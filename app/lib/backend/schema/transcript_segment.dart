@@ -1,4 +1,4 @@
-import 'package:friend_private/backend/preferences.dart';
+import 'package:omi_private/backend/preferences.dart';
 
 class TranscriptSegment {
   int id = 0;

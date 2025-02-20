@@ -6,7 +6,7 @@
 # import numpy as np
 # from bleak import BleakClient, discover
 #
-# DEVICE_NAME = "Friend"
+# DEVICE_NAME = "omi"
 # SERVICE_UUID = "19B10000-E8F2-537E-4F6C-D104768A1214"
 # CHARACTERISTIC_UUID = "19B10001-E8F2-537E-4F6C-D104768A1214"
 #
@@ -145,7 +145,7 @@
 # # "Pack my box with five dozen liquor jugs."
 # # "The five boxing wizards jump quickly and quietly."
 # # "Bright blue birds fly above the green grassy hills."
-# # "Fred’s friends fried Fritos for Friday's food festival."
+# # "Fred’s omis fried Fritos for Friday's food festival."
 #
 # # Natural Conversation Phrases
 # # "Hey, can you pass me that book?"
@@ -171,4 +171,4 @@
 # # "I need to buy some groceries, like milk, eggs, and bread."
 # # "He quickly ran to catch the bus before it left."
 # # "Technology is evolving rapidly, changing our daily lives."
-# # "She whispered a secret to her best friend in class."
+# # "She whispered a secret to her best omi in class."

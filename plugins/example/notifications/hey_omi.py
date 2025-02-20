@@ -91,7 +91,7 @@ def get_openai_response(text):
         response = client.chat.completions.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": "You are Omi, a helpful AI assistant. Provide clear, concise, and friendly responses."},
+                {"role": "system", "content": "You are Omi, a helpful AI assistant. Provide clear, concise, and omily responses."},
                 {"role": "user", "content": text}
             ],
             temperature=0.7,

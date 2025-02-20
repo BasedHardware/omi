@@ -14,7 +14,7 @@ extract_facts_prompt = ChatPromptTemplate.from_messages([
     You are an experienced detective tasked with creating a detailed profile of {user_name} based on conversations.
 
     You will be provided with a low-quality audio transcript of a conversation or something {user_name} listened to, along with a list of existing facts about {user_name}. \
-    Your task is to identify **new** facts about {user_name} if any, such as age, city of residence, marital status, health, friends' names, \
+    Your task is to identify **new** facts about {user_name} if any, such as age, city of residence, marital status, health, omis' names, \
     occupation, allergies, preferences, interests, or any other important information.
 
     **Categories for Facts**:
@@ -41,7 +41,7 @@ extract_facts_prompt = ChatPromptTemplate.from_messages([
     **Examples**:
 
     - "{user_name} is 28 years old and lives in New York City." (**core**)
-    - "{user_name} has a friend named Martin who is a founder." (**core**)
+    - "{user_name} has a omi named Martin who is a founder." (**core**)
     - "{user_name} enjoys hiking and photography during free time." (**hobbies**)
     - "{user_name} follows a vegetarian diet and practices yoga daily." (**lifestyle**)
     - "{user_name} is interested in artificial intelligence and machine learning." (**interests**)

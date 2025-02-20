@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/api/users.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:omi_private/backend/http/api/users.dart';
+import 'package:omi_private/backend/preferences.dart';
+import 'package:omi_private/widgets/dialog.dart';
 
 class RecordingsStoragePermission extends StatefulWidget {
   const RecordingsStoragePermission({super.key});
@@ -73,8 +73,8 @@ class _RecordingsStoragePermissionState extends State<RecordingsStoragePermissio
                     SizedBox(height: 16),
                     _buildReasonTile(
                       icon: Icons.group,
-                      title: "Train Profiles for Friends and Family",
-                      description: "Your recordings help us recognize and create profiles for your friends and family.",
+                      title: "Train Profiles for omis and Family",
+                      description: "Your recordings help us recognize and create profiles for your omis and family.",
                     ),
                     SizedBox(height: 16),
                     _buildReasonTile(

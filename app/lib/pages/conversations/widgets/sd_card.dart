@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/pages/conversations/sync_page.dart';
-import 'package:friend_private/providers/capture_provider.dart';
-import 'package:friend_private/utils/other/temp.dart';
+import 'package:omi_private/pages/conversations/sync_page.dart';
+import 'package:omi_private/providers/capture_provider.dart';
+import 'package:omi_private/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 
 class SdCardBannerWidget extends StatefulWidget {
@@ -42,7 +42,7 @@ class _SdCardBannerWidgetState extends State<SdCardBannerWidget> {
         });
       });
 
-      /// Friend V2 SD CARD functionality
+      /// omi V2 SD CARD functionality
       String totalsdCardSecondsRemainingString = totalRemainingSeconds.toStringAsFixed(2);
       var banner = 'You have $totalsdCardSecondsRemainingString seconds of Storage Remaining. Click here to see';
 

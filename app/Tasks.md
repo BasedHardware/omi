@@ -52,7 +52,7 @@
   object.
     - [ ] `createWavFile` remove empty sounds without words, and saves that fixed file.
 
-- [ ] ~~ (Idea) Detect a keyword or special order e.g. "Hey Friend" (but not so generic) and  
+- [ ] ~~ (Idea) Detect a keyword or special order e.g. "Hey omi" (but not so generic) and  
   triggers a prompt execution + response. This would require a few hardware updates (could also be
   a  
   button on the device), and it's way bigger than it seems.
@@ -60,6 +60,6 @@
   at  
   Home you were chatting about x and y"
 - [ ] ~~ (Idea) Speaker detection, use something like the python  
-  library [librosa](https://github.com/librosa/librosa), so that friend recognizes when is you the  
+  library [librosa](https://github.com/librosa/librosa), so that omi recognizes when is you the  
   one speaking and creates memories better considering that. Maybe even later learns to recognize  
   other people.

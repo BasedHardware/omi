@@ -34,14 +34,14 @@ class _CompletePageState extends State<CompletePage> {
         //       TextSpan(text: 'Avoid closing the app from the background. '),
         //       TextSpan(
         //           text: 'Keep the app running', style: TextStyle(decoration: TextDecoration.underline, fontSize: 18)),
-        //       TextSpan(text: ' while using your Friend.'),
+        //       TextSpan(text: ' while using your omi.'),
         //       TextSpan(text: '\n\n'),
         //       TextSpan(text: 'Make sure to '),
         //       TextSpan(
         //         text: 'enable notifications',
         //         style: TextStyle(decoration: TextDecoration.underline, fontSize: 18),
         //       ),
-        //       TextSpan(text: ' to get the most out of your Friend.'),
+        //       TextSpan(text: ' to get the most out of your omi.'),
         //     ],
         //   )),
         // ),

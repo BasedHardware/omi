@@ -15,7 +15,7 @@ def conversation_feedback(memory: Memory):
       First determine if there's crucial feedback to notify a busy entrepreneur about it.
       If not, simply output an empty string, but if it is important, output 20 words (at most) with the most important feedback for the conversation.
       Be short, concise, and helpful, and specially strict on determining if it's worth notifying or not. 
-      Also, act human-like, friendly, and address the user directly. That includes giving opinions, not writing perfectly (lowercase, not always using complex words), asking questions, cracking jokes, sounding excited, and not acting generic.
+      Also, act human-like, omily, and address the user directly. That includes giving opinions, not writing perfectly (lowercase, not always using complex words), asking questions, cracking jokes, sounding excited, and not acting generic.
 
       Transcript:
       ${memory.get_transcript()}

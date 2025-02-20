@@ -1,10 +1,10 @@
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/utils/logger.dart';
+import 'package:omi_private/backend/preferences.dart';
+import 'package:omi_private/utils/logger.dart';
 import 'package:manage_calendar_events/manage_calendar_events.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 // TODO: handle this cases
-// - Process reminders during the transcription? if they include smth like "Hey Friend..."
+// - Process reminders during the transcription? if they include smth like "Hey omi..."
 // - If there's a event to be created that was in 10 minutes, but the conversation was 20 minutes
 //    - we shouldn't create the event, but that edge cases still happens.
 

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:friend_private/backend/preferences.dart';
+import 'package:omi_private/backend/preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class MarkdownViewer extends StatefulWidget {

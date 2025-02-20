@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/providers/device_provider.dart';
-import 'package:friend_private/services/services.dart';
-import 'package:friend_private/utils/analytics/intercom.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/widgets/device_widget.dart';
+import 'package:omi_private/backend/preferences.dart';
+import 'package:omi_private/backend/schema/bt_device/bt_device.dart';
+import 'package:omi_private/providers/device_provider.dart';
+import 'package:omi_private/services/services.dart';
+import 'package:omi_private/utils/analytics/intercom.dart';
+import 'package:omi_private/utils/analytics/mixpanel.dart';
+import 'package:omi_private/widgets/device_widget.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
@@ -164,7 +164,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               child: TextButton(
                 onPressed: () async {
                   await SharedPreferencesUtil()
-                      .btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.friend, rssi: 0));
+                      .btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
                   SharedPreferencesUtil().deviceName = '';
                   if (provider.connectedDevice != null) {
                     await _bleDisconnectDevice(provider.connectedDevice!);
@@ -173,7 +173,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                   context.read<DeviceProvider>().setConnectedDevice(null);
                   context.read<DeviceProvider>().updateConnectingStatus(false);
                   Navigator.of(context).pop();
-                  MixpanelManager().disconnectFriendClicked();
+                  MixpanelManager().disconnectomiClicked();
                 },
                 child: Text(
                   provider.connectedDevice == null ? "Unpair" : "Disconnect",

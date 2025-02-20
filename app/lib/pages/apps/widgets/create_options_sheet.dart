@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/pages/apps/add_app.dart';
-import 'package:friend_private/pages/persona/add_persona.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
+import 'package:omi_private/pages/apps/add_app.dart';
+import 'package:omi_private/pages/persona/add_persona.dart';
+import 'package:omi_private/utils/analytics/mixpanel.dart';
+import 'package:omi_private/utils/other/temp.dart';
 
 class CreateOptionsSheet extends StatelessWidget {
   const CreateOptionsSheet({super.key});

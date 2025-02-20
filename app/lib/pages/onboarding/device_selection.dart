@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'package:friend_private/pages/persona/twitter/social_profile.dart';
+import 'package:omi_private/pages/persona/twitter/social_profile.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
 
 class DeviceSelectionPage extends StatefulWidget {

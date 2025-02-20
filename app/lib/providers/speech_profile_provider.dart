@@ -3,18 +3,18 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/http/api/speech_profile.dart';
-import 'package:friend_private/backend/http/api/users.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/backend/schema/message_event.dart';
-import 'package:friend_private/backend/schema/transcript_segment.dart';
-import 'package:friend_private/providers/device_provider.dart';
-import 'package:friend_private/services/devices.dart';
-import 'package:friend_private/services/services.dart';
-import 'package:friend_private/services/sockets/transcription_connection.dart';
-import 'package:friend_private/utils/audio/wav_bytes.dart';
+import 'package:omi_private/backend/http/api/speech_profile.dart';
+import 'package:omi_private/backend/http/api/users.dart';
+import 'package:omi_private/backend/preferences.dart';
+import 'package:omi_private/backend/schema/bt_device/bt_device.dart';
+import 'package:omi_private/backend/schema/conversation.dart';
+import 'package:omi_private/backend/schema/message_event.dart';
+import 'package:omi_private/backend/schema/transcript_segment.dart';
+import 'package:omi_private/providers/device_provider.dart';
+import 'package:omi_private/services/devices.dart';
+import 'package:omi_private/services/services.dart';
+import 'package:omi_private/services/sockets/transcription_connection.dart';
+import 'package:omi_private/utils/audio/wav_bytes.dart';
 
 class SpeechProfileProvider extends ChangeNotifier
     with MessageNotifierMixin
@@ -89,7 +89,7 @@ class SpeechProfileProvider extends ChangeNotifier
     device = deviceProvider?.connectedDevice;
     await _initiateWebsocket(force: true);
 
-    if (device != null) await initiateFriendAudioStreaming();
+    if (device != null) await initiateomiAudioStreaming();
     if (_socket?.state != SocketServiceState.connected) {
       // wait for websocket to connect
       await Future.delayed(const Duration(seconds: 2));
@@ -198,7 +198,7 @@ class SpeechProfileProvider extends ChangeNotifier
     return connection.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
   }
 
-  Future<void> initiateFriendAudioStreaming() async {
+  Future<void> initiateomiAudioStreaming() async {
     _bleBytesStream = await _getBleAudioBytesListener(
       device!.id,
       onAudioBytesReceived: (List<int> value) {
@@ -300,7 +300,7 @@ class SpeechProfileProvider extends ChangeNotifier
         }
         device = connection.device;
         notifyListeners();
-        initiateFriendAudioStreaming();
+        initiateomiAudioStreaming();
         break;
       case DeviceConnectionState.disconnected:
         if (deviceId == device?.id) {

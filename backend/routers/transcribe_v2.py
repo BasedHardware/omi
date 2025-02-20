@@ -80,7 +80,7 @@ async def _websocket_util(
         await websocket.close(code=1008, reason="Bad user")
         return
 
-    # Not when comes from the phone, and only Friend's with 1.0.4
+    # Not when comes from the phone, and only omi's with 1.0.4
     # if stt_service == STTService.soniox and language not in soniox_valid_languages:
     stt_service = STTService.deepgram
 

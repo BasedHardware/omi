@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/api/conversations.dart';
-import 'package:friend_private/backend/http/api/users.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/person.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:omi_private/backend/http/api/conversations.dart';
+import 'package:omi_private/backend/http/api/users.dart';
+import 'package:omi_private/backend/preferences.dart';
+import 'package:omi_private/backend/schema/person.dart';
+import 'package:omi_private/utils/analytics/mixpanel.dart';
 import 'package:provider/provider.dart';
 
 import '../conversation_detail_provider.dart';

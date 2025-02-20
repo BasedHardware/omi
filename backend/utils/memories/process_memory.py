@@ -54,7 +54,7 @@ def _get_structured(
         if memory.photos:
             return summarize_open_glass(memory.photos), False
 
-        # from Friend
+        # from omi
         if force_process:
             # reprocess endpoint
             return get_transcript_structure(memory.get_transcript(False), memory.started_at, language_code, tz), False

@@ -1,5 +1,5 @@
 ####Description####
-The image features a group of people gathered in an open space, possibly a warehouse or a large room. There are at least five individuals present, with one person standing near the center and others scattered around the area. The man in the foreground is holding a drink, likely enjoying his time among friends. 
+The image features a group of people gathered in an open space, possibly a warehouse or a large room. There are at least five individuals present, with one person standing near the center and others scattered around the area. The man in the foreground is holding a drink, likely enjoying his time among omis. 
 
 In addition to the people, there's also a refrigerator visible in the scene, which could be part of the open space or another room within the building.
 ####Description (llava-llama3)####
