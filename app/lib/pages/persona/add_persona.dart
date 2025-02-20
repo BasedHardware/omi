@@ -136,6 +136,7 @@ class _AddPersonaPageState extends State<AddPersonaPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = Provider.of<PersonaProvider>(context, listen: false);
+      provider.nameController.text = SharedPreferencesUtil().givenName;
       provider.onShowSuccessDialog = _showSuccessDialog;
     });
   }
