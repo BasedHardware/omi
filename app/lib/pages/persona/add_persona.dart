@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/pages/persona/persona_provider.dart';
-import 'package:friend_private/providers/app_provider.dart';
-import 'package:friend_private/utils/alerts/app_snackbar.dart';
-import 'package:friend_private/utils/other/debouncer.dart';
-import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/utils/text_formatter.dart';
-import 'package:friend_private/widgets/animated_loading_button.dart';
+import 'package:omi_private/pages/persona/persona_provider.dart';
+import 'package:omi_private/providers/app_provider.dart';
+import 'package:omi_private/utils/alerts/app_snackbar.dart';
+import 'package:omi_private/utils/other/debouncer.dart';
+import 'package:omi_private/utils/other/temp.dart';
+import 'package:omi_private/utils/text_formatter.dart';
+import 'package:omi_private/widgets/animated_loading_button.dart';
 import 'package:provider/provider.dart';
 
 import 'twitter/social_profile.dart';

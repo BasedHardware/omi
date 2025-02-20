@@ -1,7 +1,7 @@
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/fact.dart';
-import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/env/env.dart';
+import 'package:omi_private/backend/preferences.dart';
+import 'package:omi_private/backend/schema/fact.dart';
+import 'package:omi_private/backend/schema/conversation.dart';
+import 'package:omi_private/env/env.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 
 class MixpanelManager {
@@ -222,9 +222,9 @@ class MixpanelManager {
   void manualConversationCreated(ServerConversation conversation) =>
       track('Manual Memory Created', properties: getConversationEventProperties(conversation));
 
-  void setUserProperties(String whatDoYouDo, String whereDoYouPlanToUseYourFriend, String ageRange) {
+  void setUserProperties(String whatDoYouDo, String whereDoYouPlanToUseYouromi, String ageRange) {
     setUserProperty('What the user does', whatDoYouDo);
-    setUserProperty('Using Friend At', whereDoYouPlanToUseYourFriend);
+    setUserProperty('Using omi At', whereDoYouPlanToUseYouromi);
     setUserProperty('Age Range', ageRange);
   }
 
@@ -267,11 +267,11 @@ class MixpanelManager {
 
   void upgradeModalClicked() => track('Upgrade Modal Clicked');
 
-  void getFriendClicked() => track('Get Friend Clicked');
+  void getomiClicked() => track('Get omi Clicked');
 
-  void connectFriendClicked() => track('Connect Friend Clicked');
+  void connectomiClicked() => track('Connect omi Clicked');
 
-  void disconnectFriendClicked() => track('Disconnect Friend Clicked');
+  void disconnectomiClicked() => track('Disconnect omi Clicked');
 
   void batteryIndicatorClicked() => track('Battery Indicator Clicked');
 

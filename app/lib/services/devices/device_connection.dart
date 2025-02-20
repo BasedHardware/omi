@@ -4,11 +4,11 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/services/devices.dart';
-import 'package:friend_private/services/devices/frame_connection.dart';
-import 'package:friend_private/services/devices/friend_connection.dart';
-import 'package:friend_private/services/notifications.dart';
+import 'package:omi_private/backend/schema/bt_device/bt_device.dart';
+import 'package:omi_private/services/devices.dart';
+import 'package:omi_private/services/devices/frame_connection.dart';
+import 'package:omi_private/services/devices/omi_connection.dart';
+import 'package:omi_private/services/notifications.dart';
 
 class DeviceConnectionFactory {
   static DeviceConnection? create(
@@ -19,10 +19,10 @@ class DeviceConnectionFactory {
       return null;
     }
     switch (device.type!) {
-      case DeviceType.friend:
-        return FriendDeviceConnection(device, bleDevice);
+      case DeviceType.omi:
+        return omiDeviceConnection(device, bleDevice);
       case DeviceType.openglass:
-        return FriendDeviceConnection(device, bleDevice);
+        return omiDeviceConnection(device, bleDevice);
       case DeviceType.frame:
         return FrameDeviceConnection(device, bleDevice);
       default:

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/auth.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/pages/onboarding/wrapper.dart';
-import 'package:friend_private/pages/persona/persona_provider.dart';
-import 'package:friend_private/pages/persona/twitter/verify_identity_screen.dart';
-import 'package:friend_private/utils/other/temp.dart';
+import 'package:omi_private/backend/auth.dart';
+import 'package:omi_private/backend/preferences.dart';
+import 'package:omi_private/pages/onboarding/wrapper.dart';
+import 'package:omi_private/pages/persona/persona_provider.dart';
+import 'package:omi_private/pages/persona/twitter/verify_identity_screen.dart';
+import 'package:omi_private/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 
 class SocialHandleScreen extends StatefulWidget {

@@ -16,12 +16,12 @@ router = APIRouter()
 
 # Device Model Number
 # - DK2: Omi DevKit 2
-# - DK1: Friend | Friend DevKit 1
+# - DK1: omi | omi DevKit 1
 # - OpenGlass: OpenGlass
 def _get_device_by_model_number(device_model: str):
     if device_model in ['Omi DevKit 2']:
         return DeviceModel.OMI_DEVKIT_2
-    if device_model in ['Friend DevKit 1', 'Friend']:
+    if device_model in ['omi DevKit 1', 'omi']:
         return DeviceModel.OMI_DEVKIT_1
     if device_model in ['OpenGlass']:
         return DeviceModel.OPEN_GLASS
@@ -49,9 +49,9 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
 
         # Release tags
         # - Omi_DK2_v2.0.5
-        # - Friend_v1.0.4
+        # - omi_v1.0.4
         # - OpenGlass_v1.0.4
-        release_prefix = "Friend"
+        release_prefix = "omi"
         if device == DeviceModel.OMI_DEVKIT_2:
             release_prefix = "Omi_DK2"
         if device == DeviceModel.OPEN_GLASS:
@@ -97,7 +97,7 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
 
 @router.get("/v1/firmware/latest")
 async def get_latest_version_v1(device: int):
-    # if device = 1 : Friend
+    # if device = 1 : omi
     # if device = 2 : OpenGlass
     if device != 1 and device != 2:
         raise HTTPException(status_code=404, detail="Device not found")
@@ -113,7 +113,7 @@ async def get_latest_version_v1(device: int):
             raise HTTPException(status_code=response.status_code, detail="Failed to fetch latest release")
         releases = response.json()
         latest_release = None
-        device_type = "friend" if device == 1 else "openglass"
+        device_type = "omi" if device == 1 else "openglass"
         for release in releases:
             if (
                 release.get("published_at")

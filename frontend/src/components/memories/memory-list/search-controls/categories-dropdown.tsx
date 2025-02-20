@@ -14,7 +14,7 @@ const categories = [
   { icon: '🎵', value: 'music', label: 'Music' },
   { icon: '🎬', value: 'movies', label: 'Movies' },
   { icon: '👩‍👩‍👧‍👦', value: 'family', label: 'Family' },
-  { icon: '👫', value: 'friends', label: 'Friends' },
+  { icon: '👫', value: 'omis', label: 'omis' },
   { icon: '🚫', value: 'memories', label: 'Memories' },
   { icon: '🚪', value: 'places', label: 'Places' },
   { icon: '🚫', value: 'events', label: 'Events' },

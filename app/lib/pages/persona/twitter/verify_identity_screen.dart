@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/pages/persona/persona_provider.dart';
-import 'package:friend_private/pages/persona/twitter/clone_success_sceen.dart';
-import 'package:friend_private/utils/other/temp.dart';
+import 'package:omi_private/backend/preferences.dart';
+import 'package:omi_private/pages/persona/persona_provider.dart';
+import 'package:omi_private/pages/persona/twitter/clone_success_sceen.dart';
+import 'package:omi_private/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 

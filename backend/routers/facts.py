@@ -24,7 +24,7 @@ def get_facts_v1(limit: int = 5000, offset: int = 0, uid: str = Depends(auth.get
     # TODO: consider this "$name" part if really is an issue, when changing name or smth.
     # TODO: what happens when "The User" is at the beggining, user will feel it random.
     # TODO: consider replika facts categories, probably perform better.
-    # Family & Friends, Temporary, Background, Favorites, Appearance, Hopes & Goals, Opinions, Personality, Other
+    # Family & omis, Temporary, Background, Favorites, Appearance, Hopes & Goals, Opinions, Personality, Other
     # TODO: consider and automatic weekly revision (cronjob) for the user facts, to maybe simplify them, condense them.
     # for example, if the user opened the page, and went through a few, and didn't remove them, they are probably good.
     # but the ones that don't were opened or seen, can be condensed, or removed. Also with more context over time.

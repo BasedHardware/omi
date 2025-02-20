@@ -210,12 +210,12 @@ def initial_chat_message(uid: str, plugin: Optional[App] = None, prev_messages_s
     user_name, facts_str = get_prompt_facts(uid)
     if plugin is None:
         prompt = f"""
-You are 'Friend', a friendly and helpful assistant who aims to make {user_name}'s life better 10x.
+You are 'omi', a omily and helpful assistant who aims to make {user_name}'s life better 10x.
 You know the following about {user_name}: {facts_str}.
 
 {prev_messages_str}
 
-Compose {"an initial" if not prev_messages_str else "a follow-up"} message to {user_name} that fully embodies your friendly and helpful personality. Use warm and cheerful language, and include light humor if appropriate. The message should be short, engaging, and make {user_name} feel welcome. Do not mention that you are an assistant or that this is an initial message; just {"start" if not prev_messages_str else "continue"} the conversation naturally, showcasing your personality.
+Compose {"an initial" if not prev_messages_str else "a follow-up"} message to {user_name} that fully embodies your omily and helpful personality. Use warm and cheerful language, and include light humor if appropriate. The message should be short, engaging, and make {user_name} feel welcome. Do not mention that you are an assistant or that this is an initial message; just {"start" if not prev_messages_str else "continue"} the conversation naturally, showcasing your personality.
 """
     else:
         prompt = f"""
@@ -282,12 +282,12 @@ def requires_context(question: str) -> bool:
 
 
 class IsAnOmiQuestion(BaseModel):
-    value: bool = Field(description="If the message is an Omi/Friend related question")
+    value: bool = Field(description="If the message is an Omi/omi related question")
 
 
 def retrieve_is_an_omi_question_v1(messages: List[Message]) -> bool:
     prompt = f'''
-    The user is using the chat functionality of an app known as Omi or Friend.
+    The user is using the chat functionality of an app known as Omi or omi.
     Based on the current conversation your task is to determine if the user is asking a question about the way you work, or how to use you or the app.
 
     Questions like,
@@ -311,7 +311,7 @@ def retrieve_is_an_omi_question_v1(messages: List[Message]) -> bool:
 
 def retrieve_is_an_omi_question_v2(messages: List[Message]) -> bool:
     prompt = f'''
-    Task: Analyze the conversation to identify if the user is inquiring about the functionalities or usage of the app, Omi or Friend. Focus on detecting questions related to the app's operations or capabilities.
+    Task: Analyze the conversation to identify if the user is inquiring about the functionalities or usage of the app, Omi or omi. Focus on detecting questions related to the app's operations or capabilities.
 
     Examples of User Questions:
 
@@ -344,7 +344,7 @@ def retrieve_is_an_omi_question_v2(messages: List[Message]) -> bool:
 
 def retrieve_is_an_omi_question(question: str) -> bool:
     prompt = f'''
-    Task: Analyze the question to identify if the user is inquiring about the functionalities or usage of the app, Omi or Friend. Focus on detecting questions related to the app's operations or capabilities.
+    Task: Analyze the question to identify if the user is inquiring about the functionalities or usage of the app, Omi or omi. Focus on detecting questions related to the app's operations or capabilities.
 
     Examples of User Questions:
 
@@ -622,7 +622,7 @@ def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> st
     )
 
     return f"""
-    You are an assistant for answering questions about the app Omi, also known as Friend.
+    You are an assistant for answering questions about the app Omi, also known as omi.
     Continue the conversation, answering the question based on the context provided.
 
     Context:
@@ -1146,8 +1146,8 @@ def obtain_emotional_message(uid: str, memory: Memory, context: str, emotion: st
     user_name, facts_str = get_prompt_facts(uid)
     transcript = memory.get_transcript(False)
     prompt = f"""
-    You are a thoughtful and encouraging Friend.
-    Your best friend is {user_name}, {facts_str}
+    You are a thoughtful and encouraging omi.
+    Your best omi is {user_name}, {facts_str}
 
     {user_name} just finished a conversation where {user_name} experienced {emotion}.
 

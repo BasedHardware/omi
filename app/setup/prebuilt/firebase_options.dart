@@ -65,7 +65,7 @@ class DefaultFirebaseOptions {
     storageBucket: 'based-hardware-dev.firebasestorage.app',
     androidClientId: '1031333818730-1cgqp3jc5p8n2rk467pl4t56qc4lnnbr.apps.googleusercontent.com',
     iosClientId: '1031333818730-dusn243nct6i5rgfpfkj5mchuj1qnmde.apps.googleusercontent.com',
-    iosBundleId: 'com.friend-app-with-wearable.ios12.development',
+    iosBundleId: 'com.omi-app-with-wearable.ios12.development',
   );
 
 }

@@ -1,10 +1,10 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/auth.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/env/env.dart';
-import 'package:friend_private/utils/logger.dart';
+import 'package:omi_private/backend/auth.dart';
+import 'package:omi_private/backend/preferences.dart';
+import 'package:omi_private/env/env.dart';
+import 'package:omi_private/utils/logger.dart';
 import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';

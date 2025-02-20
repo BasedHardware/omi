@@ -50,8 +50,8 @@ workflows:
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_prod.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-            --android-package-name=com.friend.ios \
+            --ios-bundle-id=com.omi-app-with-wearable.ios12 \
+            --android-package-name=com.omi.ios \
             --android-out=android/app/src/prod/  \
             --ios-out=ios/Config/Prod/ \
             --service-account="./firebase_key.json" \
@@ -64,8 +64,8 @@ workflows:
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-package-name=com.friend.ios.dev \
+            --ios-bundle-id=com.omi-app-with-wearable.ios12.development \
+            --android-package-name=com.omi.ios.dev \
             --android-out=android/app/src/dev/  \
             --ios-out=ios/Config/Dev/ \
             --service-account="./firebase_dev_key.json" \
@@ -179,7 +179,7 @@ workflows:
         - google_play
         - shorebird
       vars:
-        PACKAGE_NAME: "com.friend.ios"
+        PACKAGE_NAME: "com.omi.ios"
         JAVA_TOOL_OPTIONS: "-Xmx8g"
       flutter: 3.22.3
       xcode: 15.4
@@ -248,8 +248,8 @@ workflows:
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_prod.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-            --android-package-name=com.friend.ios \
+            --ios-bundle-id=com.omi-app-with-wearable.ios12 \
+            --android-package-name=com.omi.ios \
             --android-out=android/app/src/prod/  \
             --ios-out=ios/Config/Prod/ \
             --service-account="./firebase_key.json" \
@@ -262,8 +262,8 @@ workflows:
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-package-name=com.friend.ios.dev \
+            --ios-bundle-id=com.omi-app-with-wearable.ios12.development \
+            --android-package-name=com.omi.ios.dev \
             --android-out=android/app/src/dev/  \
             --ios-out=ios/Config/Dev/ \
             --service-account="./firebase_dev_key.json" \
@@ -423,8 +423,8 @@ workflows:
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_prod.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-            --android-package-name=com.friend.ios \
+            --ios-bundle-id=com.omi-app-with-wearable.ios12 \
+            --android-package-name=com.omi.ios \
             --android-out=android/app/src/prod/  \
             --ios-out=ios/Config/Prod/ \
             --service-account="./firebase_key.json" \
@@ -437,8 +437,8 @@ workflows:
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-package-name=com.friend.ios.dev \
+            --ios-bundle-id=com.omi-app-with-wearable.ios12.development \
+            --android-package-name=com.omi.ios.dev \
             --android-out=android/app/src/dev/  \
             --ios-out=ios/Config/Dev/ \
             --service-account="./firebase_dev_key.json" \
@@ -512,7 +512,7 @@ workflows:
         - firebase
         - shorebird
       vars:
-        PACKAGE_NAME: "com.friend.ios"
+        PACKAGE_NAME: "com.omi.ios"
       flutter: 3.22.3
       xcode: 15.4
       cocoapods: 1.15.2
@@ -587,8 +587,8 @@ workflows:
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_prod.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-            --android-package-name=com.friend.ios \
+            --ios-bundle-id=com.omi-app-with-wearable.ios12 \
+            --android-package-name=com.omi.ios \
             --android-out=android/app/src/prod/  \
             --ios-out=ios/Config/Prod/ \
             --service-account="./firebase_key.json" \
@@ -601,8 +601,8 @@ workflows:
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-package-name=com.friend.ios.dev \
+            --ios-bundle-id=com.omi-app-with-wearable.ios12.development \
+            --android-package-name=com.omi.ios.dev \
             --android-out=android/app/src/dev/  \
             --ios-out=ios/Config/Dev/ \
             --service-account="./firebase_dev_key.json" \

@@ -1,9 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/api/apps.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/utils/alerts/app_snackbar.dart';
+import 'package:omi_private/backend/http/api/apps.dart';
+import 'package:omi_private/backend/schema/app.dart';
+import 'package:omi_private/utils/alerts/app_snackbar.dart';
 import 'package:image_picker/image_picker.dart';
 
 typedef ShowSuccessDialogCallback = void Function(String url);

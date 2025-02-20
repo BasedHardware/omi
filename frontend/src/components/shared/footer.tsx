@@ -83,17 +83,17 @@ export default function Footer() {
                 target="_blank"
                 rel="noreferrer"
               >
-                Friend
+                omi
               </a>
             </li>
             <li>
               <a
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
-                href={'https://www.omi.me/pages/friend-dev'}
+                href={'https://www.omi.me/pages/omi-dev'}
                 target="_blank"
                 rel="noreferrer"
               >
-                Friend DEV KIT
+                omi DEV KIT
               </a>
             </li>
           </ul>

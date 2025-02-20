@@ -26,7 +26,7 @@ class ProcessingMemory(BaseModel):
     timer_start: float
     timer_segment_start: Optional[float] = None
     timer_starts: List[float] = []
-    language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
+    language: Optional[str] = None  # applies only to omi # TODO: once released migrate db to default 'en'
     transcript_segments: List[TranscriptSegment] = []
     geolocation: Optional[Geolocation] = None
     emotional_feedback: Optional[bool] = False

@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/services/devices/device_connection.dart';
-import 'package:friend_private/services/devices/models.dart';
+import 'package:omi_private/backend/schema/bt_device/bt_device.dart';
+import 'package:omi_private/services/devices/device_connection.dart';
+import 'package:omi_private/services/devices/models.dart';
 
 abstract class IDeviceService {
   void start();
@@ -83,12 +83,12 @@ class DeviceService implements IDeviceService {
     );
     FlutterBluePlus.cancelWhenScanComplete(discoverSubscription);
 
-    // Only look for devices that implement Friend or Frame main service
+    // Only look for devices that implement omi or Frame main service
     _status = DeviceServiceStatus.scanning;
     await FlutterBluePlus.adapterState.where((val) => val == BluetoothAdapterState.on).first;
     await FlutterBluePlus.startScan(
       timeout: Duration(seconds: timeout),
-      withServices: [Guid(friendServiceUuid), Guid(frameServiceUuid)],
+      withServices: [Guid(omiServiceUuid), Guid(frameServiceUuid)],
     );
     _status = DeviceServiceStatus.ready;
   }

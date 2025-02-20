@@ -1,14 +1,14 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/main.dart';
-import 'package:friend_private/pages/persona/persona_provider.dart';
-import 'package:friend_private/pages/persona/twitter/social_profile.dart';
-import 'package:friend_private/utils/other/debouncer.dart';
-import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/utils/text_formatter.dart';
-import 'package:friend_private/widgets/animated_loading_button.dart';
+import 'package:omi_private/backend/schema/app.dart';
+import 'package:omi_private/main.dart';
+import 'package:omi_private/pages/persona/persona_provider.dart';
+import 'package:omi_private/pages/persona/twitter/social_profile.dart';
+import 'package:omi_private/utils/other/debouncer.dart';
+import 'package:omi_private/utils/other/temp.dart';
+import 'package:omi_private/utils/text_formatter.dart';
+import 'package:omi_private/widgets/animated_loading_button.dart';
 import 'package:provider/provider.dart';
 
 class UpdatePersonaPage extends StatefulWidget {

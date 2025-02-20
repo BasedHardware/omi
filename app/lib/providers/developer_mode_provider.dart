@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/api/users.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/providers/base_provider.dart';
-import 'package:friend_private/utils/alerts/app_snackbar.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/logger.dart';
-import 'package:friend_private/utils/other/validators.dart';
+import 'package:omi_private/backend/http/api/users.dart';
+import 'package:omi_private/backend/preferences.dart';
+import 'package:omi_private/providers/base_provider.dart';
+import 'package:omi_private/utils/alerts/app_snackbar.dart';
+import 'package:omi_private/utils/analytics/mixpanel.dart';
+import 'package:omi_private/utils/logger.dart';
+import 'package:omi_private/utils/other/validators.dart';
 
 class DeveloperModeProvider extends BaseProvider {
   final TextEditingController webhookOnConversationCreated = TextEditingController();

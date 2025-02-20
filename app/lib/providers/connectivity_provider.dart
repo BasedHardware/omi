@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:omi_private/widgets/dialog.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 
 class ConnectivityProvider extends ChangeNotifier {

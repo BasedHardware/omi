@@ -5,26 +5,26 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/http/api/conversations.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/backend/schema/message_event.dart';
-import 'package:friend_private/backend/schema/structured.dart';
-import 'package:friend_private/backend/schema/transcript_segment.dart';
-import 'package:friend_private/providers/conversation_provider.dart';
-import 'package:friend_private/providers/message_provider.dart';
-import 'package:friend_private/services/devices.dart';
-import 'package:friend_private/services/notifications.dart';
-import 'package:friend_private/services/services.dart';
-import 'package:friend_private/services/sockets/pure_socket.dart';
-import 'package:friend_private/services/sockets/sdcard_socket.dart';
-import 'package:friend_private/services/sockets/transcription_connection.dart';
-import 'package:friend_private/services/wals.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/enums.dart';
-import 'package:friend_private/utils/logger.dart';
+import 'package:omi_private/backend/http/api/conversations.dart';
+import 'package:omi_private/backend/preferences.dart';
+import 'package:omi_private/backend/schema/bt_device/bt_device.dart';
+import 'package:omi_private/backend/schema/conversation.dart';
+import 'package:omi_private/backend/schema/message.dart';
+import 'package:omi_private/backend/schema/message_event.dart';
+import 'package:omi_private/backend/schema/structured.dart';
+import 'package:omi_private/backend/schema/transcript_segment.dart';
+import 'package:omi_private/providers/conversation_provider.dart';
+import 'package:omi_private/providers/message_provider.dart';
+import 'package:omi_private/services/devices.dart';
+import 'package:omi_private/services/notifications.dart';
+import 'package:omi_private/services/services.dart';
+import 'package:omi_private/services/sockets/pure_socket.dart';
+import 'package:omi_private/services/sockets/sdcard_socket.dart';
+import 'package:omi_private/services/sockets/transcription_connection.dart';
+import 'package:omi_private/services/wals.dart';
+import 'package:omi_private/utils/analytics/mixpanel.dart';
+import 'package:omi_private/utils/enums.dart';
+import 'package:omi_private/utils/logger.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
@@ -271,7 +271,7 @@ class CaptureProvider extends ChangeNotifier
     _cleanupCurrentState();
     await _recheckCodecChange();
     await _ensureSocketConnection();
-    await _initiateFriendAudioStreaming();
+    await _initiateomiAudioStreaming();
     await initiateStorageBytesStreaming(); // ??
     notifyListeners();
   }
@@ -359,7 +359,7 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
-  Future<void> _initiateFriendAudioStreaming() async {
+  Future<void> _initiateomiAudioStreaming() async {
     if (_recordingDevice == null) return;
 
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);

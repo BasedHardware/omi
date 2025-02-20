@@ -10,18 +10,18 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
-import 'package:friend_private/backend/http/api/notifications.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/main.dart';
-import 'package:friend_private/pages/home/page.dart';
+import 'package:omi_private/backend/http/api/notifications.dart';
+import 'package:omi_private/backend/preferences.dart';
+import 'package:omi_private/backend/schema/message.dart';
+import 'package:omi_private/main.dart';
+import 'package:omi_private/pages/home/page.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 
 class NotificationService {
   NotificationService._();
 
   static NotificationService instance = NotificationService._();
-  MethodChannel platform = const MethodChannel('com.friend.ios/notifyOnKill');
+  MethodChannel platform = const MethodChannel('com.omi.ios/notifyOnKill');
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
 
   final channel = NotificationChannel(
