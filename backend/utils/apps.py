@@ -8,7 +8,7 @@ from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
     get_app_usage_count_db, get_app_memory_created_integration_usage_count_db, get_app_memory_prompt_usage_count_db, \
     add_tester_db, add_app_access_for_tester_db, remove_app_access_for_tester_db, remove_tester_db, \
     is_tester_db, can_tester_access_app_db, get_apps_for_tester_db, get_app_chat_message_sent_usage_count_db, \
-    update_app_in_db, get_audio_apps_count, get_persona_by_uid_db, update_persona_in_db, add_persona_to_db, \
+    update_app_in_db, get_audio_apps_count, get_persona_by_uid_db, update_persona_in_db, \
     get_omi_personas_by_uid_db
 from database.auth import get_user_name
 from database.facts import get_facts
@@ -17,7 +17,7 @@ from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_gener
     set_generic_cache, set_app_usage_history_cache, get_app_usage_history_cache, get_app_money_made_cache, \
     set_app_money_made_cache, get_plugins_installs_count, get_plugins_reviews, get_app_cache_by_id, set_app_cache_by_id, \
     set_app_review_cache, get_app_usage_count_cache, set_app_money_made_amount_cache, get_app_money_made_amount_cache, \
-    set_app_usage_count_cache, set_user_paid_app, get_user_paid_app, is_username_taken
+    set_app_usage_count_cache, set_user_paid_app, get_user_paid_app
 from database.users import get_stripe_connect_account_id
 from models.app import App, UsageHistoryItem, UsageHistoryType
 from models.memory import Memory
@@ -416,7 +416,7 @@ async def generate_persona_prompt(uid: str, persona: dict):
     persona_prompt += f"""
     **Style:**  
     - Highly interactive and opinionated.  
-    - Strong, slightly polarizing opinions based on {user_name}’s identity.  
+    - Strong, slightly polarizing opinions based on {user_name}'s identity.  
     - Reference personal facts naturally.  
     - 2-3 sentence responses, never more than 20 words.  
     - Maintain conversational flow with coherent, context-aware replies.  
@@ -425,7 +425,7 @@ async def generate_persona_prompt(uid: str, persona: dict):
     1. Seamlessly integrate facts and recent contexts for continuity, recency, and relevance.  
     2. Use the condensed facts as foundational knowledge and ongoing continuity.  
     3. Leverage recent conversations to maintain situational awareness and contextual accuracy.  
-    4. Emulate {user_name}’s humor, emotional responses, vocabulary, and tone.  
+    4. Emulate {user_name}'s humor, emotional responses, vocabulary, and tone.  
     5. Respond with the appropriate level of detail and complexity as {user_name} would.  
     6. Exhibit the same thought processes, decision-making patterns, and conversational dynamics.  
     """
@@ -515,7 +515,7 @@ You have:
 1. Seamlessly integrate facts and recent contexts for continuity, recency, and relevance.  
 2. Use the condensed facts as foundational knowledge and ongoing continuity.  
 3. Leverage recent conversations to maintain situational awareness and contextual accuracy.  
-4. Emulate {user_name}’s humor, emotional responses, vocabulary, and tone.  
+4. Emulate {user_name}'s humor, emotional responses, vocabulary, and tone.  
 5. Respond with the appropriate level of detail and complexity as {user_name} would.  
 6. Exhibit the same thought processes, decision-making patterns, and conversational dynamics.  
 """
