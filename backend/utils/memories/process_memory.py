@@ -20,7 +20,7 @@ from models.memory import *
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
 from models.notification_message import NotificationMessage
-from utils.apps import get_available_apps, update_persona_prompt
+from utils.apps import get_available_apps, update_persona_prompt, sync_update_persona_prompt
 from utils.llm import obtain_emotional_message, retrieve_metadata_fields_from_transcript
 from utils.llm import summarize_open_glass, get_transcript_structure, generate_embedding, \
     get_plugin_result, should_discard_memory, summarize_experience_text, new_facts_extractor, \
@@ -197,7 +197,7 @@ def process_memory(
             threads = []
             print('updating personas after memory creation')
             for persona in personas:
-                threads.append(threading.Thread(target=update_persona_prompt, args=(persona,)))
+                threads.append(threading.Thread(target=sync_update_persona_prompt, args=(persona,)))
 
             [t.start() for t in threads]
             [t.join() for t in threads]
