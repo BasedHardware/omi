@@ -11,6 +11,7 @@ import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/pages/chat/widgets/ai_message.dart';
 import 'package:friend_private/pages/chat/widgets/user_message.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
+import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/conversation_provider.dart';
@@ -45,6 +46,16 @@ class CloneChatPageState extends State<CloneChatPage> with AutomaticKeepAliveCli
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       final provider = Provider.of<PersonaProvider>(context, listen: false);
       await provider.getUserPersona();
+      if (provider.userPersona != null) {
+        var selectedApp = provider.userPersona!;
+        var appProvider = context.read<AppProvider>();
+        var messageProvider = context.read<MessageProvider>();
+        appProvider.setSelectedChatAppId(selectedApp.id);
+        await messageProvider.refreshMessages();
+        if (messageProvider.messages.isEmpty) {
+          messageProvider.sendInitialAppMessage(selectedApp);
+        }
+      }
       scrollToBottom();
     });
     super.initState();
@@ -125,43 +136,49 @@ class CloneChatPageState extends State<CloneChatPage> with AutomaticKeepAliveCli
                     valueColor: AlwaysStoppedAnimation(Colors.white),
                   ),
                 )
-              : Stack(
-                  children: [
-                    Align(
-                      alignment: Alignment.topCenter,
-                      child: provider.isLoadingMessages && !provider.hasCachedMessages
-                          ? const _LoadingWidget()
-                          : provider.messages.isEmpty
-                              ? _EmptyChat(isConnected: connectivityProvider.isConnected)
-                              : _MessageList(
-                                  messages: provider.messages,
-                                  controller: scrollController,
-                                  showTypingIndicator: provider.showTypingIndicator,
-                                  onSendMessage: _sendMessageUtil,
-                                  provider: provider,
-                                  app: personaProvider.userPersona!,
-                                ),
-                    ),
-                    _BottomInput(
-                      textController: textController,
-                      onTextChanged: setShowSendButton,
-                      showSendButton: _showSendButton,
-                      onSendMessage: () {
-                        String message = textController.text;
-                        if (message.isEmpty) return;
-                        if (connectivityProvider.isConnected) {
-                          _sendMessageUtil(message);
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Please check your internet connection and try again'),
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
-                        }
-                      },
-                    ),
-                  ],
+              : GestureDetector(
+                  onTap: () {
+                    // Hide keyboard when tapping outside
+                    FocusScope.of(context).unfocus();
+                  },
+                  child: Stack(
+                    children: [
+                      Align(
+                        alignment: Alignment.topCenter,
+                        child: provider.isLoadingMessages && !provider.hasCachedMessages
+                            ? const _LoadingWidget()
+                            : provider.messages.isEmpty
+                                ? _EmptyChat(isConnected: connectivityProvider.isConnected)
+                                : _MessageList(
+                                    messages: provider.messages,
+                                    controller: scrollController,
+                                    showTypingIndicator: provider.showTypingIndicator,
+                                    onSendMessage: _sendMessageUtil,
+                                    provider: provider,
+                                    app: personaProvider.userPersona!,
+                                  ),
+                      ),
+                      _BottomInput(
+                        textController: textController,
+                        onTextChanged: setShowSendButton,
+                        showSendButton: _showSendButton,
+                        onSendMessage: () {
+                          String message = textController.text;
+                          if (message.isEmpty) return;
+                          if (connectivityProvider.isConnected) {
+                            _sendMessageUtil(message);
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Please check your internet connection and try again'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                    ],
+                  ),
                 ),
         );
       },

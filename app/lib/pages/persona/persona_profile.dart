@@ -176,21 +176,26 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
             backgroundColor: Colors.transparent,
             appBar: AppBar(
               backgroundColor: Colors.transparent,
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.chat, color: Colors.white),
-                  onPressed: () {
-                    if (mounted) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const CloneChatPage(),
-                        ),
-                      );
-                    }
-                  },
+              leading: GestureDetector(
+                onTap: () {
+                  if (mounted) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CloneChatPage(),
+                      ),
+                    );
+                  }
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: SvgPicture.asset(
+                    'assets/images/ic_clone_chat.svg',
+                    width: 24,
+                    height: 24,
+                  ),
                 ),
-              ],
+              ),
             ),
             body: provider.isLoading || provider.userPersona == null
                 ? const Center(
