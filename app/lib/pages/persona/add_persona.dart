@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
-import 'package:friend_private/utils/other/debouncer.dart';
 import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/utils/text_formatter.dart';
 import 'package:friend_private/widgets/animated_loading_button.dart';
 import 'package:provider/provider.dart';
 
@@ -19,8 +18,6 @@ class AddPersonaPage extends StatefulWidget {
 }
 
 class _AddPersonaPageState extends State<AddPersonaPage> {
-  final _debouncer = Debouncer(delay: const Duration(milliseconds: 500));
-
   void _showSuccessDialog(String url) {
     showDialog(
       context: context,
@@ -245,63 +242,6 @@ class _AddPersonaPageState extends State<AddPersonaPage> {
                           const SizedBox(
                             height: 24,
                           ),
-                          Padding(
-                            padding: const EdgeInsets.only(left: 8.0),
-                            child: Text(
-                              'Persona Username',
-                              style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
-                            margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade800,
-                              borderRadius: BorderRadius.circular(10.0),
-                            ),
-                            width: double.infinity,
-                            child: TextFormField(
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Please enter a username to access the persona';
-                                }
-                                return null;
-                              },
-                              onChanged: (value) {
-                                _debouncer.run(() async {
-                                  await provider.checkIsUsernameTaken(value);
-                                });
-                              },
-                              controller: provider.usernameController,
-                              inputFormatters: [
-                                LowerCaseTextFormatter(),
-                                FilteringTextInputFormatter.allow(RegExp(r'[a-z0-9_]')),
-                              ],
-                              decoration: InputDecoration(
-                                isDense: true,
-                                border: InputBorder.none,
-                                hintText: 'nikshevchenko',
-                                suffix: provider.usernameController.text.isEmpty
-                                    ? null
-                                    : provider.isCheckingUsername
-                                        ? const SizedBox(
-                                            width: 16,
-                                            height: 16,
-                                            child: Center(
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                                valueColor: AlwaysStoppedAnimation<Color>(Colors.grey),
-                                              ),
-                                            ),
-                                          )
-                                        : Icon(
-                                            provider.isUsernameTaken ? Icons.close : Icons.check,
-                                            color: provider.isUsernameTaken ? Colors.red : Colors.green,
-                                            size: 16,
-                                          ),
-                              ),
-                            ),
-                          ),
                         ],
                       ),
                     ),
@@ -367,12 +307,7 @@ class _AddPersonaPageState extends State<AddPersonaPage> {
                               if (provider.twitterProfile.isEmpty)
                                 GestureDetector(
                                   onTap: () {
-                                    if (provider.usernameController.text.isEmpty) {
-                                      AppSnackbar.showSnackbarError(
-                                          'Please enter a username to before connecting Twitter');
-                                      return;
-                                    }
-                                    routeToPage(context, SocialHandleScreen());
+                                    routeToPage(context, const SocialHandleScreen());
                                   },
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

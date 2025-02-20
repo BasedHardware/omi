@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from ulid import ULID
 
 from database.apps import update_app_in_db, add_app_to_db, get_persona_by_uid_db, get_persona_by_id_db
-from database.redis_db import delete_generic_cache
+from database.redis_db import delete_generic_cache, is_username_taken, save_username
 from utils.llm import condense_tweets, generate_twitter_persona_prompt
 
 rapid_api_host = os.getenv('RAPID_API_HOST')
@@ -69,6 +69,13 @@ async def get_latest_tweet(username: str) -> Dict[str, Any]:
 async def create_persona_from_twitter_profile(username: str, uid: str) -> Dict[str, Any]:
     profile = await get_twitter_profile(username)
     profile['avatar'] = profile['avatar'].replace('_normal', '')
+
+    if is_username_taken(profile['profile']) != 0:
+        i = 1
+        while is_username_taken(f"{profile['profile']}{i}") != 0:
+            i += 1
+        profile['profile'] = f"{profile['profile']}{i}"
+
     persona = {
         "name": profile["name"],
         "author": profile['name'],
@@ -88,6 +95,7 @@ async def create_persona_from_twitter_profile(username: str, uid: str) -> Dict[s
         "twitter": {
             "username": profile["profile"],
             "avatar": profile["avatar"],
+            "connected_at": datetime.now(timezone.utc)
         }
     }
     tweets = await get_twitter_timeline(username)
@@ -95,6 +103,7 @@ async def create_persona_from_twitter_profile(username: str, uid: str) -> Dict[s
     condensed_tweets = condense_tweets(tweets, profile["name"])
     persona['persona_prompt'] = generate_twitter_persona_prompt(condensed_tweets, profile["name"])
     add_app_to_db(persona)
+    save_username(persona['username'], uid, persona['id'])
     delete_generic_cache('get_public_approved_apps_data')
     return persona
 
