@@ -79,6 +79,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       // TODO: if connected already, stop animation and display battery
       AuthComponent(
         onSignIn: () {
+          SharedPreferencesUtil().hasOmiDevice = true;
           MixpanelManager().onboardingStepCompleted('Auth');
           context.read<HomeProvider>().setupHasSpeakerProfile();
           IntercomManager.instance.intercom.loginIdentifiedUser(

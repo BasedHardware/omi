@@ -415,7 +415,7 @@ Future<String> getGenratedDescription(String name, String description) async {
   }
 }
 
-Future<bool> createPersonaApp(File file, Map<String, dynamic> personaData) async {
+Future<Map> createPersonaApp(File file, Map<String, dynamic> personaData) async {
   var request = http.MultipartRequest(
     'POST',
     Uri.parse('${Env.apiBaseUrl}v1/personas'),
@@ -430,18 +430,14 @@ Future<bool> createPersonaApp(File file, Map<String, dynamic> personaData) async
 
     if (response.statusCode == 200) {
       debugPrint('createPersonaApp Response body: ${jsonDecode(response.body)}');
-      return true;
+      return jsonDecode(response.body);
     } else {
       debugPrint('Failed to submit app. Status code: ${response.statusCode}');
-      if (response.body.isNotEmpty) {
-        return false;
-      } else {
-        return false;
-      }
+      return {};
     }
   } catch (e) {
     debugPrint('An error occurred createPersonaApp: $e');
-    return false;
+    return {};
   }
 }
 
@@ -509,8 +505,8 @@ Future<Map?> getTwitterProfileData(String username) async {
   }
 }
 
-Future<bool> verifyTwitterOwnership(String username, String? personaId) async {
-  var url = '${Env.apiBaseUrl}v1/personas/twitter/verify-ownership?username=$username';
+Future<bool> verifyTwitterOwnership(String username, String handle, String? personaId) async {
+  var url = '${Env.apiBaseUrl}v1/personas/twitter/verify-ownership?username=$username&handle=$handle';
   if (personaId != null) {
     url += '&persona_id=$personaId';
   }
@@ -543,6 +539,25 @@ Future<App?> getUserPersonaServer() async {
     log('getPersonaProfile: ${response.body}');
     var res = jsonDecode(response.body);
     return App.fromJson(res);
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return null;
+  }
+}
+
+Future<String?> generateUsername(String handle) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/personas/generate-username?handle=$handle',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return null;
+    log('generateUsername: ${response.body}');
+    var res = jsonDecode(response.body);
+    return res['username'];
   } catch (e, stackTrace) {
     debugPrint(e.toString());
     CrashReporting.reportHandledCrash(e, stackTrace);

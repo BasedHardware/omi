@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:friend_private/pages/persona/twitter/social_profile.dart';
+import 'package:posthog_flutter/posthog_flutter.dart';
 
 class DeviceSelectionPage extends StatefulWidget {
   const DeviceSelectionPage({super.key});
@@ -80,7 +81,10 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                     Column(
                       children: [
                         ElevatedButton(
-                          onPressed: () {
+                          onPressed: () async {
+                            await Posthog().capture(
+                              eventName: 'clicked_get_started',
+                            );
                             Navigator.pushReplacement(
                               context,
                               MaterialPageRoute(builder: (context) => const SocialHandleScreen()),
