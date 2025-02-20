@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/gen/assets.gen.dart';
+import 'package:friend_private/pages/chat/clone_chat_page.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/pages/persona/update_persona.dart';
 import 'package:friend_private/providers/auth_provider.dart';
@@ -175,14 +176,26 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
             backgroundColor: Colors.transparent,
             appBar: AppBar(
               backgroundColor: Colors.transparent,
-              // actions: [
-              //   IconButton(
-              //     icon: const Icon(Icons.settings, color: Colors.white),
-              //     onPressed: () {
-              //       // TODO: Implement settings
-              //     },
-              //   ),
-              // ],
+              leading: GestureDetector(
+                onTap: () {
+                  if (mounted) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CloneChatPage(),
+                      ),
+                    );
+                  }
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: SvgPicture.asset(
+                    'assets/images/ic_clone_chat.svg',
+                    width: 24,
+                    height: 24,
+                  ),
+                ),
+              ),
             ),
             body: provider.isLoading || provider.userPersona == null
                 ? const Center(

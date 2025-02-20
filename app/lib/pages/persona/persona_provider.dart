@@ -213,4 +213,25 @@ class PersonaProvider extends ChangeNotifier {
     isLoading = loading;
     notifyListeners();
   }
+
+  Future<bool> enablePersonaApp() async {
+    setIsLoading(true);
+    if (userPersona == null) {
+      await getUserPersona();
+    }
+    try {
+      var enabled = await enableAppServer(userPersona!.id);
+      if (enabled) {
+        return true;
+      } else {
+        AppSnackbar.showSnackbarError('Failed to enable persona');
+        return false;
+      }
+    } catch (e) {
+      AppSnackbar.showSnackbarError('Error enabling persona: $e');
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }
 }
