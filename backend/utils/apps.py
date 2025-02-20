@@ -8,7 +8,8 @@ from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
     get_app_usage_count_db, get_app_memory_created_integration_usage_count_db, get_app_memory_prompt_usage_count_db, \
     add_tester_db, add_app_access_for_tester_db, remove_app_access_for_tester_db, remove_tester_db, \
     is_tester_db, can_tester_access_app_db, get_apps_for_tester_db, get_app_chat_message_sent_usage_count_db, \
-    update_app_in_db, get_audio_apps_count, get_persona_by_uid_db, update_persona_in_db, add_persona_to_db
+    update_app_in_db, get_audio_apps_count, get_persona_by_uid_db, update_persona_in_db, add_persona_to_db, \
+    get_omi_personas_by_uid_db
 from database.auth import get_user_name
 from database.facts import get_facts
 from database.memories import get_memories
@@ -16,7 +17,7 @@ from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_gener
     set_generic_cache, set_app_usage_history_cache, get_app_usage_history_cache, get_app_money_made_cache, \
     set_app_money_made_cache, get_plugins_installs_count, get_plugins_reviews, get_app_cache_by_id, set_app_cache_by_id, \
     set_app_review_cache, get_app_usage_count_cache, set_app_money_made_amount_cache, get_app_money_made_amount_cache, \
-    set_app_usage_count_cache, set_user_paid_app, get_user_paid_app
+    set_app_usage_count_cache, set_user_paid_app, get_user_paid_app, is_username_taken
 from database.users import get_stripe_connect_account_id
 from models.app import App, UsageHistoryItem, UsageHistoryType
 from models.memory import Memory
@@ -368,6 +369,13 @@ def get_persona_by_uid(uid: str):
     return None
 
 
+def get_omi_personas_by_uid(uid: str):
+    personas = get_omi_personas_by_uid_db(uid)
+    if personas:
+        return personas
+    return None
+
+
 async def generate_persona_prompt(uid: str, persona: dict):
     """Generate a persona prompt based on user facts and memories."""
 
@@ -540,4 +548,3 @@ Use these facts, conversations and tweets to shape your personality. Responses s
     persona['persona_prompt'] = persona_prompt
     persona['updated_at'] = datetime.now(timezone.utc)
     update_persona_in_db(persona)
-

@@ -24,7 +24,6 @@ import 'package:omi_private/widgets/extensions/string.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:uuid/uuid.dart';
 
 import 'widgets/message_action_menu.dart';
 
@@ -41,7 +40,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   TextEditingController textController = TextEditingController();
   late ScrollController scrollController;
 
-  bool _showDeleteOption = false;
   bool isScrollingDown = false;
 
   bool _showSendButton = false;
@@ -62,12 +60,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       if (scrollController.position.userScrollDirection == ScrollDirection.reverse) {
         if (!isScrollingDown) {
           isScrollingDown = true;
-          _showDeleteOption = true;
           setState(() {});
           Future.delayed(const Duration(seconds: 5), () {
             if (isScrollingDown) {
               isScrollingDown = false;
-              _showDeleteOption = false;
               if (mounted) {
                 setState(() {});
               }
@@ -79,7 +75,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       if (scrollController.position.userScrollDirection == ScrollDirection.forward) {
         if (isScrollingDown) {
           isScrollingDown = false;
-          _showDeleteOption = false;
           setState(() {});
         }
       }
@@ -129,48 +124,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                   ),
                 )
               : null,
-          // AnimatedMiniBanner(
-          //   showAppBar: _showDeleteOption,
-          //   height: 80,
-          //   child: Container(
-          //     width: double.infinity,
-          //     height: 40,
-          //     color: Theme.of(context).primaryColor,
-          //     child: Row(
-          //       children: [
-          //         const SizedBox(width: 20),
-          //         const Spacer(),
-          //         InkWell(
-          //           onTap: () async {
-          //             showDialog(
-          //               context: context,
-          //               builder: (ctx) {
-          //                 return getDialog(context, () {
-          //                   Navigator.of(context).pop();
-          //                 }, () {
-          //                   setState(() {
-          //                     _showDeleteOption = false;
-          //                   });
-          //                   context.read<MessageProvider>().clearChat();
-          //                   Navigator.of(context).pop();
-          //                 }, "Clear Chat?",
-          //                     "Are you sure you want to clear the chat? This action cannot be undone.");
-          //               },
-          //             );
-          //           },
-          //           child: const Padding(
-          //             padding: EdgeInsets.all(8.0),
-          //             child: Text(
-          //               "Clear Chat  \u{1F5D1}",
-          //               style: TextStyle(color: Colors.white, fontSize: 14),
-          //             ),
-          //           ),
-          //         ),
-          //         const SizedBox(width: 20),
-          //       ],
-          //     ),
-          //   ),
-          // ),
           body: Stack(
             children: [
               Align(

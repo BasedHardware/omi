@@ -84,6 +84,7 @@ workflows:
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
           echo INTERCOM_IOS_API_KEY=$INTERCOM_IOS_API_KEY >> .env
+          echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
 
       - name: Set up Google Service Info
         script: |
@@ -457,6 +458,7 @@ workflows:
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
           echo INTERCOM_IOS_API_KEY=$INTERCOM_IOS_API_KEY >> .env
+          echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
 
       - name: Set up Google Service Info
         script: |

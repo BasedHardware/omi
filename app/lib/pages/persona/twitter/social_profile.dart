@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:omi_private/backend/auth.dart';
 import 'package:omi_private/backend/preferences.dart';
@@ -5,6 +6,7 @@ import 'package:omi_private/pages/onboarding/wrapper.dart';
 import 'package:omi_private/pages/persona/persona_provider.dart';
 import 'package:omi_private/pages/persona/twitter/verify_identity_screen.dart';
 import 'package:omi_private/utils/other/temp.dart';
+import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 
 class SocialHandleScreen extends StatefulWidget {
@@ -136,31 +138,46 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                         ),
                       ),
                       const Spacer(flex: 3),
-                      TextButton(
-                        onPressed: () {
-                          FocusScope.of(context).unfocus();
-                          SharedPreferencesUtil().hasOmiDevice = true;
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(builder: (context) => const OnboardingWrapper()),
-                          );
-                        },
-                        child: const Text(
-                          'I have omi',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                          ),
-                        ),
-                      ),
+                      FirebaseAuth.instance.currentUser == null || FirebaseAuth.instance.currentUser!.isAnonymous
+                          ? TextButton(
+                              onPressed: () async {
+                                FocusScope.of(context).unfocus();
+                                await Posthog().capture(
+                                  eventName: 'pressed_i_have_omi',
+                                  properties: {
+                                    'username': _controller.text,
+                                  },
+                                );
+
+                                routeToPage(context, OnboardingWrapper());
+                              },
+                              child: const Text(
+                                'I have omi',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              ),
+                            )
+                          : const SizedBox(),
                       const Spacer(flex: 1),
                       ElevatedButton(
                         onPressed: () async {
                           FocusScope.of(context).unfocus();
                           if (_formKey.currentState!.validate()) {
                             provider.setIsLoading(true);
-                            await signInAnonymously();
+                            if (FirebaseAuth.instance.currentUser == null) {
+                              debugPrint('User is not signed in, signing in anonymously');
+                              await signInAnonymously();
+                            }
+                            await Posthog().capture(
+                              eventName: 'x_handle_submitted',
+                              properties: {
+                                'username': _controller.text,
+                                'uid': FirebaseAuth.instance.currentUser?.uid ?? ''
+                              },
+                            );
                             SharedPreferencesUtil().hasOmiDevice = false;
                             await provider.getTwitterProfile(_controller.text.trim());
                             if (provider.twitterProfile.isNotEmpty) {

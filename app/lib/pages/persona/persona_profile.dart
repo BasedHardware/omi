@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:omi_private/backend/preferences.dart';
 import 'package:omi_private/gen/assets.gen.dart';
+import 'package:omi_private/pages/chat/clone_chat_page.dart';
 import 'package:omi_private/pages/persona/persona_provider.dart';
 import 'package:omi_private/pages/persona/update_persona.dart';
 import 'package:omi_private/providers/auth_provider.dart';
 import 'package:omi_private/utils/alerts/app_snackbar.dart';
 import 'package:omi_private/utils/other/temp.dart';
 import 'package:omi_private/widgets/sign_in_button.dart';
+import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -84,6 +86,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                             assetPath: Assets.images.appleLogo.path,
                             onTap: () async {
                               try {
+                                await Posthog().capture(eventName: 'link_with_apple_clicked');
                                 await authProvider.linkWithApple();
                                 if (mounted) {
                                   SharedPreferencesUtil().hasOmiDevice = true;
@@ -104,6 +107,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                           assetPath: Assets.images.googleLogo.path,
                           onTap: () async {
                             try {
+                              await Posthog().capture(eventName: 'link_with_google_clicked');
                               await authProvider.linkWithGoogle();
                               if (mounted) {
                                 SharedPreferencesUtil().hasOmiDevice = true;
@@ -126,10 +130,8 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                   const SizedBox(height: 16),
                   TextButton(
                     onPressed: () async {
+                      await Posthog().capture(eventName: 'i_dont_have_device_clicked');
                       await launchUrl(Uri.parse('https://www.omi.me/?_ref=omi_persona_flow'));
-                      // Navigator.pop(context);
-                      //  var persona = context.read<PersonaProvider>().userPersona;
-                      // routeToPage(context, UpdatePersonaPage(app: persona));
                     },
                     child: Text(
                       "I don't have a device",
@@ -174,14 +176,26 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
             backgroundColor: Colors.transparent,
             appBar: AppBar(
               backgroundColor: Colors.transparent,
-              // actions: [
-              //   IconButton(
-              //     icon: const Icon(Icons.settings, color: Colors.white),
-              //     onPressed: () {
-              //       // TODO: Implement settings
-              //     },
-              //   ),
-              // ],
+              leading: GestureDetector(
+                onTap: () {
+                  if (mounted) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CloneChatPage(),
+                      ),
+                    );
+                  }
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: SvgPicture.asset(
+                    'assets/images/ic_clone_chat.svg',
+                    width: 24,
+                    height: 24,
+                  ),
+                ),
+              ),
             ),
             body: provider.isLoading || provider.userPersona == null
                 ? const Center(
@@ -267,7 +281,10 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           child: TextButton(
-                            onPressed: () {
+                            onPressed: () async {
+                              await Posthog().capture(eventName: 'share_persona_clicked', properties: {
+                                'persona_username': provider.userPersona!.username ?? '',
+                              });
                               Share.share(
                                 'Check out this Persona on Omi AI: ${provider.userPersona!.name} by me \n\nhttps://personas.omi.me/u/${provider.userPersona!.username}',
                                 subject: '${provider.userPersona!.name} Persona',
@@ -388,7 +405,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                               const SizedBox(height: 12),
                               _buildSocialLink(
                                 icon: 'assets/images/calendar_logo.png',
-                                text: 'calendar id',
+                                text: 'calendar Id',
                                 isComingSoon: true,
                               ),
                             ],

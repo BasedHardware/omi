@@ -276,6 +276,17 @@ def get_persona_by_uid_db(uid: str):
     return doc.to_dict()
 
 
+def get_omi_personas_by_uid_db(uid: str):
+    filters = [FieldFilter('uid', '==', uid), FieldFilter('capabilities', 'array_contains', 'persona'),
+               FieldFilter('deleted', '==', False)]
+    persona_ref = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters))
+    docs = persona_ref.get()
+    if not docs:
+        return []
+    docs = [doc for doc in docs if 'omi' in doc.to_dict().get('connected_accounts', [])]
+    return docs
+
+
 def add_persona_to_db(persona_data: dict):
     persona_ref = db.collection('plugins_data')
     persona_ref.add(persona_data, persona_data['id'])

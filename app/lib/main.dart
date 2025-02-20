@@ -48,6 +48,7 @@ import 'package:omi_private/utils/logger.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
+import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
@@ -80,6 +81,14 @@ Future<bool> _init() async {
   return isAuth;
 }
 
+Future<void> initPostHog() async {
+  final config = PostHogConfig(Env.posthogApiKey!);
+  config.debug = true;
+  config.captureApplicationLifecycleEvents = true;
+  config.host = 'https://us.i.posthog.com';
+  await Posthog().setup(config);
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (F.env == Environment.prod) {
@@ -88,6 +97,9 @@ void main() async {
     Env.init(DevEnv());
   }
   FlutterForegroundTask.initCommunicationPort();
+  if (Env.posthogApiKey != null) {
+    await initPostHog();
+  }
   // _setupAudioSession();
   bool isAuth = await _init();
   if (Env.instabugApiKey != null) {
@@ -206,6 +218,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             child: MaterialApp(
               navigatorObservers: [
                 if (Env.instabugApiKey != null) InstabugNavigatorObserver(),
+                if (Env.posthogApiKey != null) PosthogObserver(),
               ],
               debugShowCheckedModeBanner: F.env == Environment.dev,
               title: F.title,

@@ -1,7 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:omi_private/backend/preferences.dart';
 import 'package:omi_private/backend/schema/app.dart';
 import 'package:omi_private/gen/assets.gen.dart';
 import 'package:omi_private/providers/app_provider.dart';
@@ -207,14 +206,14 @@ class ChatAppsDropdownWidget extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.start,
               mainAxisSize: MainAxisSize.max,
               children: [
-                SizedBox(
+                const SizedBox(
                   width: 24,
                   child: Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Container(
-                    child: Row(
+                    child: const Row(
                       mainAxisSize: MainAxisSize.max,
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -229,10 +228,10 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                 ),
               ],
             ),
-          )
+          ),
         ] +
         [
-          PopupMenuItem<String>(
+          const PopupMenuItem<String>(
             height: 1,
             child: Divider(
               height: 1,
@@ -251,9 +250,9 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
+                        const Text(
                           "Omi",
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                         ),
                         selectedApp == null
                             ? const SizedBox(

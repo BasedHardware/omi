@@ -74,22 +74,42 @@ def delete_app_cache_by_id(app_id: str):
 # ******************************************************
 
 def is_username_taken(username: str) -> bool:
-    return r.exists(f'personas:{username}')
+    """Check if username is taken by checking if it exists in the username:uid mapping"""
+    value = r.exists(f'username:{username}:uid')
+    if value == 0:
+        return False
+    return True
 
 
 def get_uid_by_username(username: str) -> str | None:
-    uid = r.get(f'personas:{username}')
-    if not uid:
-        return None
-    return uid.decode()
+    """Get the UID that owns this username"""
+    uid = r.get(f'username:{username}:uid')
+    return uid.decode() if uid else None
+
+
+def get_usernames_by_uid(uid: str) -> List[str]:
+    """Get all usernames owned by a UID"""
+    usernames = r.smembers(f'uid:{uid}:usernames')
+    return [u.decode() for u in usernames] if usernames else []
 
 
 def delete_username(username: str):
-    r.delete(f'personas:{username}')
+    """Delete username and remove it from owner's set"""
+    # Get current owner
+    uid = get_uid_by_username(username)
+    if uid:
+        # Remove from owner's set
+        r.srem(f'uid:{uid}:usernames', username)
+        # Delete username:uid mapping
+        r.delete(f'username:{username}:uid')
 
 
 def save_username(username: str, uid: str):
-    r.set(f'personas:{username}', uid)
+    """Save username and add to owner's set"""
+    # Save username:uid mapping
+    r.set(f'username:{username}:uid', uid)
+    # Add to owner's set of usernames
+    r.sadd(f'uid:{uid}:usernames', username)
 
 
 # ******************************************************

@@ -1,8 +1,10 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:omi_private/pages/chat/clone_chat_page.dart';
 import 'package:omi_private/pages/persona/persona_provider.dart';
 import 'package:omi_private/utils/other/temp.dart';
+import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 
 import '../persona_profile.dart';
@@ -17,17 +19,19 @@ class CloneSuccessScreen extends StatefulWidget {
 }
 
 class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
-  void _handleNavigation() {
+  void _handleNavigation() async {
     final user = FirebaseAuth.instance.currentUser;
 
     // If user is not anonymous (signed in with Google/Apple), they came from create/update flow
     if (user != null && !user.isAnonymous) {
+      Posthog().capture(eventName: 'x_connected', properties: {'existing_omi_user': true});
       Navigator.pop(context);
       Navigator.pop(context);
       Navigator.pop(context);
     } else {
       // Anonymous user, just go to profile
-      routeToPage(context, const PersonaProfilePage());
+      Posthog().capture(eventName: 'x_connected', properties: {'existing_omi_user': false});
+      routeToPage(context, const PersonaProfilePage(), replace: true);
     }
   }
 
@@ -50,7 +54,7 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 24.0),
                 child: Column(
                   children: [
-                    Spacer(flex: 2),
+                    const Spacer(flex: 2),
                     SvgPicture.asset('assets/images/checkbox.svg'),
                     const SizedBox(height: 24),
                     Text(
@@ -64,7 +68,7 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    Spacer(flex: 1),
+                    const Spacer(flex: 1),
                     Column(
                       children: [
                         Stack(
@@ -176,17 +180,19 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                         ],
                       ),
                     ),
-                    Spacer(flex: 2),
+                    const Spacer(flex: 2),
                     Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: ElevatedButton(
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Coming soon!'),
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
+                        onPressed: () async {
+                          if (mounted) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const CloneChatPage(),
+                              ),
+                            );
+                          }
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.transparent,
@@ -197,23 +203,12 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                             side: BorderSide(color: Colors.white.withOpacity(0.12), width: 4),
                           ),
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Image.asset(
-                              'assets/images/x_logo.png',
-                              width: 18,
-                              height: 18,
-                            ),
-                            const SizedBox(width: 14),
-                            const Text(
-                              'Connect to DMs',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
+                        child: const Text(
+                          'Chat with my clone',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ),
@@ -230,7 +225,7 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                         ),
                       ),
                     ),
-                    Spacer(flex: 1),
+                    const Spacer(flex: 1),
                   ],
                 ),
               ),

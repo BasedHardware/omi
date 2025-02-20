@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:omi_private/backend/http/api/apps.dart';
 import 'package:omi_private/backend/preferences.dart';
 import 'package:omi_private/pages/persona/persona_provider.dart';
 import 'package:omi_private/pages/persona/twitter/clone_success_sceen.dart';
 import 'package:omi_private/utils/other/temp.dart';
+import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -17,6 +19,7 @@ class VerifyIdentityScreen extends StatefulWidget {
 
 class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
   bool _isVerifying = false;
+  bool _isLoading = false;
   bool postTweetClicked = false;
 
   @override
@@ -34,14 +37,24 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
   }
 
   Future<void> _openTwitterToTweet(BuildContext context) async {
+    setState(() {
+      _isLoading = true;
+    });
     var provider = context.read<PersonaProvider>();
-    var handle = provider.usernameController.text;
-    if (handle.isEmpty) {
-      handle = provider.twitterProfile['profile'];
-    }
-    final tweetText = Uri.encodeComponent('Verifying my clone: https://personas.omi.me/u/$handle');
+    var handle = provider.twitterProfile['profile'];
+    var username = await generateUsername(handle);
+    provider.updateUsername(username!);
+
+    final tweetText = Uri.encodeComponent('Verifying my clone: https://personas.omi.me/u/$username');
     final twitterUrl = 'https://twitter.com/intent/tweet?text=$tweetText';
     setPostTweetClicked(true);
+    await Posthog().capture(eventName: 'post_tweet_clicked', properties: {
+      'x_handle': handle,
+      'persona_username': username,
+    });
+    setState(() {
+      _isLoading = false;
+    });
     if (await canLaunchUrl(Uri.parse(twitterUrl))) {
       await launchUrl(Uri.parse(twitterUrl), mode: LaunchMode.externalApplication);
     }
@@ -56,8 +69,9 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
 
     try {
       final handle = context.read<PersonaProvider>().twitterProfile['profile'];
-      final isVerified = await context.read<PersonaProvider>().verifyTweet(handle);
+      final isVerified = await context.read<PersonaProvider>().verifyTweet();
       if (isVerified) {
+        await Posthog().capture(eventName: 'tweet_verified', properties: {'x_handle': handle});
         SharedPreferencesUtil().hasPersonaCreated = true;
         routeToPage(context, const CloneSuccessScreen());
       } else {
@@ -226,7 +240,7 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
                       children: [
                         ElevatedButton(
                           onPressed: () {
-                            if (_isVerifying) {
+                            if (_isVerifying || _isLoading) {
                               return;
                             } else {
                               if (postTweetClicked) {
@@ -244,7 +258,7 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
                               borderRadius: BorderRadius.circular(28),
                             ),
                           ),
-                          child: _isVerifying
+                          child: _isVerifying || _isLoading
                               ? const SizedBox(
                                   width: 20,
                                   height: 20,
@@ -264,8 +278,8 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
                         const SizedBox(height: 16),
                         postTweetClicked
                             ? TextButton(
-                                onPressed: () {
-                                  Navigator.of(context).pop();
+                                onPressed: () async {
+                                  await _openTwitterToTweet(context);
                                 },
                                 child: Text(
                                   "Didn't post the tweet? click here",

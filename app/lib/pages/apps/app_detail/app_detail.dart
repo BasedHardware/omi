@@ -83,11 +83,14 @@ class _AppDetailPageState extends State<AppDetailPage> {
       // Load details
       setIsLoading(true);
       var res = await context.read<AppProvider>().getAppDetails(app.id);
-      setState(() {
-        if (res != null) {
-          app = res;
-        }
-      });
+      if (mounted) {
+        setState(() {
+          if (res != null) {
+            app = res;
+          }
+        });
+      }
+
       setIsLoading(false);
       context.read<AppProvider>().checkIsAppOwner(app.uid);
       context.read<AppProvider>().setIsAppPublicToggled(!app.private);
