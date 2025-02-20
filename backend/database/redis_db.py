@@ -74,22 +74,23 @@ def delete_app_cache_by_id(app_id: str):
 # ******************************************************
 
 def is_username_taken(username: str) -> bool:
-    return r.exists(f'personas:{username}')
+    return r.exists(f'personas:*:{username}')
 
 
 def get_uid_by_username(username: str) -> str | None:
-    uid = r.get(f'personas:{username}')
-    if not uid:
-        return None
-    return uid.decode()
+    for key in r.scan_iter(f'personas:*:{username}'):
+        uid = r.get(key)
+        if uid:
+            return uid.decode()
+    return None
 
 
-def delete_username(username: str):
-    r.delete(f'personas:{username}')
+def delete_username(username: str, persona_id: str):
+    r.delete(f'personas:{persona_id}:{username}')
 
 
-def save_username(username: str, uid: str):
-    r.set(f'personas:{username}', uid)
+def save_username(username: str, uid: str, persona_id: str):
+    r.set(f'personas:{persona_id}:{username}', uid)
 
 
 # ******************************************************

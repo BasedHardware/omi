@@ -117,7 +117,16 @@ async def create_persona(persona_data: str = Form(...), file: UploadFile = File(
     user = get_user_from_uid(uid)
     data['author'] = user['display_name']
     data['email'] = user['email']
-    save_username(data['username'], uid)
+
+    if 'username' not in data or data['username'] == '' or data['username'] is None:
+        data['username'] = data['name'].replace(' ', '')
+        if is_username_taken(data['username']) != 0:
+            i = 1
+            while is_username_taken(f"{data['username']}{i}") != 0:
+                i += 1
+            data['username'] = f"{data['username']}{i}"
+    save_username(data['username'], uid, data['id'])
+
     if 'connected_accounts' not in data or data['connected_accounts'] is None:
         data['connected_accounts'] = ['omi']
     data['persona_prompt'] = await generate_persona_prompt(uid, data)
@@ -132,7 +141,7 @@ async def create_persona(persona_data: str = Form(...), file: UploadFile = File(
 
     add_app_to_db(data)
 
-    return {'status': 'ok', 'app_id': data['id']}
+    return {'status': 'ok', 'app_id': data['id'], 'username': data['username']}
 
 
 @router.patch('/v1/personas/{persona_id}', tags=['v1'])
@@ -152,14 +161,14 @@ def update_persona(persona_id: str, persona_data: str = Form(...), file: UploadF
             f.write(file.file.read())
         img_url = upload_plugin_logo(file_path, persona_id)
         data['image'] = img_url
-    save_username(data['username'], uid)
+    save_username(data['username'], uid, persona_id)
     data['description'] = generate_persona_desc(uid, data['name'])
     data['updated_at'] = datetime.now(timezone.utc)
     update_app_in_db(data)
     if persona['approved'] and (persona['private'] is None or persona['private'] is False):
         delete_generic_cache('get_public_approved_apps_data')
     delete_app_cache_by_id(persona_id)
-    return {'status': 'ok'}
+    return {'status': 'ok', 'app_id': persona_id, 'username': data['username']}
 
 
 @router.get('/v1/personas', tags=['v1'])
@@ -189,6 +198,18 @@ def check_username(username: str, uid: str = Depends(auth.get_current_user_uid))
             return {'is_taken': False}
         else:
             return {'is_taken': True}
+
+
+@router.get('/v1/personas/generate-username', tags=['v1'])
+def generate_username(handle: str, uid: str = Depends(auth.get_current_user_uid)):
+    username = handle.replace(' ', '')
+    if is_username_taken(username) == 0:
+        return {'username': username}
+    i = 1
+    while is_username_taken(f"{username}{i}") != 0:
+        i += 1
+    username = f"{username}{i}"
+    return {'username': username}
 
 
 @router.patch('/v1/apps/{app_id}', tags=['v1'])

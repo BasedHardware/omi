@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/api/apps.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:image_picker/image_picker.dart';
@@ -10,7 +11,7 @@ typedef ShowSuccessDialogCallback = void Function(String url);
 
 class PersonaProvider extends ChangeNotifier {
   final GlobalKey<FormState> formKey = GlobalKey<FormState>();
-  TextEditingController nameController = TextEditingController();
+  TextEditingController nameController = TextEditingController(text: SharedPreferencesUtil().givenName);
   TextEditingController usernameController = TextEditingController();
   bool isUsernameTaken = false;
   bool isCheckingUsername = false;
@@ -28,6 +29,13 @@ class PersonaProvider extends ChangeNotifier {
   Map twitterProfile = {};
   App? userPersona;
 
+  String username = '';
+
+  void updateUsername(String value) {
+    username = value;
+    notifyListeners();
+  }
+
   Future getTwitterProfile(String username) async {
     setIsLoading(true);
     var res = await getTwitterProfileData(username);
@@ -44,8 +52,8 @@ class PersonaProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future verifyTweet(String username) async {
-    var res = await verifyTwitterOwnership(username, personaId);
+  Future verifyTweet() async {
+    var res = await verifyTwitterOwnership(username, twitterProfile['profile'], personaId);
     if (res) {
       AppSnackbar.showSnackbarSuccess('Twitter handle verified');
     } else {
@@ -160,8 +168,8 @@ class PersonaProvider extends ChangeNotifier {
     try {
       final personaData = {
         'name': nameController.text,
-        'username': usernameController.text,
         'private': !makePersonaPublic,
+        'username': username,
       };
 
       if (twitterProfile.isNotEmpty) {
@@ -174,8 +182,8 @@ class PersonaProvider extends ChangeNotifier {
 
       var res = await createPersonaApp(selectedImage!, personaData);
 
-      if (res) {
-        String personaUrl = 'personas.omi.me/u/${usernameController.text}';
+      if (res.isNotEmpty) {
+        String personaUrl = 'personas.omi.me/u/${res['username']}';
         print('Persona URL: $personaUrl');
         if (onShowSuccessDialog != null) {
           onShowSuccessDialog!(personaUrl);

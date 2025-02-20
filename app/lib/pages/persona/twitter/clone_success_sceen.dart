@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
+import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 
 import '../persona_profile.dart';
@@ -17,17 +18,19 @@ class CloneSuccessScreen extends StatefulWidget {
 }
 
 class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
-  void _handleNavigation() {
+  void _handleNavigation() async {
     final user = FirebaseAuth.instance.currentUser;
 
     // If user is not anonymous (signed in with Google/Apple), they came from create/update flow
     if (user != null && !user.isAnonymous) {
+      Posthog().capture(eventName: 'x_connected', properties: {'existing_omi_user': true});
       Navigator.pop(context);
       Navigator.pop(context);
       Navigator.pop(context);
     } else {
       // Anonymous user, just go to profile
-      routeToPage(context, const PersonaProfilePage());
+      Posthog().capture(eventName: 'x_connected', properties: {'existing_omi_user': false});
+      routeToPage(context, const PersonaProfilePage(), replace: true);
     }
   }
 
@@ -50,7 +53,7 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 24.0),
                 child: Column(
                   children: [
-                    Spacer(flex: 2),
+                    const Spacer(flex: 2),
                     SvgPicture.asset('assets/images/checkbox.svg'),
                     const SizedBox(height: 24),
                     Text(
@@ -64,7 +67,7 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    Spacer(flex: 1),
+                    const Spacer(flex: 1),
                     Column(
                       children: [
                         Stack(
@@ -176,7 +179,7 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                         ],
                       ),
                     ),
-                    Spacer(flex: 2),
+                    const Spacer(flex: 2),
                     Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: ElevatedButton(
@@ -230,7 +233,7 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                         ),
                       ),
                     ),
-                    Spacer(flex: 1),
+                    const Spacer(flex: 1),
                   ],
                 ),
               ),
