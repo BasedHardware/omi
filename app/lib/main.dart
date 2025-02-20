@@ -9,7 +9,6 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:friend_private/backend/auth.dart';
-import 'package:friend_private/backend/http/api/custom_auth.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/env/dev_env.dart';
 import 'package:friend_private/env/env.dart';
@@ -67,22 +66,11 @@ Future<bool> _init() async {
   await NotificationService.instance.initialize();
   await SharedPreferencesUtil.init();
   await MixpanelManager.init();
-  if (SharedPreferencesUtil().hasOmiDevice == null && FirebaseAuth.instance.currentUser?.isAnonymous == true) {
-    debugPrint('User is anonymous and unnecessarily created by Firebase');
-    await FirebaseAuth.instance.currentUser?.delete();
-  }
 
   // TODO: thinh, move to app start
   await ServiceManager.instance().start();
 
-  bool isAuth = false;
-  try {
-    if (SharedPreferencesUtil().customBackendUrl.isNotEmpty) {
-      isAuth = await customAuthSignIn(SharedPreferencesUtil().email, SharedPreferencesUtil().customAuthPassword);
-    } else {
-      isAuth = (await getIdToken()) != null;
-    }
-  } catch (e) {} // if no connect this will fail
+  bool isAuth = (await getIdToken()) != null;
   if (isAuth) MixpanelManager().identify();
   initOpus(await opus_flutter.load());
 
@@ -329,8 +317,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
         NotificationService.instance.saveNotificationToken();
       }
 
-      if (context.read<AuthenticationProvider>().user != null ||
-          (SharedPreferencesUtil().customBackendUrl.isNotEmpty && SharedPreferencesUtil().authToken.isNotEmpty)) {
+      if (context.read<AuthenticationProvider>().isSignedIn()) {
         context.read<HomeProvider>().setupHasSpeakerProfile();
         try {
           await IntercomManager.instance.intercom.loginIdentifiedUser(
@@ -355,21 +342,14 @@ class _DeciderWidgetState extends State<DeciderWidget> {
   Widget build(BuildContext context) {
     return Consumer<AuthenticationProvider>(
       builder: (context, authProvider, child) {
-        if (authProvider.user != null ||
-            (SharedPreferencesUtil().customBackendUrl.isNotEmpty && SharedPreferencesUtil().authToken.isNotEmpty)) {
-          if (SharedPreferencesUtil().hasOmiDevice == false) {
-            if (SharedPreferencesUtil().hasPersonaCreated) {
-              return const PersonaProfilePage();
-            } else {
-              return const DeviceSelectionPage();
-            }
+        if (authProvider.isSignedIn()) {
+          if (SharedPreferencesUtil().onboardingCompleted) {
+            return const HomePageWrapper();
           } else {
-            if (SharedPreferencesUtil().onboardingCompleted) {
-              return const HomePageWrapper();
-            } else {
-              return const OnboardingWrapper();
-            }
+            return const OnboardingWrapper();
           }
+        } else if (SharedPreferencesUtil().hasOmiDevice == false && SharedPreferencesUtil().hasPersonaCreated) {
+          return const PersonaProfilePage();
         } else {
           return const DeviceSelectionPage();
         }

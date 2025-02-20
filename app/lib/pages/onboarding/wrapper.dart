@@ -38,8 +38,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     _controller = TabController(length: hasSpeechProfile ? 5 : 6, vsync: this);
     _controller!.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (isSignedIn() ||
-          (SharedPreferencesUtil().customBackendUrl.isNotEmpty && SharedPreferencesUtil().authToken.isNotEmpty)) {
+      if (isSignedIn()) {
         // && !SharedPreferencesUtil().onboardingCompleted
         if (mounted) {
           context.read<HomeProvider>().setupHasSpeakerProfile();
