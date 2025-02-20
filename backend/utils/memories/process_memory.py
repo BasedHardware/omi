@@ -12,8 +12,7 @@ import database.memories as memories_db
 import database.notifications as notification_db
 import database.tasks as tasks_db
 import database.trends as trends_db
-from database.apps import record_app_usage, get_persona_by_uid_db, get_omi_personas_by_uid_db
-from database.redis_db import delete_app_cache_by_id
+from database.apps import record_app_usage, get_omi_personas_by_uid_db
 from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
 from models.facts import FactDB

@@ -23,7 +23,7 @@ from utils.notifications import send_notification
 from utils.other import endpoints as auth
 from models.app import App
 from utils.other.storage import upload_plugin_logo, delete_plugin_logo, upload_app_thumbnail, get_app_thumbnail_url
-from utils.social import get_twitter_profile, get_twitter_timeline, get_latest_tweet, \
+from utils.social import get_twitter_profile, get_latest_tweet, \
     create_persona_from_twitter_profile, add_twitter_to_persona, increment_username
 
 router = APIRouter()
