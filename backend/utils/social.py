@@ -1,12 +1,11 @@
 import os
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 import httpx
-from fastapi import HTTPException
 from ulid import ULID
 
-from database.apps import update_app_in_db, add_app_to_db, get_persona_by_uid_db, get_persona_by_id_db
-from database.redis_db import delete_generic_cache, is_username_taken, save_username
+from database.apps import update_app_in_db, add_app_to_db, get_persona_by_id_db
+from database.redis_db import delete_generic_cache, save_username, is_username_taken
 from utils.llm import condense_tweets, generate_twitter_persona_prompt
 
 rapid_api_host = os.getenv('RAPID_API_HOST')
@@ -70,11 +69,7 @@ async def create_persona_from_twitter_profile(username: str, uid: str) -> Dict[s
     profile = await get_twitter_profile(username)
     profile['avatar'] = profile['avatar'].replace('_normal', '')
 
-    if is_username_taken(profile['profile']) != 0:
-        i = 1
-        while is_username_taken(f"{profile['profile']}{i}") != 0:
-            i += 1
-        profile['profile'] = f"{profile['profile']}{i}"
+    profile['profile'] = increment_username(profile['profile'])
 
     persona = {
         "name": profile["name"],
@@ -103,7 +98,7 @@ async def create_persona_from_twitter_profile(username: str, uid: str) -> Dict[s
     condensed_tweets = condense_tweets(tweets, profile["name"])
     persona['persona_prompt'] = generate_twitter_persona_prompt(condensed_tweets, profile["name"])
     add_app_to_db(persona)
-    save_username(persona['username'], uid, persona['id'])
+    save_username(persona['username'], uid)
     delete_generic_cache('get_public_approved_apps_data')
     return persona
 
@@ -121,3 +116,13 @@ async def add_twitter_to_persona(username: str, persona_id) -> Dict[str, Any]:
     update_app_in_db(persona)
     delete_generic_cache('get_public_approved_apps_data')
     return persona
+
+
+def increment_username(username: str):
+    if is_username_taken(username):
+        i = 1
+        while is_username_taken(f"{username}{i}"):
+            i += 1
+        return f"{username}{i}"
+    else:
+        return username
