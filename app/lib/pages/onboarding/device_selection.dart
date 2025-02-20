@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/gen/assets.gen.dart';
 
 import 'package:friend_private/pages/persona/twitter/social_profile.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
@@ -36,7 +37,7 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
         children: [
           // Background image
           Image.asset(
-            'assets/images/new_background.png',
+            Assets.images.newBackground.path,
             fit: BoxFit.cover,
           ),
           Scaffold(
