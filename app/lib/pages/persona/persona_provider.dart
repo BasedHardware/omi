@@ -1,15 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/api/apps.dart'
-    show
-        checkPersonaUsername,
-        createPersonaApp,
-        enableAppServer,
-        getTwitterProfileData,
-        getUserPersonaServer,
-        updatePersonaApp,
-        verifyTwitterOwnership;
+import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
@@ -223,13 +215,10 @@ class PersonaProvider extends ChangeNotifier {
   }
 
   Future<bool> enablePersonaApp() async {
+    setIsLoading(true);
     if (userPersona == null) {
       await getUserPersona();
     }
-
-    debugPrint(userPersona!.id);
-
-    setIsLoading(true);
     try {
       var enabled = await enableAppServer(userPersona!.id);
       if (enabled) {
