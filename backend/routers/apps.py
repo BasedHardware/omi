@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import List
 import requests
 from ulid import ULID
-from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header, Response
+from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header
 
 from database.apps import change_app_approval_status, get_unapproved_public_apps_db, \
     add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db, \
@@ -12,20 +12,19 @@ from database.apps import change_app_approval_status, get_unapproved_public_apps
 from database.auth import get_user_from_uid
 from database.notifications import get_token_only
 from database.redis_db import delete_generic_cache, get_specific_user_review, increase_app_installs_count, \
-    decrease_app_installs_count, enable_app, disable_app, delete_app_cache_by_id, is_username_taken, save_username, \
-    get_uid_by_username
+    decrease_app_installs_count, enable_app, disable_app, delete_app_cache_by_id, is_username_taken, save_username
 from utils.apps import get_available_apps, get_available_app_by_id, get_approved_available_apps, \
     get_available_app_by_id_with_reviews, set_app_review, get_app_reviews, add_tester, is_tester, \
     add_app_access_for_tester, remove_app_access_for_tester, upsert_app_payment_link, get_is_user_paid_app, \
     is_permit_payment_plan_get, generate_persona_prompt, generate_persona_desc, get_persona_by_uid
-from utils.llm import generate_description, generate_persona_description
+from utils.llm import generate_description
 
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
 from models.app import App
 from utils.other.storage import upload_plugin_logo, delete_plugin_logo, upload_app_thumbnail, get_app_thumbnail_url
 from utils.social import get_twitter_profile, get_twitter_timeline, get_latest_tweet, \
-    create_persona_from_twitter_profile, add_twitter_to_persona
+    create_persona_from_twitter_profile, add_twitter_to_persona, increment_username
 
 router = APIRouter()
 
@@ -120,12 +119,8 @@ async def create_persona(persona_data: str = Form(...), file: UploadFile = File(
 
     if 'username' not in data or data['username'] == '' or data['username'] is None:
         data['username'] = data['name'].replace(' ', '')
-        if is_username_taken(data['username']) != 0:
-            i = 1
-            while is_username_taken(f"{data['username']}{i}") != 0:
-                i += 1
-            data['username'] = f"{data['username']}{i}"
-    save_username(data['username'], uid, data['id'])
+        data['username'] = increment_username(data['username'])
+    save_username(data['username'], uid)
 
     if 'connected_accounts' not in data or data['connected_accounts'] is None:
         data['connected_accounts'] = ['omi']
@@ -161,7 +156,7 @@ def update_persona(persona_id: str, persona_data: str = Form(...), file: UploadF
             f.write(file.file.read())
         img_url = upload_plugin_logo(file_path, persona_id)
         data['image'] = img_url
-    save_username(data['username'], uid, persona_id)
+    save_username(data['username'], uid)
     data['description'] = generate_persona_desc(uid, data['name'])
     data['updated_at'] = datetime.now(timezone.utc)
     update_app_in_db(data)
@@ -189,26 +184,14 @@ def get_persona_details(uid: str = Depends(auth.get_current_user_uid)):
 
 @router.get('/v1/apps/check-username', tags=['v1'])
 def check_username(username: str, uid: str = Depends(auth.get_current_user_uid)):
-    persona = is_username_taken(username)
-    if persona == 0:
-        return {'is_taken': False}
-    else:
-        username_owner = get_uid_by_username(username)
-        if username_owner == uid:
-            return {'is_taken': False}
-        else:
-            return {'is_taken': True}
+    is_taken = is_username_taken(username)
+    return {'is_taken': is_taken}
 
 
 @router.get('/v1/personas/generate-username', tags=['v1'])
 def generate_username(handle: str, uid: str = Depends(auth.get_current_user_uid)):
     username = handle.replace(' ', '')
-    if is_username_taken(username) == 0:
-        return {'username': username}
-    i = 1
-    while is_username_taken(f"{username}{i}") != 0:
-        i += 1
-    username = f"{username}{i}"
+    username = increment_username(username)
     return {'username': username}
 
 
