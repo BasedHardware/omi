@@ -48,29 +48,19 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
             ),
           ),
           Scaffold(
-            backgroundColor: const Color(0xFF0A0A0A),
+            backgroundColor: Colors.transparent,
             body: SafeArea(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24.0),
                 child: Column(
                   children: [
                     const Spacer(flex: 2),
-                    Container(
-                      width: 64,
-                      height: 64,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF00B341),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.check,
-                        color: Colors.white,
-                        size: 32,
-                      ),
-                    ),
+                    SvgPicture.asset('assets/images/checkbox.svg'),
                     const SizedBox(height: 24),
-                    const Text(
-                      'Your Omi clone is\nverified and live!',
+                    Text(
+                      FirebaseAuth.instance.currentUser?.isAnonymous == false
+                          ? 'X Connected Successfully!'
+                          : 'Your Omi clone is\nverified and live!',
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         color: Colors.white,
@@ -205,16 +195,13 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                           }
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.black,
+                          backgroundColor: Colors.transparent,
                           foregroundColor: Colors.white,
                           minimumSize: const Size(double.infinity, 56),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            side: BorderSide(
-                              color: Colors.white.withOpacity(0.12),
-                            ),
+                            borderRadius: BorderRadius.circular(16),
+                            side: BorderSide(color: Colors.white.withOpacity(0.12), width: 4),
                           ),
-                          elevation: 0,
                         ),
                         child: const Text(
                           'Chat with my clone',
