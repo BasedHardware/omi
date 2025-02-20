@@ -130,7 +130,7 @@ class CloneChatPageState extends State<CloneChatPage> with AutomaticKeepAliveCli
               ],
             ),
           ),
-          body: personaProvider.isLoading || personaProvider.userPersona == null
+          body: personaProvider.isLoading || personaProvider.userPersona == null || provider.isLoadingMessages
               ? const Center(
                   child: CircularProgressIndicator(
                     valueColor: AlwaysStoppedAnimation(Colors.white),
