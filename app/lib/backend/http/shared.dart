@@ -17,10 +17,6 @@ Future<String> getAuthHeader() async {
       expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
       (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
 
-  if (SharedPreferencesUtil().customBackendUrl.isNotEmpty && (!hasAuthToken || !isExpirationDateValid)) {
-    throw Exception('No auth token found');
-  }
-
   if (!hasAuthToken || !isExpirationDateValid) {
     SharedPreferencesUtil().authToken = await getIdToken() ?? '';
   }

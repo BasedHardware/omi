@@ -192,7 +192,7 @@ Future<void> signOut() async {
   // context.pushReplacementNamed('auth');
 }
 
-bool isSignedIn() => FirebaseAuth.instance.currentUser != null;
+bool isSignedIn() => FirebaseAuth.instance.currentUser != null && !FirebaseAuth.instance.currentUser!.isAnonymous;
 
 getFirebaseUser() {
   return FirebaseAuth.instance.currentUser;

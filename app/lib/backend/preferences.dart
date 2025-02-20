@@ -399,12 +399,4 @@ class SharedPreferencesUtil {
   Future<bool> clear() async {
     return await _preferences?.clear() ?? false;
   }
-
-  String get customBackendUrl => getString('customBackendUrl') ?? '';
-
-  set customBackendUrl(String value) => saveString('customBackendUrl', value);
-
-  String get customAuthPassword => getString('customAuthPassword') ?? '';
-
-  set customAuthPassword(String value) => saveString('customAuthPassword', value);
 }
