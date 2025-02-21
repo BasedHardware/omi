@@ -135,8 +135,7 @@ def send_message(
 
     async def generate_stream():
         callback_data = {}
-        stream_function = execute_persona_chat_stream if app and app.is_a_persona() else execute_graph_chat_stream
-        async for chunk in stream_function(uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session):
+        async for chunk in execute_graph_chat_stream(uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session):
             if chunk:
                 msg = chunk.replace("\n", "__CRLF__")
                 yield f'{msg}\n\n'
