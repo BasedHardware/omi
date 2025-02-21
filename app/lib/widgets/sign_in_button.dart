@@ -12,10 +12,10 @@ class SignInButton extends StatelessWidget {
   const SignInButton(
       {super.key, required this.title, this.assetPath, required this.onTap, this.padding, required this.iconSpacing});
 
-  factory SignInButton.withGoogle({required VoidCallback onTap}) {
+  factory SignInButton.withGoogle({required VoidCallback onTap, String? title}) {
     return SignInButton(
       assetPath: Assets.images.googleLogo.path,
-      title: "Sign in with Google",
+      title: title ?? "Sign in with Google",
       onTap: onTap,
       padding: Platform.isIOS
           ? const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
@@ -24,10 +24,10 @@ class SignInButton extends StatelessWidget {
     );
   }
 
-  factory SignInButton.withApple({required VoidCallback onTap}) {
+  factory SignInButton.withApple({required VoidCallback onTap, String? title}) {
     return SignInButton(
       assetPath: Assets.images.appleLogo.path,
-      title: "Sign in with Apple",
+      title: title ?? "Sign in with Apple",
       onTap: onTap,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       iconSpacing: 12,

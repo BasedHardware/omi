@@ -1,6 +1,8 @@
 import 'dart:io';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/providers/auth_provider.dart';
 import 'package:friend_private/widgets/sign_in_button.dart';
 import 'package:provider/provider.dart';
@@ -38,7 +40,20 @@ class _AuthComponentState extends State<AuthComponent> {
               SizedBox(height: MediaQuery.of(context).textScaleFactor > 1.0 ? 18 : 32),
               if (Platform.isIOS) ...[
                 SignInButton.withApple(
-                  onTap: () => provider.onAppleSignIn(widget.onSignIn),
+                  title:
+                      FirebaseAuth.instance.currentUser?.isAnonymous == true ? 'Link with Apple' : 'Sign in with Apple',
+                  onTap: () async {
+                    final user = FirebaseAuth.instance.currentUser;
+                    if (user != null && user.isAnonymous) {
+                      await provider.linkWithApple();
+                      if (mounted) {
+                        SharedPreferencesUtil().hasOmiDevice = true;
+                        widget.onSignIn();
+                      }
+                    } else {
+                      provider.onAppleSignIn(widget.onSignIn);
+                    }
+                  },
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -86,7 +101,20 @@ class _AuthComponentState extends State<AuthComponent> {
               ],
               const SizedBox(height: 12),
               SignInButton.withGoogle(
-                onTap: () => provider.onGoogleSignIn(widget.onSignIn),
+                title:
+                    FirebaseAuth.instance.currentUser?.isAnonymous == true ? 'Link with Google' : 'Sign in with Google',
+                onTap: () async {
+                  final user = FirebaseAuth.instance.currentUser;
+                  if (user != null && user.isAnonymous) {
+                    await provider.linkWithGoogle();
+                    if (mounted) {
+                      SharedPreferencesUtil().hasOmiDevice = true;
+                      widget.onSignIn();
+                    }
+                  } else {
+                    provider.onGoogleSignIn(widget.onSignIn);
+                  }
+                },
               ),
               const SizedBox(height: 16),
               RichText(

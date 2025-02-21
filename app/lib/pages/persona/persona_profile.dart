@@ -1,16 +1,10 @@
-import 'dart:io';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/pages/chat/clone_chat_page.dart';
+import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
-import 'package:friend_private/pages/persona/update_persona.dart';
-import 'package:friend_private/providers/auth_provider.dart';
-import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/sign_in_button.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -26,132 +20,6 @@ class PersonaProfilePage extends StatefulWidget {
 }
 
 class _PersonaProfilePageState extends State<PersonaProfilePage> {
-  void _showAccountLinkBottomSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.only(top: 20),
-          decoration: BoxDecoration(
-            color: Colors.grey[900],
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(20),
-            ),
-          ),
-          child: Consumer<AuthenticationProvider>(
-            builder: (context, authProvider, child) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[800],
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Link Your Account',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Link your account to clone your persona from device',
-                    style: TextStyle(
-                      color: Colors.grey[400],
-                      fontSize: 14,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 32),
-                  Padding(
-                    padding: EdgeInsets.only(
-                      bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-                      left: 16,
-                      right: 16,
-                    ),
-                    child: Column(
-                      children: [
-                        if (Platform.isIOS)
-                          SignInButton(
-                            title: 'Link with Apple',
-                            assetPath: Assets.images.appleLogo.path,
-                            onTap: () async {
-                              try {
-                                await Posthog().capture(eventName: 'link_with_apple_clicked');
-                                await authProvider.linkWithApple();
-                                if (mounted) {
-                                  SharedPreferencesUtil().hasOmiDevice = true;
-                                  var persona = context.read<PersonaProvider>().userPersona;
-                                  Navigator.pop(context);
-                                  routeToPage(context, UpdatePersonaPage(app: persona, fromNewFlow: true));
-                                }
-                              } catch (e) {
-                                AppSnackbar.showSnackbarError('Failed to link Apple account: $e');
-                              }
-                            },
-                            iconSpacing: 12,
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          ),
-                        if (Platform.isIOS) const SizedBox(height: 12),
-                        SignInButton(
-                          title: 'Link with Google',
-                          assetPath: Assets.images.googleLogo.path,
-                          onTap: () async {
-                            try {
-                              await Posthog().capture(eventName: 'link_with_google_clicked');
-                              await authProvider.linkWithGoogle();
-                              if (mounted) {
-                                SharedPreferencesUtil().hasOmiDevice = true;
-                                var persona = context.read<PersonaProvider>().userPersona;
-                                Navigator.pop(context);
-                                routeToPage(context, UpdatePersonaPage(app: persona, fromNewFlow: true));
-                              }
-                            } catch (e) {
-                              AppSnackbar.showSnackbarError('Failed to link Google account: $e');
-                            }
-                          },
-                          iconSpacing: Platform.isIOS ? 12 : 10,
-                          padding: Platform.isIOS
-                              ? const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
-                              : const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextButton(
-                    onPressed: () async {
-                      await Posthog().capture(eventName: 'i_dont_have_device_clicked');
-                      await launchUrl(Uri.parse('https://www.omi.me/?_ref=omi_persona_flow'));
-                    },
-                    child: Text(
-                      "I don't have a device",
-                      style: TextStyle(
-                        color: Colors.grey[400],
-                        fontSize: 14,
-                        decoration: TextDecoration.underline,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-                ],
-              );
-            },
-          ),
-        );
-      },
-    );
-  }
-
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -310,14 +178,114 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                         const SizedBox(height: 24),
                         InkWell(
                           onTap: () {
-                            final user = FirebaseAuth.instance.currentUser;
-                            if (user != null && user.isAnonymous) {
-                              _showAccountLinkBottomSheet();
-                            } else if (!user!.isAnonymous) {
-                              SharedPreferencesUtil().hasOmiDevice = true;
-                              var persona = context.read<PersonaProvider>().userPersona;
-                              routeToPage(context, UpdatePersonaPage(app: persona, fromNewFlow: true));
-                            }
+                            showModalBottomSheet(
+                              context: context,
+                              backgroundColor: Colors.transparent,
+                              isScrollControlled: true,
+                              builder: (context) => Stack(
+                                children: [
+                                  Positioned.fill(
+                                    child: Image.asset(
+                                      'assets/images/new_background.png',
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                  Container(
+                                    height: MediaQuery.of(context).size.height * 0.45,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.transparent,
+                                      borderRadius: BorderRadius.only(
+                                        topLeft: Radius.circular(32),
+                                        topRight: Radius.circular(32),
+                                      ),
+                                    ),
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const SizedBox(height: 12),
+                                        Container(
+                                          width: 40,
+                                          height: 4,
+                                          decoration: BoxDecoration(
+                                            color: Colors.white.withOpacity(0.2),
+                                            borderRadius: BorderRadius.circular(2),
+                                          ),
+                                        ),
+                                        const Spacer(),
+                                        const SizedBox(height: 24),
+                                        const Text(
+                                          'Get Omi Device',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 24,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          'Create a more accurate clone with\nyour personal conversations',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: Colors.white.withOpacity(0.6),
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                        const Spacer(),
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                                          child: Column(
+                                            children: [
+                                              ElevatedButton(
+                                                onPressed: () async {
+                                                  await Posthog().capture(eventName: 'i_dont_have_device_clicked');
+                                                  await launchUrl(
+                                                      Uri.parse('https://www.omi.me/?_ref=omi_persona_flow'));
+                                                },
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: Colors.transparent,
+                                                  foregroundColor: Colors.white,
+                                                  minimumSize: const Size(double.infinity, 56),
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius: BorderRadius.circular(16),
+                                                    side: BorderSide(
+                                                      color: Colors.white.withOpacity(0.12),
+                                                      width: 4,
+                                                    ),
+                                                  ),
+                                                ),
+                                                child: const Text(
+                                                  'Get Omi',
+                                                  style: TextStyle(
+                                                    fontSize: 17,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(height: 16),
+                                              TextButton(
+                                                onPressed: () {
+                                                  Navigator.pop(context);
+                                                  routeToPage(context, const OnboardingWrapper());
+                                                },
+                                                child: Text(
+                                                  'I have Omi device',
+                                                  style: TextStyle(
+                                                    fontSize: 18,
+                                                    color: Colors.white.withOpacity(0.6),
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(height: 40),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
                           },
                           child: Container(
                             margin: const EdgeInsets.symmetric(horizontal: 16),
