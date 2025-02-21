@@ -23,6 +23,8 @@ class PersonaProvider extends ChangeNotifier {
 
   String? personaId;
 
+  String? get _verifiedPersonaId => SharedPreferencesUtil().verifiedPersonaId;
+
   bool isFormValid = true;
   bool isLoading = false;
 
@@ -53,14 +55,18 @@ class PersonaProvider extends ChangeNotifier {
   }
 
   Future verifyTweet() async {
-    var res = await verifyTwitterOwnership(username, twitterProfile['profile'], personaId);
-    if (!res) {
+    var (verified, verifiedPersonaId) = await verifyTwitterOwnership(username, twitterProfile['profile'], personaId);
+    if (!verified) {
       AppSnackbar.showSnackbarError('Failed to verify Twitter handle');
     }
-    return res;
+    SharedPreferencesUtil().hasPersonaCreated = true;
+    SharedPreferencesUtil().verifiedPersonaId = verifiedPersonaId;
+
+    return verified;
   }
 
-  Future getUserPersona() async {
+  // TODO: get rid of this one
+  Future _getUserPersona() async {
     setIsLoading(true);
     var res = await getUserPersonaServer();
     if (res != null) {
@@ -69,6 +75,24 @@ class PersonaProvider extends ChangeNotifier {
       userPersona = null;
       AppSnackbar.showSnackbarError('Failed to fetch your persona');
     }
+    setIsLoading(false);
+  }
+
+  Future getVerifiedUserPersona() async {
+    if (_verifiedPersonaId == null) {
+      return;
+    }
+    setIsLoading(true);
+
+    // Warn: improvement needed
+    var res = await getAppDetailsServer(_verifiedPersonaId!);
+    if (res != null) {
+      userPersona = App.fromJson(res);
+    } else {
+      userPersona = null;
+      AppSnackbar.showSnackbarError('Failed to fetch your persona');
+    }
+
     setIsLoading(false);
   }
 
@@ -215,7 +239,7 @@ class PersonaProvider extends ChangeNotifier {
   Future<bool> enablePersonaApp() async {
     setIsLoading(true);
     if (userPersona == null) {
-      await getUserPersona();
+      await getVerifiedUserPersona();
     }
     try {
       var enabled = await enableAppServer(userPersona!.id);
