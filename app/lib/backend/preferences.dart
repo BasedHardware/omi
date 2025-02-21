@@ -43,6 +43,16 @@ class SharedPreferencesUtil {
 
   set hasPersonaCreated(bool value) => saveBool('hasPersonaCreated', value);
 
+  String? get verifiedPersonaId => getString('verifiedPersonaId');
+
+  set verifiedPersonaId(String? value) {
+    if (value != null) {
+      _preferences?.setString('verifiedPersonaId', value);
+    } else {
+      _preferences?.remove('verifiedPersonaId');
+    }
+  }
+
   set btDevice(BtDevice value) {
     saveString('btDevice', jsonEncode(value.toJson()));
   }

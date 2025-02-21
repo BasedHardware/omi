@@ -4,6 +4,7 @@ import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/pages/persona/twitter/clone_success_sceen.dart';
+import 'package:friend_private/utils/other/string_utils.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
@@ -42,9 +43,19 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
       _isLoading = true;
     });
     var provider = context.read<PersonaProvider>();
-    var handle = provider.twitterProfile['profile'];
-    var username = await generateUsername(handle);
-    provider.updateUsername(username!);
+    String? handle = provider.twitterProfile['profile'];
+    if (handle == null) {
+      return;
+    }
+
+    // username
+    String? username = provider.twitterProfile['persona_username'];
+    username ??= handle;
+    if (username.startsWith("@")) {
+      username = username.substring(1);
+    }
+    provider.updateUsername(username);
+
     final tweetText = Uri.encodeComponent('Verifying my clone($username): https://personas.omi.me/u/$username');
     final twitterUrl = 'https://twitter.com/intent/tweet?text=$tweetText';
     setPostTweetClicked(true);
@@ -227,7 +238,7 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
                         Column(
                           children: [
                             Text(
-                              provider.twitterProfile['name'],
+                              tryDecodingText(provider.twitterProfile['name']),
                               style: TextStyle(
                                 color: Colors.white.withOpacity(0.78),
                                 fontSize: 20,

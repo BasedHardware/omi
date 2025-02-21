@@ -112,6 +112,10 @@ def add_app_to_db(app_data: dict):
     app_ref.add(app_data, app_data['id'])
 
 
+def upsert_app_to_db(app_data: dict):
+    app_ref = db.collection('plugins_data').document(app_data['id'])
+    app_ref.set(app_data)
+
 def update_app_in_db(app_data: dict):
     app_ref = db.collection('plugins_data').document(app_data['id'])
     app_ref.update(app_data)
@@ -287,6 +291,37 @@ def get_persona_by_uid_db(uid: str):
     if not doc:
         return None
     return doc.to_dict()
+
+def get_persona_by_twitter_handle_db(handle: str):
+    filters = [
+        FieldFilter('category', '==', 'personality-emulation'),
+        FieldFilter('deleted', '==', False),
+        FieldFilter('twitter.username', '==', handle)
+    ]
+    persona_ref = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).limit(1)
+    docs = persona_ref.get()
+    if not docs:
+        return None
+    doc = next(iter(docs), None)
+    if not doc:
+        return None
+    return {'id': doc.id, **doc.to_dict()}
+
+def get_persona_by_username_twitter_handle_db(username: str, handle: str):
+    filters = [
+        FieldFilter('username', '==', username),
+        FieldFilter('category', '==', 'personality-emulation'),
+        FieldFilter('deleted', '==', False),
+        FieldFilter('twitter.username', '==', handle)
+    ]
+    persona_ref = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).limit(1)
+    docs = persona_ref.get()
+    if not docs:
+        return None
+    doc = next(iter(docs), None)
+    if not doc:
+        return None
+    return {'id': doc.id, **doc.to_dict()}
 
 
 def get_omi_personas_by_uid_db(uid: str):
