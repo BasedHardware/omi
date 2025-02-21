@@ -118,9 +118,9 @@ class _SettingsPageState extends State<SettingsPage> {
                     builder: (ctx) {
                       return getDialog(context, () {
                         Navigator.of(context).pop();
-                      }, () {
+                      }, () async {
                         SharedPreferencesUtil().hasOmiDevice = null;
-                        signOut();
+                        await signOut();
                         Navigator.of(context).pop();
                         routeToPage(context, const DeciderWidget(), replace: true);
                       }, "Sign Out?", "Are you sure you want to sign out?");

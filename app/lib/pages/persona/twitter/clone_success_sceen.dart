@@ -181,37 +181,31 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                       ),
                     ),
                     const Spacer(flex: 2),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          if (mounted) {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const CloneChatPage(),
-                              ),
-                            );
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size(double.infinity, 56),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            side: BorderSide(color: Colors.white.withOpacity(0.12), width: 4),
+                    if (FirebaseAuth.instance.currentUser?.isAnonymous == true)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            routeToPage(context, const CloneChatPage(), replace: true);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(double.infinity, 56),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              side: BorderSide(color: Colors.white.withOpacity(0.12), width: 4),
+                            ),
                           ),
-                        ),
-                        child: const Text(
-                          'Chat with my clone',
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
+                          child: const Text(
+                            'Chat with my clone',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ),
-                    ),
                     TextButton(
                       onPressed: _handleNavigation,
                       child: Text(
