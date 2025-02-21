@@ -71,6 +71,7 @@ async def upsert_persona_from_twitter_profile(username: str, handle: str, uid: s
     profile = await get_twitter_profile(handle)
     profile['avatar'] = profile['avatar'].replace('_normal', '')
     persona = get_persona_by_username_twitter_handle_db(username, handle)
+
     if not persona:
         persona = {
             "name": profile["name"],
@@ -89,11 +90,18 @@ async def upsert_persona_from_twitter_profile(username: str, handle: str, uid: s
             "private": False,
             "created_at": datetime.now(timezone.utc),
         }
+
+    # update profle
     persona["twitter"] = {
         "username": handle,
         "avatar": profile["avatar"],
         "connected_at": datetime.now(timezone.utc)
     }
+
+    # publish automatically
+    persona["status"] = "approved"
+    persona["approved"] = True
+    persona["private"] = False
 
     tweets = await get_twitter_timeline(handle)
     tweets = [{'tweet': tweet['text'], 'posted_at': tweet['created_at']} for tweet in tweets['timeline']]
