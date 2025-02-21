@@ -152,7 +152,7 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                                 routeToPage(context, OnboardingWrapper());
                               },
                               child: const Text(
-                                'I have omi',
+                                'Clone from omi device',
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,

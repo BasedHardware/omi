@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:friend_private/backend/http/api/messages.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
@@ -10,6 +11,7 @@ import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/pages/chat/widgets/ai_message.dart';
 import 'package:friend_private/pages/chat/widgets/user_message.dart';
+import 'package:friend_private/pages/persona/persona_profile.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
@@ -17,6 +19,7 @@ import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 
@@ -109,14 +112,18 @@ class CloneChatPageState extends State<CloneChatPage> with AutomaticKeepAliveCli
           appBar: AppBar(
             backgroundColor: Colors.transparent,
             elevation: 0,
-            leading: IconButton(
-              icon: const Icon(
-                Icons.arrow_back,
-                color: Colors.white,
-                size: 24,
-              ),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
+            leading: GestureDetector(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: SvgPicture.asset('assets/images/ic_clone_plus.svg'),
+                  ),
+                ),
+                onTap: () {
+                  routeToPage(context, const PersonaProfilePage(), replace: true);
+                }),
             title: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
