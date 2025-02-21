@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:collection/collection.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/fact.dart';
@@ -10,6 +9,9 @@ import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/widgets/extensions/functions.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
+
+import 'category_facts_page.dart';
+import 'facts_review_page.dart';
 
 class FactsPage extends StatelessWidget {
   const FactsPage({super.key});
@@ -31,39 +33,23 @@ class _FactsPage extends StatefulWidget {
 }
 
 class _FactsPageState extends State<_FactsPage> {
-  static List<String> values = ["_all", ...FactCategory.values.map((c) => c.toString().split(".").last)];
-  String? value = values.first;
-
   @override
   void initState() {
-    () {
-      context.read<FactsProvider>().init();
+    () async {
+      await context.read<FactsProvider>().init();
+
+      // Show review sheet if there are unreviewed facts
+      final unreviewedFacts = context.read<FactsProvider>().unreviewed;
+      print('No unreviewed facts');
+      if (unreviewedFacts.isNotEmpty) {
+        _showReviewSheet(unreviewedFacts);
+      }
     }.withPostFrameCallback();
     super.initState();
   }
 
   @override
   Widget build(BuildContext context) {
-    List<DropdownMenuItem<String>> buildDropdownItems(FactsProvider provider) {
-      String title(String val, int count) {
-        if (provider.loading) {
-          return val.capitalize();
-        }
-        return "${val.capitalize()} ($count)";
-      }
-
-      return values.map((val) {
-        var count = (provider.facts.where((f) => f.category.toString().split(".").last == val)).length;
-        return DropdownMenuItem<String>(
-            value: val,
-            child: Text(val == "_all"
-                ? title("About you", provider.facts.length)
-                : val == "other"
-                    ? title('Other things', count)
-                    : title(val, count)));
-      }).toList();
-    }
-
     return Consumer<FactsProvider>(
       builder: (context, provider, _) {
         return PopScope(
@@ -72,7 +58,21 @@ class _FactsPageState extends State<_FactsPage> {
             backgroundColor: Theme.of(context).colorScheme.primary,
             appBar: AppBar(
               backgroundColor: Theme.of(context).colorScheme.primary,
-              title: const Text('About you'),
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const Text('My Facts'),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${provider.facts.length} total facts',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade400,
+                      fontWeight: FontWeight.normal,
+                    ),
+                  ),
+                ],
+              ),
               actions: [
                 IconButton(
                   icon: const Icon(Icons.add),
@@ -88,27 +88,300 @@ class _FactsPageState extends State<_FactsPage> {
                     child: CircularProgressIndicator(
                     valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                   ))
-                : RefreshIndicator(
-                    color: Colors.white,
-                    onRefresh: () async {
-                      return await provider.loadFacts();
-                    },
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.max,
-                      children: [
-                        _buildCategoryChips(provider),
-                        provider.selectedCategory != null
-                            ? Expanded(
-                                child: _buildFactsList(provider),
-                              )
-                            : const SizedBox.shrink(),
+                : CustomScrollView(
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          child: SearchBar(
+                            hintText: 'Search your facts',
+                            leading: const Icon(Icons.search, color: Colors.white70),
+                            backgroundColor: MaterialStateProperty.all(Colors.grey.shade900),
+                            elevation: MaterialStateProperty.all(0),
+                            padding: MaterialStateProperty.all(
+                              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            ),
+                            hintStyle: MaterialStateProperty.all(
+                              TextStyle(color: Colors.grey.shade400, fontSize: 16),
+                            ),
+                            onChanged: (value) => provider.setSearchQuery(value),
+                          ),
+                        ),
+                      ),
+                      if (provider.searchQuery.isEmpty) ...[
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+                          sliver: SliverGrid(
+                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              mainAxisSpacing: 12,
+                              crossAxisSpacing: 12,
+                              childAspectRatio: 2,
+                            ),
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) {
+                                final item = provider.categories[index];
+                                final category = item.item1;
+                                final count = item.item2;
+
+                                return GestureDetector(
+                                  onTap: () {
+                                    MixpanelManager().factsPageCategoryOpened(category);
+                                    provider.setCategory(category);
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => CategoryFactsPage(
+                                          category: category,
+                                          provider: provider,
+                                          showFactDialog: _showFactDialog,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade900,
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    padding: const EdgeInsets.all(16),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          category.toString().split('.').last[0].toUpperCase() +
+                                              category.toString().split('.').last.substring(1),
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                          decoration: BoxDecoration(
+                                            color: Colors.black26,
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: Text(
+                                            count.toString(),
+                                            style: const TextStyle(
+                                              color: Colors.white70,
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                              childCount: provider.categories.length,
+                            ),
+                          ),
+                        ),
+                      ] else ...[
+                        SliverPadding(
+                          padding: const EdgeInsets.all(16),
+                          sliver: provider.filteredFacts.isEmpty
+                              ? SliverFillRemaining(
+                                  child: Center(
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.search_off, size: 48, color: Colors.grey.shade600),
+                                        const SizedBox(height: 16),
+                                        Text(
+                                          'No facts found',
+                                          style: TextStyle(
+                                            color: Colors.grey.shade400,
+                                            fontSize: 18,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                )
+                              : SliverList(
+                                  delegate: SliverChildBuilderDelegate(
+                                    (context, index) {
+                                      final fact = provider.filteredFacts[index];
+                                      return Dismissible(
+                                        key: Key(fact.id),
+                                        direction: DismissDirection.endToStart,
+                                        onDismissed: (direction) {
+                                          provider.deleteFactProvider(fact);
+                                          MixpanelManager().factsPageDeletedFact(fact);
+                                        },
+                                        background: Container(
+                                          margin: const EdgeInsets.only(bottom: 8),
+                                          decoration: BoxDecoration(
+                                            color: Colors.red.shade900,
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          alignment: Alignment.centerRight,
+                                          padding: const EdgeInsets.only(right: 20),
+                                          child: const Icon(Icons.delete_outline, color: Colors.white),
+                                        ),
+                                        child: GestureDetector(
+                                          onTap: () => _showQuickEditSheet(context, fact, provider),
+                                          child: Container(
+                                            margin: const EdgeInsets.only(bottom: 8),
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey.shade900,
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: ListTile(
+                                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                              title: Text(
+                                                fact.content.decodeString,
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 16,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    childCount: provider.filteredFacts.length,
+                                  ),
+                                ),
+                        ),
                       ],
-                    ),
+                    ],
                   ),
           ),
         );
       },
+    );
+  }
+
+  void _showQuickEditSheet(BuildContext context, Fact fact, FactsProvider provider) {
+    final contentController = TextEditingController(text: fact.content.decodeString);
+    contentController.selection = TextSelection.fromPosition(
+      TextPosition(offset: contentController.text.length),
+    );
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.grey.shade900,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.label_outline, size: 14, color: Colors.white),
+                        const SizedBox(width: 4),
+                        Text(
+                          fact.category.toString().split('.').last,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    onPressed: () => _showDeleteConfirmation(context, fact, provider),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: contentController,
+                autofocus: true,
+                maxLines: null,
+                textInputAction: TextInputAction.done,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  height: 1.4,
+                ),
+                decoration: const InputDecoration(
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                  isDense: true,
+                ),
+                onSubmitted: (value) {
+                  if (value.trim().isNotEmpty) {
+                    provider.editFactProvider(fact, value, fact.category);
+                  }
+                  Navigator.pop(context);
+                },
+                onChanged: (value) {
+                  if (value.trim().isNotEmpty) {
+                    provider.editFactProvider(fact, value, fact.category);
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.keyboard_return,
+                          size: 13,
+                          color: Colors.grey.shade400,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Press done to save',
+                          style: TextStyle(
+                            color: Colors.grey.shade400,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    '${contentController.text.length}/200',
+                    style: TextStyle(
+                      color: Colors.grey.shade500,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -120,333 +393,386 @@ class _FactsPageState extends State<_FactsPage> {
     }
 
     final contentController = TextEditingController(text: fact?.content.decodeString ?? '');
-    final formKey = GlobalKey<FormState>();
-
-    await showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        FactCategory selectedCategory = fact?.category ?? provider.selectedCategory ?? FactCategory.values.first;
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setModalState) {
-            setCategory(FactCategory category) {
-              setModalState(() {
-                selectedCategory = category;
-              });
-            }
-
-            return AlertDialog(
-              backgroundColor: Colors.grey.shade900,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              content: _showFactDialogForm(formKey, contentController, selectedCategory, provider, setCategory),
-              actions: _showFactDialogActions(
-                context,
-                formKey,
-                contentController,
-                selectedCategory,
-                provider,
-                isEditing: fact != null,
-                fact: fact,
-              ),
-            );
-          },
-        );
-      },
+    contentController.selection = TextSelection.fromPosition(
+      TextPosition(offset: contentController.text.length),
     );
-  }
 
-  Widget _showFactDialogForm(
-    GlobalKey<FormState> formKey,
-    TextEditingController contentController,
-    FactCategory selectedCategory,
-    FactsProvider provider,
-    Function(FactCategory) setCategory,
-  ) {
-    return Form(
-      key: formKey,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TextFormField(
-            controller: contentController,
-            autofocus: true,
-            decoration: InputDecoration(
-              hintText: 'I love Omi ...',
-              border: InputBorder.none,
-              labelStyle: TextStyle(color: Colors.grey),
+    FactCategory selectedCategory = fact?.category ?? provider.selectedCategory ?? FactCategory.values.first;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.grey.shade900,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
             ),
-            maxLines: 5,
-            minLines: 1,
-            keyboardType: TextInputType.text,
-            textCapitalization: TextCapitalization.sentences,
-            validator: (value) => value!.isEmpty ? 'Can\'t be empty' : null,
-            style: const TextStyle(color: Colors.white, fontSize: 24),
-          ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 0.0,
-            runSpacing: 0.0,
-            children: FactCategory.values.map((category) {
-              return TextButton(
-                onPressed: () {
-                  setCategory(category);
-                },
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: category == selectedCategory ? Colors.grey.shade800 : Colors.grey.shade900,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      category == selectedCategory
-                          ? const Row(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      fact != null ? 'Edit Fact' : 'New Fact',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (fact != null)
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, color: Colors.red, size: 22),
+                        onPressed: () => _showDeleteConfirmation(context, fact, provider),
+                      ),
+                  ],
+                ),
+                if (fact == null || !fact.manuallyAdded) ...[
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    height: 34,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: FactCategory.values.length,
+                      separatorBuilder: (context, _) => const SizedBox(width: 8),
+                      itemBuilder: (context, index) {
+                        final category = FactCategory.values[index];
+                        final isSelected = category == selectedCategory;
+                        return GestureDetector(
+                          onTap: () => setState(() => selectedCategory = category),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: isSelected ? Colors.white.withOpacity(0.1) : Colors.grey.shade800,
+                              borderRadius: BorderRadius.circular(17),
+                              border: Border.all(
+                                color: isSelected ? Colors.white : Colors.transparent,
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(
-                                  size: 14,
-                                  Icons.check,
-                                  color: Colors.white,
-                                ),
-                                SizedBox(
-                                  width: 4,
+                                if (isSelected) ...[
+                                  const Icon(
+                                    Icons.check,
+                                    size: 14,
+                                    color: Colors.white,
+                                  ),
+                                  const SizedBox(width: 4),
+                                ],
+                                Text(
+                                  category.toString().split('.').last,
+                                  style: TextStyle(
+                                    color: isSelected ? Colors.white : Colors.white70,
+                                    fontSize: 13,
+                                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                  ),
                                 ),
                               ],
-                            )
-                          : SizedBox.shrink(),
-                      Text(
-                        category.toString().split('.').last,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-          //DropdownButtonFormField<FactCategory>(
-          //  value: selectedCategory,
-          //  decoration: const InputDecoration(
-          //    labelText: 'Category',
-          //  ),
-          //  dropdownColor: Colors.grey.shade800,
-          //  style: const TextStyle(color: Colors.white),
-          //  items: FactCategory.values.map((category) {
-          //    return DropdownMenuItem(
-          //      value: category,
-          //      child: Text(
-          //        category.toString().split('.').last,
-          //        style: const TextStyle(color: Colors.white),
-          //      ),
-          //    );
-          //  }).toList(),
-          //  onChanged: (value) {
-          //    setCategory(value!);
-          //  },
-          //),
-        ],
-      ),
-    );
-  }
-
-  List<Widget> _showFactDialogActions(
-    BuildContext context,
-    GlobalKey<FormState> formKey,
-    TextEditingController contentController,
-    FactCategory selectedCategory,
-    FactsProvider provider, {
-    bool isEditing = false,
-    Fact? fact,
-  }) {
-    onPressed() async {
-      if (formKey.currentState!.validate()) {
-        if (isEditing && fact != null) {
-          provider.editFactProvider(fact, contentController.text, selectedCategory);
-          MixpanelManager().factsPageEditedFact();
-        } else {
-          provider.createFactProvider(contentController.text, selectedCategory);
-          MixpanelManager().factsPageCreatedFact(selectedCategory);
-        }
-        Navigator.pop(context);
-      }
-    }
-
-    return [
-      isEditing
-          ? TextButton(
-              onPressed: () {
-                if (fact != null) {
-                  provider.deleteFactProvider(fact);
-                }
-                Navigator.pop(context);
-              },
-              child: const Opacity(
-                opacity: .6,
-                child: Text('Delete', style: TextStyle(color: Colors.redAccent)),
-              ),
-            )
-          : const SizedBox.shrink(),
-      TextButton(
-        onPressed: onPressed,
-        child: Text(isEditing ? 'Update' : 'Add', style: const TextStyle(color: Colors.white)),
-      ),
-    ];
-  }
-
-  Widget _buildCategoryChips(FactsProvider provider) {
-    Widget buildChip(item) {
-      final category = item.item1;
-      final count = item.item2;
-      return GestureDetector(
-        onTap: () {
-          MixpanelManager().factsPageCategoryOpened(category);
-          setState(() {
-            provider.setCategory(category);
-          });
-        },
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.grey.shade200,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.grey.withOpacity(0.3),
-                spreadRadius: 1,
-                blurRadius: 3,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                provider.selectedCategory == category
-                    ? Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: Icon(
-                          size: 16,
-                          Icons.check,
-                          color: Theme.of(context).colorScheme.onPrimary,
-                        ))
-                    : const SizedBox.shrink(),
-                Text(
-                  category.toString().split('.').last[0].toUpperCase() +
-                      category.toString().split('.').last.substring(1),
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: const BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.all(Radius.circular(24)),
-                  ),
-                  child: Text(
-                    count.toString(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
+                ],
+                const SizedBox(height: 24),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade800,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: TextField(
+                    controller: contentController,
+                    textInputAction: TextInputAction.done,
+                    autofocus: true,
+                    maxLines: null,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      height: 1.4,
+                    ),
+                    decoration: const InputDecoration(
+                      hintText: 'I like to eat ice cream...',
+                      hintStyle: TextStyle(color: Colors.grey),
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.zero,
+                      isDense: true,
+                    ),
+                    onSubmitted: (value) {
+                      if (value.trim().isNotEmpty) {
+                        if (fact != null) {
+                          provider.editFactProvider(fact, value, selectedCategory);
+                          MixpanelManager().factsPageEditedFact();
+                        } else {
+                          provider.createFactProvider(value, selectedCategory);
+                          MixpanelManager().factsPageCreatedFact(selectedCategory);
+                        }
+                        Navigator.pop(context);
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.keyboard_return,
+                            size: 13,
+                            color: Colors.grey.shade400,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Press done to save',
+                            style: TextStyle(
+                              color: Colors.grey.shade400,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      '${contentController.text.length}/200',
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  void _showDeleteConfirmation(BuildContext context, Fact fact, FactsProvider provider) {
+    if (Platform.isIOS) {
+      showCupertinoDialog(
+        context: context,
+        builder: (context) => CupertinoAlertDialog(
+          title: const Text('Delete fact?'),
+          content: const Text('This action cannot be undone.'),
+          actions: [
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: Colors.grey.shade400),
+              ),
+            ),
+            CupertinoDialogAction(
+              isDestructiveAction: true,
+              onPressed: () {
+                provider.deleteFactProvider(fact);
+                Navigator.pop(context); // Close dialog
+                Navigator.pop(context); // Close edit sheet
+              },
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      );
+    } else {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: Colors.grey.shade900,
+          surfaceTintColor: Colors.transparent,
+          title: const Text(
+            'Delete fact?',
+            style: TextStyle(color: Colors.white, fontSize: 18),
+          ),
+          content: const Text(
+            'This action cannot be undone.',
+            style: TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: Colors.grey.shade400),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                provider.deleteFactProvider(fact);
+                Navigator.pop(context); // Close dialog
+                Navigator.pop(context); // Close edit sheet
+              },
+              child: const Text(
+                'Delete',
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+          ],
         ),
       );
     }
-
-    return Padding(
-      padding: provider.selectedCategory == null
-          ? const EdgeInsets.fromLTRB(32, 0, 32, 80)
-          : const EdgeInsets.fromLTRB(16, 32, 16, 32),
-      child: Align(
-        alignment: Alignment.center,
-        child: Wrap(
-          direction: Axis.horizontal,
-          alignment: WrapAlignment.center,
-          spacing: provider.selectedCategory == null ? 32 : 16,
-          runSpacing: provider.selectedCategory == null ? 16 : 16,
-          children: provider.categories.map((item) {
-            return buildChip(item);
-          }).toList(),
-        ),
-      ),
-    );
   }
 
-  Widget _buildFactsList(FactsProvider provider) {
-    final filteredFacts = provider.filteredFacts;
-    return filteredFacts.isEmpty
-        ? const Center(
+  void _showReviewSheet(List<Fact> facts) async {
+    if (facts.isEmpty) return;
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isDismissible: true,
+      enableDrag: false,
+      builder: (context) => ListenableProvider(
+          create: (_) => FactsProvider(),
+          builder: (context, _) {
+            return FactReviewSheet(
+              facts: facts,
+              provider: context.read<FactsProvider>(),
+            );
+          }),
+    );
+  }
+}
+
+class FactReviewSheet extends StatelessWidget {
+  final List<Fact> facts;
+  final FactsProvider provider;
+
+  const FactReviewSheet({
+    super.key,
+    required this.facts,
+    required this.provider,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey.shade900,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            margin: const EdgeInsets.only(bottom: 20),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Icon(Icons.notes, size: 40),
-                SizedBox(height: 24),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 32),
-                  child: Text(
-                      'Omi doesn\'t know anything about you in this realm yet. Tell it a few things to get started.',
-                      style: TextStyle(color: Colors.white, fontSize: 24),
-                      textAlign: TextAlign.center),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: MediaQuery.of(context).size.width * 0.74,
+                          child: Text(
+                            'Review and save ${facts.length} facts generated from today\'s conversation with Omi',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        // Text(
+                        //   '${facts.length} facts to review',
+                        //   style: TextStyle(
+                        //     color: Colors.grey.shade400,
+                        //     fontSize: 14,
+                        //   ),
+                        // ),
+                      ],
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white70),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
                 ),
-                SizedBox(height: 64),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        style: TextButton.styleFrom(
+                          backgroundColor: Colors.white.withOpacity(0.1),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: () => Navigator.pop(context),
+                        child: Text(
+                          'Review later',
+                          style: TextStyle(
+                            color: Colors.grey.shade300,
+                            fontSize: 15,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextButton(
+                        style: TextButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => FactReviewPage(
+                                facts: facts,
+                                provider: provider,
+                              ),
+                            ),
+                          );
+                        },
+                        child: const Text(
+                          'Review now',
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
-          )
-        : ListView.separated(
-            separatorBuilder: (context, index) {
-              return Padding(
-                padding: const EdgeInsets.only(
-                  left: 20,
-                  right: 20,
-                ),
-                child: Divider(
-                  color: Colors.white60,
-                  height: 1,
-                ),
-              );
-            },
-            itemCount: filteredFacts.length,
-            itemBuilder: (context, index) {
-              Fact fact = filteredFacts[index];
-              return Dismissible(
-                key: Key(fact.id),
-                direction: DismissDirection.endToStart,
-                onDismissed: (direction) {
-                  provider.deleteFactProvider(fact);
-                  MixpanelManager().factsPageDeletedFact(fact);
-                },
-                background: Container(
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.only(right: 20.0),
-                  color: Colors.red,
-                  child: const Icon(Icons.delete, color: Colors.white),
-                ),
-                child: Card(
-                  color: Colors.black12,
-                  elevation: 0,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
-                    child: ListTile(
-                      title: Text(fact.content.decodeString),
-                      onTap: () => _showFactDialog(context, provider, fact: fact),
-                    ),
-                  ),
-                ),
-              );
-            },
-          );
+          ),
+        ],
+      ),
+    );
   }
 }
