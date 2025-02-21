@@ -46,7 +46,7 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
     var username = await generateUsername(handle);
     provider.updateUsername(username!);
 
-    final tweetText = Uri.encodeComponent('Verifying my clone: https://personas.omi.me/u/$username');
+    final tweetText = Uri.encodeComponent('Verifying my clone($username): https://personas.omi.me/u/$username');
     final twitterUrl = 'https://twitter.com/intent/tweet?text=$tweetText';
     setPostTweetClicked(true);
     await Posthog().capture(eventName: 'post_tweet_clicked', properties: {

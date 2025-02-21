@@ -558,3 +558,13 @@ Use these facts, conversations and tweets to shape your personality. Responses s
     persona['updated_at'] = datetime.now(timezone.utc)
     update_persona_in_db(persona)
     delete_app_cache_by_id(persona['id'])
+
+
+def increment_username(username: str):
+    if is_username_taken(username):
+        i = 1
+        while is_username_taken(f"{username}{i}"):
+            i += 1
+        return f"{username}{i}"
+    else:
+        return username

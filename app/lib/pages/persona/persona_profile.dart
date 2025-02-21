@@ -178,14 +178,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
               backgroundColor: Colors.transparent,
               leading: GestureDetector(
                 onTap: () {
-                  if (mounted) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const CloneChatPage(),
-                      ),
-                    );
-                  }
+                  routeToPage(context, const CloneChatPage(), replace: false);
                 },
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
