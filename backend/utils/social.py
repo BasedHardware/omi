@@ -12,8 +12,8 @@ rapid_api_host = os.getenv('RAPID_API_HOST')
 rapid_api_key = os.getenv('RAPID_API_KEY')
 
 
-async def get_twitter_profile(username: str) -> Dict[str, Any]:
-    url = f"https://{rapid_api_host}/screenname.php?screenname={username}"
+async def get_twitter_profile(handle: str) -> Dict[str, Any]:
+    url = f"https://{rapid_api_host}/screenname.php?screenname={handle}"
 
     headers = {
         "X-RapidAPI-Key": rapid_api_key,
@@ -27,9 +27,9 @@ async def get_twitter_profile(username: str) -> Dict[str, Any]:
         return data
 
 
-async def get_twitter_timeline(username: str) -> Dict[str, Any]:
-    print(f"Fetching Twitter timeline for {username}...")
-    url = f"https://{rapid_api_host}/timeline.php?screenname={username}"
+async def get_twitter_timeline(handle: str) -> Dict[str, Any]:
+    print(f"Fetching Twitter timeline for {handle}...")
+    url = f"https://{rapid_api_host}/timeline.php?screenname={handle}"
 
     headers = {
         "X-RapidAPI-Key": rapid_api_key,
@@ -43,9 +43,9 @@ async def get_twitter_timeline(username: str) -> Dict[str, Any]:
         return data
 
 
-async def get_latest_tweet(username: str) -> Dict[str, Any]:
-    print(f"Fetching latest tweet for {username}...")
-    url = f"https://{rapid_api_host}/timeline.php?screenname={username}"
+async def get_latest_tweet(handle: str) -> Dict[str, Any]:
+    print(f"Fetching latest tweet for {handle}...")
+    url = f"https://{rapid_api_host}/timeline.php?screenname={handle}"
 
     headers = {
         "X-RapidAPI-Key": rapid_api_key,
@@ -64,13 +64,9 @@ async def get_latest_tweet(username: str) -> Dict[str, Any]:
         else:
             return {"tweet": latest_tweet['text'], 'verified': False}
 
-
-async def create_persona_from_twitter_profile(username: str, uid: str) -> Dict[str, Any]:
-    profile = await get_twitter_profile(username)
+async def create_persona_from_twitter_profile(username: str, handle: str, uid: str) -> Dict[str, Any]:
+    profile = await get_twitter_profile(handle)
     profile['avatar'] = profile['avatar'].replace('_normal', '')
-
-    profile['profile'] = increment_username(profile['profile'])
-
     persona = {
         "name": profile["name"],
         "author": profile['name'],
@@ -79,7 +75,7 @@ async def create_persona_from_twitter_profile(username: str, uid: str) -> Dict[s
         "deleted": False,
         "status": "approved",
         "capabilities": ["persona"],
-        "username": profile["profile"],
+        "username": username,
         "connected_accounts": ["twitter"],
         "description": profile["desc"],
         "image": profile["avatar"],
@@ -88,12 +84,12 @@ async def create_persona_from_twitter_profile(username: str, uid: str) -> Dict[s
         "private": False,
         "created_at": datetime.now(timezone.utc),
         "twitter": {
-            "username": profile["profile"],
+            "username": handle,
             "avatar": profile["avatar"],
             "connected_at": datetime.now(timezone.utc)
         }
     }
-    tweets = await get_twitter_timeline(username)
+    tweets = await get_twitter_timeline(handle)
     tweets = [{'tweet': tweet['text'], 'posted_at': tweet['created_at']} for tweet in tweets['timeline']]
     condensed_tweets = condense_tweets(tweets, profile["name"])
     persona['persona_prompt'] = generate_twitter_persona_prompt(condensed_tweets, profile["name"])
@@ -103,26 +99,16 @@ async def create_persona_from_twitter_profile(username: str, uid: str) -> Dict[s
     return persona
 
 
-async def add_twitter_to_persona(username: str, persona_id) -> Dict[str, Any]:
+async def add_twitter_to_persona(handle: str, persona_id) -> Dict[str, Any]:
     persona = get_persona_by_id_db(persona_id)
-    twitter = await get_twitter_profile(username)
+    twitter = await get_twitter_profile(handle)
     twitter['avatar'] = twitter['avatar'].replace('_normal', '')
     persona['connected_accounts'].append('twitter')
     persona['twitter'] = {
-        "username": twitter["profile"],
+        "username": handle,
         "avatar": twitter["avatar"],
         "connected_at": datetime.now(timezone.utc)
     }
     update_app_in_db(persona)
     delete_generic_cache('get_public_approved_apps_data')
     return persona
-
-
-def increment_username(username: str):
-    if is_username_taken(username):
-        i = 1
-        while is_username_taken(f"{username}{i}"):
-            i += 1
-        return f"{username}{i}"
-    else:
-        return username

@@ -36,9 +36,9 @@ class PersonaProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future getTwitterProfile(String username) async {
+  Future getTwitterProfile(String handle) async {
     setIsLoading(true);
-    var res = await getTwitterProfileData(username);
+    var res = await getTwitterProfileData(handle);
     print('Twitter Profile: $res');
     if (res != null) {
       if (res['status'] == 'notfound') {
