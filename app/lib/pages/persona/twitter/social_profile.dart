@@ -138,31 +138,7 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                           },
                         ),
                       ),
-                      const Spacer(flex: 3),
-                      FirebaseAuth.instance.currentUser == null || FirebaseAuth.instance.currentUser!.isAnonymous
-                          ? TextButton(
-                              onPressed: () async {
-                                FocusScope.of(context).unfocus();
-                                await Posthog().capture(
-                                  eventName: 'pressed_i_have_omi',
-                                  properties: {
-                                    'username': _controller.text,
-                                  },
-                                );
-
-                                routeToPage(context, const OnboardingWrapper());
-                              },
-                              child: const Text(
-                                'Clone from omi device',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18,
-                                ),
-                              ),
-                            )
-                          : const SizedBox(),
-                      const Spacer(flex: 1),
+                      const Spacer(flex: 5),
                       ElevatedButton(
                         onPressed: () async {
                           FocusScope.of(context).unfocus();
@@ -175,10 +151,7 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                             var handle = _controller.text.trim();
                             await Posthog().capture(
                               eventName: 'x_handle_submitted',
-                              properties: {
-                                'handle': handle,
-                                'uid': FirebaseAuth.instance.currentUser?.uid ?? ''
-                              },
+                              properties: {'handle': handle, 'uid': FirebaseAuth.instance.currentUser?.uid ?? ''},
                             );
                             SharedPreferencesUtil().hasOmiDevice = false;
                             await provider.getTwitterProfile(handle);
@@ -212,7 +185,31 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                                 ),
                               ),
                       ),
-                      const Spacer(flex: 3),
+                      SizedBox(height: MediaQuery.of(context).textScaleFactor > 1.0 ? 18 : 32),
+                      FirebaseAuth.instance.currentUser == null || FirebaseAuth.instance.currentUser!.isAnonymous
+                          ? TextButton(
+                              onPressed: () async {
+                                FocusScope.of(context).unfocus();
+                                await Posthog().capture(
+                                  eventName: 'pressed_i_have_omi',
+                                  properties: {
+                                    'username': _controller.text,
+                                  },
+                                );
+
+                                routeToPage(context, OnboardingWrapper());
+                              },
+                              child: const Text(
+                                'Clone from omi device',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              ),
+                            )
+                          : const SizedBox(),
+                      const Spacer(flex: 1),
                     ],
                   ),
                 ),

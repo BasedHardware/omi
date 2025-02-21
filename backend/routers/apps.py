@@ -19,7 +19,7 @@ from utils.apps import get_available_apps, get_available_app_by_id, get_approved
     is_permit_payment_plan_get, generate_persona_prompt, generate_persona_desc, get_persona_by_uid, \
     increment_username
 
-from utils.llm import generate_description
+from utils.llm import generate_description, generate_persona_intro_message
 
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
@@ -444,7 +444,7 @@ def generate_description_endpoint(data: dict, uid: str = Depends(auth.get_curren
 
 
 # ******************************************************
-# ******************* SOCIAL *******************
+# ********************** SOCIAL ************************
 # ******************************************************
 
 @router.get('/v1/personas/twitter/profile', tags=['v1'])
@@ -497,6 +497,17 @@ async def verify_twitter_ownership_tweet(
         res['persona_id'] = persona['id']
 
     return res
+
+
+@router.get('/v1/personas/twitter/initial-message', tags=['v1'])
+async def get_twitter_initial_message(username: str, uid: str = Depends(auth.get_current_user_uid)):
+    persona = get_persona_by_username_db(username)
+    if persona:
+        message = generate_persona_intro_message(persona['persona_prompt'], persona['name'])
+        return {'message': message}
+    return {'message': ''}
+
+
 
 
 # ******************************************************
