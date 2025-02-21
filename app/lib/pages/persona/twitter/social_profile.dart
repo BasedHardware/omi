@@ -153,7 +153,7 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                                 routeToPage(context, const OnboardingWrapper());
                               },
                               child: const Text(
-                                'I have omi',
+                                'Clone from omi device',
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
@@ -172,15 +172,16 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                               debugPrint('User is not signed in, signing in anonymously');
                               await signInAnonymously();
                             }
+                            var handle = _controller.text.trim();
                             await Posthog().capture(
                               eventName: 'x_handle_submitted',
                               properties: {
-                                'username': _controller.text,
+                                'handle': handle,
                                 'uid': FirebaseAuth.instance.currentUser?.uid ?? ''
                               },
                             );
                             SharedPreferencesUtil().hasOmiDevice = false;
-                            await provider.getTwitterProfile(_controller.text.trim());
+                            await provider.getTwitterProfile(handle);
                             if (provider.twitterProfile.isNotEmpty) {
                               routeToPage(context, const VerifyIdentityScreen());
                             }
