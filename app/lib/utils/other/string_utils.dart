@@ -52,3 +52,11 @@ String padBase64(String rawBase64) {
 String decodeBase64(String data) {
   return utf8.decode(base64.decode(padBase64(data)));
 }
+
+String tryDecodingText(String text) {
+  try {
+    return utf8.decode(text.toString().codeUnits);
+  } catch (e) {
+    return text;
+  }
+}
