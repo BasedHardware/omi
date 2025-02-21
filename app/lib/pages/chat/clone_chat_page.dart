@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/home/widgets/chat_apps_dropdown_widget.dart';
@@ -31,8 +32,8 @@ class CloneChatPageState extends State<CloneChatPage> {
         App selectedApp = provider.userPersona!;
 
         var appProvider = Provider.of<AppProvider>(context, listen: false);
-        appProvider.initialize(true);
-        appProvider.updateLocalApp(selectedApp);
+        SharedPreferencesUtil().appsList = [selectedApp];
+        appProvider.setApps();
         appProvider.setSelectedChatAppId(selectedApp.id);
         if (!selectedApp.enabled) {
           await appProvider.toggleApp(selectedApp.id, true, null);
@@ -73,20 +74,28 @@ class CloneChatPageState extends State<CloneChatPage> {
                     onTap: () {
                       routeToPage(context, const PersonaProfilePage(), replace: true);
                     }),
-                ChatAppsDropdownWidget(mode: ChatMode.chat_clone),
+                personaProvider.isLoading || personaProvider.userPersona == null
+                    ? const SizedBox(width: 44)
+                    : ChatAppsDropdownWidget(mode: ChatMode.chat_clone),
                 const SizedBox(
                   width: 44,
                 ),
               ],
             ),
           ),
-          body: GestureDetector(
-            onTap: () {
-              // Hide keyboard when tapping outside
-              FocusScope.of(context).unfocus();
-            },
-            child: const ChatPage(isPivotBottom: true),
-          ),
+          body: personaProvider.isLoading || personaProvider.userPersona == null
+              ? const Center(
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation(Colors.white),
+                  ),
+                )
+              : GestureDetector(
+                  onTap: () {
+                    // Hide keyboard when tapping outside
+                    FocusScope.of(context).unfocus();
+                  },
+                  child: const ChatPage(isPivotBottom: true),
+                ),
         );
       },
     );
