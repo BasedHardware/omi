@@ -28,8 +28,11 @@ import 'package:share_plus/share_plus.dart';
 import 'widgets/message_action_menu.dart';
 
 class ChatPage extends StatefulWidget {
+  final bool isPivotBottom;
+
   const ChatPage({
     super.key,
+    this.isPivotBottom = false,
   });
 
   @override
@@ -329,7 +332,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       Container(
                         width: double.maxFinite,
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        margin: EdgeInsets.only(left: 28, right: 28, bottom: home.isChatFieldFocused ? 40 : 120),
+                        margin: EdgeInsets.only(
+                            left: 28,
+                            right: 28,
+                            bottom: widget.isPivotBottom ? 40 : (home.isChatFieldFocused ? 40 : 120)),
                         decoration: const BoxDecoration(
                           color: Colors.black,
                           borderRadius: BorderRadius.all(Radius.circular(16)),
