@@ -212,6 +212,7 @@ def persona_question(state: GraphState):
         # state['callback'].put_thought_nowait("Reasoning")
         answer: str = answer_persona_question_stream(
             state.get("plugin_selected"),
+            state.get("messages", []),
             callbacks=[state.get('callback')]
         )
         return {'answer': answer, 'ask_for_nps': True}
