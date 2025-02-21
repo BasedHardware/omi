@@ -17,7 +17,7 @@ from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_gener
     set_generic_cache, set_app_usage_history_cache, get_app_usage_history_cache, get_app_money_made_cache, \
     set_app_money_made_cache, get_plugins_installs_count, get_plugins_reviews, get_app_cache_by_id, set_app_cache_by_id, \
     set_app_review_cache, get_app_usage_count_cache, set_app_money_made_amount_cache, get_app_money_made_amount_cache, \
-    set_app_usage_count_cache, set_user_paid_app, get_user_paid_app, delete_app_cache_by_id
+    set_app_usage_count_cache, set_user_paid_app, get_user_paid_app, delete_app_cache_by_id, is_username_taken
 from database.users import get_stripe_connect_account_id
 from models.app import App, UsageHistoryItem, UsageHistoryType
 from models.memory import Memory
