@@ -274,21 +274,25 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         builder: (ctx, connectivityProvider, child) {
           bool isConnected = connectivityProvider.isConnected;
           previousConnection ??= true;
-          if (previousConnection != isConnected) {
+          if (previousConnection != isConnected && connectivityProvider.isInitialized) {
             previousConnection = isConnected;
             if (!isConnected) {
-              Future.delayed(Duration.zero, () {
-                if (mounted) {
+              Future.delayed(const Duration(seconds: 2), () {
+                if (mounted && !connectivityProvider.isConnected) {
                   ScaffoldMessenger.of(ctx).showMaterialBanner(
                     MaterialBanner(
-                      content: const Text('No internet connection. Please check your connection.'),
-                      backgroundColor: Colors.red,
+                      content: const Text(
+                        'No internet connection. Please check your connection.',
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                      backgroundColor: const Color(0xFF424242), // Dark gray instead of red
+                      leading: const Icon(Icons.wifi_off, color: Colors.white70),
                       actions: [
                         TextButton(
                           onPressed: () {
                             ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
                           },
-                          child: const Text('Dismiss'),
+                          child: const Text('Dismiss', style: TextStyle(color: Colors.white70)),
                         ),
                       ],
                     ),
@@ -301,8 +305,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
                   ScaffoldMessenger.of(ctx).showMaterialBanner(
                     MaterialBanner(
-                      content: const Text('Internet connection is restored.'),
-                      backgroundColor: Colors.green,
+                      content: const Text(
+                        'Internet connection is restored.',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      backgroundColor: const Color(0xFF2E7D32), // Dark green instead of bright green
+                      leading: const Icon(Icons.wifi, color: Colors.white),
                       actions: [
                         TextButton(
                           onPressed: () {
@@ -310,11 +318,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
                             }
                           },
-                          child: const Text('Dismiss'),
+                          child: const Text('Dismiss', style: TextStyle(color: Colors.white)),
                         ),
                       ],
                       onVisible: () => Future.delayed(const Duration(seconds: 3), () {
-                        ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
+                        if (mounted) {
+                          ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
+                        }
                       }),
                     ),
                   );
