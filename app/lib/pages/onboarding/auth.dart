@@ -40,11 +40,13 @@ class _AuthComponentState extends State<AuthComponent> {
               SizedBox(height: MediaQuery.of(context).textScaleFactor > 1.0 ? 18 : 32),
               if (Platform.isIOS) ...[
                 SignInButton.withApple(
-                  title:
-                      FirebaseAuth.instance.currentUser?.isAnonymous == true ? 'Link with Apple' : 'Sign in with Apple',
+                  title: (FirebaseAuth.instance.currentUser?.isAnonymous == true &&
+                          SharedPreferencesUtil().hasPersonaCreated)
+                      ? 'Link with Apple'
+                      : 'Sign in with Apple',
                   onTap: () async {
                     final user = FirebaseAuth.instance.currentUser;
-                    if (user != null && user.isAnonymous) {
+                    if (user != null && user.isAnonymous && SharedPreferencesUtil().hasPersonaCreated) {
                       await provider.linkWithApple();
                       if (mounted) {
                         SharedPreferencesUtil().hasOmiDevice = true;
@@ -101,11 +103,13 @@ class _AuthComponentState extends State<AuthComponent> {
               ],
               const SizedBox(height: 12),
               SignInButton.withGoogle(
-                title:
-                    FirebaseAuth.instance.currentUser?.isAnonymous == true ? 'Link with Google' : 'Sign in with Google',
+                title: (FirebaseAuth.instance.currentUser?.isAnonymous == true &&
+                        SharedPreferencesUtil().hasPersonaCreated)
+                    ? 'Link with Google'
+                    : 'Sign in with Google',
                 onTap: () async {
                   final user = FirebaseAuth.instance.currentUser;
-                  if (user != null && user.isAnonymous) {
+                  if (user != null && user.isAnonymous && SharedPreferencesUtil().hasPersonaCreated) {
                     await provider.linkWithGoogle();
                     if (mounted) {
                       SharedPreferencesUtil().hasOmiDevice = true;
