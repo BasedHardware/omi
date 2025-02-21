@@ -44,7 +44,8 @@ def get_app_by_id_db(app_id: str):
 def get_audio_apps_count(app_ids: List[str]):
     if not app_ids or len(app_ids) == 0:
         return 0
-    filters = [FieldFilter('id', 'in', app_ids), FieldFilter('deleted', '==', False), FieldFilter('external_integration.triggers_on', '==', 'audio_bytes')]
+    filters = [FieldFilter('id', 'in', app_ids), FieldFilter('deleted', '==', False),
+               FieldFilter('external_integration.triggers_on', '==', 'audio_bytes')]
     apps_ref = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).count().get()
     return apps_ref[0][0].value
 
@@ -115,6 +116,7 @@ def add_app_to_db(app_data: dict):
 def upsert_app_to_db(app_data: dict):
     app_ref = db.collection('plugins_data').document(app_data['id'])
     app_ref.set(app_data)
+
 
 def update_app_in_db(app_data: dict):
     app_ref = db.collection('plugins_data').document(app_data['id'])
@@ -292,6 +294,7 @@ def get_persona_by_uid_db(uid: str):
         return None
     return doc.to_dict()
 
+
 def get_persona_by_twitter_handle_db(handle: str):
     filters = [
         FieldFilter('category', '==', 'personality-emulation'),
@@ -306,6 +309,7 @@ def get_persona_by_twitter_handle_db(handle: str):
     if not doc:
         return None
     return {'id': doc.id, **doc.to_dict()}
+
 
 def get_persona_by_username_twitter_handle_db(username: str, handle: str):
     filters = [
