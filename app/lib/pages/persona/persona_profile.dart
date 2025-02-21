@@ -169,7 +169,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
         children: [
           Positioned.fill(
             child: Image.asset(
-              'assets/images/new_background.png',
+              Assets.images.newBackground.path,
               fit: BoxFit.cover,
             ),
           ),
@@ -184,7 +184,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: SvgPicture.asset(
-                    'assets/images/ic_clone_chat.svg',
+                    Assets.images.icCloneChat.path,
                     width: 24,
                     height: 24,
                   ),
@@ -294,7 +294,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                SvgPicture.asset('assets/images/link_icon.svg'),
+                                SvgPicture.asset(Assets.images.linkIcon.path),
                                 const SizedBox(width: 14),
                                 Text(
                                   'Share Public Link',
@@ -325,8 +325,8 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                             width: double.infinity,
                             padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
-                              image: const DecorationImage(
-                                image: AssetImage('assets/images/gradient_card.png'),
+                              image: DecorationImage(
+                                image: AssetImage(Assets.images.gradientCard.path),
                                 fit: BoxFit.fill,
                                 opacity: 0.9,
                               ),
@@ -374,31 +374,31 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                 ),
                               ),
                               _buildSocialLink(
-                                icon: 'assets/images/x_logo_mini.png',
+                                icon: Assets.images.xLogoMini.path,
                                 text: provider.userPersona!.username ?? 'username',
                                 isConnected: true,
                               ),
                               const SizedBox(height: 12),
                               _buildSocialLink(
-                                icon: 'assets/images/instagram_logo.png',
+                                icon: Assets.images.instagramLogo.path,
                                 text: '@username',
                                 isComingSoon: true,
                               ),
                               const SizedBox(height: 12),
                               _buildSocialLink(
-                                icon: 'assets/images/linkedin_logo.png',
+                                icon: Assets.images.linkedinLogo.path,
                                 text: 'linkedin.com/in/username',
                                 isComingSoon: true,
                               ),
                               const SizedBox(height: 12),
                               _buildSocialLink(
-                                icon: 'assets/images/notion_logo.png',
+                                icon: Assets.images.notionLogo.path,
                                 text: 'notion.so/username',
                                 isComingSoon: true,
                               ),
                               const SizedBox(height: 12),
                               _buildSocialLink(
-                                icon: 'assets/images/calendar_logo.png',
+                                icon: Assets.images.calendarLogo.path,
                                 text: 'calendar Id',
                                 isComingSoon: true,
                               ),
