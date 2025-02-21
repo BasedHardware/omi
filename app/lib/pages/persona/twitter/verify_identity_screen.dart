@@ -41,9 +41,18 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
       _isLoading = true;
     });
     var provider = context.read<PersonaProvider>();
-    var handle = provider.twitterProfile['profile'];
-    var username = await generateUsername(handle);
-    provider.updateUsername(username!);
+    String? handle = provider.twitterProfile['profile'];
+    if (handle == null) {
+      return;
+    }
+
+    // username
+    String? username = provider.twitterProfile['persona_username'];
+    username ??= handle;
+    if (username.startsWith("@")) {
+      username = username.substring(1);
+    }
+    provider.updateUsername(username);
 
     final tweetText = Uri.encodeComponent('Verifying my clone($username): https://personas.omi.me/u/$username');
     final twitterUrl = 'https://twitter.com/intent/tweet?text=$tweetText';
@@ -72,7 +81,6 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
       final isVerified = await context.read<PersonaProvider>().verifyTweet();
       if (isVerified) {
         await Posthog().capture(eventName: 'tweet_verified', properties: {'x_handle': handle});
-        SharedPreferencesUtil().hasPersonaCreated = true;
         routeToPage(context, const CloneSuccessScreen());
       } else {
         if (mounted) {

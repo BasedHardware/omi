@@ -156,7 +156,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final provider = Provider.of<PersonaProvider>(context, listen: false);
-      await provider.getUserPersona();
+      await provider.getVerifiedUserPersona();
     });
     super.initState();
   }
