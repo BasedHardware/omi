@@ -16,7 +16,9 @@ from database.redis_db import delete_generic_cache, get_specific_user_review, in
 from utils.apps import get_available_apps, get_available_app_by_id, get_approved_available_apps, \
     get_available_app_by_id_with_reviews, set_app_review, get_app_reviews, add_tester, is_tester, \
     add_app_access_for_tester, remove_app_access_for_tester, upsert_app_payment_link, get_is_user_paid_app, \
-    is_permit_payment_plan_get, generate_persona_prompt, generate_persona_desc, get_persona_by_uid
+    is_permit_payment_plan_get, generate_persona_prompt, generate_persona_desc, get_persona_by_uid, \
+    increment_username
+
 from utils.llm import generate_description
 
 from utils.notifications import send_notification
@@ -24,7 +26,7 @@ from utils.other import endpoints as auth
 from models.app import App
 from utils.other.storage import upload_plugin_logo, delete_plugin_logo, upload_app_thumbnail, get_app_thumbnail_url
 from utils.social import get_twitter_profile, get_twitter_timeline, get_latest_tweet, \
-    create_persona_from_twitter_profile, add_twitter_to_persona, increment_username
+    create_persona_from_twitter_profile, add_twitter_to_persona
 
 router = APIRouter()
 
@@ -88,9 +90,9 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     # Backward compatibility: Set app_home_url from first auth step if not provided
     if 'external_integration' in data:
         ext_int = data['external_integration']
-        if (not ext_int.get('app_home_url') and 
-            ext_int.get('auth_steps') and 
-            len(ext_int['auth_steps']) == 1):
+        if (not ext_int.get('app_home_url') and
+            ext_int.get('auth_steps') and
+                len(ext_int['auth_steps']) == 1):
             ext_int['app_home_url'] = ext_int['auth_steps'][0]['url']
 
     add_app_to_db(data)
@@ -217,9 +219,9 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
     # Backward compatibility: Set app_home_url from first auth step if not provided
     if 'external_integration' in data:
         ext_int = data['external_integration']
-        if (not ext_int.get('app_home_url') and 
-            ext_int.get('auth_steps') and 
-            len(ext_int['auth_steps']) == 1):
+        if (not ext_int.get('app_home_url') and
+            ext_int.get('auth_steps') and
+                len(ext_int['auth_steps']) == 1):
             ext_int['app_home_url'] = ext_int['auth_steps'][0]['url']
 
     # Warn: the user can update any fields, e.g. approved.
@@ -446,10 +448,10 @@ def generate_description_endpoint(data: dict, uid: str = Depends(auth.get_curren
 # ******************************************************
 
 @router.get('/v1/personas/twitter/profile', tags=['v1'])
-async def get_twitter_profile_data(username: str, uid: str = Depends(auth.get_current_user_uid)):
-    if username.startswith('@'):
-        username = username[1:]
-    res = await get_twitter_profile(username)
+async def get_twitter_profile_data(handle: str, uid: str = Depends(auth.get_current_user_uid)):
+    if handle.startswith('@'):
+        handle = handle[1:]
+    res = await get_twitter_profile(handle)
     if res['avatar']:
         res['avatar'] = res['avatar'].replace('_normal', '')
     return res
@@ -457,7 +459,8 @@ async def get_twitter_profile_data(username: str, uid: str = Depends(auth.get_cu
 
 @router.get('/v1/personas/twitter/verify-ownership', tags=['v1'])
 async def verify_twitter_ownership_tweet(
-    username: str, 
+    username: str,
+    handle: str,
     uid: str = Depends(auth.get_current_user_uid),
     persona_id: str | None = None
 ):
@@ -470,15 +473,18 @@ async def verify_twitter_ownership_tweet(
     user_info = auth.get_user(uid)
     provider_data = [p.provider_id for p in user_info.provider_data]
 
-    if username.startswith('@'):
-        username = username[1:]
-    res = await get_latest_tweet(username)
+    # Verify handle
+    if handle.startswith('@'):
+        handle = handle[1:]
+    res = await get_latest_tweet(handle)
     if res['verified']:
         if not ('google.com' in provider_data or 'apple.com' in provider_data):
-            await create_persona_from_twitter_profile(username, uid)
+            if username.startswith('@'):
+                username = username[1:]
+            await create_persona_from_twitter_profile(username, handle, uid)
         else:
             if persona_id:
-                await add_twitter_to_persona(username, persona_id)
+                await add_twitter_to_persona(handle, persona_id)
     return res
 
 
