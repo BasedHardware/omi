@@ -167,7 +167,7 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
             filler_words=False,
             channels=channels,
             multichannel=channels > 1,
-            model='nova-2-general',
+            model='nova-3',
             sample_rate=sample_rate,
             encoding='linear16'
         )
