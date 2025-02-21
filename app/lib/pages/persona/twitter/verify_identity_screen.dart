@@ -75,12 +75,7 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
         final message = await getPersonaInitialMessage(username);
         await Posthog().capture(eventName: 'tweet_verified', properties: {'x_handle': handle});
         SharedPreferencesUtil().hasPersonaCreated = true;
-        final user = FirebaseAuth.instance.currentUser;
-        if (user != null && !user.isAnonymous) {
-          routeToPage(context, CloneSuccessScreen(message: message));
-        } else {
-          routeToPage(context, CloneSuccessScreen(message: message), replace: true);
-        }
+        routeToPage(context, CloneSuccessScreen(message: message));
       } else {
         if (mounted) {
           showDialog(
