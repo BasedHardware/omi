@@ -4,14 +4,17 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:friend_private/pages/chat/clone_chat_page.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
+import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 
 import '../persona_profile.dart';
 
 class CloneSuccessScreen extends StatefulWidget {
+  final String message;
   const CloneSuccessScreen({
     super.key,
+    required this.message,
   });
 
   @override
@@ -146,40 +149,33 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                       ],
                     ),
                     const SizedBox(height: 34),
-                    Container(
-                      width: MediaQuery.sizeOf(context).width * 0.65,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(18),
-                          topRight: Radius.circular(18),
-                          bottomRight: Radius.circular(18),
-                        ),
-                      ),
-                      child: const Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Hey, what's up bro.",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w400,
+                    widget.message.isNotEmpty
+                        ? Container(
+                            width: MediaQuery.sizeOf(context).width * 0.65,
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: const BorderRadius.only(
+                                topLeft: Radius.circular(18),
+                                topRight: Radius.circular(18),
+                                bottomRight: Radius.circular(18),
+                              ),
                             ),
-                          ),
-                          SizedBox(height: 4),
-                          Text(
-                            "What did you learn this week?",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w400,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  widget.message.decodeString,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                )
+                              ],
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
+                          )
+                        : const SizedBox(),
                     const Spacer(flex: 2),
                     if (FirebaseAuth.instance.currentUser?.isAnonymous == true)
                       Padding(

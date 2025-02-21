@@ -487,7 +487,6 @@ Future<bool> checkPersonaUsername(String username) async {
   }
 }
 
-
 Future<Map?> getTwitterProfileData(String handle) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/personas/twitter/profile?handle=$handle',
@@ -505,7 +504,6 @@ Future<Map?> getTwitterProfileData(String handle) async {
     return null;
   }
 }
-
 
 Future<bool> verifyTwitterOwnership(String username, String handle, String? personaId) async {
   var url = '${Env.apiBaseUrl}v1/personas/twitter/verify-ownership?username=$username&handle=$handle';
@@ -529,6 +527,23 @@ Future<bool> verifyTwitterOwnership(String username, String handle, String? pers
   }
 }
 
+Future<String> getPersonaInitialMessage(String username) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/personas/twitter/initial-message?username=$username',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return '';
+    log('getPersonaInitialMessage: ${response.body}');
+    return jsonDecode(response.body)['message'];
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return '';
+  }
+}
 
 Future<App?> getUserPersonaServer() async {
   var response = await makeApiCall(

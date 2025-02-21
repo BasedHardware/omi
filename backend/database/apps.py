@@ -255,6 +255,19 @@ def get_personas_by_username_db(persona_id: str):
     return [{**doc.to_dict(), 'doc_id': doc.id} for doc in docs]
 
 
+def get_persona_by_username_db(username: str):
+    filters = [FieldFilter('username', '==', username), FieldFilter('capabilities', 'array_contains', 'persona'),
+               FieldFilter('deleted', '==', False)]
+    persona_ref = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).limit(1)
+    docs = persona_ref.get()
+    if not docs:
+        return None
+    doc = next(iter(docs), None)
+    if not doc:
+        return None
+    return doc.to_dict()
+
+
 def get_persona_by_id_db(persona_id: str):
     persona_ref = db.collection('plugins_data').document(persona_id)
     doc = persona_ref.get()

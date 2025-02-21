@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, H
 
 from database.apps import change_app_approval_status, get_unapproved_public_apps_db, \
     add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db, \
-    get_personas_by_username_db, get_persona_by_id_db, delete_persona_db
+    get_personas_by_username_db, get_persona_by_id_db, delete_persona_db, get_persona_by_username_db
 from database.auth import get_user_from_uid
 from database.notifications import get_token_only
 from database.redis_db import delete_generic_cache, get_specific_user_review, increase_app_installs_count, \
@@ -19,7 +19,7 @@ from utils.apps import get_available_apps, get_available_app_by_id, get_approved
     is_permit_payment_plan_get, generate_persona_prompt, generate_persona_desc, get_persona_by_uid, \
     increment_username
 
-from utils.llm import generate_description
+from utils.llm import generate_description, generate_persona_intro_message
 
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
@@ -444,7 +444,7 @@ def generate_description_endpoint(data: dict, uid: str = Depends(auth.get_curren
 
 
 # ******************************************************
-# ******************* SOCIAL *******************
+# ********************** SOCIAL ************************
 # ******************************************************
 
 @router.get('/v1/personas/twitter/profile', tags=['v1'])
@@ -486,6 +486,17 @@ async def verify_twitter_ownership_tweet(
             if persona_id:
                 await add_twitter_to_persona(handle, persona_id)
     return res
+
+
+@router.get('/v1/personas/twitter/initial-message', tags=['v1'])
+async def get_twitter_initial_message(username: str, uid: str = Depends(auth.get_current_user_uid)):
+    persona = get_persona_by_username_db(username)
+    if persona:
+        message = generate_persona_intro_message(persona['persona_prompt'], persona['name'])
+        return {'message': message}
+    return {'message': ''}
+
+
 
 
 # ******************************************************
