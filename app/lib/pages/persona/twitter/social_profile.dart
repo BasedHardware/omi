@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/auth.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/pages/persona/twitter/verify_identity_screen.dart';
@@ -42,7 +43,7 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
           // Background image
           Positioned.fill(
             child: Image.asset(
-              'assets/images/new_background.png',
+              Assets.images.newBackground.path,
               fit: BoxFit.cover,
             ),
           ),
@@ -120,7 +121,7 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                             prefixIcon: Padding(
                               padding: const EdgeInsets.all(14.0),
                               child: Image.asset(
-                                'assets/images/x_logo.png',
+                                Assets.images.xLogo.path,
                                 width: 22,
                                 height: 22,
                               ),
@@ -149,7 +150,7 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                                   },
                                 );
 
-                                routeToPage(context, OnboardingWrapper());
+                                routeToPage(context, const OnboardingWrapper());
                               },
                               child: const Text(
                                 'Clone from omi device',
