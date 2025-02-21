@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/pages/persona/twitter/clone_success_sceen.dart';
 import 'package:friend_private/utils/other/string_utils.dart';
@@ -161,7 +162,7 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
           // Background image
           Positioned.fill(
             child: Image.asset(
-              'assets/images/new_background.png',
+              Assets.images.newBackground.path,
               fit: BoxFit.cover,
             ),
           ),

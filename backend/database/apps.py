@@ -331,7 +331,7 @@ def get_omi_personas_by_uid_db(uid: str):
     docs = persona_ref.get()
     if not docs:
         return []
-    docs = [doc for doc in docs if 'omi' in doc.to_dict().get('connected_accounts', [])]
+    docs = [doc.to_dict() for doc in docs if 'omi' in doc.to_dict().get('connected_accounts', [])]
     return docs
 
 

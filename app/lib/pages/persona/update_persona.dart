@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/schema/app.dart';
+import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/pages/persona/twitter/social_profile.dart';
@@ -261,7 +262,7 @@ class _UpdatePersonaPageState extends State<UpdatePersonaPage> {
                             child: Row(
                               children: [
                                 Image.asset(
-                                  'assets/images/x_logo_mini.png',
+                                  Assets.images.xLogoMini.path,
                                   width: 24,
                                   height: 24,
                                 ),

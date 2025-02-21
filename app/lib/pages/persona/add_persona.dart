@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
@@ -290,7 +291,7 @@ class _AddPersonaPageState extends State<AddPersonaPage> {
                           child: Row(
                             children: [
                               Image.asset(
-                                'assets/images/x_logo_mini.png',
+                                Assets.images.xLogoMini.path,
                                 width: 24,
                                 height: 24,
                               ),

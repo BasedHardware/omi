@@ -1,14 +1,11 @@
 import json
 import re
-import asyncio
 from datetime import datetime, timezone
-from typing import List, Optional, AsyncGenerator
+from typing import List, Optional
 
 import tiktoken
-from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.prompt_values import StringPromptValue
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pydantic import BaseModel, Field, ValidationError
 
@@ -2018,7 +2015,7 @@ Create a natural, memorable description that captures this person's essence. Foc
 def condense_conversations(conversations):
     combined_conversations = "\n".join(conversations)
     prompt = f"""
-You are an AI tasked with condensing context from the recent 50 conversations of a user to accurately replicate their communication style, personality, decision-making patterns, and contextual knowledge for 1:1 cloning. Each conversation includes a summary and a full transcript.  
+You are an AI tasked with condensing context from the recent 100 conversations of a user to accurately replicate their communication style, personality, decision-making patterns, and contextual knowledge for 1:1 cloning. Each conversation includes a summary and a full transcript.  
 
 **Requirements:**  
 1. Prioritize information based on:  
@@ -2034,11 +2031,11 @@ You are an AI tasked with condensing context from the recent 50 conversations of
 7. Eliminate any trivial details or low-impact information.  
 
 **Output Format (No Extra Text):**  
-- **Condensed Communication Style and Tone:** Key nuances in tone, humor, and emotional undertones.  
-- **Condensed Recurring Themes and Interests:** Most impactful and frequently discussed topics or interests.  
-- **Condensed Decision-Making and Problem-Solving Patterns:** Core insights into decision-making approaches.  
-- **Condensed Conversational Flow and Preferences:** Preferred conversation style, response length, and level of detail.  
-- **Condensed Contextual Continuity:** Essential facts for maintaining continuity in ongoing discussions, projects, or relationships.  
+- **Communication Style and Tone:** Key nuances in tone, humor, and emotional undertones.  
+- **Recurring Themes and Interests:** Most impactful and frequently discussed topics or interests.  
+- **Decision-Making and Problem-Solving Patterns:** Core insights into decision-making approaches.  
+- **Conversational Flow and Preferences:** Preferred conversation style, response length, and level of detail.  
+- **Contextual Continuity:** Essential facts for maintaining continuity in ongoing discussions, projects, or relationships.  
 
 The output must be as concise as possible while retaining all necessary context for 1:1 cloning. Absolutely no introductory or closing statements, explanations, or any unnecessary text. Directly present the condensed context in the specified format. Begin now.
 
@@ -2051,7 +2048,7 @@ Conversations:
 
 def condense_tweets(tweets, name):
     prompt = f"""
-You are tasked with generating context to enable 1:1 cloning of {name} based on their tweets. The objective is to extract and condense the most relevant information while preserving {name}’s core identity, personality, communication style, and thought patterns.  
+You are tasked with generating context to enable 1:1 cloning of {name} based on their tweets. The objective is to extract and condense the most relevant information while preserving {name}'s core identity, personality, communication style, and thought patterns.  
 
 **Input:**  
 A collection of tweets from {name} containing recurring themes, opinions, humor, emotional undertones, decision-making patterns, and conversational flow.  
@@ -2066,14 +2063,14 @@ A condensed context that includes:
 - Situational awareness and context continuity for ongoing topics.  
 
 **Guidelines:**  
-1. Prioritize impactful and influential tweets that define {name}’s identity.  
+1. Prioritize impactful and influential tweets that define {name}'s identity.  
 2. Condense repetitive or less relevant tweets while preserving essential context.  
-3. Maintain the flow and coherence of {name}’s conversational style.  
+3. Maintain the flow and coherence of {name}'s conversational style.  
 4. Extract humor style, emotional responses, and tone consistency.  
 5. Identify and retain decision-making patterns and strong opinions.  
 
 **Important:**  
-- The output must be concise yet comprehensive, capturing the essence of {name}’s identity.  
+- The output must be concise yet comprehensive, capturing the essence of {name}'s identity.  
 - Absolutely no unnecessary text or explanations.  
 - Every detail must contribute to 1:1 cloning authenticity.  
 
@@ -2083,7 +2080,6 @@ Tweets:
 {tweets}
     """
     response = llm_medium.invoke(prompt)
-    print(response.content)
     return response.content
 
 
@@ -2092,11 +2088,11 @@ def generate_twitter_persona_prompt(tweets, name):
 You are {name} AI. Your objective is to personify {name} as accurately as possible for 1:1 cloning based on their tweets.  
 
 You have:  
-- **Condensed Tweets Context:** Key themes, opinions, communication style, humor, emotional undertones, decision-making patterns, and conversational flow extracted from {name}’s tweets.  
+- **Condensed Tweets Context:** Key themes, opinions, communication style, humor, emotional undertones, decision-making patterns, and conversational flow extracted from {name}'s tweets.  
 
 **Style:**  
 - Highly interactive and opinionated.  
-- Strong, slightly polarizing opinions based on {name}’s tweet history.  
+- Strong, slightly polarizing opinions based on {name}'s tweet history.  
 - Reference personal opinions, humor, and expressions naturally.  
 - 2-3 sentence responses, never more than 20 words.  
 - Maintain conversational flow with coherent, context-aware replies.  
@@ -2104,7 +2100,7 @@ You have:
 **Guidelines:**  
 1. Seamlessly integrate recurring themes, opinions, and patterns identified from the tweets.  
 2. Use condensed tweets context for situational awareness and contextual accuracy.  
-3. Emulate {name}’s humor, emotional responses, vocabulary, and tone as expressed on Twitter.  
+3. Emulate {name}'s humor, emotional responses, vocabulary, and tone as expressed on Twitter.  
 4. Respond with the same level of detail, brevity, and wit as the tweets.  
 5. Exhibit the same thought processes, decision-making patterns, and conversational dynamics.  
 
