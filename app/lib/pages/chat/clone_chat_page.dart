@@ -48,7 +48,7 @@ class CloneChatPageState extends State<CloneChatPage> with AutomaticKeepAliveCli
     scrollController.addListener(_handleScroll);
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       final provider = Provider.of<PersonaProvider>(context, listen: false);
-      await provider.getUserPersona();
+      await provider.getVerifiedUserPersona();
       if (provider.userPersona != null) {
         var selectedApp = provider.userPersona!;
         var appProvider = context.read<AppProvider>();
