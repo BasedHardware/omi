@@ -1,3 +1,4 @@
+import 'package:friend_private/utils/other/string_utils.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 
 class AppReview {
@@ -236,6 +237,10 @@ class App {
     this.connectedAccounts = const [],
     this.twitter,
   });
+
+  String getName() {
+    return tryDecodingText(name);
+  }
 
   String? getRatingAvg() => ratingAvg?.toStringAsFixed(1);
 
