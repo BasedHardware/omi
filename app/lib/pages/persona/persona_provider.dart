@@ -36,9 +36,9 @@ class PersonaProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future getTwitterProfile(String username) async {
+  Future getTwitterProfile(String handle) async {
     setIsLoading(true);
-    var res = await getTwitterProfileData(username);
+    var res = await getTwitterProfileData(handle);
     print('Twitter Profile: $res');
     if (res != null) {
       if (res['status'] == 'notfound') {
@@ -54,9 +54,7 @@ class PersonaProvider extends ChangeNotifier {
 
   Future verifyTweet() async {
     var res = await verifyTwitterOwnership(username, twitterProfile['profile'], personaId);
-    if (res) {
-      AppSnackbar.showSnackbarSuccess('Twitter handle verified');
-    } else {
+    if (!res) {
       AppSnackbar.showSnackbarError('Failed to verify Twitter handle');
     }
     return res;
