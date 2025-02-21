@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -80,10 +81,13 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
 
     try {
       final handle = context.read<PersonaProvider>().twitterProfile['profile'];
+      final username = context.read<PersonaProvider>().username;
       final isVerified = await context.read<PersonaProvider>().verifyTweet();
       if (isVerified) {
+        final message = await getPersonaInitialMessage(username);
         await Posthog().capture(eventName: 'tweet_verified', properties: {'x_handle': handle});
-        routeToPage(context, const CloneSuccessScreen());
+        SharedPreferencesUtil().hasPersonaCreated = true;
+        routeToPage(context, CloneSuccessScreen(message: message));
       } else {
         if (mounted) {
           showDialog(

@@ -66,6 +66,7 @@ async def verify_latest_tweet(username: str, handle: str) -> Dict[str, Any]:
 
         return {"tweet": latest_tweet['text'], 'verified': False}
 
+
 async def upsert_persona_from_twitter_profile(username: str, handle: str, uid: str) -> Dict[str, Any]:
     profile = await get_twitter_profile(handle)
     profile['avatar'] = profile['avatar'].replace('_normal', '')
@@ -108,7 +109,8 @@ async def add_twitter_to_persona(handle: str, persona_id) -> Dict[str, Any]:
     persona = get_persona_by_id_db(persona_id)
     twitter = await get_twitter_profile(handle)
     twitter['avatar'] = twitter['avatar'].replace('_normal', '')
-    persona['connected_accounts'].append('twitter')
+    if 'twitter' not in persona['connected_accounts']:
+        persona['connected_accounts'].append('twitter')
     persona['twitter'] = {
         "username": handle,
         "avatar": twitter["avatar"],
