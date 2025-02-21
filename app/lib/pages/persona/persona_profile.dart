@@ -9,6 +9,7 @@ import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/pages/persona/update_persona.dart';
 import 'package:friend_private/providers/auth_provider.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
+import 'package:friend_private/utils/other/string_utils.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/sign_in_button.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
@@ -247,7 +248,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                           children: [
                             const SizedBox(width: 4),
                             Text(
-                              provider.userPersona!.name,
+                              provider.userPersona!.getName(),
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 24,
@@ -280,7 +281,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                               });
                               Share.share(
                                 'Check out this Persona on Omi AI: ${provider.userPersona!.name} by me \n\nhttps://personas.omi.me/u/${provider.userPersona!.username}',
-                                subject: '${provider.userPersona!.name} Persona',
+                                subject: '${provider.userPersona!.getName()} Persona',
                               );
                             },
                             style: TextButton.styleFrom(
