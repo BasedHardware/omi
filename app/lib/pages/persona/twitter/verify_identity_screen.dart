@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -44,7 +45,6 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
     var handle = provider.twitterProfile['profile'];
     var username = await generateUsername(handle);
     provider.updateUsername(username!);
-
     final tweetText = Uri.encodeComponent('Verifying my clone($username): https://personas.omi.me/u/$username');
     final twitterUrl = 'https://twitter.com/intent/tweet?text=$tweetText';
     setPostTweetClicked(true);
@@ -69,11 +69,18 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
 
     try {
       final handle = context.read<PersonaProvider>().twitterProfile['profile'];
+      final username = context.read<PersonaProvider>().username;
       final isVerified = await context.read<PersonaProvider>().verifyTweet();
       if (isVerified) {
+        final message = await getPersonaInitialMessage(username);
         await Posthog().capture(eventName: 'tweet_verified', properties: {'x_handle': handle});
         SharedPreferencesUtil().hasPersonaCreated = true;
-        routeToPage(context, const CloneSuccessScreen());
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null && !user.isAnonymous) {
+          routeToPage(context, CloneSuccessScreen(message: message));
+        } else {
+          routeToPage(context, CloneSuccessScreen(message: message), replace: true);
+        }
       } else {
         if (mounted) {
           showDialog(

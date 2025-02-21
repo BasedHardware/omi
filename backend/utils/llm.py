@@ -2117,3 +2117,13 @@ Tweets:
 {tweets}
     """
     return prompt
+
+
+def generate_persona_intro_message(prompt: str, name: str):
+    messages = [
+        {"role": "system", "content": prompt},
+        {"role": "user", "content": f"Generate a short, funny 5-8 word message that would make someone want to chat with you. Be casual and witty, but don't mention being AI or a clone. Just be {name}. The message should feel natural and make people curious to chat with you."}
+    ]
+    
+    response = llm_medium.invoke(messages)
+    return response.content.strip('"').strip()
