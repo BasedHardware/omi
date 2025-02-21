@@ -645,17 +645,14 @@ def answer_omi_question_stream(messages: List[Message], context: str, callbacks:
 
 
 def answer_persona_question_stream(app: App, messages: List[Message], callbacks: []) -> str:
-    prompt = f"""
-    {app.persona_prompt}
+    chat_messages = [{"role": "system", "content": app.persona_prompt}]
+    for msg in messages:
+        if msg.sender == "ai":
+            chat_messages.append({"role": "ai", "content": msg.text})
+        else:
+            chat_messages.append({"role": "user", "content": msg.text})
 
-    Continue the conversation based on the ongoing <messages> provided.
-
-    <messages>
-    {Message.get_messages_as_xml(messages)}
-    </messages>
-    """
-
-    return llm_medium_stream.invoke(prompt, {'callbacks':callbacks}).content
+    return llm_medium_stream.invoke(chat_messages, {'callbacks':callbacks}).content
 
 def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
                        cited: Optional[bool] = False,
