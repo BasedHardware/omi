@@ -186,14 +186,7 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                         padding: const EdgeInsets.only(bottom: 10),
                         child: ElevatedButton(
                           onPressed: () async {
-                            if (mounted) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const CloneChatPage(),
-                                ),
-                              );
-                            }
+                            routeToPage(context, const CloneChatPage(), replace: true);
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.transparent,

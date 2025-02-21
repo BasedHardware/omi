@@ -30,9 +30,12 @@ class SharedPreferencesUtil {
   //-------------------------------- Device ----------------------------------//
 
   bool? get hasOmiDevice => _preferences?.getBool('hasOmiDevice');
+
   set hasOmiDevice(bool? value) {
     if (value != null) {
       _preferences?.setBool('hasOmiDevice', value);
+    } else {
+      _preferences?.remove('hasOmiDevice');
     }
   }
 
