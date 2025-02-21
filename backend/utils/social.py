@@ -43,8 +43,8 @@ async def get_twitter_timeline(handle: str) -> Dict[str, Any]:
         return data
 
 
-async def get_latest_tweet(handle: str) -> Dict[str, Any]:
-    print(f"Fetching latest tweet for {handle}...")
+async def verify_latest_tweet(username: str, handle: str) -> Dict[str, Any]:
+    print(f"Fetching latest tweet for {handle}, username {username}...")
     url = f"https://{rapid_api_host}/timeline.php?screenname={handle}"
 
     headers = {
@@ -57,12 +57,14 @@ async def get_latest_tweet(handle: str) -> Dict[str, Any]:
         response.raise_for_status()
         data = response.json()
         # from the timeline, the first tweet is the latest
-        latest_tweet = data['timeline'][0]
-        # check if latest_tweet['text'] contains the word "verifying my clone"
-        if "Verifying my clone" in latest_tweet['text']:
-            return {"tweet": latest_tweet['text'], 'verified': True}
-        else:
-            return {"tweet": latest_tweet['text'], 'verified': False}
+        timeline = data.get('timeline', [])
+        if len(timeline) > 0:
+            latest_tweet = timeline[0]
+            # check if latest_tweet['text'] contains the word "verifying my clone"
+            if f'Verifying my clone({username})' in latest_tweet['text']:
+                return {"tweet": latest_tweet['text'], 'verified': True}
+
+        return {"tweet": latest_tweet['text'], 'verified': False}
 
 async def create_persona_from_twitter_profile(username: str, handle: str, uid: str) -> Dict[str, Any]:
     profile = await get_twitter_profile(handle)
