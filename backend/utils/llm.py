@@ -647,6 +647,10 @@ def answer_omi_question_stream(messages: List[Message], context: str, callbacks:
     return llm_mini_stream.invoke(prompt, {'callbacks': callbacks}).content
 
 
+def answer_persona_question_stream(app: App, callbacks: []) -> str:
+    prompt = app.persona_prompt
+    return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content
+
 def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
                        cited: Optional[bool] = False,
                        messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, H
 
 from database.apps import change_app_approval_status, get_unapproved_public_apps_db, \
     add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db, \
-    get_personas_by_username_db, get_persona_by_id_db, delete_persona_db, get_persona_by_username_db
+    get_personas_by_username_db, get_persona_by_id_db, delete_persona_db, get_persona_by_twitter_handle_db
 from database.auth import get_user_from_uid
 from database.notifications import get_token_only
 from database.redis_db import delete_generic_cache, get_specific_user_review, increase_app_installs_count, \
@@ -26,7 +26,7 @@ from utils.other import endpoints as auth
 from models.app import App
 from utils.other.storage import upload_plugin_logo, delete_plugin_logo, upload_app_thumbnail, get_app_thumbnail_url
 from utils.social import get_twitter_profile, get_twitter_timeline, verify_latest_tweet, \
-    create_persona_from_twitter_profile, add_twitter_to_persona
+    upsert_persona_from_twitter_profile, add_twitter_to_persona
 
 router = APIRouter()
 
@@ -454,6 +454,13 @@ async def get_twitter_profile_data(handle: str, uid: str = Depends(auth.get_curr
     res = await get_twitter_profile(handle)
     if res['avatar']:
         res['avatar'] = res['avatar'].replace('_normal', '')
+
+    # Get matching persona if exists
+    persona = get_persona_by_twitter_handle_db(handle)
+    if persona:
+        res['persona_id'] = persona['id']
+        res['persona_username'] = persona['username']
+
     return res
 
 
@@ -478,13 +485,17 @@ async def verify_twitter_ownership_tweet(
         handle = handle[1:]
     if username.startswith('@'):
         username = username[1:]
+    persona = None
     res = await verify_latest_tweet(username, handle)
     if res['verified']:
         if not ('google.com' in provider_data or 'apple.com' in provider_data):
-            await create_persona_from_twitter_profile(username, handle, uid)
+            persona = await upsert_persona_from_twitter_profile(username, handle, uid)
         else:
             if persona_id:
-                await add_twitter_to_persona(handle, persona_id)
+                persona = await add_twitter_to_persona(handle, persona_id)
+    if persona:
+        res['persona_id'] = persona['id']
+
     return res
 
 

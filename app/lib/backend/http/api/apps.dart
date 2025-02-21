@@ -505,7 +505,8 @@ Future<Map?> getTwitterProfileData(String handle) async {
   }
 }
 
-Future<bool> verifyTwitterOwnership(String username, String handle, String? personaId) async {
+
+Future<(bool, String?)> verifyTwitterOwnership(String username, String handle, String? personaId) async {
   var url = '${Env.apiBaseUrl}v1/personas/twitter/verify-ownership?username=$username&handle=$handle';
   if (personaId != null) {
     url += '&persona_id=$personaId';
@@ -517,13 +518,17 @@ Future<bool> verifyTwitterOwnership(String username, String handle, String? pers
     method: 'GET',
   );
   try {
-    if (response == null || response.statusCode != 200) return false;
+    if (response == null || response.statusCode != 200) return (false, null);
     log('verifyTwitterOwnership: ${response.body}');
-    return jsonDecode(response.body)['verified'];
+    var data = jsonDecode(response.body);
+    return (
+      (data['verified'] ?? false) as bool,
+      data['persona_id'] as String?,
+    );
   } catch (e, stackTrace) {
     debugPrint(e.toString());
     CrashReporting.reportHandledCrash(e, stackTrace);
-    return false;
+    return (false, null);
   }
 }
 

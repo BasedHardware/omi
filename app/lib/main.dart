@@ -361,7 +361,9 @@ class _DeciderWidgetState extends State<DeciderWidget> {
           } else {
             return const OnboardingWrapper();
           }
-        } else if (SharedPreferencesUtil().hasOmiDevice == false && SharedPreferencesUtil().hasPersonaCreated) {
+        } else if (SharedPreferencesUtil().hasOmiDevice == false &&
+            SharedPreferencesUtil().hasPersonaCreated &&
+            SharedPreferencesUtil().verifiedPersonaId != null) {
           return const PersonaProfilePage();
         } else {
           return const DeviceSelectionPage();

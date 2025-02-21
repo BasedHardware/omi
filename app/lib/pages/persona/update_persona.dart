@@ -27,7 +27,8 @@ class _UpdatePersonaPageState extends State<UpdatePersonaPage> {
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (widget.app == null) {
-        await context.read<PersonaProvider>().getUserPersona();
+        // TODO: Check why we need this one, previous getUserPersona()
+        await context.read<PersonaProvider>().getVerifiedUserPersona();
         var app = context.read<PersonaProvider>().userPersona;
         context.read<PersonaProvider>().prepareUpdatePersona(app!);
       } else {

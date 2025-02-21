@@ -354,7 +354,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       physics: const NeverScrollableScrollPhysics(),
                       children: const [
                         ConversationsPage(),
-                        ChatPage(),
+                        ChatPage(isPivotBottom: false),
                         AppsPage(),
                       ],
                     ),
