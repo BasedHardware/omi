@@ -648,11 +648,13 @@ def answer_persona_question_stream(app: App, messages: List[Message], callbacks:
     prompt = f"""
     {app.persona_prompt}
 
-    ---
-    CHAT MESSAGES:
+    Continue the conversation based on the ongoing <messages> provided.
 
-    {Message.get_messages_as_string(messages)}
+    <messages>
+    {Message.get_messages_as_xml(messages)}
+    </messages>
     """
+
     return llm_medium_stream.invoke(prompt, {'callbacks':callbacks}).content
 
 def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
@@ -2131,6 +2133,6 @@ def generate_persona_intro_message(prompt: str, name: str):
         {"role": "system", "content": prompt},
         {"role": "user", "content": f"Generate a short, funny 5-8 word message that would make someone want to chat with you. Be casual and witty, but don't mention being AI or a clone. Just be {name}. The message should feel natural and make people curious to chat with you."}
     ]
-    
+
     response = llm_medium.invoke(messages)
     return response.content.strip('"').strip()
