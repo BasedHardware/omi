@@ -10,17 +10,16 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/ring_buffer.h>
+#include <hal/nrf_power.h>
 #include "transport.h"
 #include "config.h"
 #include "utils.h"
-// #include "nfc.h"
 #include "speaker.h"
 #include "sdcard.h"
 #include "storage.h"
 #include "button.h"
 #include "mic.h"
-#include "lib/battery/battery.h"
-// #include "friend.h"
+// #include "lib/battery/battery.h"
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define MAX_STORAGE_BYTES 0xFFFF0000
@@ -159,6 +158,8 @@ static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, ui
         LOG_ERR("Invalid CCC value: %u", value);
     }
 }
+
+#ifdef CONFIG_OMI_ENABLE_ACCELEROMETER
 int accel_start() 
 {
     struct sensor_value odr_attr;
@@ -176,8 +177,6 @@ int accel_start()
     }
     odr_attr.val1 = 10;
     odr_attr.val2 = 0;
-
-
 
     if (gpio_is_ready_dt(&accel_gpio_pin)) 
     {
@@ -215,6 +214,8 @@ int accel_start()
     
     return 1;
 }
+#endif
+
 // Advertisement data
 static const struct bt_data bt_ad[] = {
     BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
@@ -296,7 +297,12 @@ static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struc
     LOG_INF("dfu_control_point_write_handler");
     if (len == 1 && ((uint8_t *)buf)[0] == 0x06)
     {
-        NRF_POWER->GPREGRET = 0xA8;
+        uint32_t val = 0xA8;
+    #ifdef CONFIG_OMI_USE_LEGACY_SDK
+        NRF_POWER->GPREGRET = val;
+    #else
+        nrf_power_gpregret_set(NRF_POWER, 0, val);
+    #endif
         NVIC_SystemReset();
     }
     else if (len == 2 && ((uint8_t *)buf)[0] == 0x01)
@@ -304,7 +310,12 @@ static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struc
         uint8_t notification_value = 0x10;
         bt_gatt_notify(conn, attr, &notification_value, sizeof(notification_value));
 
-        NRF_POWER->GPREGRET = 0xA8;
+        uint32_t val = 0xA8;
+    #ifdef CONFIG_OMI_USE_LEGACY_SDK
+        NRF_POWER->GPREGRET = val;
+    #else
+        nrf_power_gpregret_set(NRF_POWER, 0, val);
+    #endif
         NVIC_SystemReset();
     }
     return len;
@@ -323,23 +334,23 @@ void broadcast_battery_level(struct k_work *work_item);
 K_WORK_DELAYABLE_DEFINE(battery_work, broadcast_battery_level);
 
 void broadcast_battery_level(struct k_work *work_item) {
-    uint16_t battery_millivolt;
-    uint8_t battery_percentage;
-    if (battery_get_millivolt(&battery_millivolt) == 0 &&
-        battery_get_percentage(&battery_percentage, battery_millivolt) == 0) {
+    // uint16_t battery_millivolt;
+    // uint8_t battery_percentage;
+    // if (battery_get_millivolt(&battery_millivolt) == 0 &&
+    //     battery_get_percentage(&battery_percentage, battery_millivolt) == 0) {
 
 
-        LOG_PRINTK("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
+    //     LOG_PRINTK("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
 
 
-        // Use the Zephyr BAS function to set (and notify) the battery level
-        int err = bt_bas_set_battery_level(battery_percentage);
-        if (err) {
-            LOG_ERR("Error updating battery level: %d", err);
-        }
-    } else {
-        LOG_ERR("Failed to read battery level");
-    }
+    //     // Use the Zephyr BAS function to set (and notify) the battery level
+    //     int err = bt_bas_set_battery_level(battery_percentage);
+    //     if (err) {
+    //         LOG_ERR("Error updating battery level: %d", err);
+    //     }
+    // } else {
+    //     LOG_ERR("Failed to read battery level");
+    // }
 
     k_work_reschedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
 }
@@ -827,8 +838,8 @@ int transport_start()
     }
 
     int battErr = 0;
-    battErr |= battery_init();
-    battErr |= battery_charge_start();
+    // battErr |= battery_init();
+    // battErr |= battery_charge_start();
     if (battErr)
     {
         LOG_ERR("Battery init failed (err %d)", battErr);
@@ -860,7 +871,6 @@ int broadcast_audio_packets(uint8_t *buffer, size_t size)
     }
     return 0;
 }
-
 
 void accel_off()
 {

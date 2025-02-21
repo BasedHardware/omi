@@ -1,0 +1,39 @@
+/ {
+    aliases {
+        led0 = &led0;
+        led1 = &led1;
+        led2 = &led1; // Fake led2
+        pwm-led0 = &pwm_led0;
+        sw0 = &button0;
+        sw1 = &button1;
+        bootloader-led0 = &led0;
+        mcuboot-button0 = &button0;
+        mcuboot-led0 = &led0;
+        watchdog0 = &wdt0;
+    };
+
+    // chosen {
+    //     zephyr,bt-hci-ipc = &ipc0;  // Enable BT HCI over IPC
+    // };
+};
+
+// &ipc0 {
+//     status = "okay";
+// };
+
+&pinctrl {
+    i2s0_default: i2s0_default {
+        group1 {
+            psels = <NRF_PSEL(I2S_SCK_M, 0, 12)>,    // Adjust pin numbers
+                    <NRF_PSEL(I2S_LRCK_M, 0, 13)>,   // for your specific
+                    <NRF_PSEL(I2S_SDOUT, 0, 14)>;    // board connections
+        };
+    };
+};
+
+&i2s0 {
+    status = "okay";
+    pinctrl-0 = <&i2s0_default>;
+    pinctrl-names = "default";
+    label = "I2S_0";
+};

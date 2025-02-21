@@ -7,6 +7,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/sys/poweroff.h>
+#include <hal/nrf_power.h>
 #include "button.h"
 #include "transport.h"
 #include "speaker.h"
@@ -540,7 +541,14 @@ void turnoff_all()
     gpio_pin_interrupt_configure_dt(&d5_pin_input,GPIO_INT_LEVEL_INACTIVE);
     //maybe save something here to indicate success. next time the button is pressed we should know about it
     NRF_USBD->INTENCLR= 0xFFFFFFFF;    
+
+    // Enter low power mode
+#ifdef CONFIG_OMI_USE_LEGACY_SDK
     NRF_POWER->SYSTEMOFF=1;
+#else
+    // nrf_power_system_off(NRF_POWER);
+    sys_poweroff();
+#endif
 }
 
 void force_button_state(FSM_STATE_T state)

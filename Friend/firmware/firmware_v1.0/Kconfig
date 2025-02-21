@@ -56,3 +56,15 @@ config OMI_ENABLE_HAPTIC
     default n
 
 endmenu
+
+menu "Omi Build Configuration"
+
+config OMI_USE_LEGACY_SDK
+    bool "Using the legacy SDK (<=2.7.0)!!"
+    default y
+
+config OMI_USE_LEGACY_SOC
+    bool "Using the legacy SOC (nrf52840)!!"
+    default y
+
+endmenu
