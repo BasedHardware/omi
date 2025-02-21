@@ -25,7 +25,7 @@ from utils.notifications import send_notification
 from utils.other import endpoints as auth
 from models.app import App
 from utils.other.storage import upload_plugin_logo, delete_plugin_logo, upload_app_thumbnail, get_app_thumbnail_url
-from utils.social import get_twitter_profile, get_twitter_timeline, get_latest_tweet, \
+from utils.social import get_twitter_profile, get_twitter_timeline, verify_latest_tweet, \
     create_persona_from_twitter_profile, add_twitter_to_persona
 
 router = APIRouter()
@@ -476,11 +476,11 @@ async def verify_twitter_ownership_tweet(
     # Verify handle
     if handle.startswith('@'):
         handle = handle[1:]
-    res = await get_latest_tweet(handle)
+    if username.startswith('@'):
+        username = username[1:]
+    res = await verify_latest_tweet(username, handle)
     if res['verified']:
         if not ('google.com' in provider_data or 'apple.com' in provider_data):
-            if username.startswith('@'):
-                username = username[1:]
             await create_persona_from_twitter_profile(username, handle, uid)
         else:
             if persona_id:

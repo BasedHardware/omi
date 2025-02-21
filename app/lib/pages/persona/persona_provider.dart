@@ -54,9 +54,7 @@ class PersonaProvider extends ChangeNotifier {
 
   Future verifyTweet() async {
     var res = await verifyTwitterOwnership(username, twitterProfile['profile'], personaId);
-    if (res) {
-      AppSnackbar.showSnackbarSuccess('Twitter handle verified');
-    } else {
+    if (!res) {
       AppSnackbar.showSnackbarError('Failed to verify Twitter handle');
     }
     return res;
