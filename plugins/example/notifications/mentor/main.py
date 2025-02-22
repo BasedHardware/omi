@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 # Constants
-ANALYSIS_INTERVAL = 120  # 120 seconds between analyses
+ANALYSIS_INTERVAL = 60  # 120 seconds between analyses
 REMINDER_INTERVAL = 60  # remind user 60 seconds after last notification
 REMINDER_CHECK_INTERVAL = 10  # check for reminders every 10 seconds
 REMINDER_MESSAGE = "Hey! How's it going with my previous suggestion? Have you had a chance to try it out?"
@@ -174,12 +174,13 @@ def send_reminder_notification(session_id, message_id):
     logger.info(f"Attempting to send reminder for session {session_id}, message {message_id}")
     
     api_base_url = os.getenv('API_BASE_URL')
-    plugin_base_url = os.getenv('PLUGIN_BASE_URL')
+    app_secret = os.getenv('APP_SECRET')  # Get app secret from environment variable
+    
     if not api_base_url:
         logger.error("API_BASE_URL environment variable not set")
         return
-    if not plugin_base_url:
-        logger.error("PLUGIN_BASE_URL environment variable not set")
+    if not app_secret:
+        logger.error("APP_SECRET environment variable not set")
         return
 
     aid = message_buffer.get_app_id(session_id)
@@ -197,9 +198,9 @@ def send_reminder_notification(session_id, message_id):
             "message_id": message_id  # Include message_id in the payload
         }
         
-        # Add Referer header for app auth
+        # Add X-App-Secret header for authentication
         headers = {
-            'Referer': plugin_base_url
+            'X-App-Secret': app_secret
         }
         
         logger.info(f"Sending reminder notification to {notification_url} for session {session_id}, message {message_id} with aid {aid}")
@@ -403,7 +404,7 @@ def webhook():
             logger.info(f"Current message count: {len(buffer_data['messages'])}")
             logger.info(f"Silence detected: {buffer_data['silence_detected']}")
 
-            if (time_since_last_analysis >= ANALYSIS_INTERVAL and 
+            if ((time_since_last_analysis >= ANALYSIS_INTERVAL or buffer_data['last_analysis_time'] == 0) and
                 buffer_data['messages'] and 
                 not buffer_data['silence_detected'] and
                 message_id):  # Only proceed if we have a message_id
