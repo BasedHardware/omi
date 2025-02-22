@@ -327,20 +327,72 @@ class _AddPersonaPageState extends State<AddPersonaPage> {
                                   ),
                                 )
                               else
-                                Container(
+                                GestureDetector(
+                                  onTap: () => provider.disconnectTwitter(),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[800],
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: const Text(
+                                      'Disconnect',
+                                      style: TextStyle(
+                                        color: Colors.red,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[900],
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Image.asset(
+                                Assets.images.logoTransparent.path,
+                                width: 24,
+                                height: 24,
+                              ),
+                              const SizedBox(width: 12),
+                              const Text(
+                                'Connect Omi',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const Spacer(),
+                              GestureDetector(
+                                onTap: () {
+                                  if (!provider.hasOmiConnection) {
+                                    provider.toggleOmiConnection(true);
+                                  } else {
+                                    provider.disconnectOmi();
+                                  }
+                                },
+                                child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                   decoration: BoxDecoration(
                                     color: Colors.grey[800],
                                     borderRadius: BorderRadius.circular(16),
                                   ),
-                                  child: const Text(
-                                    'Connected',
+                                  child: Text(
+                                    provider.hasOmiConnection ? 'Disconnect' : 'Connect',
                                     style: TextStyle(
-                                      color: Colors.grey,
+                                      color: provider.hasOmiConnection ? Colors.red : Colors.white,
                                       fontSize: 12,
                                     ),
                                   ),
                                 ),
+                              ),
                             ],
                           ),
                         ),

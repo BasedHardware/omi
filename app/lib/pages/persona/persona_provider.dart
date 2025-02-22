@@ -16,6 +16,9 @@ class PersonaProvider extends ChangeNotifier {
   bool isUsernameTaken = false;
   bool isCheckingUsername = false;
   bool makePersonaPublic = false;
+  bool isFormValid = false;
+  bool hasOmiConnection = false;
+  bool hasTwitterConnection = false;
   ShowSuccessDialogCallback? onShowSuccessDialog;
 
   File? selectedImage;
@@ -25,7 +28,6 @@ class PersonaProvider extends ChangeNotifier {
 
   String? get _verifiedPersonaId => SharedPreferencesUtil().verifiedPersonaId;
 
-  bool isFormValid = true;
   bool isLoading = false;
 
   Map twitterProfile = {};
@@ -41,7 +43,7 @@ class PersonaProvider extends ChangeNotifier {
   Future getTwitterProfile(String handle) async {
     setIsLoading(true);
     var res = await getTwitterProfileData(handle);
-    print('Twitter Profile: $res');
+    debugPrint('Twitter Profile: $res');
     if (res != null) {
       if (res['status'] == 'notfound') {
         AppSnackbar.showSnackbarError('Twitter handle not found');
@@ -110,6 +112,11 @@ class PersonaProvider extends ChangeNotifier {
     makePersonaPublic = !app.private;
     selectedImageUrl = app.image;
     personaId = app.id;
+    hasOmiConnection = app.connectedAccounts.contains('omi');
+    hasTwitterConnection = app.connectedAccounts.contains('twitter');
+    if (hasTwitterConnection && app.twitter != null) {
+      twitterProfile = app.twitter!;
+    }
     notifyListeners();
   }
 
@@ -136,42 +143,61 @@ class PersonaProvider extends ChangeNotifier {
     isFormValid = false;
     onShowSuccessDialog = null;
     personaId = null;
+    hasOmiConnection = false;
+    hasTwitterConnection = false;
     twitterProfile = {};
     notifyListeners();
   }
 
-  Future<void> updatePersona() async {
-    if (!formKey.currentState!.validate()) {
-      if (selectedImage == null && selectedImageUrl == null) {
-        AppSnackbar.showSnackbarError('Please select an image');
-      }
-      return;
+  void toggleOmiConnection(bool value) {
+    hasOmiConnection = value;
+    notifyListeners();
+  }
+
+  void toggleTwitterConnection(bool value) {
+    hasTwitterConnection = value;
+    if (!value) {
+      twitterProfile = {};
     }
+    notifyListeners();
+  }
 
+  void disconnectTwitter() {
+    twitterProfile = {};
+    hasTwitterConnection = false;
+    notifyListeners();
+  }
+
+  void disconnectOmi() {
+    hasOmiConnection = false;
+    notifyListeners();
+  }
+
+  Future<void> updatePersona() async {
     setIsLoading(true);
-
     try {
-      final personaData = {
+      Map<String, dynamic> personaData = {
+        'id': userPersona!.id,
         'name': nameController.text,
         'username': usernameController.text,
         'private': !makePersonaPublic,
-        'id': personaId,
       };
 
-      var res = await updatePersonaApp(selectedImage, personaData);
+      if (hasOmiConnection && !userPersona!.connectedAccounts.contains('omi')) {
+        personaData['connected_accounts'] = [...userPersona!.connectedAccounts, 'omi'];
+      }
 
-      if (res) {
+      bool success = await updatePersonaApp(selectedImage, personaData);
+      if (success) {
         AppSnackbar.showSnackbarSuccess('Persona updated successfully');
-        String personaUrl = 'personas.omi.me/u/${usernameController.text}';
-        print('Persona URL: $personaUrl');
-        if (onShowSuccessDialog != null) {
-          onShowSuccessDialog!(personaUrl);
-        }
+        await getVerifiedUserPersona();
+        notifyListeners();
       } else {
-        AppSnackbar.showSnackbarError('Failed to create your persona. Please try again later.');
+        AppSnackbar.showSnackbarError('Failed to update persona');
       }
     } catch (e) {
-      AppSnackbar.showSnackbarError('Failed to create persona: $e');
+      print('Error updating persona: $e');
+      AppSnackbar.showSnackbarError('Failed to update persona');
     } finally {
       setIsLoading(false);
     }
@@ -192,10 +218,15 @@ class PersonaProvider extends ChangeNotifier {
         'name': nameController.text,
         'private': !makePersonaPublic,
         'username': username,
+        'connected_accounts': <String>[],
       };
 
+      if (hasOmiConnection) {
+        (personaData['connected_accounts'] as List<String>).add('omi');
+      }
+
       if (twitterProfile.isNotEmpty) {
-        personaData['connected_accounts'] = ['omi', 'twitter'];
+        (personaData['connected_accounts'] as List<String>).add('twitter');
         personaData['twitter'] = {
           'username': twitterProfile['profile'],
           'avatar': twitterProfile['avatar'],
@@ -206,7 +237,7 @@ class PersonaProvider extends ChangeNotifier {
 
       if (res.isNotEmpty) {
         String personaUrl = 'personas.omi.me/u/${res['username']}';
-        print('Persona URL: $personaUrl');
+        debugPrint('Persona URL: $personaUrl');
         if (onShowSuccessDialog != null) {
           onShowSuccessDialog!(personaUrl);
         }
