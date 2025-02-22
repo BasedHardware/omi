@@ -19,9 +19,16 @@ Before you start, make sure you have the following:
     - **Modal: [optional]**  For serverless deployment ([modal.com](https://modal.com/))
     - **Hugging Face:** For voice activity detection ([huggingface.co](https://huggingface.co/))
     - **GitHub:[optional]** For firmware updates ([github.com](https://github.com/))
-    - **Google Maps API Key:** 🗺️ (Optional) For location features
+    - **Google Maps API Key: [optional]** For location features ([mapsplatform.google.com](https://mapsplatform.google.com/))
+    - **Typesense Credentials:** For search functionality ([typesense.org](https://typesense.org/))
+    - **Stripe Credentials: [optional]** For paid apps payment processing ([stripe.com](https://stripe.com/))
     
 **Note:** If you are not very experienced in backend development, we recommend installing [Homebrew](https://docs.brew.sh/Installation) (for macOS or Linux) or [Chocolatey](https://chocolatey.org/install) (for Windows).
+
+#### Video Walkthrough
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/JyXQM0B0Gnc?si=_2W2GU5Qr7dn7gC7" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
 
 ## I. Setting Up Google Cloud & Firebase ☁️
 
@@ -65,6 +72,8 @@ Before you start, make sure you have the following:
         - **Windows:** You should already have it installed if you are on Windows 10 version 1903 and above
     - **Install PyOgg:**
         - **All Platforms:** `pip install PyOgg`
+    - **Install All Required Dependencies:**
+        - **All Platforms:** `brew install -r requirements.txt`
 
 2. **Clone the Backend Repository: 📂**
     - Open your terminal and navigate to your desired directory
@@ -75,20 +84,52 @@ Before you start, make sure you have the following:
        cd backend 
        ```
 
-3. **Set up the Environment File: 📝**
+3. **Set up Pusher Service: 📡 [Optional]**
+    - You don't need to have the Pusher Service running if you do not intend to use the webhooks feature
+    - Navigate to the pusher directory:
+       ```bash
+       cd pusher
+       ```
+    - Create a copy of the `.env.template` file and rename it to `.env`:
+      ```bash
+      cp .env.template .env
+      ```
+    - Set the `SERVICE_ACCOUNT_JSON` environment variable in the `.env` file to the string representation of your Google Cloud service account credentials (`google-credentials.json`). This is used to authenticate with Google Cloud
+    - Move back to the backend directory and run the following command to start the Pusher service:
+       ```bash
+       uvicorn pusher.main:app --reload --env-file .env --port 8000
+       ```
+    - Optionally you can expose the Pusher endpoint using Ngrok or a similar service
+
+4. **Set up Typesense: 🔎 [Optional]**
+    - You don't need to setup Typesense if you do not intend to use the search functionality
+    - Create an account on [Typesense](https://typesense.org/)
+    - Create a new collection in Typesense with the name `memories` and use the schema provided in the `typesense/memories.schema` file
+    - Install the Firebase Typesense extension from [here](https://console.firebase.google.com/project/_/extensions/install?ref=typesense/firestore-typesense-search@2.0.0-rc.1)
+      - While setting up the extension, use the following values for the configuration:
+        - Firestore Collection Path: `users/{userId}/memories`
+        - Firestore Collection Fields: `structured,transcript_segments,created_at,deleted,discarded,started_at,id,finished_at,geolocation,userId`
+      - Create `typesense_sync` collection and add a document named `backfill` with data `{'trigger' : true}` (required only if you already have memories in Firestore and want to sync them to Typesense)
+    - Set the `TYPESENSE_HOST`, `TYPESENSE_HOST_PORT` and `TYPESENSE_API_KEY` environment variables in the `.env` file to the host URL and API key provided by Typesense
+
+
+5. **Set up the Environment File: 📝**
     - Create a copy of the `.env.template` file and rename it to `.env`:
       ```bash
       cp .env.template .env
       ```
     - Open the `.env` file and fill in the following:
-        - **OpenAI API Key:** Obtained from your OpenAI account
-        - **Deepgram API Key:** Obtained from your Deepgram account
+        - **OPENAI_API_KEY:** Obtained from your OpenAI account
+        - **DEEPGRAM_API_KEY:** Obtained from your Deepgram account
         - **Redis Credentials:**  Host, port, username, and password for your Redis instance
         - **Modal API Key:**  Obtained from your Modal account
         - **ADMIN_KEY:** Set to a temporary value (e.g., `123`) for local development
+        - **HOSTED_PUSHER_API_URL:** Endpoint of your hosted pusher service (if you are using it, see step 3)
+        - **Typesense Credentials:** Host, port, and API key for your Typesense instance (if you are using it, see step 4)
+        - **NO_SOCKET_TIMEOUT: (Optional)** Set to `True` to disable the socket timeout for the backend server (socket will stay connected for as long as the app is open)
         - **Other API Keys:** Fill in any other API keys required by your integrations (e.g., Google Maps API key)
 
-4. **Install Python Dependencies: 📚**
+5. **Install Python Dependencies: 📚**
     - In your terminal (inside the backend directory), run:
        ```bash
        pip install -r requirements.txt

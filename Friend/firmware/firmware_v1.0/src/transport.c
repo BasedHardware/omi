@@ -123,14 +123,14 @@ K_WORK_DELAYABLE_DEFINE(accel_work, broadcast_accel);
 void broadcast_accel(struct k_work *work_item) {
 
     sensor_sample_fetch_chan(lsm6dsl_dev, SENSOR_CHAN_ACCEL_XYZ);
-	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_X, &mega_sensor.a_x);
-	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Y, &mega_sensor.a_y);
-	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Z, &mega_sensor.a_z);
+    sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_X, &mega_sensor.a_x);
+    sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Y, &mega_sensor.a_y);
+    sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Z, &mega_sensor.a_z);
 
     sensor_sample_fetch_chan(lsm6dsl_dev, SENSOR_CHAN_GYRO_XYZ);
-	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_X, &mega_sensor.g_x);
-	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_Y, &mega_sensor.g_y);
-	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_Z, &mega_sensor.g_z);
+    sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_X, &mega_sensor.g_x);
+    sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_Y, &mega_sensor.g_y);
+    sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_Z, &mega_sensor.g_z);
 
    //only time mega sensor is changed is through here (hopefully),  so no chance of race condition
     int err = bt_gatt_notify(current_connection, &accel_service.attrs[1], &mega_sensor, sizeof(mega_sensor));
@@ -168,48 +168,48 @@ int accel_start()
     {
         LOG_ERR("Could not get LSM6DSL device");
         return 0;
-	}
+    }
     if (!device_is_ready(lsm6dsl_dev)) 
     {
-		LOG_ERR("LSM6DSL: not ready");
-		return 0;
-	}
+        LOG_ERR("LSM6DSL: not ready");
+        return 0;
+    }
     odr_attr.val1 = 10;
-	odr_attr.val2 = 0;
+    odr_attr.val2 = 0;
 
 
 
     if (gpio_is_ready_dt(&accel_gpio_pin)) 
     {
-		printk("Speaker Pin ready\n");
-	}
+        LOG_PRINTK("Speaker Pin ready\n");
+    }
     else 
     {
-		printk("Error setting up speaker Pin\n");
+        LOG_PRINTK("Error setting up speaker Pin\n");
         return -1;
-	}
-	if (gpio_pin_configure_dt(&accel_gpio_pin, GPIO_OUTPUT_INACTIVE) < 0) 
+    }
+    if (gpio_pin_configure_dt(&accel_gpio_pin, GPIO_OUTPUT_INACTIVE) < 0) 
     {
-		printk("Error setting up Haptic Pin\n");
+        LOG_PRINTK("Error setting up Haptic Pin\n");
         return -1;
-	}
+    }
     gpio_pin_set_dt(&accel_gpio_pin, 1);
     if (sensor_attr_set(lsm6dsl_dev, SENSOR_CHAN_ACCEL_XYZ,
-		SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) 
+        SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) 
     {
-	    LOG_ERR("Cannot set sampling frequency for Accelerometer.");
-		return 0;
-	}
+        LOG_ERR("Cannot set sampling frequency for Accelerometer.");
+        return 0;
+    }
     if (sensor_attr_set(lsm6dsl_dev, SENSOR_CHAN_GYRO_XYZ,
-		SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) {
-	    LOG_ERR("Cannot set sampling frequency for gyro.");
-	    return 0;
-	}
+        SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) {
+        LOG_ERR("Cannot set sampling frequency for gyro.");
+        return 0;
+    }
     if (sensor_sample_fetch(lsm6dsl_dev) < 0) 
     {
         LOG_ERR("Sensor sample update error");
         return 0;
-	}
+    }
 
     LOG_INF("Accelerometer is ready for use \n");
     
@@ -219,7 +219,7 @@ int accel_start()
 static const struct bt_data bt_ad[] = {
     BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
     BT_DATA(BT_DATA_UUID128_ALL, audio_service_uuid.val, sizeof(audio_service_uuid.val)),
-    BT_DATA(BT_DATA_NAME_COMPLETE, "Friend", sizeof("Friend") - 1),
+    BT_DATA(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME, sizeof(CONFIG_BT_DEVICE_NAME) - 1),
 };
 
 // Scan response data
@@ -329,7 +329,7 @@ void broadcast_battery_level(struct k_work *work_item) {
         battery_get_percentage(&battery_percentage, battery_millivolt) == 0) {
 
 
-        printk("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
+        LOG_PRINTK("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
 
 
         // Use the Zephyr BAS function to set (and notify) the battery level
@@ -369,9 +369,9 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     LOG_DBG("TX PHY %s, RX PHY %s", phy2str(info.le.phy->tx_phy), phy2str(info.le.phy->rx_phy));
     LOG_DBG("LE data len updated: TX (len: %d time: %d) RX (len: %d time: %d)", info.le.data_len->tx_max_len, info.le.data_len->tx_max_time, info.le.data_len->rx_max_len, info.le.data_len->rx_max_time);
 
-    k_work_schedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
+    k_work_schedule(&battery_work, K_MSEC(100)); // run immediately
 
-	is_connected = true;
+    is_connected = true;
 
     // // Put NFC to sleep when Bluetooth is connected
     // nfc_sleep();
@@ -391,8 +391,8 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
     current_connection = NULL;
     current_mtu = 0;
 
-	// // restart NFC
-	// nfc_wake();
+    // // restart NFC
+    // nfc_wake();
 }
 
 static bool _le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
@@ -408,7 +408,7 @@ static void _le_param_updated(struct bt_conn *conn, uint16_t interval,
                               uint16_t latency, uint16_t timeout)
 {
     LOG_INF("Connection parameters updated.");
-	LOG_DBG("[ interval: %d, latency: %d, timeout: %d ]", interval, latency, timeout);
+    LOG_DBG("[ interval: %d, latency: %d, timeout: %d ]", interval, latency, timeout);
 }
 
 static void _le_phy_updated(struct bt_conn *conn,
@@ -487,7 +487,7 @@ static bool read_from_tx_queue()
 
     // Adjust size
     tx_buffer_size = tx_buffer[0] + (tx_buffer[1] << 8);
-    // printk("tx_buffer_size %d\n",tx_buffer_size);
+    // LOG_PRINTK("tx_buffer_size %d\n",tx_buffer_size);
 
     return true;
 }
@@ -524,7 +524,7 @@ static bool push_to_gatt(struct bt_conn *conn)
         pusher_temp_data[1] = (id >> 8) & 0xFF;
         pusher_temp_data[2] = index;
         memcpy(pusher_temp_data + NET_BUFFER_HEADER_SIZE, buffer + offset, packet_size);
-        // printk("sent %d bytes \n",tx_buffer_size);
+        // LOG_PRINTK("sent %d bytes \n",tx_buffer_size);
 
         offset += packet_size;
         index++;
@@ -636,8 +636,8 @@ void update_file_size()
 {
     file_num_array[0] = get_file_size(1);
     file_num_array[1] = get_offset();
-    // printk("file size for file count %d %d\n",file_count,file_num_array[0]);
-    // printk("offset for file count %d %d\n",file_count,file_num_array[1]);
+    // LOG_PRINTK("file size for file count %d %d\n",file_count,file_num_array[0]);
+    // LOG_PRINTK("offset for file count %d %d\n",file_count,file_num_array[1]);
 }
 
 void pusher(void)
@@ -664,7 +664,7 @@ void pusher(void)
         }
         if (!file_size_updated) 
         {
-            printk("updating file size\n");
+            LOG_PRINTK("updating file size\n");
             update_file_size();
             
             file_size_updated = true;
@@ -706,7 +706,7 @@ void pusher(void)
              {
                 update_file_size();
                 heartbeat_count = 0;
-                printk("drawing\n");
+                LOG_PRINTK("drawing\n");
              }
             }
             else 
@@ -740,7 +740,7 @@ int bt_off()
    int err = bt_le_adv_stop();
    if (err)
    {
-       printk("Failed to stop Bluetooth %d\n",err);
+       LOG_PRINTK("Failed to stop Bluetooth %d\n",err);
    }
    k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
    sd_off();
@@ -827,16 +827,16 @@ int transport_start()
     }
 
     int battErr = 0;
-	battErr |= battery_init();
-	battErr |= battery_charge_start();
-	if (battErr)
-	{
-		LOG_ERR("Battery init failed (err %d)", battErr);
-	}
-	else
-	{
-		LOG_INF("Battery initialized");
-	}
+    battErr |= battery_init();
+    battErr |= battery_charge_start();
+    if (battErr)
+    {
+        LOG_ERR("Battery init failed (err %d)", battErr);
+    }
+    else
+    {
+        LOG_INF("Battery initialized");
+    }
 
     // friend_init();
 

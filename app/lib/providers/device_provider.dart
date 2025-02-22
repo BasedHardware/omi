@@ -20,8 +20,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   BtDevice? pairedDevice;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
   int batteryLevel = -1;
+  bool _hasLowBatteryAlerted = false;
   Timer? _reconnectionTimer;
   int connectionCheckSeconds = 4;
+
+  bool get havingNewFirmware => false; // FIXME
 
   Timer? _disconnectNotificationTimer;
 
@@ -92,12 +95,24 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   initiateBleBatteryListener() async {
-    if (_bleBatteryLevelListener != null) return;
+    if (connectedDevice == null) {
+      return;
+    }
     _bleBatteryLevelListener?.cancel();
     _bleBatteryLevelListener = await _getBleBatteryLevelListener(
       connectedDevice!.id,
       onBatteryLevelChange: (int value) {
         batteryLevel = value;
+        if (batteryLevel < 20 && !_hasLowBatteryAlerted) {
+          _hasLowBatteryAlerted = true;
+          NotificationService.instance.createNotification(
+            title: "Low Battery Alert",
+            body: "Your device is running low on battery. Time for a recharge! 🔋",
+          );
+        } else if (batteryLevel > 20) {
+          _hasLowBatteryAlerted = true;
+        }
+        notifyListeners();
       },
     );
     notifyListeners();
@@ -108,7 +123,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _reconnectionTimer?.cancel();
     _reconnectionTimer = Timer.periodic(Duration(seconds: connectionCheckSeconds), (t) async {
       debugPrint("period connect...");
-      print(printer);
       print('seconds: $connectionCheckSeconds');
       print('triggered timer at ${DateTime.now()}');
 
@@ -176,9 +190,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       }
       updateConnectingStatus(false);
     }
-    if (isConnected) {
-      await initiateBleBatteryListener();
-    }
 
     notifyListeners();
   }
@@ -221,12 +232,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     print('after resetState inside initiateConnectionListener');
 
-    InstabugLog.logInfo('Friend Device Disconnected');
+    InstabugLog.logInfo('Omi Device Disconnected');
     _disconnectNotificationTimer?.cancel();
     _disconnectNotificationTimer = Timer(const Duration(seconds: 30), () {
       NotificationService.instance.createNotification(
-        title: 'Your Friend Device Disconnected',
-        body: 'Please reconnect to continue using your Friend.',
+        title: 'Your Omi Device Disconnected',
+        body: 'Please reconnect to continue using your Omi.',
       );
     });
     MixpanelManager().deviceDisconnected();
@@ -244,8 +255,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     setConnectedDevice(device);
     setIsDeviceV2Connected();
     setIsConnected(true);
-    if (isConnected) {
-      await initiateBleBatteryListener();
+    await initiateBleBatteryListener();
+    if (batteryLevel != -1 && batteryLevel < 20) {
+      _hasLowBatteryAlerted = false;
     }
     updateConnectingStatus(false);
     await captureProvider?.streamDeviceRecording(device: device);

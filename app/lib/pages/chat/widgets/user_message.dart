@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/pages/chat/widgets/ai_message.dart';
+import 'package:friend_private/pages/chat/widgets/files_handler_widget.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:friend_private/utils/other/temp.dart';
 
@@ -26,13 +26,19 @@ class HumanMessage extends StatelessWidget {
               ),
             ),
           ),
+          FilesHandlerWidget(message: message),
           Wrap(
             alignment: WrapAlignment.end,
             children: [
               Container(
                 decoration: BoxDecoration(
                   color: Theme.of(context).primaryColor,
-                  borderRadius: const BorderRadius.all(Radius.circular(16.0)),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16.0),
+                    topRight: Radius.circular(2.0),
+                    bottomRight: Radius.circular(16.0),
+                    bottomLeft: Radius.circular(16.0),
+                  ),
                 ),
                 padding: const EdgeInsets.all(16.0),
                 child: Text(
@@ -42,7 +48,6 @@ class HumanMessage extends StatelessWidget {
               ),
             ],
           ),
-          CopyButton(messageText: message.text, isUserMessage: true,),
         ],
       ),
     );

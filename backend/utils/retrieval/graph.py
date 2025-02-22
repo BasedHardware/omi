@@ -1,7 +1,10 @@
 import datetime
 import uuid
-from typing import List, Optional, Tuple
+import asyncio
+from typing import List, Optional, Tuple, AsyncGenerator
 
+from langchain.callbacks.base import BaseCallbackHandler
+from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import END
@@ -13,25 +16,33 @@ import database.memories as memories_db
 from database.redis_db import get_filter_category_items
 from database.vector_db import query_vectors_by_metadata
 import database.notifications as notification_db
-from models.chat import Message
+from models.app import App
+from models.chat import ChatSession, Message
 from models.memory import Memory
 from models.plugin import Plugin
 from utils.llm import (
     answer_omi_question,
+    answer_omi_question_stream,
+    answer_persona_question_stream,
     requires_context,
     answer_simple_message,
+    answer_simple_message_stream,
     retrieve_context_dates,
     retrieve_context_dates_by_question,
     qa_rag,
+    qa_rag_stream,
     retrieve_is_an_omi_question,
+    retrieve_is_file_question,
     select_structured_filters,
     extract_question_from_conversation,
     generate_embedding,
 )
+from utils.other.chat_file import FileChatTool
 from utils.other.endpoints import timeit
 from utils.plugins import get_github_docs_content
 
 model = ChatOpenAI(model="gpt-4o-mini")
+llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)
 
 
 class StructuredFilters(TypedDict):
@@ -46,11 +57,48 @@ class DateRangeFilters(TypedDict):
     end: datetime.datetime
 
 
+class AsyncStreamingCallback(BaseCallbackHandler):
+    def __init__(self):
+        self.queue = asyncio.Queue()
+
+    async def put_data(self, text):
+        await self.queue.put(f"data: {text}")
+
+    async def put_thought(self, text):
+        await self.queue.put(f"think: {text}")
+
+    def put_thought_nowait(self, text):
+        self.queue.put_nowait(f"think: {text}")
+
+    async def end(self):
+        await self.queue.put(None)
+
+    async def on_llm_new_token(self, token: str, **kwargs) -> None:
+        await self.put_data(token)
+
+    async def on_llm_end(self, response, **kwargs) -> None:
+        await self.end()
+
+    async def on_llm_error(self, error: Exception, **kwargs) -> None:
+        print(f"Error on LLM {error}")
+        await self.end()
+
+    def put_data_nowait(self, text):
+        self.queue.put_nowait(f"data: {text}")
+
+    def end_nowait(self):
+        self.queue.put_nowait(None)
+
+
 class GraphState(TypedDict):
     uid: str
     messages: List[Message]
     plugin_selected: Optional[Plugin]
     tz: str
+    cited: Optional[bool] = False
+
+    streaming: Optional[bool] = False
+    callback: Optional[AsyncStreamingCallback] = None
 
     filters: Optional[StructuredFilters]
     date_filters: Optional[DateRangeFilters]
@@ -61,19 +109,49 @@ class GraphState(TypedDict):
     answer: Optional[str]
     ask_for_nps: Optional[bool]
 
+    chat_session: Optional[ChatSession]
+
 
 def determine_conversation(state: GraphState):
     question = extract_question_from_conversation(state.get("messages", []))
     print("determine_conversation parsed question:", question)
+
+    # # stream
+    # if state.get('streaming', False):
+    #     state['callback'].put_thought_nowait(question)
+
     return {"parsed_question": question}
 
 
 def determine_conversation_type(
         state: GraphState,
-) -> Literal["no_context_conversation", "context_dependent_conversation", "omi_question"]:
+) -> Literal["no_context_conversation", "context_dependent_conversation", "omi_question", "file_chat_question", "persona_question"]:
+    # chat with files by attachments on the last message
+    messages = state.get("messages", [])
+    if len(messages) > 0 and len(messages[-1].files_id) > 0:
+        return "file_chat_question"
+
+    # persona
+    app: App = state.get("plugin_selected")
+    if app and app.is_a_persona():
+        # file
+        question = state.get("parsed_question", "")
+        is_file_question = retrieve_is_file_question(question)
+        if is_file_question:
+            return "file_chat_question"
+
+        return "persona_question"
+
+    # chat
+    # no context
     question = state.get("parsed_question", "")
     if not question or len(question) == 0:
         return "no_context_conversation"
+
+    # determine the follow up question is chatting with files or not
+    is_file_question = retrieve_is_file_question(question)
+    if is_file_question:
+        return "file_chat_question"
 
     is_omi_question = retrieve_is_an_omi_question(question)
     if is_omi_question:
@@ -86,15 +164,61 @@ def determine_conversation_type(
 
 def no_context_conversation(state: GraphState):
     print("no_context_conversation node")
-    return {"answer": answer_simple_message(state.get("uid"), state.get("messages")), "ask_for_nps": False}
 
+    # streaming
+    streaming = state.get("streaming")
+    if streaming:
+        # state['callback'].put_thought_nowait("Reasoning")
+        answer: str = answer_simple_message_stream(
+            state.get("uid"), state.get("messages"),
+            state.get("plugin_selected"),
+            callbacks=[state.get('callback')]
+        )
+        return {"answer": answer, "ask_for_nps": False}
+
+    # no streaming
+    answer: str = answer_simple_message(
+        state.get("uid"), state.get("messages"),
+        state.get("plugin_selected"),
+    )
+    return {"answer": answer, "ask_for_nps": False}
 
 def omi_question(state: GraphState):
     print("no_context_omi_question node")
+
     context: dict = get_github_docs_content()
     context_str = 'Documentation:\n\n'.join([f'{k}:\n {v}' for k, v in context.items()])
+
+    # streaming
+    streaming = state.get("streaming")
+    if streaming:
+        # state['callback'].put_thought_nowait("Reasoning")
+        answer: str = answer_omi_question_stream(
+            state.get("messages", []), context_str,
+            callbacks=[state.get('callback')]
+        )
+        return {'answer': answer, 'ask_for_nps': True}
+
+    # no streaming
     answer = answer_omi_question(state.get("messages", []), context_str)
     return {'answer': answer, 'ask_for_nps': True}
+
+def persona_question(state: GraphState):
+    print("persona_question node")
+
+    # streaming
+    streaming = state.get("streaming")
+    if streaming:
+        # state['callback'].put_thought_nowait("Reasoning")
+        answer: str = answer_persona_question_stream(
+            state.get("plugin_selected"),
+            state.get("messages", []),
+            callbacks=[state.get('callback')]
+        )
+        return {'answer': answer, 'ask_for_nps': True}
+
+    # no streaming
+    return {'answer': "Oops", 'ask_for_nps': True}
 
 
 def context_dependent_conversation_v1(state: GraphState):
@@ -107,7 +231,6 @@ def context_dependent_conversation(state: GraphState):
     return state
 
 # !! include a question extractor? node?
-
 
 def retrieve_topics_filters(state: GraphState):
     print("retrieve_topics_filters")
@@ -140,37 +263,112 @@ def retrieve_date_filters(state: GraphState):
 
 def query_vectors(state: GraphState):
     print("query_vectors")
+
+    # # stream
+    # if state.get('streaming', False):
+    #     state['callback'].put_thought_nowait("Searching through your memories")
+
     date_filters = state.get("date_filters")
     uid = state.get("uid")
-    vector = (
-        generate_embedding(state.get("parsed_question", ""))
-        if state.get("parsed_question")
-        else [0] * 3072
-    )
+    # vector = (
+    #    generate_embedding(state.get("parsed_question", ""))
+    #    if state.get("parsed_question")
+    #    else [0] * 3072
+    # )
+
+    # Use [1] * dimension to trigger the score distance to fetch all vectors by meta filters
+    vector = ([1] * 3072)
     print("query_vectors vector:", vector[:5])
+
+    # TODO: enable it when the in-accurated topic filter get fixed
+    is_topic_filter_enabled = date_filters.get("start") is None
     memories_id = query_vectors_by_metadata(
         uid,
         vector,
         dates_filter=[date_filters.get("start"), date_filters.get("end")],
-        people=state.get("filters", {}).get("people", []),
-        topics=state.get("filters", {}).get("topics", []),
-        entities=state.get("filters", {}).get("entities", []),
+        people=state.get("filters", {}).get("people", []) if is_topic_filter_enabled else [],
+        topics=state.get("filters", {}).get("topics", []) if is_topic_filter_enabled else [],
+        entities=state.get("filters", {}).get("entities", []) if is_topic_filter_enabled else [],
         dates=state.get("filters", {}).get("dates", []),
+        limit=100,
     )
     memories = memories_db.get_memories_by_id(uid, memories_id)
+
+    # stream
+    # if state.get('streaming', False):
+    #    if len(memories) == 0:
+    #        msg = "No relevant memories found"
+    #    else:
+    #        msg = f"Found {len(memories)} relevant memories"
+    #    state['callback'].put_thought_nowait(msg)
+
+    # print(memories_id)
     return {"memories_found": memories}
 
 
 def qa_handler(state: GraphState):
     uid = state.get("uid")
+
+    # streaming
+    streaming = state.get("streaming")
+    if streaming:
+        # state['callback'].put_thought_nowait("Reasoning")
+        memories = state.get("memories_found", [])
+        response: str = qa_rag_stream(
+            uid,
+            state.get("parsed_question"),
+            Memory.memories_to_string(memories, False),
+            state.get("plugin_selected"),
+            cited=state.get("cited"),
+            messages=state.get("messages"),
+            tz=state.get("tz"),
+            callbacks=[state.get('callback')]
+        )
+        return {"answer": response, "ask_for_nps": True}
+
+    # no streaming
     memories = state.get("memories_found", [])
     response: str = qa_rag(
         uid,
         state.get("parsed_question"),
-        Memory.memories_to_string(memories, True),
+        Memory.memories_to_string(memories, False),
         state.get("plugin_selected"),
+        cited=state.get("cited"),
+        messages=state.get("messages"),
+        tz=state.get("tz"),
     )
     return {"answer": response, "ask_for_nps": True}
+
+def file_chat_question(state: GraphState):
+    print("chat_with_file_question node")
+
+    fc_tool = FileChatTool()
+
+    uid = state.get("uid", "")
+    question = state.get("parsed_question", "")
+
+    messages = state.get("messages", [])
+    last_message = messages[-1] if messages else None
+
+    file_ids = []
+    chat_session = state.get("chat_session")
+    if chat_session:
+        if last_message:
+            if len(last_message.files_id) > 0:
+                file_ids = last_message.files_id
+            else:
+                # if user asked about file but not attach new file, will get all file in session
+                file_ids = chat_session.file_ids
+    else:
+        file_ids = fc_tool.get_files()
+
+    streaming = state.get("streaming")
+    if streaming:
+        answer = fc_tool.process_chat_with_file_stream(uid, question, file_ids, callback=state.get('callback'))
+        return {'answer': answer, 'ask_for_nps': True}
+
+    answer = fc_tool.process_chat_with_file(uid, question,file_ids)
+    return {'answer': answer, 'ask_for_nps': True}
 
 
 workflow = StateGraph(GraphState)
@@ -185,9 +383,13 @@ workflow.add_conditional_edges("determine_conversation", determine_conversation_
 workflow.add_node("no_context_conversation", no_context_conversation)
 workflow.add_node("omi_question", omi_question)
 workflow.add_node("context_dependent_conversation", context_dependent_conversation)
+workflow.add_node("file_chat_question", file_chat_question)
+workflow.add_node("persona_question", persona_question)
 
 workflow.add_edge("no_context_conversation", END)
 workflow.add_edge("omi_question", END)
+workflow.add_edge("persona_question", END)
+workflow.add_edge("file_chat_question", END)
 workflow.add_edge("context_dependent_conversation", "retrieve_topics_filters")
 workflow.add_edge("context_dependent_conversation", "retrieve_date_filters")
 
@@ -208,54 +410,100 @@ workflow.add_edge("qa_handler", END)
 checkpointer = MemorySaver()
 graph = workflow.compile(checkpointer=checkpointer)
 
+graph_stream = workflow.compile()
 
 @timeit
 def execute_graph_chat(
-        uid: str, messages: List[Message], plugin: Optional[Plugin] = None
+        uid: str, messages: List[Message], plugin: Optional[Plugin] = None, cited: Optional[bool] = False
 ) -> Tuple[str, bool, List[Memory]]:
-    print('execute_graph_chat plugin    :', plugin)
+    print('execute_graph_chat plugin    :', plugin.id if plugin else '<none>')
     tz = notification_db.get_user_time_zone(uid)
     result = graph.invoke(
-        {"uid": uid, "tz": tz, "messages": messages, "plugin_selected": plugin},
+        {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": plugin},
         {"configurable": {"thread_id": str(uuid.uuid4())}},
     )
     return result.get("answer"), result.get('ask_for_nps', False), result.get("memories_found", [])
 
+async def execute_graph_chat_stream(
+    uid: str, messages: List[Message], plugin: Optional[App] = None, cited: Optional[bool] = False, callback_data: dict = {}, chat_session: Optional[ChatSession] = None
+) -> AsyncGenerator[str, None]:
+    print('execute_graph_chat_stream plugin: ', plugin.id if plugin else '<none>')
+    tz = notification_db.get_user_time_zone(uid)
+    callback = AsyncStreamingCallback()
 
-def _pretty_print_conversation(messages: List[Message]):
+    task = asyncio.create_task(graph_stream.ainvoke(
+        {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": plugin,
+         "streaming": True, "callback": callback, "chat_session": chat_session,},
+        {"configurable": {"thread_id": str(uuid.uuid4())}},
+    ))
+
+    while True:
+        try:
+            chunk = await callback.queue.get()
+            if chunk:
+                yield chunk
+            else:
+                break
+        except asyncio.CancelledError:
+            break
+    await task
+    result = task.result()
+    callback_data['answer'] = result.get("answer")
+    callback_data['memories_found'] = result.get("memories_found", [])
+    callback_data['ask_for_nps'] = result.get('ask_for_nps', False)
+
+    yield None
+    return
+
+async def execute_persona_chat_stream(
+        uid: str, messages: List[Message], app: App, cited: Optional[bool] = False,
+        callback_data: dict = None, chat_session: Optional[str] = None
+) -> AsyncGenerator[str, None]:
+    """Handle streaming chat responses for persona-type apps"""
+
+    system_prompt = app.persona_prompt
+    formatted_messages = [SystemMessage(content=system_prompt)]
+
     for msg in messages:
-        print(f"{msg.sender}: {msg.text}")
+        if msg.sender == "ai":
+            formatted_messages.append(AIMessage(content=msg.text))
+        else:
+            formatted_messages.append(HumanMessage(content=msg.text))
 
+    full_response = []
+    callback = AsyncStreamingCallback()
 
-if __name__ == "__main__":
-    # graph.get_graph().draw_png("workflow.png")
-    uid = "viUv7GtdoHXbK1UBCDlPuTDuPgJ2"
-    # def _send_message(text: str, sender: str = 'human'):
-    #     message = Message(
-    #         id=str(uuid.uuid4()), text=text, created_at=datetime.datetime.now(datetime.timezone.utc), sender=sender,
-    #         type='text'
-    #     )
-    #     chat_db.add_message(uid, message.dict())
-    messages = [
-        Message(
-            id=str(uuid.uuid4()),
-            text="Should I give equity to Ansh?",
-            # text="I need to launch a new consumer hardware wearable and need to make a video for it. Recommend best books about video production for the launch",
-            # text="Should I build the features myself or hire people?",
-            # text="So i just woke up and i'm thinking i want to wake Up earlier because i woke up today at like 2 p.m. it's crazy. but i need to have something in the morning, some commitment in the morning, like 10 a.m. that i would wake up for so that i go to sleep later as well. what do you think that commitment can and should be?",
-            created_at=datetime.datetime.now(datetime.timezone.utc),
-            sender="human",
-            type="text",
-        )
-    ]
-    result = execute_graph_chat(uid, messages)
-    print("result:", print(result[0]))
-    # messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
-    # _pretty_print_conversation(messages)
-    # # print(messages[-1].text)
-    # # _send_message('Check again, Im pretty sure I had some')
-    # # raise Exception()
-    # start_time = time.time()
-    # result = graph.invoke({'uid': uid, 'messages': messages}, {"configurable": {"thread_id": "foo"}})
-    # print('result:', result.get('answer'))
-    # print('time:', time.time() - start_time)
+    try:
+        task = asyncio.create_task(llm_medium_stream.agenerate(
+            messages=[formatted_messages],
+            callbacks=[callback]
+        ))
+
+        while True:
+            try:
+                chunk = await callback.queue.get()
+                if chunk:
+                    token = chunk.replace("data: ", "")
+                    full_response.append(token)
+                    yield chunk
+                else:
+                    break
+            except asyncio.CancelledError:
+                break
+
+        await task
+
+        if callback_data is not None:
+            callback_data['answer'] = ''.join(full_response)
+            callback_data['memories_found'] = []
+            callback_data['ask_for_nps'] = False
+
+        yield None
+        return
+
+    except Exception as e:
+        print(f"Error in execute_persona_chat_stream: {e}")
+        if callback_data is not None:
+            callback_data['error'] = str(e)
+        yield None
+        return

@@ -39,7 +39,7 @@ class ExternalIntegration(BaseModel):
     setup_instructions_file_path: str
     is_instructions_url: bool = True
     auth_steps: Optional[List[AuthStep]] = []
-    # setup_instructions_markdown: str = ''
+    app_home_url: Optional[str] = None
 
 
 class ProactiveNotification(BaseModel):
@@ -61,6 +61,10 @@ class App(BaseModel):
     capabilities: Set[str]
     memory_prompt: Optional[str] = None
     chat_prompt: Optional[str] = None
+    persona_prompt: Optional[str] = None
+    username: Optional[str] = None
+    connected_accounts: List[str] = []
+    twitter: Optional[dict] = None
     external_integration: Optional[ExternalIntegration] = None
     reviews: List[AppReview] = []
     user_review: Optional[AppReview] = None
@@ -82,6 +86,9 @@ class App(BaseModel):
     payment_link_id: Optional[str] = None
     payment_link: Optional[str] = None
     is_user_paid: Optional[bool] = False
+    thumbnails: Optional[List[str]] = []  # List of thumbnail IDs
+    thumbnail_urls: Optional[List[str]] = []  # List of thumbnail URLs
+    is_influencer: Optional[bool] = False
     app_secret: Optional[str] = None
 
     def get_rating_avg(self) -> Optional[str]:
@@ -94,7 +101,10 @@ class App(BaseModel):
         return self.has_capability('memories')
 
     def works_with_chat(self) -> bool:
-        return self.has_capability('chat')
+        return self.has_capability('chat') or self.has_capability('persona')
+
+    def is_a_persona(self) -> bool:
+        return self.has_capability('persona')
 
     def works_externally(self) -> bool:
         return self.has_capability('external_integration')
@@ -104,6 +114,9 @@ class App(BaseModel):
 
     def triggers_realtime(self) -> bool:
         return self.works_externally() and self.external_integration.triggers_on == 'transcript_processed'
+
+    def triggers_realtime_audio_bytes(self) -> bool:
+        return self.works_externally() and self.external_integration.triggers_on == 'audio_bytes'
 
     def filter_proactive_notification_scopes(self, params: [str]) -> []:
         if not self.proactive_notification:

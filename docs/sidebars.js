@@ -43,6 +43,7 @@ const sidebars = {
             'developer/apps/Submitting',
           ]
         },
+       'developer/AppSetup',
         {
           type: 'category',
           label: 'Backend',
@@ -62,7 +63,7 @@ const sidebars = {
             'developer/Compile_firmware',
           ]
         },
-        'developer/AppSetup',
+        
         'developer/Protocol',
         'developer/Contribution',
         {

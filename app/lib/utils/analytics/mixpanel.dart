@@ -36,10 +36,6 @@ class MixpanelManager {
     setUserProperty('Calendar Enabled', _preferences.calendarEnabled);
     setUserProperty('Recordings Language', _preferences.recordingsLanguage);
     setUserProperty('Authorized Storing Recordings', _preferences.permissionStoreRecordingsEnabled);
-    setUserProperty(
-      'GCP Integration Set',
-      _preferences.gcpCredentials.isNotEmpty && _preferences.gcpBucketName.isNotEmpty,
-    );
   }
 
   setUserProperty(String key, dynamic value) => _mixpanel?.getPeople().set(key, value);
@@ -83,14 +79,10 @@ class MixpanelManager {
   void onboardingStepCompleted(String step) => track('Onboarding Step $step Completed');
 
   void settingsSaved({
-    bool hasGCPCredentials = false,
-    bool hasGCPBucketName = false,
     bool hasWebhookConversationCreated = false,
     bool hasWebhookTranscriptReceived = false,
   }) =>
       track('Developer Settings Saved', properties: {
-        'has_gcp_credentials': hasGCPCredentials,
-        'has_gcp_bucket_name': hasGCPBucketName,
         'has_webhook_memory_created': hasWebhookConversationCreated,
         'has_webhook_transcript_received': hasWebhookTranscriptReceived,
       });

@@ -3,7 +3,6 @@
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/l2cap.h>
 #include <zephyr/bluetooth/services/bas.h>
-#include <zephyr/sys/printk.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/i2s.h>
 #include <zephyr/drivers/gpio.h>
@@ -123,16 +122,16 @@ int speaker_init()
 
     if (gpio_is_ready_dt(&speaker_gpio_pin)) 
     {
-		printk("Speaker Pin ready\n");
+		LOG_PRINTK("Speaker Pin ready\n");
 	}
     else 
     {
-		printk("Error setting up speaker Pin\n");
+		LOG_PRINTK("Error setting up speaker Pin\n");
         return -1;
 	}
 	if (gpio_pin_configure_dt(&speaker_gpio_pin, GPIO_OUTPUT_INACTIVE) < 0) 
     {
-		printk("Error setting up Haptic Pin\n");
+		LOG_PRINTK("Error setting up Haptic Pin\n");
         return -1;
 	}
     gpio_pin_set_dt(&speaker_gpio_pin, 1);
@@ -219,17 +218,17 @@ uint16_t speak(uint16_t len, const void *buf) //direct from bt
             int res= i2s_write(audio_speaker, rx_buffer,  MAX_BLOCK_SIZE);
             if (res < 0)
             {
-                printk("Failed to write I2S data: %d\n", res);
+                LOG_PRINTK("Failed to write I2S data: %d\n", res);
             }
             i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_START);// calls are probably non blocking   
             if (res != 0) 
             {
-                printk("Failed to drain I2S transmission: %d\n", res);
+                LOG_PRINTK("Failed to drain I2S transmission: %d\n", res);
             }    
 	        res =  i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
             if (res != 0) 
             {
-                printk("Failed to drain I2S transmission: %d\n", res);
+                LOG_PRINTK("Failed to drain I2S transmission: %d\n", res);
             }
             //clear the buffer
             k_sleep(K_MSEC(4000));

@@ -1,11 +1,12 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shimmer/shimmer.dart';
+import 'package:friend_private/pages/apps/app_home_web_page.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:friend_private/pages/apps/widgets/full_screen_image_viewer.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
-import 'package:flutter_svg/svg.dart';
 import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/pages/apps/app_detail/reviews_list_page.dart';
 import 'package:friend_private/pages/apps/app_detail/widgets/add_review_widget.dart';
 import 'package:friend_private/pages/apps/markdown_viewer.dart';
@@ -16,6 +17,7 @@ import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/animated_loading_button.dart';
+import 'package:friend_private/widgets/confirmation_dialog.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
@@ -26,6 +28,7 @@ import 'dart:async';
 
 import '../../../backend/schema/app.dart';
 import '../widgets/show_app_options_sheet.dart';
+import 'widgets/app_analytics_widget.dart';
 import 'widgets/info_card_widget.dart';
 
 import 'package:timeago/timeago.dart' as timeago;
@@ -44,10 +47,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
   bool setupCompleted = false;
   bool appLoading = false;
   bool isLoading = false;
-  double moneyMade = 0.0;
-  int usageCount = 0;
   Timer? _paymentCheckTimer;
   late App app;
+  late bool showInstallAppConfirmation;
 
   checkSetupCompleted() {
     // TODO: move check to backend
@@ -67,30 +69,43 @@ class _AppDetailPageState extends State<AppDetailPage> {
   @override
   void initState() {
     app = widget.app;
+    showInstallAppConfirmation = SharedPreferencesUtil().showInstallAppConfirmation;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Automatically open app home page if conditions are met
+      if (app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => AppHomeWebPage(app: app),
+          ),
+        );
+      }
+      // Load details
       setIsLoading(true);
       var res = await context.read<AppProvider>().getAppDetails(app.id);
-      setState(() {
-        if (res != null) {
-          app = res;
-          moneyMade = res.moneyMade ?? 0.0;
-          usageCount = res.usageCount ?? 0;
-        }
-      });
-      setIsLoading(false);
+      if (mounted) {
+        setState(() {
+          if (res != null) {
+            app = res;
+          }
+        });
+      }
 
+      setIsLoading(false);
       context.read<AppProvider>().checkIsAppOwner(app.uid);
       context.read<AppProvider>().setIsAppPublicToggled(!app.private);
     });
     if (app.worksExternally()) {
       if (app.externalIntegration!.setupInstructionsFilePath.isNotEmpty) {
-        getAppMarkdown(app.externalIntegration!.setupInstructionsFilePath).then((value) {
-          value = value.replaceAll(
-            '](assets/',
-            '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${app.id}/assets/',
-          );
-          setState(() => instructionsMarkdown = value);
-        });
+        if (app.externalIntegration!.setupInstructionsFilePath.contains('raw.githubusercontent.com')) {
+          getAppMarkdown(app.externalIntegration!.setupInstructionsFilePath).then((value) {
+            value = value.replaceAll(
+              '](assets/',
+              '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${app.id}/assets/',
+            );
+            setState(() => instructionsMarkdown = value);
+          });
+        }
       }
       checkSetupCompleted();
     }
@@ -108,7 +123,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
     MixpanelManager().appPurchaseStarted(appId);
     _paymentCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
       var prefs = SharedPreferencesUtil();
-      setState(() => appLoading = true);
+      if (mounted) {
+        setState(() => appLoading = true);
+      }
+
       var details = await getAppDetailsServer(appId);
       if (details != null && details['is_user_paid']) {
         var enabled = await enableAppServer(appId);
@@ -142,45 +160,65 @@ class _AppDetailPageState extends State<AppDetailPage> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         elevation: 0,
         actions: [
-          app.enabled && app.worksWithChat()
-              ? GestureDetector(
-                  child: const Icon(Icons.question_answer),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    context.read<HomeProvider>().setIndex(1);
-                    if (context.read<HomeProvider>().onSelectedIndexChanged != null) {
-                      context.read<HomeProvider>().onSelectedIndexChanged!(1);
-                    }
-                    var appId = app.id;
-                    var appProvider = Provider.of<AppProvider>(context, listen: false);
-                    var messageProvider = Provider.of<MessageProvider>(context, listen: false);
-                    App? selectedApp;
-                    if (appId.isNotEmpty) {
-                      selectedApp = await appProvider.getAppFromId(appId);
-                    }
-                    appProvider.setSelectedChatAppId(appId);
-                    await messageProvider.refreshMessages();
-                    if (messageProvider.messages.isEmpty) {
-                      messageProvider.sendInitialAppMessage(selectedApp);
-                    }
-                  },
-                )
-              : const SizedBox.shrink(),
-          app.enabled && app.worksWithChat()
-              ? const SizedBox(
-                  width: 24,
-                )
-              : const SizedBox.shrink(),
-          isLoading
+          if (app.enabled && app.worksWithChat()) ...[
+            GestureDetector(
+              child: const Icon(Icons.question_answer),
+              onTap: () async {
+                Navigator.pop(context);
+                context.read<HomeProvider>().setIndex(1);
+                if (context.read<HomeProvider>().onSelectedIndexChanged != null) {
+                  context.read<HomeProvider>().onSelectedIndexChanged!(1);
+                }
+                var appId = app.id;
+                var appProvider = Provider.of<AppProvider>(context, listen: false);
+                var messageProvider = Provider.of<MessageProvider>(context, listen: false);
+                App? selectedApp;
+                if (appId.isNotEmpty) {
+                  selectedApp = await appProvider.getAppFromId(appId);
+                }
+                appProvider.setSelectedChatAppId(appId);
+                await messageProvider.refreshMessages();
+                if (messageProvider.messages.isEmpty) {
+                  messageProvider.sendInitialAppMessage(selectedApp);
+                }
+              },
+            ),
+            const SizedBox(width: 24),
+          ],
+          if (app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true) ...[
+            GestureDetector(
+              child: const Icon(
+                Icons.open_in_browser_rounded,
+                color: Colors.white,
+              ),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => AppHomeWebPage(app: app),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(width: 24),
+          ],
+          isLoading || app.private
               ? const SizedBox.shrink()
               : GestureDetector(
                   child: const Icon(Icons.share),
                   onTap: () {
                     MixpanelManager().track('App Shared', properties: {'appId': app.id});
-                    Share.share(
-                      'Check out this app on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${app.id}',
-                      subject: app.name,
-                    );
+                    if (app.isNotPersona()) {
+                      Share.share(
+                        'Check out this app on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${app.id}',
+                        subject: app.name,
+                      );
+                    } else {
+                      Share.share(
+                        'Check out this Persona on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://personas.omi.me/u/${app.username}',
+                        subject: app.name,
+                      );
+                    }
                   },
                 ),
           !context.watch<AppProvider>().isAppOwner
@@ -410,7 +448,41 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                 child: AnimatedLoadingButton(
                                   width: MediaQuery.of(context).size.width * 0.9,
                                   text: 'Install App',
-                                  onPressed: () => _toggleApp(app.id, true),
+                                  onPressed: () async {
+                                    if (app.worksExternally()) {
+                                      showDialog(
+                                        context: context,
+                                        builder: (ctx) {
+                                          return StatefulBuilder(builder: (ctx, setState) {
+                                            return ConfirmationDialog(
+                                              title: 'Data Access Notice',
+                                              description:
+                                                  'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app',
+                                              checkboxText: "Don't show it again",
+                                              checkboxValue: !showInstallAppConfirmation,
+                                              updateCheckboxValue: (value) {
+                                                if (value != null) {
+                                                  setState(() {
+                                                    showInstallAppConfirmation = !value;
+                                                    SharedPreferencesUtil().showInstallAppConfirmation = !value;
+                                                  });
+                                                }
+                                              },
+                                              onConfirm: () {
+                                                _toggleApp(app.id, true);
+                                                Navigator.pop(context);
+                                              },
+                                              onCancel: () {
+                                                Navigator.pop(context);
+                                              },
+                                            );
+                                          });
+                                        },
+                                      );
+                                    } else {
+                                      _toggleApp(app.id, true);
+                                    }
+                                  },
                                   color: Colors.green,
                                 ),
                               ),
@@ -569,14 +641,107 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       ),
                     )
                   : const SizedBox.shrink(),
+              if (app.thumbnailUrls.isNotEmpty) ...[
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 16),
+                  child: Text(
+                    'Preview',
+                    style: TextStyle(color: Colors.white, fontSize: 18),
+                  ),
+                ),
+                SizedBox(
+                  height: MediaQuery.of(context).size.width * 0.9,
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    scrollDirection: Axis.horizontal,
+                    itemCount: app.thumbnailUrls.length,
+                    itemBuilder: (context, index) {
+                      final screenWidth = MediaQuery.of(context).size.width;
+                      // Calculate width to show 1.5 thumbnails
+                      final width = screenWidth * 0.65;
+                      // Calculate height to maintain 2:3 ratio (height = width * 1.5)
+                      final height = width * 1.5;
+
+                      return GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => FullScreenImageViewer(
+                                imageUrl: app.thumbnailUrls[index],
+                              ),
+                            ),
+                          );
+                        },
+                        child: CachedNetworkImage(
+                          imageUrl: app.thumbnailUrls[index],
+                          imageBuilder: (context, imageProvider) => Container(
+                            width: width,
+                            height: height,
+                            clipBehavior: Clip.hardEdge,
+                            margin: EdgeInsets.only(
+                              left: index == 0 ? 16 : 8,
+                              right: index == app.thumbnailUrls.length - 1 ? 16 : 8,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: const Color(0xFF424242),
+                                width: 1,
+                              ),
+                              image: DecorationImage(
+                                image: imageProvider,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                          placeholder: (context, url) => Shimmer.fromColors(
+                            baseColor: Colors.grey[900]!,
+                            highlightColor: Colors.grey[800]!,
+                            child: Container(
+                              width: width,
+                              height: height,
+                              margin: EdgeInsets.only(
+                                left: index == 0 ? 16 : 8,
+                                right: index == app.thumbnailUrls.length - 1 ? 16 : 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                          errorWidget: (context, url, error) => Container(
+                            width: width,
+                            height: height,
+                            margin: EdgeInsets.only(
+                              left: index == 0 ? 16 : 8,
+                              right: index == app.thumbnailUrls.length - 1 ? 16 : 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[900],
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.error),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
               InfoCardWidget(
                 onTap: () {
                   if (app.description.decodeString.characters.length > 200) {
                     routeToPage(
-                        context, MarkdownViewer(title: 'About the App', markdown: app.description.decodeString));
+                        context,
+                        MarkdownViewer(
+                            title: 'About the ${app.isNotPersona() ? 'App' : 'Persona'}',
+                            markdown: app.description.decodeString));
                   }
                 },
-                title: 'About the App',
+                title: 'About the ${app.isNotPersona() ? 'App' : 'Persona'}',
                 description: app.description,
                 showChips: true,
                 chips: app
@@ -622,7 +787,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 },
                 child: Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(18.0),
+                  padding: const EdgeInsets.all(16.0),
                   margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade900,
@@ -688,64 +853,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   : const SizedBox.shrink(),
               // isIntegration ? const SizedBox(height: 16) : const SizedBox.shrink(),
               // widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
-              app.private
-                  ? const SizedBox.shrink()
-                  : Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16.0),
-                      margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade900,
-                        borderRadius: BorderRadius.circular(16.0),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('App Analytics', style: TextStyle(color: Colors.white, fontSize: 16)),
-                          const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Skeleton.shade(child: SvgPicture.asset(Assets.images.icChart, width: 20)),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        usageCount.toString(),
-                                        style: const TextStyle(color: Colors.white, fontSize: 30),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text('Times Used', style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
-                                ],
-                              ),
-                              const Spacer(flex: 2),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Skeleton.shade(child: SvgPicture.asset(Assets.images.icDollar, width: 20)),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        "\$$moneyMade",
-                                        style: const TextStyle(color: Colors.white, fontSize: 28),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text('Money Earned', style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
-                                ],
-                              ),
-                              const Spacer(flex: 2),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
+              // app.private
+              //     ? const SizedBox.shrink()
+              //     : AppAnalyticsWidget(
+              //         installs: app.installs, moneyMade: app.isPaid ? ((app.price ?? 0) * app.installs) : 0),
               const SizedBox(height: 60),
             ],
           ),
@@ -780,6 +891,20 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
       prefs.enableApp(appId);
       MixpanelManager().appEnabled(appId);
+
+      // Automatically open app home page after installation if available
+      if (app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
+        Future.delayed(const Duration(seconds: 1), () {
+          if (mounted) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => AppHomeWebPage(app: app),
+              ),
+            );
+          }
+        });
+      }
     } else {
       prefs.disableApp(appId);
       var res = await disableAppServer(appId);

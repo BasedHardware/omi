@@ -12,10 +12,12 @@ from pydub import AudioSegment
 from starlette.websockets import WebSocketState
 
 import database.memories as memories_db
+import database.users as user_db
 from database import redis_db
 from database.redis_db import get_cached_user_geolocation
 from models.memory import Memory, TranscriptSegment, MemoryStatus, Structured, Geolocation
 from models.message_event import MemoryEvent, MessageEvent
+from utils.apps import is_audio_bytes_app_enabled
 from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory
 from utils.plugins import trigger_external_integrations
@@ -25,6 +27,8 @@ from utils.webhooks import send_audio_bytes_developer_webhook, realtime_transcri
 from utils.pusher import connect_to_trigger_pusher
 
 from utils.other import endpoints as auth
+
+import wave
 
 router = APIRouter()
 
@@ -68,7 +72,13 @@ async def _websocket_util(
     print('_websocket_util', uid, language, sample_rate, codec, include_speech_profile)
 
     if not uid or len(uid) <= 0:
-        raise HTTPException(status_code=400, detail="Invalid UID")
+        await websocket.close(code=1008, reason="Bad uid")
+        return
+
+    # Validate user
+    if not user_db.is_exists_user(uid):
+        await websocket.close(code=1008, reason="Bad user")
+        return
 
     # Not when comes from the phone, and only Friend's with 1.0.4
     # if stt_service == STTService.soniox and language not in soniox_valid_languages:
@@ -165,10 +175,14 @@ async def _websocket_util(
     processing = memories_db.get_processing_memories(uid)
     asyncio.create_task(finalize_processing_memories(processing))
 
+    # audio_data = bytearray()  # Variable to store audio bytes
+    # current_memory_id = None  # Track the current memory ID
+
     async def _create_current_memory():
+        # nonlocal current_memory_id
         print("_create_current_memory", uid)
 
-        # Reset state variablesr
+        # Reset state variables
         nonlocal seconds_to_trim
         nonlocal seconds_to_add
         seconds_to_trim = None
@@ -178,6 +192,31 @@ async def _websocket_util(
         if not memory or not memory['transcript_segments']:
             return
         await _create_memory(memory)
+
+        # # Save audio bytes to a WAV file when the memory ends
+        # if current_memory_id and get_user_store_recording_permission(uid):
+        #     try:
+        #         if not audio_data:
+        #             print("No audio data to write.")
+        #             return
+        #
+        #         path = f"_recordings/{current_memory_id}_audio.wav"
+        #         print(f"Saving audio file to {path}")
+        #
+        #         with wave.open(path, "wb") as wav_file:
+        #             wav_file.setnchannels(channels)
+        #             wav_file.setsampwidth(2)
+        #             wav_file.setframerate(sample_rate)
+        #             wav_file.writeframes(audio_data)
+        #
+        #         print(f"Audio file saved successfully: {path}")
+        #         upload_memory_recording(file_path=path,uid=uid,memory_id=current_memory_id)
+        #
+        #     except Exception as e:
+        #         print(f"Error saving audio file: {e}")
+        # else:
+        #     print("Audio recording permission is false or no memory ID")
+        # audio_data.clear()
 
     # memory_creation_task_lock = False
     memory_creation_task_lock = asyncio.Lock()
@@ -205,13 +244,14 @@ async def _websocket_util(
             )
 
     def _get_or_create_in_progress_memory(segments: List[dict]):
+        # nonlocal current_memory_id
         if existing := retrieve_in_progress_memory(uid):
-            # print('_get_or_create_in_progress_memory existing', existing['id'], uid)
             memory = Memory(**existing)
             memory.transcript_segments = TranscriptSegment.combine_segments(
                 memory.transcript_segments, [TranscriptSegment(**segment) for segment in segments]
             )
             redis_db.set_in_progress_memory_id(uid, memory.id)
+            # current_memory_id = memory.id
             return memory
 
         started_at = datetime.now(timezone.utc) - timedelta(seconds=segments[0]['end'] - segments[0]['start'])
@@ -229,6 +269,7 @@ async def _websocket_util(
         print('_get_in_progress_memory new', memory, uid)
         memories_db.upsert_memory(uid, memory_data=memory.dict())
         redis_db.set_in_progress_memory_id(uid, memory.id)
+        # current_memory_id = memory.id
         return memory
 
     async def create_memory_on_segment_received_task(finished_at: datetime):
@@ -344,7 +385,7 @@ async def _websocket_util(
         # Audio bytes
         audio_bytes_ws = None
         audio_buffers = bytearray()
-        audio_bytes_enabled = bool(get_audio_bytes_webhook_seconds(uid))
+        audio_bytes_enabled = bool(get_audio_bytes_webhook_seconds(uid)) or is_audio_bytes_app_enabled(uid)
 
         def audio_bytes_send(audio_bytes):
             nonlocal audio_buffers
@@ -406,7 +447,6 @@ async def _websocket_util(
 
     pusher_connect, pusher_close, transcript_send, transcript_consume, audio_bytes_send, audio_bytes_consume = create_pusher_task_handler()
 
-
     current_memory_id = None
 
     async def stream_transcript_process():
@@ -460,7 +500,6 @@ async def _websocket_util(
                 memories_db.update_memory_segments(uid, memory.id, [s.dict() for s in memory.transcript_segments])
                 memories_db.update_memory_finished_at(uid, memory.id, finished_at)
 
-
                 # threading.Thread(target=process_segments, args=(uid, segments)).start() # restore when plugins work
             except Exception as e:
                 print(f'Could not process transcript: error {e}', uid)
@@ -470,17 +509,12 @@ async def _websocket_util(
         nonlocal websocket_close_code
 
         timer_start = time.time()
-        # f = open("audio.bin", "ab")
         try:
             while websocket_active:
                 data = await websocket.receive_bytes()
-                # save the data to a file
-                # data_length = len(data)
-                # f.write(struct.pack('I', data_length))  # Write length as 4 bytes
-                # f.write(data)
-
                 if codec == 'opus' and sample_rate == 16000:
                     data = decoder.decode(bytes(data), frame_size=160)
+                    # audio_data.extend(data)
 
                 if include_speech_profile and codec != 'opus':  # don't do for opus 1.0.4 for now
                     has_speech = _has_speech(data, sample_rate)
@@ -590,16 +624,16 @@ async def _websocket_util(
             except Exception as e:
                 print(f"Error closing Pusher: {e}", uid)
 
-
-@router.websocket("/v2/listen")
-async def websocket_endpoint(
-        websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
-        channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = STTService.soniox
-):
-    await _websocket_util(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, stt_service)
+# @deprecated
+# @router.websocket("/v2/listen")
+# async def websocket_endpoint_v2(
+#         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
+#         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = STTService.soniox
+# ):
+#     await _websocket_util(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, stt_service)
 
 @router.websocket("/v3/listen")
-async def websocket_endpoint_v3(
+async def websocket_endpoint(
         websocket: WebSocket, uid: str = Depends(auth.get_current_user_uid), language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = STTService.soniox
 ):

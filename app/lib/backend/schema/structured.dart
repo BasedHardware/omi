@@ -49,7 +49,9 @@ class Structured {
         if (event.isEmpty) continue;
         structured.events.add(Event(
           event['title'],
-          DateTime.parse(event['startsAt'] ?? event['start']).toLocal(),
+          (event['startsAt'] ?? event['start']) is int
+              ? DateTime.fromMillisecondsSinceEpoch((event['startsAt'] ?? event['start']) * 1000).toLocal()
+              : DateTime.parse(event['startsAt'] ?? event['start']).toLocal(),
           event['duration'],
           description: event['description'] ?? '',
           created: event['created'] ?? false,

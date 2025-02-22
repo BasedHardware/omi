@@ -23,9 +23,22 @@ import {
 } from "@/components/ui/dialog";
 import { Message } from '@/types/chat';
 import { PreorderBanner } from '@/components/shared/PreorderBanner';
-import Mixpanel from 'mixpanel-browser';
+import { Mixpanel } from '@/lib/mixpanel';
 
 function ChatContent() {
+
+  useEffect(() => {
+    // Identify the user first
+    Mixpanel.identify();
+
+    // Then track the page view
+    Mixpanel.track('Page View', {
+      page: 'Chat',
+      url: window.location.pathname,
+      timestamp: new Date().toISOString()
+    });
+  }, []);
+
   const searchParams = useSearchParams();
   const botId = searchParams.get('id');
 
@@ -34,6 +47,7 @@ function ChatContent() {
   const [botData, setBotData] = useState<{
     name: string;
     avatar: string;
+    image?: string;
     username?: string;
   } | null>(null);
 
@@ -61,7 +75,8 @@ function ChatContent() {
           setBotData({
             name: data.name,
             avatar: data.avatar,
-            username: data.username
+            username: data.username,
+            image: data.image
           });
         }
       } catch (error) {
@@ -74,7 +89,7 @@ function ChatContent() {
 
   // Use the fetched data
   const botName = botData?.name || 'Omi';
-  const botImage = botData?.avatar || '/omi-avatar.svg';
+  const botImage = botData?.avatar || botData?.image || '/omi-avatar.svg';
   const username = botData?.username || '';
 
   // Function to save messages to Firebase
@@ -245,9 +260,11 @@ function ChatContent() {
       timestamp: new Date().toISOString()
     });
 
+    /***
     console.log('Sending message:', inputText);
     console.log('User Message Count:', newUserMessageCount);
     console.log('Authenticated User:', auth.currentUser);
+    ***/
 
     // Check for login requirement after 2 messages (shows prompt before 3rd)
     if (!auth.currentUser && newUserMessageCount >= 3) {
@@ -643,7 +660,7 @@ function ChatContent() {
         </div>
         <div className="max-w-4xl mx-auto mt-4 flex flex-col sm:flex-row justify-between text-xs text-gray-500">
           <div className="flex gap-2 mb-2 sm:mb-0">
-            <span>Omi by Based Hardware © 2024</span>
+            <span>Omi by Based Hardware © 2025</span>
           </div>
           <div className="flex gap-2">
             <Button variant="link" className="p-0 h-auto text-xs text-gray-500 hover:text-white">Terms & Conditions</Button>

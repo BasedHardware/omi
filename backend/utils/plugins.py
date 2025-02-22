@@ -1,5 +1,5 @@
 import threading
-from typing import List, Optional
+from typing import List
 import os
 import requests
 import time
@@ -230,6 +230,11 @@ async def trigger_realtime_integrations(uid: str, segments: list[dict], memory_i
     _trigger_realtime_integrations(uid, token, segments, memory_id)
 
 
+async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
+    """REALTIME AUDIO STREAMING"""
+    _trigger_realtime_audio_bytes(uid, sample_rate, data)
+
+
 # proactive notification
 def _retrieve_contextual_memories(uid: str, user_context):
     vector = (
@@ -302,7 +307,7 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
     if 'user_context' in filter_scopes:
         memories = _retrieve_contextual_memories(uid, data.get('context', {}))
         if len(memories) > 0:
-            context = Memory.memories_to_string(memories, True)
+            context = Memory.memories_to_string(memories)
 
     # messages
     messages = []
@@ -323,6 +328,41 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
     # set rate
     _set_proactive_noti_sent_at(uid, plugin)
     return message
+
+
+def _trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
+    apps: List[App] = get_available_apps(uid)
+    filtered_apps = [
+        app for app in apps if
+        app.triggers_realtime_audio_bytes() and app.enabled and not app.deleted
+    ]
+    if not filtered_apps:
+        return {}
+
+    threads = []
+    results = {}
+
+    def _single(app: App):
+        if not app.external_integration.webhook_url:
+            return
+
+        url = app.external_integration.webhook_url
+        url += f'?sample_rate={sample_rate}&uid={uid}'
+        try:
+            response = requests.post(url, data=data, headers={'Content-Type': 'application/octet-stream'}, timeout=15)
+            print('trigger_realtime_audio_bytes', app.id, 'status:', response.status_code)
+        except Exception as e:
+            print(f"Plugin integration error: {e}")
+            return
+
+    for app in filtered_apps:
+        threads.append(threading.Thread(target=_single, args=(app,)))
+
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+
+    return results
+
 
 
 def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], memory_id: str | None) -> dict:
