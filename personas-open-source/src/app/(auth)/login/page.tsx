@@ -60,7 +60,7 @@ export default function SignInPage() {
         {/* Footer */}
         <div className="fixed bottom-4 w-full max-w-4xl mx-auto px-4">
           <div className="flex justify-between text-xs text-gray-500">
-            <span>Omi Chat © 2024</span>
+            <span>Omi Chat © 2025</span>
             <div className="flex gap-4">
               <Button variant="link" className="p-0 h-auto text-xs text-gray-500 hover:text-white">Terms & Conditions</Button>
               <Button variant="link" className="p-0 h-auto text-xs text-gray-500 hover:text-white">Privacy Policy</Button>
