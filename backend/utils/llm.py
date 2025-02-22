@@ -249,6 +249,20 @@ As {plugin.name}, fully embrace your personality and characteristics in your {"i
     return llm_mini.invoke(prompt).content
 
 
+def initial_persona_chat_message(uid: str, app: Optional[App] = None, messages: List[Message] = []) -> str:
+    print("initial_persona_chat_message")
+    chat_messages = [SystemMessage(content=app.persona_prompt)]
+    for msg in messages:
+        if msg.sender == MessageSender.ai:
+            chat_messages.append(AIMessage(content=msg.text))
+        else:
+            chat_messages.append(HumanMessage(content=msg.text))
+    llm_call = llm_persona_mini_stream
+    if app.is_influencer:
+        llm_call = llm_persona_medium_stream
+    return llm_call.invoke(chat_messages).content
+
+
 # *********************************************
 # ************* RETRIEVAL + CHAT **************
 # *********************************************
