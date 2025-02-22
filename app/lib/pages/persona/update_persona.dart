@@ -154,66 +154,6 @@ class _UpdatePersonaPageState extends State<UpdatePersonaPage> {
                               ),
                             ),
                           ),
-                          const SizedBox(
-                            height: 24,
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.only(left: 8.0),
-                            child: Text(
-                              'Persona Username',
-                              style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
-                            margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade800,
-                              borderRadius: BorderRadius.circular(10.0),
-                            ),
-                            width: double.infinity,
-                            child: TextFormField(
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Please enter a username to access the persona';
-                                }
-                                return null;
-                              },
-                              onChanged: (value) {
-                                _debouncer.run(() async {
-                                  await provider.checkIsUsernameTaken(value);
-                                });
-                              },
-                              controller: provider.usernameController,
-                              inputFormatters: [
-                                LowerCaseTextFormatter(),
-                                FilteringTextInputFormatter.allow(RegExp(r'[a-z0-9_]')),
-                              ],
-                              decoration: InputDecoration(
-                                isDense: true,
-                                border: InputBorder.none,
-                                hintText: 'nikshevchenko',
-                                suffix: provider.usernameController.text.isEmpty
-                                    ? null
-                                    : provider.isCheckingUsername
-                                        ? const SizedBox(
-                                            width: 16,
-                                            height: 16,
-                                            child: Center(
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                                valueColor: AlwaysStoppedAnimation<Color>(Colors.grey),
-                                              ),
-                                            ),
-                                          )
-                                        : Icon(
-                                            provider.isUsernameTaken ? Icons.close : Icons.check,
-                                            color: provider.isUsernameTaken ? Colors.red : Colors.green,
-                                            size: 16,
-                                          ),
-                              ),
-                            ),
-                          ),
                         ],
                       ),
                     ),
@@ -268,11 +208,9 @@ class _UpdatePersonaPageState extends State<UpdatePersonaPage> {
                                 ),
                                 const SizedBox(width: 12),
                                 Text(
-                                  widget.app!.twitter != null
-                                      ? (widget.app!.twitter!['username'] == null
-                                          ? 'Connect Twitter'
-                                          : widget.app!.twitter?['username'] ?? '')
-                                      : 'Connect Twitter',
+                                  provider.twitterProfile.isEmpty
+                                      ? 'Connect Twitter'
+                                      : provider.twitterProfile['username'] ?? provider.twitterProfile['profile'] ?? '',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 16,
@@ -282,8 +220,7 @@ class _UpdatePersonaPageState extends State<UpdatePersonaPage> {
                                 if (provider.twitterProfile.isEmpty)
                                   GestureDetector(
                                     onTap: () {
-                                      if (widget.app!.connectedAccounts.contains('twitter')) {
-                                      } else {
+                                      if (!provider.hasTwitterConnection) {
                                         routeToPage(context, const SocialHandleScreen());
                                       }
                                     },
@@ -294,7 +231,7 @@ class _UpdatePersonaPageState extends State<UpdatePersonaPage> {
                                         borderRadius: BorderRadius.circular(16),
                                       ),
                                       child: Text(
-                                        widget.app!.connectedAccounts.contains('twitter') ? 'Connected' : 'Connect',
+                                        provider.hasTwitterConnection ? 'Connected' : 'Connect',
                                         style: const TextStyle(
                                           color: Colors.white,
                                           fontSize: 12,
@@ -303,20 +240,72 @@ class _UpdatePersonaPageState extends State<UpdatePersonaPage> {
                                     ),
                                   )
                                 else
-                                  Container(
+                                  GestureDetector(
+                                    onTap: () => provider.disconnectTwitter(),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey[800],
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      child: const Text(
+                                        'Disconnect',
+                                        style: TextStyle(
+                                          color: Colors.red,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[900],
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.person_outline,
+                                  size: 24,
+                                  color: Colors.white,
+                                ),
+                                const SizedBox(width: 12),
+                                const Text(
+                                  'Connect Omi',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const Spacer(),
+                                GestureDetector(
+                                  onTap: () {
+                                    if (!provider.hasOmiConnection) {
+                                      provider.toggleOmiConnection(true);
+                                    } else {
+                                      provider.disconnectOmi();
+                                    }
+                                  },
+                                  child: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                     decoration: BoxDecoration(
                                       color: Colors.grey[800],
                                       borderRadius: BorderRadius.circular(16),
                                     ),
-                                    child: const Text(
-                                      'Connected',
+                                    child: Text(
+                                      provider.hasOmiConnection ? 'Disconnect' : 'Connect',
                                       style: TextStyle(
-                                        color: Colors.grey,
+                                        color: provider.hasOmiConnection ? Colors.red : Colors.white,
                                         fontSize: 12,
                                       ),
                                     ),
                                   ),
+                                ),
                               ],
                             ),
                           ),
