@@ -505,7 +505,6 @@ Future<Map?> getTwitterProfileData(String handle) async {
   }
 }
 
-
 Future<(bool, String?)> verifyTwitterOwnership(String username, String handle, String? personaId) async {
   var url = '${Env.apiBaseUrl}v1/personas/twitter/verify-ownership?username=$username&handle=$handle';
   if (personaId != null) {
@@ -585,5 +584,23 @@ Future<String?> generateUsername(String handle) async {
     debugPrint(e.toString());
     CrashReporting.reportHandledCrash(e, stackTrace);
     return null;
+  }
+}
+
+Future<bool> migrateAppOwnerId(String oldId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/apps/migrate-owner?old_id=$oldId',
+    headers: {},
+    body: '',
+    method: 'POST',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return false;
+    log('migrateAppOwnerId: ${response.body}');
+    return true;
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return false;
   }
 }
