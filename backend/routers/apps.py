@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, H
 from database.apps import change_app_approval_status, get_unapproved_public_apps_db, \
     add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db, \
     get_personas_by_username_db, get_persona_by_id_db, delete_persona_db, get_persona_by_twitter_handle_db, \
-    get_persona_by_username_db
+    get_persona_by_username_db, migrate_app_owner_id_db
 from database.auth import get_user_from_uid
 from database.notifications import get_token_only
 from database.redis_db import delete_generic_cache, get_specific_user_review, increase_app_installs_count, \
@@ -92,7 +92,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     if 'external_integration' in data:
         ext_int = data['external_integration']
         if (not ext_int.get('app_home_url') and
-            ext_int.get('auth_steps') and
+                ext_int.get('auth_steps') and
                 len(ext_int['auth_steps']) == 1):
             ext_int['app_home_url'] = ext_int['auth_steps'][0]['url']
 
@@ -106,7 +106,8 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
 
 
 @router.post('/v1/personas', tags=['v1'])
-async def create_persona(persona_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
+async def create_persona(persona_data: str = Form(...), file: UploadFile = File(...),
+                         uid=Depends(auth.get_current_user_uid)):
     data = json.loads(persona_data)
     data['approved'] = False
     data['deleted'] = False
@@ -221,7 +222,7 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
     if 'external_integration' in data:
         ext_int = data['external_integration']
         if (not ext_int.get('app_home_url') and
-            ext_int.get('auth_steps') and
+                ext_int.get('auth_steps') and
                 len(ext_int['auth_steps']) == 1):
             ext_int['app_home_url'] = ext_int['auth_steps'][0]['url']
 
@@ -467,10 +468,10 @@ async def get_twitter_profile_data(handle: str, uid: str = Depends(auth.get_curr
 
 @router.get('/v1/personas/twitter/verify-ownership', tags=['v1'])
 async def verify_twitter_ownership_tweet(
-    username: str,
-    handle: str,
-    uid: str = Depends(auth.get_current_user_uid),
-    persona_id: str | None = None
+        username: str,
+        handle: str,
+        uid: str = Depends(auth.get_current_user_uid),
+        persona_id: str | None = None
 ):
     # Get user info to check auth provider
     user = get_user_from_uid(uid)
@@ -509,6 +510,9 @@ async def get_twitter_initial_message(username: str, uid: str = Depends(auth.get
     return {'message': ''}
 
 
+@router.post('/v1/apps/migrate-owner', tags=['v1'])
+def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid)):
+    migrate_app_owner_id_db(uid, old_id)
 
 
 # ******************************************************

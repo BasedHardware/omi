@@ -347,3 +347,11 @@ def add_persona_to_db(persona_data: dict):
 def update_persona_in_db(persona_data: dict):
     persona_ref = db.collection('plugins_data').document(persona_data['id'])
     persona_ref.update(persona_data)
+
+
+def migrate_app_owner_id_db(new_id: str, old_id: str):
+    filters = [FieldFilter('uid', '==', old_id), FieldFilter('deleted', '==', False)]
+    apps_ref = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
+    for app in apps_ref:
+        app_ref = db.collection('plugins_data').document(app.id)
+        app_ref.update({'uid': new_id})
