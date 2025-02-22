@@ -1,19 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
-import { use } from 'react';
+import { use, useEffect, useState } from 'react';
 
-export default function UsernamePage({ params }: { params: Promise<{ username: string }> }) {
+type Props = {
+  params: Promise<{ username: string }>
+}
+
+export default function UsernamePage({ params }: Props) {
   const { username } = use(params);
   const router = useRouter();
   const [error, setError] = useState<'not_found' | 'private' | null>(null);
-
+  
   useEffect(() => {
     const fetchBotByUsername = async () => {
       try {
@@ -35,8 +38,8 @@ export default function UsernamePage({ params }: { params: Promise<{ username: s
         } else {
           setError('not_found');
         }
-      } catch (error) {
-        console.error('Error fetching bot by username:', error);
+      } catch (e) {
+        console.error('Error fetching bot:', e);
         setError('not_found');
       }
     };
@@ -44,7 +47,9 @@ export default function UsernamePage({ params }: { params: Promise<{ username: s
     fetchBotByUsername();
   }, [username, router]);
 
-  if (!error) return null;
+  if (!error) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4">
@@ -69,7 +74,6 @@ export default function UsernamePage({ params }: { params: Promise<{ username: s
             <p className="text-sm text-gray-500">You don't have access to view this persona.</p>
           </>
         )}
-
         <Link href="/">
           <Button 
             className="mt-8 w-full max-w-sm rounded-full bg-white text-black hover:bg-gray-200"
