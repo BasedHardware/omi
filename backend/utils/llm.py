@@ -34,6 +34,7 @@ llm_large_stream = ChatOpenAI(model='o1-preview', streaming=True, temperature=1)
 llm_medium = ChatOpenAI(model='gpt-4o')
 llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)
 llm_persona_mini_stream = ChatOpenAI(
+    temperature=0.8,
     model="google/gemini-flash-1.5-8b",
     api_key=os.environ.get('OPENROUTER_API_KEY'),
     base_url="https://openrouter.ai/api/v1",
@@ -41,6 +42,7 @@ llm_persona_mini_stream = ChatOpenAI(
     streaming=True,
 )
 llm_persona_medium_stream = ChatOpenAI(
+    temperature=0.8,
     model="anthropic/claude-3.5-sonnet",
     api_key=os.environ.get('OPENROUTER_API_KEY'),
     base_url="https://openrouter.ai/api/v1",
