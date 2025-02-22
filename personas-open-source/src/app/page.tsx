@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 import { PreorderBanner } from '@/components/shared/PreorderBanner';
 import { Mixpanel } from '@/lib/mixpanel';
 import { useInView } from 'react-intersection-observer';
-
+import { TwitterProfile } from '@/types/twitter';
 
 type Chatbot = {
   id: string;
@@ -28,17 +28,6 @@ type Chatbot = {
   category: string;
   created_at?: string;
   verified?: boolean;
-};
-
-type TwitterProfile = {
-  profile: string;
-  rest_id: string;
-  avatar: string;
-  desc: string;
-  name: string;
-  friends: number;
-  sub_count: number;
-  id: string;
 };
 
 const formatTwitterAvatarUrl = (url: string): string => {
