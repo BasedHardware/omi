@@ -660,7 +660,7 @@ function ChatContent() {
         </div>
         <div className="max-w-4xl mx-auto mt-4 flex flex-col sm:flex-row justify-between text-xs text-gray-500">
           <div className="flex gap-2 mb-2 sm:mb-0">
-            <span>Omi by Based Hardware © 2024</span>
+            <span>Omi by Based Hardware © 2025</span>
           </div>
           <div className="flex gap-2">
             <Button variant="link" className="p-0 h-auto text-xs text-gray-500 hover:text-white">Terms & Conditions</Button>
