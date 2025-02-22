@@ -6,6 +6,7 @@ import 'package:friend_private/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
 import 'widgets/app_metadata_widget.dart';
+import 'widgets/app_secret_widget.dart';
 import 'widgets/capabilities_chips_widget.dart';
 import 'widgets/external_trigger_fields_widget.dart';
 import 'widgets/payment_details_widget.dart';
@@ -227,6 +228,23 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                     ),
                                     const SizedBox(height: 48, child: NotificationScopesChipsWidget()),
                                   ],
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade900,
+                                  borderRadius: BorderRadius.circular(12.0),
+                                ),
+                                padding: const EdgeInsets.all(14.0),
+                                width: double.infinity,
+                                child: AppSecretWidget(
+                                  app: widget.app,
+                                  onSecretUpdated: (newSecret) {
+                                    setState(() {
+                                      widget.app.appSecret = newSecret;
+                                    });
+                                  },
                                 ),
                               ),
                             ],

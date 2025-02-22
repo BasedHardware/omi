@@ -189,6 +189,7 @@ class App {
   double? price;
   bool isUserPaid;
   String? paymentLink;
+  String? appSecret;
 
   App({
     required this.id,
@@ -221,6 +222,7 @@ class App {
     this.price,
     required this.isUserPaid,
     this.paymentLink,
+    this.appSecret,
   });
 
   String? getRatingAvg() => ratingAvg?.toStringAsFixed(1);
@@ -268,6 +270,7 @@ class App {
       price: json['price'] ?? 0.0,
       isUserPaid: json['is_user_paid'] ?? false,
       paymentLink: json['payment_link'],
+      appSecret: json['app_secret'],
     );
   }
 
@@ -350,6 +353,7 @@ class App {
       'price': price,
       'is_user_paid': isUserPaid,
       'payment_link': paymentLink,
+      'app_secret': appSecret,
     };
   }
 
