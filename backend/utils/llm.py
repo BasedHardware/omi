@@ -1,9 +1,15 @@
 import json
 import re
+import os
 from datetime import datetime, timezone
 from typing import List, Optional
 
 import tiktoken
+from langchain.schema import (
+    HumanMessage,
+    SystemMessage,
+    AIMessage,
+)
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
@@ -27,6 +33,20 @@ llm_large = ChatOpenAI(model='o1-preview')
 llm_large_stream = ChatOpenAI(model='o1-preview', streaming=True, temperature=1)
 llm_medium = ChatOpenAI(model='gpt-4o')
 llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)
+llm_persona_mini_stream = ChatOpenAI(
+    model="google/gemini-flash-1.5-8b",
+    api_key=os.environ.get('OPENROUTER_API_KEY'),
+    base_url="https://openrouter.ai/api/v1",
+    default_headers={"X-Title": "Omi Chat"},
+    streaming=True,
+)
+llm_persona_medium_stream = ChatOpenAI(
+    model="anthropic/claude-3.5-sonnet",
+    api_key=os.environ.get('OPENROUTER_API_KEY'),
+    base_url="https://openrouter.ai/api/v1",
+    default_headers={"X-Title": "Omi Chat"},
+    streaming=True,
+)
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 parser = PydanticOutputParser(pydantic_object=Structured)
 
@@ -645,14 +665,18 @@ def answer_omi_question_stream(messages: List[Message], context: str, callbacks:
 
 
 def answer_persona_question_stream(app: App, messages: List[Message], callbacks: []) -> str:
-    chat_messages = [{"role": "system", "content": app.persona_prompt}]
+    print("answer_persona_question_stream")
+    chat_messages = [SystemMessage(content=app.persona_prompt)]
     for msg in messages:
-        if msg.sender == "ai":
-            chat_messages.append({"role": "ai", "content": msg.text})
+        if msg.sender == MessageSender.ai:
+            chat_messages.append(AIMessage(content=msg.text))
         else:
-            chat_messages.append({"role": "user", "content": msg.text})
+            chat_messages.append(HumanMessage(content=msg.text))
+    llm_call = llm_persona_mini_stream
+    if app.is_influencer:
+        llm_call = llm_persona_medium_stream
+    return llm_call.invoke(chat_messages, {'callbacks':callbacks}).content
 
-    return llm_medium_stream.invoke(chat_messages, {'callbacks':callbacks}).content
 
 def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
                        cited: Optional[bool] = False,
