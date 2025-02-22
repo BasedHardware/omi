@@ -173,7 +173,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                   context.read<DeviceProvider>().setConnectedDevice(null);
                   context.read<DeviceProvider>().updateConnectingStatus(false);
                   Navigator.of(context).pop();
-                  MixpanelManager().disconnectFriendClicked();
+                  MixpanelManager().disconnectOmiClicked();
                 },
                 child: Text(
                   provider.connectedDevice == null ? "Unpair" : "Disconnect",

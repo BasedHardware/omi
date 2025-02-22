@@ -139,11 +139,11 @@ class ZapierClient:
         return {"result": "{}"}
 
 
-class FriendClient:
+class OmiClient:
     """
-    Implementation of the Friend Core APIs.
+    Implementation of the Omi Core APIs.
 
-    This abstract class provides a Python interface to all Friend Core APIs.
+    This abstract class provides a Python interface to all Omi Core APIs.
     """
 
     def __init__(
@@ -268,7 +268,7 @@ class FriendClient:
 
 zap_client = ZapierClient()
 
-friend_client = FriendClient(
+friend_client = OmiClient(
     base_url=os.getenv('FRIEND_API_URL'),
     workflow_api_key=os.getenv('WORKFLOW_API_KEY'),
 )

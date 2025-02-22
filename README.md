@@ -38,7 +38,7 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 
 ## In this repo:
 
-- [omi device](https://github.com/BasedHardware/omi/tree/main/Friend)
+- [omi device](https://github.com/BasedHardware/omi/tree/main/Omi)
 - [mobile app](https://github.com/BasedHardware/omi/tree/main/app)
 - [ai personas (web)](https://github.com/BasedHardware/omi/tree/main/personas-open-source)
 

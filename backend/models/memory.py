@@ -163,7 +163,7 @@ class Memory(BaseModel):
     finished_at: Optional[datetime]
 
     source: Optional[MemorySource] = MemorySource.friend  # TODO: once released migrate db to include this field
-    language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
+    language: Optional[str] = None  # applies only to Omi # TODO: once released migrate db to default 'en'
 
     structured: Structured
     transcript_segments: List[TranscriptSegment] = []
