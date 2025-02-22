@@ -19,7 +19,7 @@ from models.plugin import UsageHistoryType
 from routers.sync import retrieve_file_paths, decode_files_to_wav, retrieve_vad_segments
 from utils.apps import get_available_app_by_id
 from utils.chat import process_voice_message_segment, process_voice_message_segment_stream
-from utils.llm import initial_chat_message
+from utils.llm import initial_chat_message, initial_persona_chat_message
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream, execute_persona_chat_stream
@@ -278,17 +278,21 @@ def initial_message_util(uid: str, app_id: Optional[str] = None):
 
     prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, plugin_id=app_id)))
     print('initial_message_util returned', len(prev_messages), 'prev messages for', app_id)
-    prev_messages_str = ''
-    if prev_messages:
-        prev_messages_str = 'Previous conversation history:\n'
-        prev_messages_str += Message.get_messages_as_string([Message(**msg) for msg in prev_messages])
-
-    print('initial_message_util', len(prev_messages_str), app_id)
-    print('prev_messages:', [m['id'] for m in prev_messages])
 
     app = get_available_app_by_id(app_id, uid)
     app = App(**app) if app else None
-    text = initial_chat_message(uid, app, prev_messages_str)
+
+    # persona
+    text: str
+    if app and app.is_a_persona():
+        text = initial_persona_chat_message(uid, app, prev_messages)
+    else:
+        prev_messages_str = ''
+        if prev_messages:
+            prev_messages_str = 'Previous conversation history:\n'
+            prev_messages_str += Message.get_messages_as_string([Message(**msg) for msg in prev_messages])
+        print('initial_message_util', len(prev_messages_str), app_id)
+        text = initial_chat_message(uid, app, prev_messages_str)
 
     ai_message = Message(
         id=str(uuid.uuid4()),
