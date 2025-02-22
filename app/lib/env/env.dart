@@ -15,8 +15,8 @@ abstract class Env {
 
   static String? get apiBaseUrl => _instance.apiBaseUrl;
 
-  // static String? get apiBaseUrl => 'https://based-hardware-development--backened-dev-api.modal.run/';
-  // static String? get apiBaseUrl => 'https://camel-lucky-reliably.ngrok-free.app/';
+  // static String? get apiBaseUrl => 'https://backend-dt5lrfkkoa-uc.a.run.app/';
+  // // static String? get apiBaseUrl => 'https://camel-lucky-reliably.ngrok-free.app/';
   // static String? get apiBaseUrl => 'https://mutual-fun-boar.ngrok-free.app/';
 
   static String? get growthbookApiKey => _instance.growthbookApiKey;
@@ -28,6 +28,8 @@ abstract class Env {
   static String? get intercomIOSApiKey => _instance.intercomIOSApiKey;
 
   static String? get intercomAndroidApiKey => _instance.intercomAndroidApiKey;
+
+  static String? get posthogApiKey => _instance.posthogApiKey;
 }
 
 abstract class EnvFields {
@@ -48,4 +50,6 @@ abstract class EnvFields {
   String? get intercomIOSApiKey;
 
   String? get intercomAndroidApiKey;
+
+  String? get posthogApiKey;
 }

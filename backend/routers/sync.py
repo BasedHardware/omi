@@ -119,6 +119,7 @@ def decode_files_to_wav(files_path: List[str]):
 def retrieve_vad_segments(path: str, segmented_paths: set):
     start_timestamp = get_timestamp_from_path(path)
     voice_segments = vad_is_empty(path, return_segments=True, cache=True)
+
     segments = []
     # should we merge more aggressively, to avoid too many small segments? ~ not for now
     # Pros -> lesser segments, faster, less concurrency

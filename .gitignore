@@ -51,6 +51,7 @@ dist/
 **/ios/Runner/GoogleService-Info.plist
 **/ios/Config/*
 **/ios/Config/**/*
+**/ios/Flutter/Custom.xcconfig
 
 # macOS specific
 **/macos/**/Pods/
@@ -108,7 +109,8 @@ src/recordings
 **/step-versions/
 
 # vscode configuration
-.vscode/
+/.vscode/
+!app/.vscode/launch.json
 !.vscode/extensions.json
 
 # test output

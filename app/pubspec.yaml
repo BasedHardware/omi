@@ -1,9 +1,9 @@
 name: friend_private
 description: A new Flutter project.
 
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.47+176
+version: 1.0.53+216
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -11,7 +11,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  
+
   # State Management
   provider: ^6.1.2
   flutter_provider_utilities: ^1.0.6
@@ -20,7 +20,7 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
-  # UI 
+  # UI
   auto_size_text: 3.0.0
   lottie: ^3.1.2
   expandable_text: ^2.3.0
@@ -28,9 +28,9 @@ dependencies:
   gradient_borders: ^1.0.1
   visibility_detector: ^0.4.0+2
   flutter_rating_bar: ^4.0.1
-  sign_in_button: ^3.2.0
   dotted_border: ^2.1.0
   skeletonizer: ^1.4.2
+  shimmer: ^3.0.0
 
   # Firebase
   firebase_core: 3.3.0
@@ -40,9 +40,10 @@ dependencies:
   # Analytics and Support
   intercom_flutter:
   mixpanel_flutter: ^2.2.0
+  posthog_flutter: ^4.10.2
 
   # Utils
-  collection: 1.18.0
+  collection: ^1.18.0
   equatable: 2.0.5
   flutter_blue_plus: 1.33.6
   http: ^1.2.1
@@ -73,7 +74,7 @@ dependencies:
   flutter_background_service_platform_interface: 5.1.1
   opus_flutter: ^3.0.3
   opus_dart: ^3.0.1
-  growthbook_sdk_flutter: ^3.9.2
+  growthbook_sdk_flutter: 3.9.2
   manage_calendar_events: ^2.0.3
   flutter_timezone: ^2.0.0
   sign_in_with_apple: ^6.1.1
@@ -97,7 +98,8 @@ dependencies:
   timeago: ^3.7.0
   app_links: ^6.3.2
   flutter_svg: ^2.0.16
-
+  file_picker: 8.0.7
+  photo_view: ^0.15.0
 
 dependency_overrides:
   http: ^1.2.1
@@ -123,7 +125,6 @@ dependency_overrides:
       ref: master
       version: ^2.0.4
 
-
 dev_dependencies:
   flutter_launcher_icons: 0.13.1
   flutter_lints: ^4.0.0
@@ -136,8 +137,7 @@ dev_dependencies:
   envied_generator: ^0.5.4+1
   build_runner: ^2.4.11
   flutter_flavorizr: ^2.2.3
-  flutter_gen_runner: ^5.8.0
-
+  flutter_gen_runner: 5.8.0
 
 flutter_launcher_icons:
   android: true
@@ -145,8 +145,7 @@ flutter_launcher_icons:
   remove_alpha_ios: true
   web:
     generate: true
-  image_path: 'assets/images/app_launcher_icon.png'
-
+  image_path: "assets/images/app_launcher_icon.png"
 
 flutter:
   uses-material-design: true
@@ -163,7 +162,7 @@ flutter:
     - shorebird.yaml
     - assets/device_assets/frame_lib.lua
   fonts:
-    - family: 'SF Pro Display'
+    - family: "SF Pro Display"
       fonts:
         - asset: assets/fonts/SFPRODISPLAYTHINITALIC.OTF
           weight: 100
@@ -189,15 +188,13 @@ flutter_gen:
   output: lib/gen/
   class_name: Assets
   integrations:
-  flutter_svg: true
-  flare_flutter: true
-  rive: true
-  lottie: true
+    flutter_svg: true
+    rive: true
+    lottie: true
   gen_package_path: true
   ignore_resolution: true
   omit_path_levels: 3
   format_dart_code: false
-  
 
 flutter_native_splash:
   background_image: "assets/images/splash.png"
@@ -207,4 +204,3 @@ flutter_native_splash:
 
   android: true
   ios: true
-

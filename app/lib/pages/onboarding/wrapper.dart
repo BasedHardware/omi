@@ -38,8 +38,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     _controller = TabController(length: hasSpeechProfile ? 5 : 6, vsync: this);
     _controller!.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (isSignedIn() ||
-          (SharedPreferencesUtil().customBackendUrl.isNotEmpty && SharedPreferencesUtil().authToken.isNotEmpty)) {
+      if (isSignedIn()) {
         // && !SharedPreferencesUtil().onboardingCompleted
         if (mounted) {
           context.read<HomeProvider>().setupHasSpeakerProfile();
@@ -80,15 +79,14 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       // TODO: if connected already, stop animation and display battery
       AuthComponent(
         onSignIn: () {
+          SharedPreferencesUtil().hasOmiDevice = true;
           MixpanelManager().onboardingStepCompleted('Auth');
           context.read<HomeProvider>().setupHasSpeakerProfile();
           IntercomManager.instance.intercom.loginIdentifiedUser(
             userId: SharedPreferencesUtil().uid,
           );
           if (SharedPreferencesUtil().onboardingCompleted) {
-            // previous users
-            // Not needed anymore, because AuthProvider already does this
-            // routeToPage(context, const HomePageWrapper(), replace: true);
+            routeToPage(context, const HomePageWrapper(), replace: true);
           } else {
             _goNext();
           }
@@ -181,17 +179,17 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                   physics: const NeverScrollableScrollPhysics(),
                   children: [
                     DeviceAnimationWidget(animatedBackground: _controller!.index != -1),
-                    _controller!.index == 6 || _controller!.index == 7
-                        ? const SizedBox()
-                        : Center(
-                            child: Text(
-                              'Omi',
-                              style: TextStyle(
-                                  color: Colors.grey.shade200,
-                                  fontSize: _controller!.index == _controller!.length - 1 ? 28 : 40,
-                                  fontWeight: FontWeight.w500),
-                            ),
-                          ),
+                    // _controller!.index == 6 || _controller!.index == 7
+                    //     ? const SizedBox()
+                    //     : Center(
+                    //         child: Text(
+                    //           'Omi',
+                    //           style: TextStyle(
+                    //               color: Colors.grey.shade200,
+                    //               fontSize: _controller!.index == _controller!.length - 1 ? 28 : 40,
+                    //               fontWeight: FontWeight.w500),
+                    //         ),
+                    //       ),
                     const SizedBox(height: 24),
                     [-1, 5, 6, 7].contains(_controller?.index)
                         ? const SizedBox(
@@ -203,7 +201,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                               _controller!.index == _controller!.length - 1
                                   ? 'Your personal growth journey with AI that listens to your every word.'
                                   : 'Your personal growth journey with AI that listens to your every word.',
-                              style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                              style: TextStyle(color: Colors.grey.shade300, fontSize: 24),
                               textAlign: TextAlign.center,
                             ),
                           ),

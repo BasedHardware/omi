@@ -19,10 +19,12 @@
 				"CMAKE_BUILD_TYPE": "Debug",
 				"PLATFORM": "nrf52840",
 				"BOARD": "xiao_ble_sense",
-				"CACHED_CONF_FILE": "${sourceDir}/prj_xiao_ble_sense_devkitv1.conf"
+				"CACHED_CONF_FILE": "${sourceDir}/prj_xiao_ble_sense_devkitv1.conf",
+				"CONF_FILE": "${sourceDir}/prj_xiao_ble_sense_devkitv1.conf",
+				"DTC_OVERLAY_FILE": "${sourceDir}/overlay/xiao_ble_sense_devkitv1.overlay"
             }
 		},{
-			"name": "build_xiao_ble_sense_devkitv1-spisd.",
+			"name": "build_xiao_ble_sense_devkitv1-spisd",
 			"displayName": "Devkit V1 (with SPI SD)",
 			"configuration": "Debug",
 			"hidden": false,
@@ -35,10 +37,11 @@
 				"PLATFORM": "nrf52840",
 				"BOARD": "xiao_ble_sense",
 				"CACHED_CONF_FILE": "${sourceDir}/prj_xiao_ble_sense_devkitv1-spisd.conf",
+				"CONF_FILE": "${sourceDir}/prj_xiao_ble_sense_devkitv1-spisd.conf",
 				"DTC_OVERLAY_FILE": "${sourceDir}/overlay/xiao_ble_sense_devkitv1-spisd.overlay"
-            }
+			}
         },{
-			"name": "build_xiao_ble_sense_devkitv2-adafruit.",
+			"name": "build_xiao_ble_sense_devkitv2-adafruit",
 			"displayName": "Devkit V2 (with Adafruit BFF Module)",
 			"configuration": "Debug",
 			"hidden": false,

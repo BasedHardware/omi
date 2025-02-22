@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/api/users.dart';
-import 'package:friend_private/backend/http/cloud_storage.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/providers/base_provider.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
@@ -9,8 +8,6 @@ import 'package:friend_private/utils/logger.dart';
 import 'package:friend_private/utils/other/validators.dart';
 
 class DeveloperModeProvider extends BaseProvider {
-  final TextEditingController gcpCredentialsController = TextEditingController();
-  final TextEditingController gcpBucketNameController = TextEditingController();
   final TextEditingController webhookOnConversationCreated = TextEditingController();
   final TextEditingController webhookOnTranscriptReceived = TextEditingController();
   final TextEditingController webhookAudioBytes = TextEditingController();
@@ -93,8 +90,6 @@ class DeveloperModeProvider extends BaseProvider {
 
   Future initialize() async {
     setIsLoading(true);
-    gcpCredentialsController.text = SharedPreferencesUtil().gcpCredentials;
-    gcpBucketNameController.text = SharedPreferencesUtil().gcpBucketName;
     localSyncEnabled = SharedPreferencesUtil().localSyncEnabled;
     webhookOnConversationCreated.text = SharedPreferencesUtil().webhookOnConversationCreated;
     webhookOnTranscriptReceived.text = SharedPreferencesUtil().webhookOnTranscriptReceived;
@@ -142,24 +137,6 @@ class DeveloperModeProvider extends BaseProvider {
     if (savingSettingsLoading) return;
     setIsLoading(true);
     final prefs = SharedPreferencesUtil();
-
-    if (gcpCredentialsController.text.isNotEmpty && gcpBucketNameController.text.isNotEmpty) {
-      try {
-        await authenticateGCP(base64: gcpCredentialsController.text.trim());
-      } catch (e) {
-        AppSnackbar.showSnackbarError(
-          'Invalid GCP credentials or bucket name. Please check and try again.',
-        );
-
-        savingSettingsLoading = false;
-        notifyListeners();
-
-        return;
-      }
-    }
-
-    prefs.gcpCredentials = gcpCredentialsController.text.trim();
-    prefs.gcpBucketName = gcpBucketNameController.text.trim();
 
     if (webhookAudioBytes.text.isNotEmpty && !isValidUrl(webhookAudioBytes.text)) {
       AppSnackbar.showSnackbarError('Invalid audio bytes webhook URL');
@@ -214,8 +191,8 @@ class DeveloperModeProvider extends BaseProvider {
     prefs.devModeJoanFollowUpEnabled = followUpQuestionEnabled;
 
     MixpanelManager().settingsSaved(
-      hasGCPCredentials: prefs.gcpCredentials.isNotEmpty,
-      hasGCPBucketName: prefs.gcpBucketName.isNotEmpty,
+      hasWebhookConversationCreated: conversationEventsToggled,
+      hasWebhookTranscriptReceived: transcriptsToggled,
     );
     setIsLoading(false);
     notifyListeners();

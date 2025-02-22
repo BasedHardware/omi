@@ -12,7 +12,7 @@ import database.memories as memories_db
 import database.notifications as notification_db
 import database.tasks as tasks_db
 import database.trends as trends_db
-from database.apps import record_app_usage
+from database.apps import record_app_usage, get_omi_personas_by_uid_db
 from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
 from models.facts import FactDB
@@ -20,7 +20,7 @@ from models.memory import *
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
 from models.notification_message import NotificationMessage
-from utils.apps import get_available_apps
+from utils.apps import get_available_apps, update_persona_prompt, sync_update_persona_prompt
 from utils.llm import obtain_emotional_message, retrieve_metadata_fields_from_transcript
 from utils.llm import summarize_open_glass, get_transcript_structure, generate_embedding, \
     get_plugin_result, should_discard_memory, summarize_experience_text, new_facts_extractor, \
@@ -150,7 +150,7 @@ def send_new_facts_notification(token: str, facts: [FactDB]):
         navigate_to="/facts",
     )
 
-    send_notification(token, "Omi" + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
+    send_notification(token, "omi" + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
 
 
 def _extract_trends(memory: Memory):
@@ -191,6 +191,17 @@ def process_memory(
 
     if not is_reprocess:
         threading.Thread(target=memory_created_webhook, args=(uid, memory,)).start()
+        # Update persona prompts with new memory
+        personas = get_omi_personas_by_uid_db(uid)
+        if personas:
+            threads = []
+            print('updating personas after memory creation')
+            for persona in personas:
+                threads.append(threading.Thread(target=sync_update_persona_prompt, args=(persona,)))
+
+            [t.start() for t in threads]
+            [t.join() for t in threads]
+
 
     # TODO: trigger external integrations here too
 
@@ -338,7 +349,7 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
     print(f"Emotion Uid: {uid} {emotion}")
 
     # Ask llms about notification content
-    title = "Omi"
+    title = "omi"
     context_str, _ = retrieve_rag_memory_context(uid, memory)
 
     response: str = obtain_emotional_message(uid, memory, context_str, emotion)

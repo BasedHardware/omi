@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 import { PreorderBanner } from '@/components/shared/PreorderBanner';
 import { Mixpanel } from '@/lib/mixpanel';
 import { useInView } from 'react-intersection-observer';
-
+import { TwitterProfile } from '@/types/twitter';
 
 type Chatbot = {
   id: string;
@@ -28,17 +28,6 @@ type Chatbot = {
   category: string;
   created_at?: string;
   verified?: boolean;
-};
-
-type TwitterProfile = {
-  profile: string;
-  rest_id: string;
-  avatar: string;
-  desc: string;
-  name: string;
-  friends: number;
-  sub_count: number;
-  id: string;
 };
 
 const formatTwitterAvatarUrl = (url: string): string => {
@@ -416,7 +405,7 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
       {/* Footer */}
       <footer className="max-w-4xl mx-auto px-4 py-4">
         <div className="flex flex-col sm:flex-row justify-between text-xs text-zinc-400">
-          <span className="mb-2 sm:mb-0 sm:mr-8">Omi by Based Hardware © 2024</span>
+          <span className="mb-2 sm:mb-0 sm:mr-8">Omi by Based Hardware © 2025</span>
           <div className="flex gap-2">
             <Button variant="link" className="p-0 h-auto text-xs text-zinc-400 hover:text-white">Terms & Conditions</Button>
             <Button variant="link" className="p-0 h-auto text-xs text-zinc-400 hover:text-white">Privacy Policy</Button>

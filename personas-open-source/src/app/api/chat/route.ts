@@ -18,6 +18,7 @@ export async function POST(req: Request) {
     const { message, botId, conversationHistory } = await req.json();
 
     var chatPrompt;
+    var isInfluencer = false;
 
     if (!botId) return NextResponse.json({ message: "Bad param" }, { status: 400 });
 
@@ -25,7 +26,8 @@ export async function POST(req: Request) {
       const botDoc = await getDoc(doc(db, 'plugins_data', botId));
       if (botDoc.exists()) {
         const bot = botDoc.data();
-        chatPrompt = bot.chat_prompt;
+        chatPrompt = bot.chat_prompt ?? bot.persona_prompt;
+        isInfluencer = bot.is_influencer ?? false;
       }
     } catch (error) {
       console.error('Error fetching bot data:', error);
@@ -54,8 +56,15 @@ export async function POST(req: Request) {
 
     console.log('Formatted messages:', formattedMessages);
 
+
+    // LLM model, use a better model for specific people
+    var llmModel = "google/gemini-flash-1.5-8b";
+    if (isInfluencer) {
+      llmModel = "anthropic/claude-3.5-sonnet";
+    }
+
     const stream = await openai.chat.completions.create({
-      model: "google/gemini-flash-1.5-8b",
+      model: llmModel,
       messages: formattedMessages,
       stream: true,
       temperature: 0.8,
