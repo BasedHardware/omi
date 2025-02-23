@@ -744,10 +744,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 title: 'About the ${app.isNotPersona() ? 'App' : 'Persona'}',
                 description: app.description,
                 showChips: true,
-                chips: app
+                capabilityChips: app
                     .getCapabilitiesFromIds(context.read<AddAppProvider>().capabilities)
                     .map((e) => e.title)
                     .toList(),
+                connectionChips: app.getConnectedAccountNames(),
               ),
 
               app.conversationPrompt != null

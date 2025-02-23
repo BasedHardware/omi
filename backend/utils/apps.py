@@ -388,14 +388,12 @@ async def generate_persona_prompt(uid: str, persona: dict):
     conversation_history = Memory.memories_to_string(memories)
     conversation_history = condense_conversations([conversation_history])
 
-    condensed_tweets = None
-    # Condense tweets
+    tweets = None
     if "twitter" in persona['connected_accounts']:
         print("twitter in connected accounts---------------------------")
         # Get latest tweets
         tweets = await get_twitter_timeline(persona['twitter']['username'])
-        tweets = [tweet['text'] for tweet in tweets['timeline']]
-        condensed_tweets = condense_tweets(tweets, persona['name'])
+        tweets = [{'tweet': tweet['text'], 'posted_at': tweet['created_at']} for tweet in tweets['timeline']]
 
     # Condense facts
     facts_text = condense_facts([fact['content'] for fact in facts if not fact['deleted']], user_name)
@@ -410,7 +408,7 @@ async def generate_persona_prompt(uid: str, persona: dict):
     """
 
     # Add condensed tweets if available
-    if condensed_tweets:
+    if tweets:
         persona_prompt += f"- **Condensed Tweets:** Recent tweets from {user_name} for additional context and personality insights.\n"
 
     persona_prompt += f"""
@@ -431,8 +429,8 @@ async def generate_persona_prompt(uid: str, persona: dict):
     """
 
     # Add a guideline about tweets if they exist
-    if condensed_tweets:
-        persona_prompt += "7. Utilize condensed tweets to enhance authenticity, incorporating common expressions, opinions, and phrasing from {user_name}’s social media presence.\n"
+    if tweets:
+        persona_prompt += "7. Utilize tweets to enhance authenticity, incorporating common expressions, opinions, and phrasing from {user_name}'s social media presence.\n"
 
     persona_prompt += f"""
     **Rules:**  
@@ -451,7 +449,7 @@ async def generate_persona_prompt(uid: str, persona: dict):
     {conversation_history}
 
     Recent Tweets:
-    {condensed_tweets}
+    {tweets}
 
     Use these facts, conversations and tweets to shape your personality. Responses should help the conversation go deeper. You have strong opinions, slightly controversial."""
     return persona_prompt
