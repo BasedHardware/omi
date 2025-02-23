@@ -123,6 +123,11 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: TextButton(
+                                    style: TextButton.styleFrom(
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    ),
                                     onPressed: () async {
                                       routeToPage(context, const HomePageWrapper(), replace: true);
                                     },
@@ -154,6 +159,11 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                                     onPressed: () async {
                                       await IntercomManager.instance.displayFirmwareUpdateArticle();
                                     },
+                                    style: TextButton.styleFrom(
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    ),
                                     child: const Text(
                                       'Open Update Guide',
                                       style: TextStyle(
@@ -191,20 +201,25 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                           ),
-                                          onPressed: () {
-                                            showDialog(
-                                              context: context,
-                                              builder: (context) => FirmwareUpdateDialog(
-                                                steps: otaUpdateSteps,
-                                                onUpdateStart: () async {
-                                                  await downloadFirmware();
-                                                  await startDfu(widget.device!);
-                                                },
-                                              ),
-                                            );
+                                          onPressed: () async {
+                                            if (otaUpdateSteps.isEmpty) {
+                                              await downloadFirmware();
+                                              await startDfu(widget.device!);
+                                            } else {
+                                              showDialog(
+                                                context: context,
+                                                builder: (context) => FirmwareUpdateDialog(
+                                                  steps: otaUpdateSteps,
+                                                  onUpdateStart: () async {
+                                                    await downloadFirmware();
+                                                    await startDfu(widget.device!);
+                                                  },
+                                                ),
+                                              );
+                                            }
                                           },
-                                          child: const Text(
-                                            "Update",
+                                          child: Text(
+                                            otaUpdateSteps.isEmpty ? "Start Update" : "Update",
                                             style: TextStyle(color: Colors.white, fontSize: 16),
                                           ),
                                         ),
