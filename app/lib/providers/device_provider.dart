@@ -6,6 +6,8 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/env/env.dart';
+import 'package:friend_private/http/api/device.dart';
+import 'package:friend_private/utils/device.dart';
 import 'package:version/version.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:friend_private/providers/capture_provider.dart';
@@ -255,60 +257,21 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     });
   }
 
-  Future<Map> getLatestVersion({
-    required String deviceModelNumber,
-    required String firmwareRevision,
-    required String hardwareRevision,
-    required String manufacturerName,
-  }) async {
-    var res = await makeApiCall(
-        url:
-            "${Env.apiBaseUrl}v2/firmware/latest?device_model=$deviceModelNumber&firmware_revision=$firmwareRevision&hardware_revision=$hardwareRevision&manufacturer_name=$manufacturerName",
-        headers: {},
-        body: '',
-        method: 'GET');
-
-    if (res == null || res.statusCode != 200) {
-      return {};
-    }
-
-    return jsonDecode(res.body);
-  }
-
   Future<(String, bool)> shouldUpdateFirmware() async {
     if (pairedDevice == null || connectedDevice == null) {
       return ('No paird device is connected', false);
     }
 
     var device = pairedDevice!;
-
-    var latestFirmwareDetails = await getLatestVersion(
+    var latestFirmwareDetails = await getLatestFirmwareVersion(
       deviceModelNumber: device.modelNumber,
       firmwareRevision: device.firmwareRevision,
       hardwareRevision: device.hardwareRevision,
       manufacturerName: device.manufacturerName,
     );
 
-    debugPrint(device.firmwareRevision);
-    Version currentVersion = Version.parse(device.firmwareRevision);
-    if (latestFirmwareDetails.isEmpty || latestFirmwareDetails['version'] == null || latestFirmwareDetails['draft']) {
-      return ('Latest Version Not Available', false);
-    }
-
-    Version latestVersion = Version.parse(latestFirmwareDetails['version']);
-    Version minVersion = Version.parse(latestFirmwareDetails['min_version']);
-
-    if (currentVersion < minVersion) {
-      return ('0', false);
-    } else if (latestVersion > currentVersion) {
-      PackageInfo packageInfo = await PackageInfo.fromPlatform();
-      if (Version.parse(packageInfo.version) <= Version.parse(latestFirmwareDetails['min_app_version']) &&
-          int.parse(packageInfo.buildNumber) < int.parse(latestFirmwareDetails['min_app_version_code'])) {
-        return ('App update required', false);
-      }
-      return ('Update available', true);
-    }
-    return ('Up to date', false);
+    return await DeviceUtils.shouldUpdateFirmware(
+        currentFirmware: device.firmwareRevision, latestFirmwareDetails: latestFirmwareDetails);
   }
 
   void _onDeviceConnected(BtDevice device) async {
