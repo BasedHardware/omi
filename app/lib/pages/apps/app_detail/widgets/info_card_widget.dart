@@ -6,14 +6,16 @@ class InfoCardWidget extends StatelessWidget {
   final String title;
   final String description;
   final bool showChips;
-  final List<String>? chips;
+  final List<String>? capabilityChips;
+  final List<String>? connectionChips;
   const InfoCardWidget(
       {super.key,
       required this.onTap,
       required this.title,
       required this.description,
       required this.showChips,
-      this.chips});
+      this.capabilityChips,
+      this.connectionChips});
 
   @override
   Widget build(BuildContext context) {
@@ -49,12 +51,33 @@ class InfoCardWidget extends StatelessWidget {
                   : description.decodeString,
               style: const TextStyle(color: Colors.grey, fontSize: 15, height: 1.4),
             ),
-            if (showChips) ...[
+            if (showChips && capabilityChips != null) ...[
               const SizedBox(height: 10),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: chips!
+                children: capabilityChips!
+                    .map((chip) => Chip(
+                          label: Text(
+                            chip,
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                          backgroundColor: Colors.transparent,
+                          shape: StadiumBorder(
+                            side: BorderSide(
+                              color: Colors.grey.shade800,
+                            ),
+                          ),
+                        ))
+                    .toList(),
+              ),
+            ],
+            if (showChips && connectionChips != null) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: connectionChips!
                     .map((chip) => Chip(
                           label: Text(
                             chip,

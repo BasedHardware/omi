@@ -1,6 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/main.dart';
@@ -8,7 +7,6 @@ import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/pages/persona/twitter/social_profile.dart';
 import 'package:friend_private/utils/other/debouncer.dart';
 import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/utils/text_formatter.dart';
 import 'package:friend_private/widgets/animated_loading_button.dart';
 import 'package:provider/provider.dart';
 
@@ -142,7 +140,7 @@ class _UpdatePersonaPageState extends State<UpdatePersonaPage> {
                             child: TextFormField(
                               validator: (value) {
                                 if (value == null || value.isEmpty) {
-                                  return 'Please enter a username to access the persona';
+                                  return 'Please enter a valid name for your persona';
                                 }
                                 return null;
                               },
@@ -172,7 +170,7 @@ class _UpdatePersonaPageState extends State<UpdatePersonaPage> {
                             onChanged: (value) {
                               provider.setPersonaPublic(value);
                             },
-                            activeColor: Colors.white,
+                            activeColor: Colors.deepPurple,
                           ),
                         ],
                       ),
@@ -208,55 +206,39 @@ class _UpdatePersonaPageState extends State<UpdatePersonaPage> {
                                 ),
                                 const SizedBox(width: 12),
                                 Text(
-                                  provider.twitterProfile.isEmpty
-                                      ? 'Connect Twitter'
-                                      : provider.twitterProfile['username'] ?? provider.twitterProfile['profile'] ?? '',
+                                  provider.hasTwitterConnection
+                                      ? (provider.twitterProfile['name'] ?? provider.twitterProfile['username'])
+                                      : 'Connect Twitter',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 16,
                                   ),
                                 ),
                                 const Spacer(),
-                                if (provider.twitterProfile.isEmpty)
-                                  GestureDetector(
-                                    onTap: () {
-                                      if (!provider.hasTwitterConnection) {
-                                        routeToPage(context, const SocialHandleScreen());
-                                      }
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey[800],
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      child: Text(
-                                        provider.hasTwitterConnection ? 'Connected' : 'Connect',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 12,
-                                        ),
-                                      ),
+                                GestureDetector(
+                                  onTap: () {
+                                    if (!provider.hasTwitterConnection) {
+                                      routeToPage(context, const SocialHandleScreen());
+                                    } else {
+                                      provider.disconnectTwitter();
+                                    }
+                                    provider.validateForm();
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[800],
+                                      borderRadius: BorderRadius.circular(16),
                                     ),
-                                  )
-                                else
-                                  GestureDetector(
-                                    onTap: () => provider.disconnectTwitter(),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey[800],
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      child: const Text(
-                                        'Disconnect',
-                                        style: TextStyle(
-                                          color: Colors.red,
-                                          fontSize: 12,
-                                        ),
+                                    child: Text(
+                                      provider.hasTwitterConnection ? 'Disconnect' : 'Connect',
+                                      style: TextStyle(
+                                        color: provider.hasTwitterConnection ? Colors.red : Colors.white,
+                                        fontSize: 12,
                                       ),
                                     ),
                                   ),
+                                )
                               ],
                             ),
                           ),
@@ -290,6 +272,7 @@ class _UpdatePersonaPageState extends State<UpdatePersonaPage> {
                                     } else {
                                       provider.disconnectOmi();
                                     }
+                                    provider.validateForm();
                                   },
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
