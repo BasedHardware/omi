@@ -262,7 +262,7 @@ class _AddPersonaPageState extends State<AddPersonaPage> {
                             onChanged: (value) {
                               provider.setPersonaPublic(value);
                             },
-                            activeColor: Colors.white,
+                            activeColor: Colors.deepPurple,
                           ),
                         ],
                       ),
@@ -297,16 +297,16 @@ class _AddPersonaPageState extends State<AddPersonaPage> {
                               ),
                               const SizedBox(width: 12),
                               Text(
-                                provider.twitterProfile.isEmpty
-                                    ? 'Connect Twitter'
-                                    : provider.twitterProfile['username'] ?? '',
+                                provider.hasTwitterConnection
+                                    ? (provider.twitterProfile['name'] ?? '')
+                                    : 'Connect Twitter',
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 16,
                                 ),
                               ),
                               const Spacer(),
-                              if (provider.twitterProfile.isEmpty)
+                              if (!provider.hasTwitterConnection)
                                 GestureDetector(
                                   onTap: () {
                                     routeToPage(context, const SocialHandleScreen());
@@ -377,6 +377,7 @@ class _AddPersonaPageState extends State<AddPersonaPage> {
                                   } else {
                                     provider.disconnectOmi();
                                   }
+                                  provider.validateForm();
                                 },
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

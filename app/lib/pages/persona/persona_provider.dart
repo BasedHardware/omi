@@ -63,6 +63,7 @@ class PersonaProvider extends ChangeNotifier {
     }
     SharedPreferencesUtil().hasPersonaCreated = true;
     SharedPreferencesUtil().verifiedPersonaId = verifiedPersonaId;
+    toggleTwitterConnection(true);
 
     return verified;
   }
@@ -112,6 +113,7 @@ class PersonaProvider extends ChangeNotifier {
     makePersonaPublic = !app.private;
     selectedImageUrl = app.image;
     personaId = app.id;
+    userPersona = app;
     hasOmiConnection = app.connectedAccounts.contains('omi');
     hasTwitterConnection = app.connectedAccounts.contains('twitter');
     if (hasTwitterConnection && app.twitter != null) {
@@ -131,7 +133,11 @@ class PersonaProvider extends ChangeNotifier {
   }
 
   void validateForm() {
-    isFormValid = formKey.currentState!.validate() && (selectedImage != null || selectedImageUrl != null);
+    bool hasValidImage = selectedImage != null || selectedImageUrl != null;
+    bool hasValidFormFields = formKey.currentState!.validate();
+    bool hasKnowledgeData = hasOmiConnection || hasTwitterConnection;
+
+    isFormValid = hasValidImage && hasValidFormFields && hasKnowledgeData;
     notifyListeners();
   }
 
@@ -144,6 +150,7 @@ class PersonaProvider extends ChangeNotifier {
     onShowSuccessDialog = null;
     personaId = null;
     hasOmiConnection = false;
+    userPersona = null;
     hasTwitterConnection = false;
     twitterProfile = {};
     notifyListeners();
@@ -174,6 +181,11 @@ class PersonaProvider extends ChangeNotifier {
   }
 
   Future<void> updatePersona() async {
+    if (!hasOmiConnection && !hasTwitterConnection) {
+      AppSnackbar.showSnackbarError('Please connect at least one knowledge data source (Omi or Twitter)');
+      return;
+    }
+
     setIsLoading(true);
     try {
       Map<String, dynamic> personaData = {
@@ -185,6 +197,20 @@ class PersonaProvider extends ChangeNotifier {
 
       if (hasOmiConnection && !userPersona!.connectedAccounts.contains('omi')) {
         personaData['connected_accounts'] = [...userPersona!.connectedAccounts, 'omi'];
+      } else if (!hasOmiConnection && userPersona!.connectedAccounts.contains('omi')) {
+        personaData['connected_accounts'] =
+            userPersona!.connectedAccounts.where((element) => element != 'omi').toList();
+      }
+
+      if (hasTwitterConnection && !userPersona!.connectedAccounts.contains('twitter')) {
+        personaData['connected_accounts'] = [...userPersona!.connectedAccounts, 'twitter'];
+        personaData['twitter'] = {
+          'username': twitterProfile['profile'],
+          'avatar': twitterProfile['avatar'],
+        };
+      } else if (!hasTwitterConnection && userPersona!.connectedAccounts.contains('twitter')) {
+        personaData['connected_accounts'] =
+            userPersona!.connectedAccounts.where((element) => element != 'twitter').toList();
       }
 
       bool success = await updatePersonaApp(selectedImage, personaData);
@@ -208,6 +234,11 @@ class PersonaProvider extends ChangeNotifier {
       if (selectedImage == null) {
         AppSnackbar.showSnackbarError('Please select an image');
       }
+      return;
+    }
+
+    if (!hasOmiConnection && !hasTwitterConnection) {
+      AppSnackbar.showSnackbarError('Please connect at least one knowledge data source (Omi or Twitter)');
       return;
     }
 
