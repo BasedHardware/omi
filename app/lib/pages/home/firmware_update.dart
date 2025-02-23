@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'firmware_update_dialog.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/pages/home/firmware_mixin.dart';
 import 'package:friend_private/pages/home/page.dart';
@@ -141,11 +142,13 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                                   style: const TextStyle(color: Colors.white, fontSize: 16),
                                 ),
                                 const SizedBox(height: 8),
-                                Text(
-                                  'Latest Version Available: ${latestFirmwareDetails['version']}',
-                                  style: const TextStyle(color: Colors.white, fontSize: 16),
-                                ),
-                                const SizedBox(height: 16),
+                                if (latestFirmwareDetails['version'] != null) ...[
+                                  Text(
+                                    'Latest Version Available: ${latestFirmwareDetails['version']}',
+                                    style: const TextStyle(color: Colors.white, fontSize: 16),
+                                  ),
+                                  const SizedBox(height: 16),
+                                ],
                                 if (updateMessage == '0')
                                   TextButton(
                                     onPressed: () async {
@@ -183,12 +186,20 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                                           borderRadius: BorderRadius.circular(12),
                                         ),
                                         child: TextButton(
-                                          onPressed: () async {
-                                            await downloadFirmware();
-                                            await startDfu(widget.device!);
+                                          onPressed: () {
+                                            showDialog(
+                                              context: context,
+                                              builder: (context) => FirmwareUpdateDialog(
+                                                steps: otaUpdateSteps,
+                                                onUpdateStart: () async {
+                                                  await downloadFirmware();
+                                                  await startDfu(widget.device!);
+                                                },
+                                              ),
+                                            );
                                           },
                                           child: const Text(
-                                            "Download Firmware",
+                                            "Update",
                                             style: TextStyle(color: Colors.white, fontSize: 16),
                                           ),
                                         ),
