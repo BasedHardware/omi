@@ -171,35 +171,37 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     }
 
     // Right
-    Widget statusIndicator = const SizedBox.shrink();
+    Widget? statusIndicator;
     var stateText = "";
     if (!isHavingRecordingDevice && !isUsingPhoneMic) {
       stateText = "";
     } else if (transcriptServiceStateOk && (isUsingPhoneMic || isHavingRecordingDevice)) {
-      stateText = "Listening";
+      stateText = "";
       statusIndicator = const RecordingStatusIndicator();
     } else if (!internetConnectionStateOk) {
       stateText = "Waiting for network";
     } else if (!transcriptServiceStateOk) {
       stateText = "Connecting";
     }
-    Widget right = stateText.isNotEmpty
+    Widget right = stateText.isNotEmpty || statusIndicator != null
         ? Expanded(
             child: Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              SizedBox(
-                width: 16,
-                height: 16,
-                child: statusIndicator,
-              ),
-              const SizedBox(width: 8),
               Text(
                 stateText,
                 style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                 maxLines: 1,
                 textAlign: TextAlign.end,
-              )
+              ),
+              if (statusIndicator != null) ...[
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: statusIndicator,
+                )
+              ],
             ],
           ))
         : const SizedBox.shrink();
