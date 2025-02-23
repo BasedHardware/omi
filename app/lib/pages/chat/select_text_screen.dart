@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/message.dart';
 
 import 'widgets/markdown_message_widget.dart';
+import 'widgets/text_selection_control.dart';
 
 class SelectTextScreen extends StatelessWidget {
   final ServerMessage message;
@@ -26,7 +27,11 @@ class SelectTextScreen extends StatelessWidget {
       ),
       body: Padding(
         padding: const EdgeInsets.all(10.0),
-        child: SelectionArea(child: getMarkdownWidget(context, message.text)),
+        child: SelectableRegion(
+          selectionControls: IOSTextSelectionControls(handleColor: Colors.grey[300]!),
+          focusNode: FocusNode(),
+          child: getMarkdownWidget(context, message.text),
+        ),
       ),
     );
   }
