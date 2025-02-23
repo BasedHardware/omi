@@ -122,7 +122,7 @@ async def create_persona(persona_data: str = Form(...), file: UploadFile = File(
     data['email'] = user['email']
 
     if 'username' not in data or data['username'] == '' or data['username'] is None:
-        data['username'] = data['name'].replace(' ', '')
+        data['username'] = data['name'].replace(' ', '').lower()
         data['username'] = increment_username(data['username'])
     save_username(data['username'], uid)
 
