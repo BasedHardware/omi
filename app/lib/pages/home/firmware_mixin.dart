@@ -21,6 +21,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   bool isInstalling = false;
   bool isInstalled = false;
   int installProgress = 1;
+  List<String> otaUpdateSteps = [];
 
   // TODO: thinh, use connection directly
   Future _bleDisconnectDevice(BtDevice btDevice) async {
@@ -90,12 +91,19 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
         headers: {},
         body: '',
         method: 'GET');
-    if (res == null) {
+
+    debugPrint("hey ${res?.statusCode}");
+    if (res == null || res.statusCode != 200) {
       latestFirmwareDetails = {};
       return;
     }
-    if (res.statusCode == 200) {
-      latestFirmwareDetails = jsonDecode(res.body);
+
+    final responseData = jsonDecode(res.body);
+    latestFirmwareDetails = responseData;
+
+    // Parse OTA update steps
+    if (responseData['ota_update_steps'] != null) {
+      otaUpdateSteps = List<String>.from(responseData['ota_update_steps']);
     }
   }
 
@@ -133,8 +141,14 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   }
 
   Future downloadFirmware() async {
+    final zipUrl = latestFirmwareDetails['zip_url'];
+    if (zipUrl == null) {
+      debugPrint('Error: zip_url is null in latestFirmwareDetails');
+      return;
+    }
+
     var httpClient = http.Client();
-    var request = http.Request('GET', Uri.parse(latestFirmwareDetails['zip_url']));
+    var request = http.Request('GET', Uri.parse(zipUrl));
     var response = httpClient.send(request);
     String dir = (await getApplicationDocumentsDirectory()).path;
 

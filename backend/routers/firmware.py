@@ -35,7 +35,7 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
         raise HTTPException(status_code=404, detail="Device not found")
 
     async with httpx.AsyncClient() as client:
-        url = "https://api.github.com/repos/basedhardware/omi/releases?per_page=100"
+        url = "https://api.github.com/repos/beastoin/omi/releases?per_page=100"
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
@@ -59,7 +59,7 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
         for release in releases:
             if release.get("draft") or not release.get("published_at") or not release.get("tag_name"):
                 continue
-            if not bool(re.match(f"{release_prefix}_v\d+.\d+.\d+", release.get("tag_name"), re.IGNORECASE)):
+            if not bool(re.match(f"{release_prefix}_v[0-9]+.[0-9]+.[0-9]+", release.get("tag_name"), re.IGNORECASE)):
                 continue
             if not latest_release or release.get("published_at") > latest_release.get("published_at"):
                 latest_release = release
@@ -92,6 +92,7 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
             "min_app_version_code": kv.get("minimum_app_version_code"),
             "zip_url": asset.get("browser_download_url"),
             "draft": False,
+            "ota_update_steps": ["no_usb", "battery", "internet"]
         }
 
 
@@ -173,6 +174,10 @@ def extract_key_value_pairs(markdown_content):
         if len(key_value) == 2:
             key = key_value[0].strip()
             value = key_value[1].strip()
-            key_value_map[key] = value
+            if key == 'ota_update_steps':
+                # Parse comma-separated steps
+                key_value_map[key] = [step.strip() for step in value.split(',')]
+            else:
+                key_value_map[key] = value
 
     return key_value_map
