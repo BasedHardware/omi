@@ -186,6 +186,11 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                                           borderRadius: BorderRadius.circular(12),
                                         ),
                                         child: TextButton(
+                                          style: TextButton.styleFrom(
+                                            minimumSize: Size.zero,
+                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                          ),
                                           onPressed: () {
                                             showDialog(
                                               context: context,

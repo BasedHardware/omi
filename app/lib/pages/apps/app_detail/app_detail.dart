@@ -637,7 +637,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       ),
                       title: const Text(
                         'Integration Instructions',
-                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+                        style: TextStyle(fontWeight: FontWeight.w500, fontSize: 18),
                       ),
                     )
                   : const SizedBox.shrink(),

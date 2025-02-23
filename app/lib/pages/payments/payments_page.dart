@@ -85,7 +85,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 20,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                   const SizedBox(height: 18),
@@ -107,7 +107,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 20,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                           const SizedBox(height: 16),

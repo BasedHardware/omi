@@ -344,7 +344,7 @@ class _UpdatePersonaPageState extends State<UpdatePersonaPage> {
                 textStyle: const TextStyle(
                   color: Colors.black,
                   fontSize: 16,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),

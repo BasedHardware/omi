@@ -106,7 +106,7 @@ class _FirmwareUpdateDialogState extends State<FirmwareUpdateDialog> {
                         child: Text(
                           '${_currentPage + 1}',
                           style: const TextStyle(
-                            color: Colors.black,
+                            color: Color(0xFF1D1D1D),
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
                           ),
@@ -153,55 +153,63 @@ class _FirmwareUpdateDialogState extends State<FirmwareUpdateDialog> {
                   ),
                   const SizedBox(height: 40),
                   Expanded(
-                    child: TextButton(
-                      onPressed: () {
-                        if (_currentPage < updateSteps.length - 1) {
-                          _pageController.nextPage(
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeInOut,
-                          );
-                        } else {
-                          Navigator.of(context).pop();
-                          try {
-                            widget.onUpdateStart();
-                          } catch (e) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Failed to start update: $e'),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        }
-                      },
-                      // Add container with gradient for last step
-                      child: Container(
-                        decoration: updateSteps[_currentPage].isLastStep
-                            ? BoxDecoration(
-                                border: const GradientBoxBorder(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      Color.fromARGB(127, 208, 208, 208),
-                                      Color.fromARGB(127, 188, 99, 121),
-                                      Color.fromARGB(127, 86, 101, 182),
-                                      Color.fromARGB(127, 126, 190, 236)
-                                    ],
+                    child: Row(
+                      mainAxisSize: MainAxisSize.max,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          decoration: updateSteps[_currentPage].isLastStep
+                              ? BoxDecoration(
+                                  border: const GradientBoxBorder(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        Color.fromARGB(127, 208, 208, 208),
+                                        Color.fromARGB(127, 188, 99, 121),
+                                        Color.fromARGB(127, 86, 101, 182),
+                                        Color.fromARGB(127, 126, 190, 236)
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                              )
-                            : null,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                          child: Text(
-                            updateSteps[_currentPage].isLastStep ? 'Start Update' : 'Next',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
+                                  borderRadius: BorderRadius.circular(12),
+                                )
+                              : null,
+                          child: TextButton(
+                            style: TextButton.styleFrom(
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            ),
+                            onPressed: () {
+                              if (_currentPage < updateSteps.length - 1) {
+                                _pageController.nextPage(
+                                  duration: const Duration(milliseconds: 300),
+                                  curve: Curves.easeInOut,
+                                );
+                              } else {
+                                Navigator.of(context).pop();
+                                try {
+                                  widget.onUpdateStart();
+                                } catch (e) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Failed to start update: $e'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                            // Add container with gradient for last step
+                            child: Text(
+                              updateSteps[_currentPage].isLastStep ? 'Start Update' : 'Next',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                      ],
                     ),
                   ),
                 ],

@@ -20,7 +20,7 @@ class _CompletePageState extends State<CompletePage> {
         // const Center(
         //   child: Text(
         //     'You are all set  🎉',
-        //     style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
+        //     style: TextStyle(fontSize: 24, fontWeight: FontWeight.w500),
         //   ),
         // ),
         // const SizedBox(height: 32),
