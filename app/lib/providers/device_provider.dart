@@ -276,8 +276,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   Future<(String, bool)> shouldUpdateFirmware() async {
-    if (pairedDevice == null) {
-      return ('No paird device', false);
+    if (pairedDevice == null || connectedDevice == null) {
+      return ('No paird device is connected', false);
     }
 
     var device = pairedDevice!;
@@ -335,10 +335,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     notifyListeners();
 
     // Check firmware updates
-    _checkFirmwareUpdates();
+    checkFirmwareUpdates();
   }
 
-  Future _checkFirmwareUpdates() async {
+  Future checkFirmwareUpdates() async {
     int retryCount = 0;
     const maxRetries = 3;
     const retryDelay = Duration(seconds: 3);

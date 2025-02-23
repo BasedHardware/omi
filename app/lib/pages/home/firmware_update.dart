@@ -6,7 +6,6 @@ import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/utils/analytics/intercom.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:gradient_borders/gradient_borders.dart';
-import 'package:intercom_flutter/intercom_flutter.dart';
 
 class FirmwareUpdate extends StatefulWidget {
   final BtDevice? device;
@@ -25,6 +24,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
   @override
   void initState() {
     var device = widget.device!;
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       setState(() {
         isLoading = true;
