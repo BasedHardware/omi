@@ -29,6 +29,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
       setState(() {
         isLoading = true;
       });
+
       await getLatestVersion(
         deviceModelNumber: device.modelNumber,
         firmwareRevision: device.firmwareRevision,
@@ -36,7 +37,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
         manufacturerName: device.manufacturerName,
       );
       var (a, b) =
-          await shouldUpdateFirmware(currentFirmware: widget.device!.firmwareRevision, deviceName: widget.device!.name);
+          await shouldUpdateFirmware(currentFirmware: widget.device!.firmwareRevision);
       if (mounted) {
         setState(() {
           shouldUpdate = b;
