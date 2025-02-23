@@ -40,7 +40,7 @@ async def get_omi_github_releases(cache_key: str) -> Optional[list]:
 
     # Make GitHub API request if not cached
     async with httpx.AsyncClient() as client:
-        url = "https://api.github.com/repos/beastoin/omi/releases?per_page=100"
+        url = "https://api.github.com/repos/BasedHardware/omi/releases?per_page=100"
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
