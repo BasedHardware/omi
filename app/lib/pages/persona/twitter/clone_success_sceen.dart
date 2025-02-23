@@ -135,7 +135,7 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                                 style: TextStyle(
                                   color: Colors.white.withOpacity(0.74),
                                   fontSize: 20,
-                                  fontWeight: FontWeight.w600,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
                             ),
@@ -198,7 +198,7 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                             'Chat with my clone',
                             style: TextStyle(
                               fontSize: 17,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ),

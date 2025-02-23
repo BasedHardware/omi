@@ -261,7 +261,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                                   'Get Omi',
                                                   style: TextStyle(
                                                     fontSize: 17,
-                                                    fontWeight: FontWeight.w600,
+                                                    fontWeight: FontWeight.w500,
                                                   ),
                                                 ),
                                               ),
@@ -311,7 +311,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 20,
-                                    fontWeight: FontWeight.w600,
+                                    fontWeight: FontWeight.w500,
                                   ),
                                 ),
                                 const SizedBox(height: 4),
@@ -340,7 +340,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                   style: TextStyle(
                                     color: Colors.white.withOpacity(0.65),
                                     fontSize: 18,
-                                    fontWeight: FontWeight.w600,
+                                    fontWeight: FontWeight.w500,
                                   ),
                                 ),
                               ),

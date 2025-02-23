@@ -412,7 +412,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                     loaderColor: Colors.black,
                     textStyle: const TextStyle(
                       fontSize: 16,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w500,
                       color: Colors.black,
                     ),
                     width: MediaQuery.of(context).size.width * 0.8,
@@ -466,7 +466,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                 title,
                 style: const TextStyle(
                   fontSize: 16,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w500,
                   color: Colors.white,
                 ),
               ),

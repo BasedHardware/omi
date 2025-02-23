@@ -92,7 +92,6 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
         body: '',
         method: 'GET');
 
-    debugPrint("hey ${res?.statusCode}");
     if (res == null || res.statusCode != 200) {
       latestFirmwareDetails = {};
       return;
