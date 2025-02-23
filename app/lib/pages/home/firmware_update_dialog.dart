@@ -75,7 +75,7 @@ class _FirmwareUpdateDialogState extends State<FirmwareUpdateDialog> {
     return Dialog(
       backgroundColor: Colors.transparent,
       child: Container(
-        height: 450,
+        height: 400,
         decoration: BoxDecoration(
           color: const Color(0xFF1D1D1D),
           borderRadius: BorderRadius.circular(20),
@@ -97,22 +97,6 @@ class _FirmwareUpdateDialogState extends State<FirmwareUpdateDialog> {
                 children: [
                   Column(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: const BoxDecoration(
-                          color: Colors.white60,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Text(
-                          '${_currentPage + 1}',
-                          style: const TextStyle(
-                            color: Color(0xFF1D1D1D),
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 40),
                       Text(
                         step.title,
                         style: const TextStyle(
