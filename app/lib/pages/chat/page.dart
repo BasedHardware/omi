@@ -514,7 +514,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                         hintStyle: TextStyle(fontSize: 14.0, color: Colors.grey),
                                         focusedBorder: InputBorder.none,
                                         enabledBorder: InputBorder.none,
-                                        contentPadding: EdgeInsets.only(top: 8, bottom: 8),
+                                        contentPadding: EdgeInsets.only(top: 8, bottom: 12),
                                       ),
                                       maxLines: null,
                                       keyboardType: TextInputType.multiline,

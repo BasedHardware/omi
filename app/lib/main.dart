@@ -250,6 +250,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   textSelectionTheme: const TextSelectionThemeData(
                     cursorColor: Colors.white,
                     selectionColor: Colors.deepPurple,
+                    selectionHandleColor: Colors.white,
                   )),
               themeMode: ThemeMode.dark,
               builder: (context, child) {
