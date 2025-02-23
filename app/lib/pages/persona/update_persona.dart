@@ -1,6 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/main.dart';
@@ -8,7 +7,6 @@ import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/pages/persona/twitter/social_profile.dart';
 import 'package:friend_private/utils/other/debouncer.dart';
 import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/utils/text_formatter.dart';
 import 'package:friend_private/widgets/animated_loading_button.dart';
 import 'package:provider/provider.dart';
 
@@ -142,7 +140,7 @@ class _UpdatePersonaPageState extends State<UpdatePersonaPage> {
                             child: TextFormField(
                               validator: (value) {
                                 if (value == null || value.isEmpty) {
-                                  return 'Please enter a username to access the persona';
+                                  return 'Please enter a valid name for your persona';
                                 }
                                 return null;
                               },
@@ -151,66 +149,6 @@ class _UpdatePersonaPageState extends State<UpdatePersonaPage> {
                                 isDense: true,
                                 border: InputBorder.none,
                                 hintText: 'Nik AI',
-                              ),
-                            ),
-                          ),
-                          const SizedBox(
-                            height: 24,
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.only(left: 8.0),
-                            child: Text(
-                              'Persona Username',
-                              style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
-                            margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade800,
-                              borderRadius: BorderRadius.circular(10.0),
-                            ),
-                            width: double.infinity,
-                            child: TextFormField(
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Please enter a username to access the persona';
-                                }
-                                return null;
-                              },
-                              onChanged: (value) {
-                                _debouncer.run(() async {
-                                  await provider.checkIsUsernameTaken(value);
-                                });
-                              },
-                              controller: provider.usernameController,
-                              inputFormatters: [
-                                LowerCaseTextFormatter(),
-                                FilteringTextInputFormatter.allow(RegExp(r'[a-z0-9_]')),
-                              ],
-                              decoration: InputDecoration(
-                                isDense: true,
-                                border: InputBorder.none,
-                                hintText: 'nikshevchenko',
-                                suffix: provider.usernameController.text.isEmpty
-                                    ? null
-                                    : provider.isCheckingUsername
-                                        ? const SizedBox(
-                                            width: 16,
-                                            height: 16,
-                                            child: Center(
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                                valueColor: AlwaysStoppedAnimation<Color>(Colors.grey),
-                                              ),
-                                            ),
-                                          )
-                                        : Icon(
-                                            provider.isUsernameTaken ? Icons.close : Icons.check,
-                                            color: provider.isUsernameTaken ? Colors.red : Colors.green,
-                                            size: 16,
-                                          ),
                               ),
                             ),
                           ),
@@ -232,7 +170,7 @@ class _UpdatePersonaPageState extends State<UpdatePersonaPage> {
                             onChanged: (value) {
                               provider.setPersonaPublic(value);
                             },
-                            activeColor: Colors.white,
+                            activeColor: Colors.deepPurple,
                           ),
                         ],
                       ),
@@ -268,10 +206,8 @@ class _UpdatePersonaPageState extends State<UpdatePersonaPage> {
                                 ),
                                 const SizedBox(width: 12),
                                 Text(
-                                  widget.app!.twitter != null
-                                      ? (widget.app!.twitter!['username'] == null
-                                          ? 'Connect Twitter'
-                                          : widget.app!.twitter?['username'] ?? '')
+                                  provider.hasTwitterConnection
+                                      ? (provider.twitterProfile['name'] ?? provider.twitterProfile['username'])
                                       : 'Connect Twitter',
                                   style: const TextStyle(
                                     color: Colors.white,
@@ -279,44 +215,80 @@ class _UpdatePersonaPageState extends State<UpdatePersonaPage> {
                                   ),
                                 ),
                                 const Spacer(),
-                                if (provider.twitterProfile.isEmpty)
-                                  GestureDetector(
-                                    onTap: () {
-                                      if (widget.app!.connectedAccounts.contains('twitter')) {
-                                      } else {
-                                        routeToPage(context, const SocialHandleScreen());
-                                      }
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey[800],
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      child: Text(
-                                        widget.app!.connectedAccounts.contains('twitter') ? 'Connected' : 'Connect',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                else
-                                  Container(
+                                GestureDetector(
+                                  onTap: () {
+                                    if (!provider.hasTwitterConnection) {
+                                      routeToPage(context, const SocialHandleScreen());
+                                    } else {
+                                      provider.disconnectTwitter();
+                                    }
+                                    provider.validateForm();
+                                  },
+                                  child: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                     decoration: BoxDecoration(
                                       color: Colors.grey[800],
                                       borderRadius: BorderRadius.circular(16),
                                     ),
-                                    child: const Text(
-                                      'Connected',
+                                    child: Text(
+                                      provider.hasTwitterConnection ? 'Disconnect' : 'Connect',
                                       style: TextStyle(
-                                        color: Colors.grey,
+                                        color: provider.hasTwitterConnection ? Colors.red : Colors.white,
                                         fontSize: 12,
                                       ),
                                     ),
                                   ),
+                                )
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[900],
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.person_outline,
+                                  size: 24,
+                                  color: Colors.white,
+                                ),
+                                const SizedBox(width: 12),
+                                const Text(
+                                  'Connect Omi',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const Spacer(),
+                                GestureDetector(
+                                  onTap: () {
+                                    if (!provider.hasOmiConnection) {
+                                      provider.toggleOmiConnection(true);
+                                    } else {
+                                      provider.disconnectOmi();
+                                    }
+                                    provider.validateForm();
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[800],
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: Text(
+                                      provider.hasOmiConnection ? 'Disconnect' : 'Connect',
+                                      style: TextStyle(
+                                        color: provider.hasOmiConnection ? Colors.red : Colors.white,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
                           ),
