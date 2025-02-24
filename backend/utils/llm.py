@@ -1447,79 +1447,6 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     If the <user_last_messages> contain a complete question, maintain the original version as accurately as possible. \
     Avoid adding unnecessary words.
 
-    If the <user_last_messages> contain files (i.e., the file names <file> are provided), it indicates that user want to ask about the files they just attached/uploaded \
-    For example, if the user says "What is this", and attaches a file, the answer should focus on asking about the content of that file like. \
-    Phrasing could include: "What is the content of the file <name_file> I just attached?", "Could you provide details about the file <name_file> I just uploaded?"
-
-    You MUST keep the original <date_in_term>
-
-    Output a WH-question, that is, a question that starts with a WH-word, like "What", "When", "Where", "Who", "Why", "How".
-
-    Example 1:
-    <user_last_messages>
-    <message>
-        <sender>User</sender>
-        <content>
-            According to WHOOP, my HRV this Sunday was the highest it's been in a month. Here's what I did:
-
-            Attended an outdoor party (cold weather, talked a lot more than usual).
-            Smoked weed (unusual for me).
-            Drank lots of relaxing tea.
-
-            Can you prioritize each activity on a 0-10 scale for how much it might have influenced my HRV?
-        </content>
-    </message>
-    </user_last_messages>
-    Expected output: "How should each activity (going to a party and talking a lot, smoking weed, and drinking lots of relaxing tea) be prioritized on a scale of 0-10 in terms of their impact on my HRV, considering the recent activities that led to the highest HRV this month?"
-
-    <user_last_messages>
-    {Message.get_messages_as_xml(user_last_messages)}
-    </user_last_messages>
-
-    <previous_messages>
-    {Message.get_messages_as_xml(messages)}
-    </previous_messages>
-
-    <date_in_term>
-    - today
-    - my day
-    - my week
-    - this week
-    - this day
-    - etc.
-    </date_in_term>
-    '''.replace('    ', '').strip()
-    #print(prompt)
-    question = llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
-    # print(question)
-    return question
-
-def extract_question_from_conversation_v7(messages: List[Message]) -> str:
-    # user last messages
-    user_message_idx = len(messages)
-    for i in range(len(messages) - 1, -1, -1):
-        if messages[i].sender == MessageSender.ai:
-            break
-        if messages[i].sender == MessageSender.human:
-            user_message_idx = i
-    user_last_messages = messages[user_message_idx:]
-    if len(user_last_messages) == 0:
-        return ""
-
-    prompt = f'''
-    You will be given a recent conversation between a <user> and an <AI>. \
-    The conversation may include a few messages exchanged in <previous_messages> and partly build up the proper question. \
-    Your task is to understand the <user_last_messages> and identify the question or follow-up question the user is asking.
-
-    You will be provided with <previous_messages> between you and the user to help you indentify the question.
-
-    First, determine whether the user is asking a question or a follow-up question. \
-    If the user is not asking a question or does not want to follow up, respond with an empty message. \
-    For example, if the user says "Hi", "Hello", "How are you?", or "Good morning", the answer should be empty.
-
-    If the <user_last_messages> contain a complete question, maintain the original version as accurately as possible. \
-    Avoid adding unnecessary words.
-
     You MUST keep the original <date_in_term>
 
     Output a WH-question, that is, a question that starts with a WH-word, like "What", "When", "Where", "Who", "Why", "How".
@@ -1562,6 +1489,7 @@ def extract_question_from_conversation_v7(messages: List[Message]) -> str:
     question = llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
     # print(question)
     return question
+
 
 def extract_question_from_conversation_v6(messages: List[Message]) -> str:
     # user last messages
@@ -2087,24 +2015,24 @@ def generate_description(app_name: str, description: str) -> str:
 def condense_facts(facts, name):
     combined_facts = "\n".join(facts)
     prompt = f"""
-You are an AI tasked with condensing a detailed profile of hundreds facts about {name} to accurately replicate their personality, communication style, decision-making patterns, and contextual knowledge for 1:1 cloning.
+You are an AI tasked with condensing a detailed profile of hundreds facts about {name} to accurately replicate their personality, communication style, decision-making patterns, and contextual knowledge for 1:1 cloning.  
 
-**Requirements:**
-1. Prioritize facts based on:
-   - Relevance to the user's core identity, personality, and communication style.
-   - Frequency of occurrence or mention in conversations.
-   - Impact on decision-making processes and behavioral patterns.
-2. Group related facts to eliminate redundancy while preserving context.
-3. Preserve nuances in communication style, humor, tone, and preferences.
-4. Retain facts essential for continuity in ongoing projects, interests, and relationships.
-5. Discard trivial details, repetitive information, and rarely mentioned facts.
-6. Maintain consistency in the user's thought processes, conversational flow, and emotional responses.
+**Requirements:**  
+1. Prioritize facts based on:  
+   - Relevance to the user's core identity, personality, and communication style.  
+   - Frequency of occurrence or mention in conversations.  
+   - Impact on decision-making processes and behavioral patterns.  
+2. Group related facts to eliminate redundancy while preserving context.  
+3. Preserve nuances in communication style, humor, tone, and preferences.  
+4. Retain facts essential for continuity in ongoing projects, interests, and relationships.  
+5. Discard trivial details, repetitive information, and rarely mentioned facts.  
+6. Maintain consistency in the user's thought processes, conversational flow, and emotional responses.  
 
-**Output Format (No Extra Text):**
-- **Core Identity and Personality:** Brief overview encapsulating the user's personality, values, and communication style.
-- **Prioritized Facts:** Organized into categories with only the most relevant and impactful details.
-- **Behavioral Patterns and Decision-Making:** Key patterns defining how the user approaches problems and makes decisions.
-- **Contextual Knowledge and Continuity:** Facts crucial for maintaining continuity in conversations and ongoing projects.
+**Output Format (No Extra Text):**  
+- **Core Identity and Personality:** Brief overview encapsulating the user's personality, values, and communication style.  
+- **Prioritized Facts:** Organized into categories with only the most relevant and impactful details.  
+- **Behavioral Patterns and Decision-Making:** Key patterns defining how the user approaches problems and makes decisions.  
+- **Contextual Knowledge and Continuity:** Facts crucial for maintaining continuity in conversations and ongoing projects.  
 
 The output must be as concise as possible while retaining all necessary information for 1:1 cloning. Absolutely no introductory or closing statements, explanations, or any unnecessary text. Directly present the condensed facts in the specified format. Begin condensation now.
 
@@ -2117,7 +2045,7 @@ Facts:
 
 def generate_persona_description(facts, name):
     prompt = f"""Based on these facts about a person, create a concise, engaging description that captures their unique personality and characteristics (max 250 characters).
-
+    
     They chose to be known as {name}.
 
 Facts:
@@ -2133,27 +2061,27 @@ Create a natural, memorable description that captures this person's essence. Foc
 def condense_conversations(conversations):
     combined_conversations = "\n".join(conversations)
     prompt = f"""
-You are an AI tasked with condensing context from the recent 100 conversations of a user to accurately replicate their communication style, personality, decision-making patterns, and contextual knowledge for 1:1 cloning. Each conversation includes a summary and a full transcript.
+You are an AI tasked with condensing context from the recent 100 conversations of a user to accurately replicate their communication style, personality, decision-making patterns, and contextual knowledge for 1:1 cloning. Each conversation includes a summary and a full transcript.  
 
-**Requirements:**
-1. Prioritize information based on:
-   - Most impactful and frequently occurring themes, topics, and interests.
-   - Nuances in communication style, humor, tone, and emotional undertones.
-   - Decision-making patterns and problem-solving approaches.
-   - User preferences in conversation flow, level of detail, and type of responses.
-2. Condense redundant or repetitive information while maintaining necessary context.
-3. Group related contexts to enhance conciseness and preserve continuity.
-4. Retain patterns in how the user reacts to different situations, questions, or challenges.
-5. Preserve continuity for ongoing discussions, projects, or relationships.
-6. Maintain consistency in the user's thought processes, conversational flow, and emotional responses.
-7. Eliminate any trivial details or low-impact information.
+**Requirements:**  
+1. Prioritize information based on:  
+   - Most impactful and frequently occurring themes, topics, and interests.  
+   - Nuances in communication style, humor, tone, and emotional undertones.  
+   - Decision-making patterns and problem-solving approaches.  
+   - User preferences in conversation flow, level of detail, and type of responses.  
+2. Condense redundant or repetitive information while maintaining necessary context.  
+3. Group related contexts to enhance conciseness and preserve continuity.  
+4. Retain patterns in how the user reacts to different situations, questions, or challenges.  
+5. Preserve continuity for ongoing discussions, projects, or relationships.  
+6. Maintain consistency in the user's thought processes, conversational flow, and emotional responses.  
+7. Eliminate any trivial details or low-impact information.  
 
-**Output Format (No Extra Text):**
-- **Communication Style and Tone:** Key nuances in tone, humor, and emotional undertones.
-- **Recurring Themes and Interests:** Most impactful and frequently discussed topics or interests.
-- **Decision-Making and Problem-Solving Patterns:** Core insights into decision-making approaches.
-- **Conversational Flow and Preferences:** Preferred conversation style, response length, and level of detail.
-- **Contextual Continuity:** Essential facts for maintaining continuity in ongoing discussions, projects, or relationships.
+**Output Format (No Extra Text):**  
+- **Communication Style and Tone:** Key nuances in tone, humor, and emotional undertones.  
+- **Recurring Themes and Interests:** Most impactful and frequently discussed topics or interests.  
+- **Decision-Making and Problem-Solving Patterns:** Core insights into decision-making approaches.  
+- **Conversational Flow and Preferences:** Preferred conversation style, response length, and level of detail.  
+- **Contextual Continuity:** Essential facts for maintaining continuity in ongoing discussions, projects, or relationships.  
 
 The output must be as concise as possible while retaining all necessary context for 1:1 cloning. Absolutely no introductory or closing statements, explanations, or any unnecessary text. Directly present the condensed context in the specified format. Begin now.
 
@@ -2166,31 +2094,31 @@ Conversations:
 
 def condense_tweets(tweets, name):
     prompt = f"""
-You are tasked with generating context to enable 1:1 cloning of {name} based on their tweets. The objective is to extract and condense the most relevant information while preserving {name}'s core identity, personality, communication style, and thought patterns.
+You are tasked with generating context to enable 1:1 cloning of {name} based on their tweets. The objective is to extract and condense the most relevant information while preserving {name}'s core identity, personality, communication style, and thought patterns.  
 
-**Input:**
-A collection of tweets from {name} containing recurring themes, opinions, humor, emotional undertones, decision-making patterns, and conversational flow.
+**Input:**  
+A collection of tweets from {name} containing recurring themes, opinions, humor, emotional undertones, decision-making patterns, and conversational flow.  
 
-**Output:**
-A condensed context that includes:
-- Core identity and personality traits as expressed through tweets.
-- Recurring themes, opinions, and values.
-- Humor style, emotional undertones, and tone of voice.
-- Vocabulary, expressions, and communication style.
-- Decision-making patterns and conversational dynamics.
-- Situational awareness and context continuity for ongoing topics.
+**Output:**  
+A condensed context that includes:  
+- Core identity and personality traits as expressed through tweets.  
+- Recurring themes, opinions, and values.  
+- Humor style, emotional undertones, and tone of voice.  
+- Vocabulary, expressions, and communication style.  
+- Decision-making patterns and conversational dynamics.  
+- Situational awareness and context continuity for ongoing topics.  
 
-**Guidelines:**
-1. Prioritize impactful and influential tweets that define {name}'s identity.
-2. Condense repetitive or less relevant tweets while preserving essential context.
-3. Maintain the flow and coherence of {name}'s conversational style.
-4. Extract humor style, emotional responses, and tone consistency.
-5. Identify and retain decision-making patterns and strong opinions.
+**Guidelines:**  
+1. Prioritize impactful and influential tweets that define {name}'s identity.  
+2. Condense repetitive or less relevant tweets while preserving essential context.  
+3. Maintain the flow and coherence of {name}'s conversational style.  
+4. Extract humor style, emotional responses, and tone consistency.  
+5. Identify and retain decision-making patterns and strong opinions.  
 
-**Important:**
-- The output must be concise yet comprehensive, capturing the essence of {name}'s identity.
-- Absolutely no unnecessary text or explanations.
-- Every detail must contribute to 1:1 cloning authenticity.
+**Important:**  
+- The output must be concise yet comprehensive, capturing the essence of {name}'s identity.  
+- Absolutely no unnecessary text or explanations.  
+- Every detail must contribute to 1:1 cloning authenticity.  
 
 Generate the condensed context now.
 
