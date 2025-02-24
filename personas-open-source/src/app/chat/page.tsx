@@ -550,7 +550,7 @@ function ChatContent() {
   }, [messages.length]);
 
   const DevicePopup = () => (
-    <div className={`fixed bottom-32 right-4 z-50 transition-all duration-500 ${showDevicePopup ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-full pointer-events-none'
+    <div className={`fixed bottom-48 right-4 z-50 transition-all duration-500 ${showDevicePopup ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-full pointer-events-none'
       }`}>
       <Link
         href="https://www.omi.me/products/friend-dev-kit-2?ref=personas&utm_source=personas.omi.me&utm_campaign=personas_chat"
@@ -654,6 +654,14 @@ function ChatContent() {
 
       {/* Input Area */}
       <div className="p-4 border-t border-zinc-800">
+          <div className="flex justify-center">
+            <Button
+              onClick={() => window.open(getStoreUrl, '_blank')}
+              className="w-full max-w-[250px] mb-4 py-6 text-base font-bold text-[16px] rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white hover:opacity-90"
+            >
+              Create my clone
+            </Button>
+          </div>
         <div className="max-w-4xl mx-auto flex gap-2">
           <Input
             ref={inputRef}
@@ -676,14 +684,6 @@ function ChatContent() {
           </Button>
         </div>
         <div className="max-w-4xl mx-auto mt-4">
-          <div className="flex justify-center">
-            <Button
-              onClick={() => window.open(getStoreUrl, '_blank')}
-              className="w-full max-w-[250px] mb-4 py-6 text-base font-bold text-[16px] rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white hover:opacity-90"
-            >
-              Create my clone
-            </Button>
-          </div>
           <div className="flex flex-col sm:flex-row justify-between text-xs text-gray-500">
             <div className="flex gap-2 mb-2 sm:mb-0">
               <span>Omi by Based Hardware © 2025</span>
