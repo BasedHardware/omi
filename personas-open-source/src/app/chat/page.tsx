@@ -659,7 +659,7 @@ function ChatContent() {
               onClick={() => window.open(getStoreUrl, '_blank')}
               className="w-full max-w-[250px] mb-4 py-6 text-base font-bold text-[16px] rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white hover:opacity-90"
             >
-              Create my clone
+              Create your own clone
             </Button>
           </div>
         <div className="max-w-4xl mx-auto flex gap-2">
