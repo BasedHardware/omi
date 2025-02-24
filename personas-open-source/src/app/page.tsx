@@ -146,23 +146,63 @@ export default function HomePage() {
     return querySnapshot.empty ? null : querySnapshot.docs[0].id;
   };
 
-  //handleCreatePersona function using redirectToChat in all cases.
-  const handleCreatePersona = async () => {
-    const cleanHandle = handle.replace('@', '');
-    const twitterResult = await fetchTwitterProfile(handle);
-    const linkedinResult = await fetchLinkedinProfile(handle);
-    let docId: string | null = null;
+  //helper function to extract a handle from a URL or raw handle input.
+  const extractHandle = (input: string): string => {
+    const trimmedInput = input.trim();
+    // Check for Twitter URL pattern.
+    const twitterMatch = trimmedInput.match(/x\.com\/(?:#!\/)?@?([^/?]+)/i);
+    if (twitterMatch && twitterMatch[1]) {
+      return twitterMatch[1];
+    }
+    // Check for LinkedIn URL pattern.
+    const linkedinMatch = trimmedInput.match(/linkedin\.com\/in\/([^/?]+)/i);
+    if (linkedinMatch && linkedinMatch[1]) {
+      return linkedinMatch[1];
+    }
+    // If not a URL, remove leading '@' if present.
+    return trimmedInput.startsWith('@') ? trimmedInput.substring(1) : trimmedInput;
+  };
 
-    if (twitterResult && !linkedinResult) {
+  // handleCreatePersona function using redirectToChat in all cases.
+  const handleCreatePersona = async () => {
+    const trimmedInput = handle.trim();
+    const isTwitterURL = /x\.com\//i.test(trimmedInput);
+    const isLinkedinURL = /linkedin\.com\//i.test(trimmedInput);
+
+    // Extract the clean handle regardless.
+    const cleanHandle = extractHandle(handle);
+    let twitterResult = false;
+    let linkedinResult = false;
+
+    if (isTwitterURL && !isLinkedinURL) {
+      // If a Twitter URL is provided, only fetch Twitter.
+      twitterResult = await fetchTwitterProfile(cleanHandle);
+    } else if (isLinkedinURL && !isTwitterURL) {
+      // If a LinkedIn URL is provided, only fetch LinkedIn.
+      linkedinResult = await fetchLinkedinProfile(cleanHandle);
+    } else {
+      // For plain handles or ambiguous scenarios, fetch both.
+      twitterResult = await fetchTwitterProfile(cleanHandle);
+      linkedinResult = await fetchLinkedinProfile(cleanHandle);
+    }
+
+    let docId: string | null = null;
+    // If a specific platform was intended, use only that result.
+    if (isTwitterURL && twitterResult) {
+      docId = await getProfileDocId(cleanHandle, 'twitter');
+    } else if (isLinkedinURL && linkedinResult) {
+      docId = await getProfileDocId(cleanHandle, 'linkedin');
+    } else if (twitterResult && !linkedinResult) {
       docId = await getProfileDocId(cleanHandle, 'twitter');
     } else if (linkedinResult && !twitterResult) {
       docId = await getProfileDocId(cleanHandle, 'linkedin');
     } else if (twitterResult && linkedinResult) {
+      // If both are available and no specific URL intent, prompt the user.
       setPendingCleanHandle(cleanHandle);
       setShowPlatformModal(true);
       return;
     }
-    
+
     if (docId) {
       redirectToChat(docId);
     } else {
