@@ -176,7 +176,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     if (!isHavingRecordingDevice && !isUsingPhoneMic) {
       stateText = "";
     } else if (transcriptServiceStateOk && (isUsingPhoneMic || isHavingRecordingDevice)) {
-      stateText = "";
+      stateText = "Listening";
       statusIndicator = const RecordingStatusIndicator();
     } else if (!internetConnectionStateOk) {
       stateText = "Waiting for network";
