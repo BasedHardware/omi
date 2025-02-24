@@ -28,7 +28,7 @@ class SelectTextScreen extends StatelessWidget {
       body: Padding(
         padding: const EdgeInsets.all(10.0),
         child: SelectableRegion(
-          selectionControls: IOSTextSelectionControls(handleColor: Colors.grey[300]!),
+          selectionControls: IOSTextSelectionControls(handleColor: Colors.white),
           focusNode: FocusNode(),
           child: getMarkdownWidget(context, message.text),
         ),
