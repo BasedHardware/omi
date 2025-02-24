@@ -66,7 +66,7 @@ class AppListItem extends StatelessWidget {
                             app.name.decodeString + (app.private && showPrivateIcon ? " 🔒".decodeString : ''),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
+                            style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.white, fontSize: 16),
                           ),
                         ),
                       ],

@@ -159,7 +159,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
           widget.conversation.discarded
               ? const SizedBox.shrink()
               : Text(widget.conversation.structured.getEmoji(),
-                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
+                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500)),
           widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded
               ? const SizedBox(width: 12)
               : const SizedBox.shrink(),

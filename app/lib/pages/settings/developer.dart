@@ -49,7 +49,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                       padding: EdgeInsets.symmetric(horizontal: 4.0),
                       child: Text(
                         'Save',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16),
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                       ),
                     ),
                   )
@@ -239,7 +239,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                     children: [
                       const Text(
                         'Webhooks',
-                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
                       ),
                       Spacer(),
                       GestureDetector(
@@ -363,7 +363,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   const SizedBox(height: 32),
                   const Text(
                     'Experimental',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -383,7 +383,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   const SizedBox(height: 36),
                   const Text(
                     'Pilot Features',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 8),
                   Text(

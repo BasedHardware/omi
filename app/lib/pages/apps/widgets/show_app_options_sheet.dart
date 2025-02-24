@@ -43,7 +43,7 @@ class ShowAppOptionsSheet extends StatelessWidget {
               child: ListTile(
                 title: Text(
                   app.isNotPersona() ? 'Keep App Public' : 'Keep Persona Public',
-                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                 ),
                 trailing: Switch(
                   value: provider.appPublicToggled,
