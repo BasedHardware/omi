@@ -114,6 +114,7 @@ class Message(BaseModel):
                 <content>
                     {message.text}
                 </content>
+                {f'<attachments>\n' + '\n'.join([f"<file>{file.name}</file>" for file in message.files]) + '\n</attachments>' if message.files else ''}
                 </message>
             """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
             for message in sorted_messages
