@@ -230,7 +230,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               ],
               supportedLocales: const [Locale('en')],
               theme: ThemeData(
-                  fontFamily: "SF Pro Display",
                   useMaterial3: false,
                   colorScheme: const ColorScheme.dark(
                     primary: Colors.black,

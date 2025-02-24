@@ -43,17 +43,17 @@ class _FirmwareUpdateDialogState extends State<FirmwareUpdateDialog> {
     final stepMap = {
       'no_usb': FirmwareUpdateStep(
         title: 'No USB',
-        description: 'Unplug your Omi device from the USB, either from a charger or a computer.',
+        description: "Please disconnect your Omi device from any USB connection.\n\n⚠️ Keeping USB connected during updates may damage your device.",
         icon: Icons.usb_off,
       ),
       'battery': FirmwareUpdateStep(
         title: 'Battery > 15%',
-        description: 'Ensure your Omi device\'s battery is above 15%.',
+        description: "Please check that your Omi device has at least 15% battery remaining.\n\nTip: We recommend charging your device first to ensure a safe update process.",
         icon: Icons.battery_5_bar,
       ),
       'internet': FirmwareUpdateStep(
         title: 'Stable Internet',
-        description: 'Make sure your phone has a stable internet connection.',
+        description: 'Please ensure you have a stable WiFi or cellular connection.\n\nTip: WiFi is recommended for faster and more reliable updates. Avoid updating while in areas with weak signal.',
         icon: Icons.wifi,
       ),
     };
@@ -75,7 +75,7 @@ class _FirmwareUpdateDialogState extends State<FirmwareUpdateDialog> {
     return Dialog(
       backgroundColor: Colors.transparent,
       child: Container(
-        height: 400,
+        height: 450,
         decoration: BoxDecoration(
           color: const Color(0xFF1D1D1D),
           borderRadius: BorderRadius.circular(20),
