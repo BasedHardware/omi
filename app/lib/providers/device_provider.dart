@@ -1,8 +1,15 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
+import 'package:friend_private/backend/http/shared.dart';
+import 'package:friend_private/env/env.dart';
+import 'package:friend_private/http/api/device.dart';
+import 'package:friend_private/utils/device.dart';
+import 'package:version/version.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/services/devices.dart';
 import 'package:friend_private/services/notifications.dart';
@@ -24,7 +31,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Timer? _reconnectionTimer;
   int connectionCheckSeconds = 4;
 
-  bool get havingNewFirmware => false; // FIXME
+  bool _havingNewFirmware = false;
+  bool get havingNewFirmware => _havingNewFirmware && pairedDevice != null && isConnected;
 
   Timer? _disconnectNotificationTimer;
 
@@ -220,6 +228,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   void onDeviceDisconnected() async {
     debugPrint('onDisconnected inside: $connectedDevice');
+    _havingNewFirmware = false;
     setConnectedDevice(null);
     setIsDeviceV2Connected();
     setIsConnected(false);
@@ -248,11 +257,29 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     });
   }
 
+  Future<(String, bool)> shouldUpdateFirmware() async {
+    if (pairedDevice == null || connectedDevice == null) {
+      return ('No paird device is connected', false);
+    }
+
+    var device = pairedDevice!;
+    var latestFirmwareDetails = await getLatestFirmwareVersion(
+      deviceModelNumber: device.modelNumber,
+      firmwareRevision: device.firmwareRevision,
+      hardwareRevision: device.hardwareRevision,
+      manufacturerName: device.manufacturerName,
+    );
+
+    return await DeviceUtils.shouldUpdateFirmware(
+        currentFirmware: device.firmwareRevision, latestFirmwareDetails: latestFirmwareDetails);
+  }
+
   void _onDeviceConnected(BtDevice device) async {
     debugPrint('_onConnected inside: $connectedDevice');
     _disconnectNotificationTimer?.cancel();
     NotificationService.instance.clearNotification(1);
     setConnectedDevice(device);
+
     setIsDeviceV2Connected();
     setIsConnected(true);
     await initiateBleBatteryListener();
@@ -269,6 +296,36 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     ServiceManager.instance().wal.getSyncs().sdcard.setDevice(device);
 
     notifyListeners();
+
+    // Check firmware updates
+    checkFirmwareUpdates();
+  }
+
+  Future checkFirmwareUpdates() async {
+    int retryCount = 0;
+    const maxRetries = 3;
+    const retryDelay = Duration(seconds: 3);
+
+    while (retryCount < maxRetries) {
+      try {
+        var (_, hasUpdate) = await shouldUpdateFirmware();
+        _havingNewFirmware = hasUpdate;
+        notifyListeners();
+        break; // Success, exit loop
+      } catch (e) {
+        retryCount++;
+        debugPrint('Error checking firmware update (attempt $retryCount): $e');
+
+        if (retryCount == maxRetries) {
+          debugPrint('Max retries reached, giving up');
+          _havingNewFirmware = false;
+          notifyListeners();
+          break;
+        }
+
+        await Future.delayed(retryDelay);
+      }
+    }
   }
 
   Future setIsDeviceV2Connected() async {

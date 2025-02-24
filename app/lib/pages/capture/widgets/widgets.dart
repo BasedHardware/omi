@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
+import 'package:friend_private/pages/home/firmware_update.dart';
 import 'package:friend_private/pages/speech_profile/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
@@ -91,14 +92,14 @@ class UpdateFirmwareCardWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<DeviceProvider>(
       builder: (context, provider, child) {
-        return (provider.pairedDevice == null || !provider.isConnected || !provider.havingNewFirmware)
+        return (!provider.havingNewFirmware)
             ? const SizedBox()
             : Stack(
                 children: [
                   GestureDetector(
                     onTap: () {
                       MixpanelManager().pageOpened('Update Firmware Memories');
-                      IntercomManager.instance.displayFirmwareUpdateArticle();
+                      routeToPage(context, FirmwareUpdate(device: provider.pairedDevice));
                     },
                     child: Container(
                       decoration: BoxDecoration(
@@ -116,7 +117,7 @@ class UpdateFirmwareCardWidget extends StatelessWidget {
                                 Icon(Icons.upload),
                                 SizedBox(width: 16),
                                 Text(
-                                  'Update your Firmware',
+                                  'Update omi firmware',
                                   style: TextStyle(color: Colors.white, fontSize: 16),
                                 ),
                               ],
@@ -126,11 +127,6 @@ class UpdateFirmwareCardWidget extends StatelessWidget {
                         ],
                       ),
                     ),
-                  ),
-                  const Positioned(
-                    top: 6,
-                    right: 24,
-                    child: Icon(Icons.fiber_manual_record, color: Colors.red, size: 16.0),
                   ),
                 ],
               );

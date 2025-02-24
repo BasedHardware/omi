@@ -119,7 +119,7 @@ class _AddPersonaPageState extends State<AddPersonaPage> {
                       style: TextStyle(
                         color: Colors.black,
                         fontSize: 14,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
@@ -420,7 +420,7 @@ class _AddPersonaPageState extends State<AddPersonaPage> {
                 textStyle: const TextStyle(
                   color: Colors.black,
                   fontSize: 16,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),

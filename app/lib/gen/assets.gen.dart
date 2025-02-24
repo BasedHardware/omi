@@ -142,6 +142,10 @@ class $AssetsImagesGen {
   SvgGenImage get icCloneChat =>
       const SvgGenImage('assets/images/ic_clone_chat.svg');
 
+  /// File path: assets/images/ic_clone_plus.svg
+  SvgGenImage get icClonePlus =>
+      const SvgGenImage('assets/images/ic_clone_plus.svg');
+
   /// File path: assets/images/ic_dollar.svg
   SvgGenImage get icDollar => const SvgGenImage('assets/images/ic_dollar.svg');
 
@@ -258,6 +262,7 @@ class $AssetsImagesGen {
         herologoV4,
         icChart,
         icCloneChat,
+        icClonePlus,
         icDollar,
         instagramLogo,
         instruction1,

@@ -51,7 +51,7 @@ class MyUpgradeAlertState extends UpgradeAlertState {
               key: key,
               title: const Text(
                 'New Version Available  🎉',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
               ),
               content: SingleChildScrollView(child: ListBody(children: <Widget>[Text(message)])),
               actions: <Widget>[
@@ -76,7 +76,7 @@ class MyUpgradeAlertState extends UpgradeAlertState {
             key: key,
             title: const Text(
               'New Version Available  🎉',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
             content: SingleChildScrollView(child: ListBody(children: <Widget>[Text(message)])),
             actions: <Widget>[
