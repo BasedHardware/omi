@@ -359,6 +359,16 @@ def get_omi_personas_by_uid_db(uid: str):
     docs = [doc.to_dict() for doc in docs if 'omi' in doc.to_dict().get('connected_accounts', [])]
     return docs
 
+def get_omi_persona_apps_by_uid_db(uid: str):
+    filters = [FieldFilter('uid', '==', uid),
+               FieldFilter('category', '==', 'personality-emulation'),
+               FieldFilter('deleted', '==', False)]
+    persona_ref = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters))
+    docs = persona_ref.get()
+    if not docs:
+        return []
+    docs = [doc.to_dict() for doc in docs]
+    return docs
 
 def add_persona_to_db(persona_data: dict):
     persona_ref = db.collection('plugins_data')

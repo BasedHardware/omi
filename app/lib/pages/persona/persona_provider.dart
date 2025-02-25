@@ -117,6 +117,11 @@ class PersonaProvider extends ChangeNotifier {
       }
     }
 
+    // Prepare for updates
+    if (_userPersona != null) {
+      prepareUpdatePersona(_userPersona!);
+    }
+
     setIsLoading(false);
   }
 
@@ -125,7 +130,6 @@ class PersonaProvider extends ChangeNotifier {
       return;
     }
     makePersonaPublic = value;
-    notifyListeners();
 
     // Update
     updatePersona();
@@ -229,6 +233,11 @@ class PersonaProvider extends ChangeNotifier {
         'username': usernameController.text,
         'private': !makePersonaPublic,
       };
+
+      // Fix hasOmiConnection
+      if (!hasOmiConnection && _userPersona?.uid == SharedPreferencesUtil().uid) {
+        hasOmiConnection = true;
+      }
 
       if (hasOmiConnection && !_userPersona!.connectedAccounts.contains('omi')) {
         personaData['connected_accounts'] = [..._userPersona!.connectedAccounts, 'omi'];
