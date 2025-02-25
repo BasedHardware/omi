@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/apps/update_app.dart';
+import 'package:friend_private/pages/persona/persona_profile.dart';
 import 'package:friend_private/pages/persona/update_persona.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -101,7 +102,13 @@ class ShowAppOptionsSheet extends StatelessWidget {
                       if (app.isNotPersona()) {
                         routeToPage(context, UpdateAppPage(app: app));
                       } else {
-                        routeToPage(context, UpdatePersonaPage(app: app, fromNewFlow: false));
+                        // Navigate to Persona Profile page with apps routing and the current app
+                        routeToPage(
+                            context,
+                            PersonaProfilePage(
+                              routing: PersonaProfileRouting.apps_updates,
+                              app: app,
+                            ));
                       }
                     },
                   ),

@@ -1,18 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/pages/chat/clone_chat_page.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
+import 'package:friend_private/pages/settings/page.dart';
+import 'package:friend_private/providers/capture_provider.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+enum PersonaProfileRouting {
+  no_device,
+  create_my_clone,
+  apps_updates,
+  home,
+}
+
 class PersonaProfilePage extends StatefulWidget {
-  const PersonaProfilePage({super.key});
+  final PersonaProfileRouting routing;
+  final App? app;
+
+  const PersonaProfilePage({
+    super.key,
+    this.routing = PersonaProfileRouting.no_device,
+    this.app,
+  });
 
   @override
   State<PersonaProfilePage> createState() => _PersonaProfilePageState();
@@ -23,7 +41,11 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final provider = Provider.of<PersonaProvider>(context, listen: false);
-      await provider.getVerifiedUserPersona();
+      if (widget.app != null) {
+        provider.prepareUpdatePersona(widget.app!);
+      } else {
+        await provider.getVerifiedUserPersona();
+      }
     });
     super.initState();
   }
@@ -44,19 +66,56 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
             backgroundColor: Colors.transparent,
             appBar: AppBar(
               backgroundColor: Colors.transparent,
-              leading: GestureDetector(
-                onTap: () {
-                  routeToPage(context, const CloneChatPage(), replace: false);
-                },
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: SvgPicture.asset(
-                    Assets.images.icCloneChat.path,
-                    width: 24,
-                    height: 24,
+              leading: widget.routing == PersonaProfileRouting.apps_updates
+                  ? IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                      onPressed: () {
+                        Navigator.pop(context);
+                      },
+                    )
+                  : GestureDetector(
+                      onTap: () {
+                        routeToPage(context, const CloneChatPage(), replace: false);
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: SvgPicture.asset(
+                          Assets.images.icCloneChat.path,
+                          width: 24,
+                          height: 24,
+                        ),
+                      ),
+                    ),
+              actions: [
+                // Only show settings icon for create_my_clone or home routing
+                if (widget.routing == PersonaProfileRouting.create_my_clone ||
+                    widget.routing == PersonaProfileRouting.home)
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: GestureDetector(
+                      onTap: () async {
+                        MixpanelManager().pageOpened('Settings');
+                        String language = SharedPreferencesUtil().recordingsLanguage;
+                        bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
+                        String transcriptModel = SharedPreferencesUtil().transcriptionModel;
+                        await routeToPage(context, const SettingsPage());
+
+                        if (language != SharedPreferencesUtil().recordingsLanguage ||
+                            hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
+                            transcriptModel != SharedPreferencesUtil().transcriptionModel) {
+                          if (context.mounted) {
+                            context.read<CaptureProvider>().onRecordProfileSettingChanged();
+                          }
+                        }
+                      },
+                      child: SvgPicture.asset(
+                        'assets/images/ic_setting_persona.svg',
+                        width: 44,
+                        height: 44,
+                      ),
+                    ),
                   ),
-                ),
-              ),
+              ],
             ),
             body: provider.isLoading || persona == null
                 ? const Center(

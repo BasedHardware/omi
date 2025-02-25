@@ -61,8 +61,10 @@ class CreateOptionsSheet extends StatelessWidget {
               onTap: () {
                 Navigator.pop(context);
                 MixpanelManager().pageOpened('Create Persona');
-                // Navigate to Persona Profile page instead of AddPersonaPage
-                routeToPage(context, const PersonaProfilePage());
+                // Navigate to Persona Profile page with create_my_clone routing
+                routeToPage(context, const PersonaProfilePage(
+                  routing: PersonaProfileRouting.create_my_clone,
+                ));
               },
             ),
           ),
