@@ -578,7 +578,7 @@ async def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid
     migrate_app_owner_id_db(uid, old_id)
 
     # Get all personas owned by the old ID
-    personas = get_omi_persona_apps_by_uid_db(old_id)
+    personas = get_omi_persona_apps_by_uid_db(uid)
 
     # Update each persona to add 'omi' to connected_accounts
     for persona in personas:
