@@ -86,18 +86,30 @@ class PersonaProvider extends ChangeNotifier {
 
   // Get upsert verified user persona
   Future getVerifiedUserPersona() async {
-    if (_verifiedPersonaId == null) {
-      return;
-    }
     setIsLoading(true);
 
-    // Warn: improvement needed
-    var res = await getAppDetailsServer(_verifiedPersonaId!);
-    if (res != null) {
-      _userPersona = App.fromJson(res);
+    debugPrint("verified persona id ${_verifiedPersonaId}");
+
+    if (_verifiedPersonaId == null) {
+      // If no verified persona ID exists, get or create one
+      var res = await getUpsertUserPersonaServer();
+      if (res != null) {
+        _userPersona = App.fromJson(res);
+        // Save the persona ID for future use
+        SharedPreferencesUtil().verifiedPersonaId = _userPersona?.id;
+      } else {
+        _userPersona = null;
+        AppSnackbar.showSnackbarError('Failed to create your persona');
+      }
     } else {
-      _userPersona = null;
-      AppSnackbar.showSnackbarError('Failed to fetch your persona');
+      // If we have a verified persona ID, fetch it
+      var res = await getAppDetailsServer(_verifiedPersonaId!);
+      if (res != null) {
+        _userPersona = App.fromJson(res);
+      } else {
+        _userPersona = null;
+        AppSnackbar.showSnackbarError('Failed to fetch your persona');
+      }
     }
 
     setIsLoading(false);

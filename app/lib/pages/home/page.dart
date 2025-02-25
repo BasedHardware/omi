@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -13,6 +14,7 @@ import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/conversations/conversations_page.dart';
 import 'package:friend_private/pages/facts/page.dart';
 import 'package:friend_private/pages/home/widgets/chat_apps_dropdown_widget.dart';
+import 'package:friend_private/pages/persona/persona_profile.dart';
 import 'package:friend_private/pages/home/widgets/speech_language_sheet.dart';
 import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/providers/app_provider.dart';
@@ -509,23 +511,39 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     }
                   },
                 ),
-                IconButton(
-                  icon: const Icon(Icons.settings, color: Colors.white, size: 30),
-                  onPressed: () async {
-                    MixpanelManager().pageOpened('Settings');
-                    String language = SharedPreferencesUtil().recordingsLanguage;
-                    bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
-                    String transcriptModel = SharedPreferencesUtil().transcriptionModel;
-                    await routeToPage(context, const SettingsPage());
+                Row(
+                  children: [
+                    IconButton(
+                      icon: SvgPicture.asset(
+                        'assets/images/ic_persona_profile.svg',
+                        width: 30,
+                        height: 30,
+                        colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                      ),
+                      onPressed: () {
+                        MixpanelManager().pageOpened('Persona Profile');
+                        routeToPage(context, const PersonaProfilePage());
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.settings, color: Colors.white, size: 30),
+                      onPressed: () async {
+                        MixpanelManager().pageOpened('Settings');
+                        String language = SharedPreferencesUtil().recordingsLanguage;
+                        bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
+                        String transcriptModel = SharedPreferencesUtil().transcriptionModel;
+                        await routeToPage(context, const SettingsPage());
 
-                    if (language != SharedPreferencesUtil().recordingsLanguage ||
-                        hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
-                        transcriptModel != SharedPreferencesUtil().transcriptionModel) {
-                      if (context.mounted) {
-                        context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                      }
-                    }
-                  },
+                        if (language != SharedPreferencesUtil().recordingsLanguage ||
+                            hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
+                            transcriptModel != SharedPreferencesUtil().transcriptionModel) {
+                          if (context.mounted) {
+                            context.read<CaptureProvider>().onRecordProfileSettingChanged();
+                          }
+                        }
+                      },
+                    ),
+                  ],
                 ),
               ],
             ),
