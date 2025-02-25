@@ -400,7 +400,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               labelPadding: const EdgeInsets.only(top: 4, bottom: 4),
                               indicatorPadding: EdgeInsets.zero,
                               onTap: (index) {
-                                MixpanelManager().bottomNavigationTabClicked(['Memories', 'Chat', 'Apps'][index]);
+                                MixpanelManager().bottomNavigationTabClicked(['Memories', 'Chat', 'Explore'][index]);
                                 primaryFocus?.unfocus();
                                 if (home.selectedIndex == index) {
                                   return;
@@ -431,7 +431,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 ),
                                 Tab(
                                   child: Text(
-                                    'Apps',
+                                    'Explore',
                                     style: TextStyle(
                                       color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
                                       fontSize: MediaQuery.sizeOf(context).width < 410 ? 13 : 15,
@@ -487,7 +487,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     } else if (provider.selectedIndex == 2) {
                       return Padding(
                         padding: EdgeInsets.only(right: MediaQuery.sizeOf(context).width * 0.16),
-                        child: const Text('Apps', style: TextStyle(color: Colors.white, fontSize: 18)),
+                        child: const Text('Explore', style: TextStyle(color: Colors.white, fontSize: 18)),
                       );
                     } else {
                       return Expanded(
@@ -514,35 +514,39 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 Row(
                   children: [
                     IconButton(
+                      padding: const EdgeInsets.all(8.0),
                       icon: SvgPicture.asset(
                         'assets/images/ic_persona_profile.svg',
-                        width: 30,
-                        height: 30,
-                        colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                        width: 28,
+                        height: 28,
                       ),
                       onPressed: () {
                         MixpanelManager().pageOpened('Persona Profile');
-                        routeToPage(context, const PersonaProfilePage());
+                        routeToPage(
+                            context,
+                            const PersonaProfilePage(
+                              routing: PersonaProfileRouting.home,
+                            ));
                       },
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.settings, color: Colors.white, size: 30),
-                      onPressed: () async {
-                        MixpanelManager().pageOpened('Settings');
-                        String language = SharedPreferencesUtil().recordingsLanguage;
-                        bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
-                        String transcriptModel = SharedPreferencesUtil().transcriptionModel;
-                        await routeToPage(context, const SettingsPage());
+                    // IconButton(
+                    //   icon: const Icon(Icons.settings, color: Colors.white, size: 30),
+                    //   onPressed: () async {
+                    //     MixpanelManager().pageOpened('Settings');
+                    //     String language = SharedPreferencesUtil().recordingsLanguage;
+                    //     bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
+                    //     String transcriptModel = SharedPreferencesUtil().transcriptionModel;
+                    //     await routeToPage(context, const SettingsPage());
 
-                        if (language != SharedPreferencesUtil().recordingsLanguage ||
-                            hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
-                            transcriptModel != SharedPreferencesUtil().transcriptionModel) {
-                          if (context.mounted) {
-                            context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                          }
-                        }
-                      },
-                    ),
+                    //     if (language != SharedPreferencesUtil().recordingsLanguage ||
+                    //         hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
+                    //         transcriptModel != SharedPreferencesUtil().transcriptionModel) {
+                    //       if (context.mounted) {
+                    //         context.read<CaptureProvider>().onRecordProfileSettingChanged();
+                    //       }
+                    //     }
+                    //   },
+                    // ),
                   ],
                 ),
               ],
