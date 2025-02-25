@@ -24,6 +24,11 @@ class PersonaProvider extends ChangeNotifier {
   File? selectedImage;
   String? selectedImageUrl;
 
+  Future updatePersonaName() async {
+    await updatePersona();
+    notifyListeners();
+  }
+
   String? get _verifiedPersonaId => SharedPreferencesUtil().verifiedPersonaId;
 
   bool isLoading = false;
@@ -143,6 +148,19 @@ class PersonaProvider extends ChangeNotifier {
     if (image != null) {
       selectedImage = File(image.path);
       validateForm();
+    }
+    notifyListeners();
+  }
+
+  Future<void> pickAndUpdateImage() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+    if (image != null) {
+      selectedImage = File(image.path);
+      validateForm();
+
+      // Update
+      await updatePersona();
     }
     notifyListeners();
   }

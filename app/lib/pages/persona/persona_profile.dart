@@ -129,24 +129,60 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                         Stack(
                           alignment: Alignment.center,
                           children: [
-                            Container(
-                              width: 100,
-                              height: 100,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: const Color(0xFF494947),
-                                  width: 2.5,
-                                ),
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(50),
-                                child: persona.image.isEmpty
-                                    ? Image.asset(Assets.images.logoTransparentV2.path)
-                                    : Image.network(
-                                        persona.image,
-                                        fit: BoxFit.cover,
+                            GestureDetector(
+                              onTap: (widget.routing == PersonaProfileRouting.home ||
+                                      widget.routing == PersonaProfileRouting.apps_updates ||
+                                      widget.routing == PersonaProfileRouting.create_my_clone)
+                                  ? () {
+                                      provider.pickAndUpdateImage();
+                                    }
+                                  : null,
+                              child: Stack(
+                                children: [
+                                  Container(
+                                    width: 100,
+                                    height: 100,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: const Color(0xFF494947),
+                                        width: 2.5,
                                       ),
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(50),
+                                      child: provider.selectedImage != null
+                                          ? Image.file(
+                                              provider.selectedImage!,
+                                              fit: BoxFit.cover,
+                                            )
+                                          : persona.image.isEmpty
+                                              ? Image.asset(Assets.images.logoTransparentV2.path)
+                                              : Image.network(
+                                                  persona.image,
+                                                  fit: BoxFit.cover,
+                                                ),
+                                    ),
+                                  ),
+                                  if (widget.routing == PersonaProfileRouting.apps_updates ||
+                                      widget.routing == PersonaProfileRouting.create_my_clone)
+                                    Positioned(
+                                      right: 0,
+                                      bottom: 0,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: const BoxDecoration(
+                                          color: Colors.blue,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.edit,
+                                          color: Colors.white,
+                                          size: 16,
+                                        ),
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
                             Positioned(
@@ -169,25 +205,44 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                           ],
                         ),
                         const SizedBox(height: 16),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const SizedBox(width: 4),
-                            Text(
-                              persona.getName(),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
+                        GestureDetector(
+                          onTap: (widget.routing == PersonaProfileRouting.home ||
+                                  widget.routing == PersonaProfileRouting.apps_updates ||
+                                  widget.routing == PersonaProfileRouting.create_my_clone)
+                              ? () {
+                                  _showNameEditDialog(context, persona, provider);
+                                }
+                              : null,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const SizedBox(width: 4),
+                              Text(
+                                persona.getName(),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 4),
-                            const Icon(
-                              Icons.verified,
-                              color: Colors.blue,
-                              size: 20,
-                            ),
-                          ],
+                              const SizedBox(width: 4),
+                              const Icon(
+                                Icons.verified,
+                                color: Colors.blue,
+                                size: 20,
+                              ),
+                              if (widget.routing == PersonaProfileRouting.apps_updates ||
+                                  widget.routing == PersonaProfileRouting.create_my_clone)
+                                const Padding(
+                                  padding: EdgeInsets.only(left: 8.0),
+                                  child: Icon(
+                                    Icons.edit,
+                                    color: Colors.white,
+                                    size: 16,
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 8),
                         Text(
@@ -439,6 +494,51 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
         ],
       );
     });
+  }
+
+  void _showNameEditDialog(BuildContext context, App persona, PersonaProvider provider) {
+    final TextEditingController nameController = provider.nameController;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Theme.of(context).colorScheme.surface,
+          title: const Text('Edit Name', style: TextStyle(color: Colors.white)),
+          content: TextField(
+            controller: nameController,
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+              hintText: 'Enter name',
+              hintStyle: TextStyle(color: Colors.grey),
+              enabledBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: Colors.grey),
+              ),
+              focusedBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: Colors.white),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+            TextButton(
+              onPressed: () {
+                if (nameController.text.isNotEmpty) {
+                  provider.updatePersonaName();
+                  Navigator.of(context).pop();
+                }
+              },
+              child: const Text('Save', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Widget _buildSocialLink({
