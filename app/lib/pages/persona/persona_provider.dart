@@ -9,7 +9,26 @@ import 'package:image_picker/image_picker.dart';
 
 typedef ShowSuccessDialogCallback = void Function(String url);
 
+enum PersonaProfileRouting {
+  no_device,
+  create_my_clone,
+  apps_updates,
+  home,
+}
+
 class PersonaProvider extends ChangeNotifier {
+  // Routing state for persona profile
+  PersonaProfileRouting _routing = PersonaProfileRouting.home;
+  PersonaProfileRouting get routing => _routing;
+  
+  void setRouting(PersonaProfileRouting routing, {App? app}) {
+    _routing = routing;
+    if (app != null) {
+      _userPersona = app;
+      prepareUpdatePersona(app);
+    }
+    notifyListeners();
+  }
   final GlobalKey<FormState> formKey = GlobalKey<FormState>();
   TextEditingController nameController = TextEditingController(text: SharedPreferencesUtil().givenName);
   TextEditingController usernameController = TextEditingController();
