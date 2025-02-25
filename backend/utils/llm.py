@@ -257,6 +257,7 @@ def initial_persona_chat_message(uid: str, app: Optional[App] = None, messages: 
             chat_messages.append(AIMessage(content=msg.text))
         else:
             chat_messages.append(HumanMessage(content=msg.text))
+    chat_messages.append(HumanMessage(content='lets begin. you write the first message, one short provocative question relevant to your identity. never respond with **. while continuing the convo, always respond w short msgs, lowercase.'))
     llm_call = llm_persona_mini_stream
     if app.is_influencer:
         llm_call = llm_persona_medium_stream
