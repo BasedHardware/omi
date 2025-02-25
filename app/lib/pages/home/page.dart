@@ -102,7 +102,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   bool scriptsInProgress = false;
 
   PageController? _controller;
-  final PersonaProvider _personaProvider = PersonaProvider();
 
   void _initiateApps() {
     context.read<AppProvider>().getApps();
@@ -272,88 +271,90 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider.value(
-        value: _personaProvider,
-        child: MyUpgradeAlert(
-          upgrader: _upgrader,
-          dialogStyle: Platform.isIOS ? UpgradeDialogStyle.cupertino : UpgradeDialogStyle.material,
-          child: Consumer<ConnectivityProvider>(
-            builder: (ctx, connectivityProvider, child) {
-              bool isConnected = connectivityProvider.isConnected;
-              previousConnection ??= true;
-              if (previousConnection != isConnected && connectivityProvider.isInitialized) {
-                previousConnection = isConnected;
-                if (!isConnected) {
-                  Future.delayed(const Duration(seconds: 2), () {
-                    if (mounted && !connectivityProvider.isConnected) {
-                      ScaffoldMessenger.of(ctx).showMaterialBanner(
-                        MaterialBanner(
-                          content: const Text(
-                            'No internet connection. Please check your connection.',
-                            style: TextStyle(color: Colors.white70),
-                          ),
-                          backgroundColor: const Color(0xFF424242), // Dark gray instead of red
-                          leading: const Icon(Icons.wifi_off, color: Colors.white70),
-                          actions: [
-                            TextButton(
-                              onPressed: () {
-                                ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                              },
-                              child: const Text('Dismiss', style: TextStyle(color: Colors.white70)),
-                            ),
-                          ],
+    return MyUpgradeAlert(
+      upgrader: _upgrader,
+      dialogStyle: Platform.isIOS ? UpgradeDialogStyle.cupertino : UpgradeDialogStyle.material,
+      child: Consumer<ConnectivityProvider>(
+        builder: (ctx, connectivityProvider, child) {
+          bool isConnected = connectivityProvider.isConnected;
+          previousConnection ??= true;
+          if (previousConnection != isConnected && connectivityProvider.isInitialized) {
+            previousConnection = isConnected;
+            if (!isConnected) {
+              Future.delayed(const Duration(seconds: 2), () {
+                if (mounted && !connectivityProvider.isConnected) {
+                  ScaffoldMessenger.of(ctx).showMaterialBanner(
+                    MaterialBanner(
+                      content: const Text(
+                        'No internet connection. Please check your connection.',
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                      backgroundColor: const Color(0xFF424242), // Dark gray instead of red
+                      leading: const Icon(Icons.wifi_off, color: Colors.white70),
+                      actions: [
+                        TextButton(
+                          onPressed: () {
+                            ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
+                          },
+                          child: const Text('Dismiss', style: TextStyle(color: Colors.white70)),
                         ),
-                      );
-                    }
-                  });
-                } else {
-                  Future.delayed(Duration.zero, () {
-                    if (mounted) {
-                      ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                      ScaffoldMessenger.of(ctx).showMaterialBanner(
-                        MaterialBanner(
-                          content: const Text(
-                            'Internet connection is restored.',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                          backgroundColor: const Color(0xFF2E7D32), // Dark green instead of bright green
-                          leading: const Icon(Icons.wifi, color: Colors.white),
-                          actions: [
-                            TextButton(
-                              onPressed: () {
-                                if (mounted) {
-                                  ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                                }
-                              },
-                              child: const Text('Dismiss', style: TextStyle(color: Colors.white)),
-                            ),
-                          ],
-                          onVisible: () => Future.delayed(const Duration(seconds: 3), () {
+                      ],
+                    ),
+                  );
+                }
+              });
+            } else {
+              Future.delayed(Duration.zero, () {
+                if (mounted) {
+                  ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
+                  ScaffoldMessenger.of(ctx).showMaterialBanner(
+                    MaterialBanner(
+                      content: const Text(
+                        'Internet connection is restored.',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      backgroundColor: const Color(0xFF2E7D32), // Dark green instead of bright green
+                      leading: const Icon(Icons.wifi, color: Colors.white),
+                      actions: [
+                        TextButton(
+                          onPressed: () {
                             if (mounted) {
                               ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
                             }
-                          }),
+                          },
+                          child: const Text('Dismiss', style: TextStyle(color: Colors.white)),
                         ),
-                      );
-                    }
-
-                    WidgetsBinding.instance.addPostFrameCallback((_) async {
-                      if (mounted) {
-                        if (ctx.read<ConversationProvider>().conversations.isEmpty) {
-                          await ctx.read<ConversationProvider>().getInitialConversations();
+                      ],
+                      onVisible: () => Future.delayed(const Duration(seconds: 3), () {
+                        if (mounted) {
+                          ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
                         }
-                        if (ctx.read<MessageProvider>().messages.isEmpty) {
-                          await ctx.read<MessageProvider>().refreshMessages();
-                        }
-                      }
-                    });
-                  });
+                      }),
+                    ),
+                  );
                 }
-              }
-              return child!;
-            },
-            child: Scaffold(
+
+                WidgetsBinding.instance.addPostFrameCallback((_) async {
+                  if (mounted) {
+                    if (ctx.read<ConversationProvider>().conversations.isEmpty) {
+                      await ctx.read<ConversationProvider>().getInitialConversations();
+                    }
+                    if (ctx.read<MessageProvider>().messages.isEmpty) {
+                      await ctx.read<MessageProvider>().refreshMessages();
+                    }
+                  }
+                });
+              });
+            }
+          }
+          return child!;
+        },
+        child: Consumer<HomeProvider>(
+          builder: (context, homeProvider, _) {
+            debugPrint("asd ${homeProvider.selectedIndex}");
+            return Scaffold(
               backgroundColor: Theme.of(context).colorScheme.primary,
+              appBar: homeProvider.selectedIndex == 3 ? null : _buildAppBar(context),
               body: DefaultTabController(
                 length: 3,
                 initialIndex: _controller?.initialPage ?? 0,
@@ -456,122 +457,116 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   ),
                 ),
               ),
-              appBar: AppBar(
-                automaticallyImplyLeading: false,
-                backgroundColor: Theme.of(context).colorScheme.surface,
-                title: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const BatteryInfoWidget(),
-                    Consumer<HomeProvider>(builder: (context, provider, child) {
-                      if (provider.selectedIndex == 0) {
-                        return Consumer<ConversationProvider>(builder: (context, convoProvider, child) {
-                          if (convoProvider.missingWalsInSeconds >= 120) {
-                            return GestureDetector(
-                              onTap: () {
-                                routeToPage(context, const SyncPage());
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.only(left: 12),
-                                child: const Icon(Icons.download, color: Colors.white, size: 24),
-                              ),
-                            );
-                          } else {
-                            return const SizedBox.shrink();
-                          }
-                        });
-                      } else {
-                        return const SizedBox.shrink();
-                      }
-                    }),
-                    Consumer<HomeProvider>(
-                      builder: (context, provider, child) {
-                        if (provider.selectedIndex == 1) {
-                          return ChatAppsDropdownWidget(
-                            controller: _controller,
-                          );
-                        } else if (provider.selectedIndex == 2) {
-                          return Padding(
-                            padding: EdgeInsets.only(right: MediaQuery.sizeOf(context).width * 0.16),
-                            child: const Text('Explore', style: TextStyle(color: Colors.white, fontSize: 18)),
-                          );
-                        } else {
-                          return Expanded(
-                            child: Row(
-                              children: [
-                                const Spacer(),
-                                SpeechLanguageSheet(
-                                  recordingLanguage: provider.recordingLanguage,
-                                  setRecordingLanguage: (language) {
-                                    provider.setRecordingLanguage(language);
-                                    // Notify capture provider
-                                    if (context.mounted) {
-                                      context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                                    }
-                                  },
-                                  availableLanguages: provider.availableLanguages,
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-                      },
-                    ),
-                    Row(
-                      children: [
-                        IconButton(
-                          padding: const EdgeInsets.all(8.0),
-                          icon: SvgPicture.asset(
-                            'assets/images/ic_persona_profile.svg',
-                            width: 28,
-                            height: 28,
-                          ),
-                          onPressed: () {
-                            MixpanelManager().pageOpened('Persona Profile');
-                            // Set routing in provider
-                            _personaProvider.setRouting(PersonaProfileRouting.home);
-                            // Navigate to persona profile page in PageView
-                            _controller?.animateToPage(3,
-                                duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
-                          },
-                        ),
-                        // IconButton(
-                        //   icon: const Icon(Icons.settings, color: Colors.white, size: 30),
-                        //   onPressed: () async {
-                        //     MixpanelManager().pageOpened('Settings');
-                        //     String language = SharedPreferencesUtil().recordingsLanguage;
-                        //     bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
-                        //     String transcriptModel = SharedPreferencesUtil().transcriptionModel;
-                        //     await routeToPage(context, const SettingsPage());
+            );
+          },
+        ),
+      ),
+    );
+  }
 
-                        //     if (language != SharedPreferencesUtil().recordingsLanguage ||
-                        //         hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
-                        //         transcriptModel != SharedPreferencesUtil().transcriptionModel) {
-                        //       if (context.mounted) {
-                        //         context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                        //       }
-                        //     }
-                        //   },
-                        // ),
-                      ],
+  PreferredSizeWidget _buildAppBar(BuildContext context) {
+    return AppBar(
+      automaticallyImplyLeading: false,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const BatteryInfoWidget(),
+          Consumer<HomeProvider>(builder: (context, provider, child) {
+            if (provider.selectedIndex == 0) {
+              return Consumer<ConversationProvider>(builder: (context, convoProvider, child) {
+                if (convoProvider.missingWalsInSeconds >= 120) {
+                  return GestureDetector(
+                    onTap: () {
+                      routeToPage(context, const SyncPage());
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.only(left: 12),
+                      child: const Icon(Icons.download, color: Colors.white, size: 24),
                     ),
-                  ],
-                ),
-                elevation: 0,
-                centerTitle: true,
-              ),
-            ),
+                  );
+                } else {
+                  return const SizedBox.shrink();
+                }
+              });
+            } else {
+              return const SizedBox.shrink();
+            }
+          }),
+          Consumer<HomeProvider>(
+            builder: (context, provider, child) {
+              if (provider.selectedIndex == 1) {
+                return ChatAppsDropdownWidget(
+                  controller: _controller!,
+                );
+              } else if (provider.selectedIndex == 2) {
+                return Padding(
+                  padding: EdgeInsets.only(right: MediaQuery.sizeOf(context).width * 0.16),
+                  child: const Text('Explore', style: TextStyle(color: Colors.white, fontSize: 18)),
+                );
+              } else {
+                return Expanded(
+                  child: Row(
+                    children: [
+                      const Spacer(),
+                      SpeechLanguageSheet(
+                        recordingLanguage: provider.recordingLanguage,
+                        setRecordingLanguage: (language) {
+                          provider.setRecordingLanguage(language);
+                          // Notify capture provider
+                          if (context.mounted) {
+                            context.read<CaptureProvider>().onRecordProfileSettingChanged();
+                          }
+                        },
+                        availableLanguages: provider.availableLanguages,
+                      ),
+                    ],
+                  ),
+                );
+              }
+            },
           ),
-        ));
+          Row(
+            children: [
+              IconButton(
+                  padding: const EdgeInsets.all(8.0),
+                  icon: SvgPicture.asset(
+                    'assets/images/ic_persona_profile.svg',
+                    width: 28,
+                    height: 28,
+                  ),
+                  onPressed: () {
+                    MixpanelManager().pageOpened('Persona Profile');
+
+                    // Set routing in provider
+                    var personaProvider = Provider.of<PersonaProvider>(context, listen: false);
+                    personaProvider.setRouting(PersonaProfileRouting.home);
+
+                    // Navigate
+                    var homeProvider = Provider.of<HomeProvider>(context, listen: false);
+                    homeProvider.setIndex(3);
+                    if (homeProvider.onSelectedIndexChanged != null) {
+                      homeProvider.onSelectedIndexChanged!(3);
+                    }
+                  }),
+            ],
+          ),
+        ],
+      ),
+      elevation: 0,
+      centerTitle: true,
+    );
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     ForegroundUtil.stopForegroundTask();
-    _controller?.dispose();
-    _controller = null;
+    if (_controller != null) {
+      _controller!.dispose();
+      _controller = null;
+    }
     super.dispose();
   }
 }
