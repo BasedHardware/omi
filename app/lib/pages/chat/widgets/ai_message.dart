@@ -160,7 +160,7 @@ Widget _getNpsWidget(BuildContext context, ServerMessage message, Function(int) 
       mainAxisAlignment: MainAxisAlignment.start,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text('Was this helpful?', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey.shade300)),
+        Text('Was this helpful?', style: TextStyle(fontWeight: FontWeight.w500, color: Colors.grey.shade300)),
         IconButton(
           onPressed: () {
             setMessageNps(0);
