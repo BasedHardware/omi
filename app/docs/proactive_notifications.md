@@ -1,36 +1,50 @@
-# Proactive Notifications Documentation
+# Proactive Notifications
 
-## Overview
-Proactive notifications in Omi are push notifications that are sent to users based on specific triggers or events, even when the app is not actively in use. These notifications are handled through Firebase Cloud Messaging (FCM) and Awesome Notifications for local handling.
+Omi uses a robust notification system to keep users informed and engaged, even when the app isn't actively running. This guide explains how to implement and use proactive notifications in your Omi app development.
 
-## Implementation Details
+## 📱 Quick Implementation
 
-### 1. Setup and Initialization
-The notification system is initialized in the `NotificationService` class:
 ```dart
-NotificationService.instance.initialize()
+// Initialize notifications
+await NotificationService.instance.initialize();
+
+// Send a notification
+await sendNotification({
+    'uid': 'user_id',
+    'title': 'Hello',
+    'body': 'This is a test notification'
+});
 ```
 
-### 2. Token Management
-- When a user logs in, their FCM token is automatically saved to the backend
-- The token is used to send targeted notifications to specific users
-- Tokens are refreshed automatically when needed
+## 🔧 System Components
 
-### 3. Types of Proactive Notifications
+### 🔐 Authentication & Setup
 
-#### a. System Notifications
-- Updates about system status
-- Important announcements
-- Service updates
+1. **Initialize the Service**
+   ```dart
+   await NotificationService.instance.initialize()
+   ```
 
-#### b. User-triggered Notifications
-- Responses to user actions
-- Scheduled reminders
-- Activity updates
+2. **Token Management**
+   - Automatic FCM token registration on login
+   - Secure token storage in backend
+   - Automatic token refresh handling
 
-### 4. Sending Notifications
+### 📬 Notification Types
 
-#### Backend API Endpoint
+1. **System Notifications**
+   - System status updates
+   - Important announcements
+   - Service updates
+
+2. **User Notifications**
+   - Action responses
+   - Scheduled reminders
+   - Activity updates
+
+## 🔌 API Integration
+
+### Send Notification
 ```http
 POST /v1/notification
 Headers: 
@@ -44,33 +58,52 @@ Body:
 }
 ```
 
-### 5. Handling Notifications
+## 🛠 Implementation Guide
 
-#### In-App Handling
-Notifications are handled by the `NotificationUtil` class which manages:
-- Notification actions
-- Deep linking
-- Background/foreground notification display
+### In-App Handling
+```dart
+class NotificationUtil {
+  // Handle notification actions
+  static Future<void> onActionReceivedMethod(
+    ReceivedAction receivedAction
+  ) async {
+    // Your handling logic
+  }
+}
+```
 
-#### Background Handling
-The app can receive and process notifications even when in the background using:
-- `NotificationOnKillService` for Android
-- `NotificationService` for iOS
+### Background Processing
+- Android: `NotificationOnKillService`
+- iOS: `NotificationService`
 
-## Best Practices
-1. Always include relevant context in notification payload
-2. Use appropriate notification channels
-3. Handle both foreground and background states
-4. Implement proper error handling
+## ✅ Best Practices
 
-## Testing
-To test proactive notifications:
-1. Ensure FCM is properly configured
-2. Verify token registration
-3. Test notifications in various app states (foreground, background, terminated)
+1. **Payload Structure**
+   - Include necessary context
+   - Keep payload size minimal
+   - Use appropriate channels
 
-## Troubleshooting
-- Verify FCM token is properly registered
-- Check notification permissions
-- Ensure proper configuration in Firebase Console
-- Verify backend secret key for authentication
+2. **State Handling**
+   - Handle foreground state
+   - Manage background state
+   - Process terminated state
+
+## 🔍 Troubleshooting
+
+### Common Issues
+- FCM token not registered
+- Missing notification permissions
+- Firebase Console misconfiguration
+- Invalid backend secret key
+
+### Quick Fixes
+1. Verify Firebase setup in console
+2. Check app notification permissions
+3. Validate backend configuration
+4. Test in different app states
+
+## 💬 Need Help?
+
+- Join our [Discord Community](http://discord.omi.me)
+- Check [Firebase Documentation](https://firebase.google.com/docs/cloud-messaging)
+- Visit [Omi Docs](https://docs.omi.me/)
