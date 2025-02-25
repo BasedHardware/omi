@@ -294,6 +294,27 @@ def get_persona_by_uid_db(uid: str):
         return None
     return doc.to_dict()
 
+def get_user_persona_by_uid(uid: str):
+    filters = [
+        FieldFilter('category', '==', 'personality-emulation'),
+        FieldFilter('deleted', '==', False),
+        FieldFilter('uid', '==', uid),
+    ]
+    persona_ref = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).limit(1)
+    docs = persona_ref.get()
+    if not docs:
+        return None
+    doc = next(iter(docs), None)
+    if not doc:
+        return None
+    return {'id': doc.id, **doc.to_dict()}
+
+def create_user_persona_db(persona_data: dict):
+    """Create a new user persona in the database"""
+    persona_ref = db.collection('plugins_data')
+    persona_ref.add(persona_data, persona_data['id'])
+    return persona_data
+
 
 def get_persona_by_twitter_handle_db(handle: str):
     filters = [

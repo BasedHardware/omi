@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, H
 from database.apps import change_app_approval_status, get_unapproved_public_apps_db, \
     add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db, \
     get_personas_by_username_db, get_persona_by_id_db, delete_persona_db, get_persona_by_twitter_handle_db, \
-    get_persona_by_username_db, migrate_app_owner_id_db
+    get_persona_by_username_db, migrate_app_owner_id_db, get_user_persona_by_uid
 from database.auth import get_user_from_uid
 from database.notifications import get_token_only
 from database.redis_db import delete_generic_cache, get_specific_user_review, increase_app_installs_count, \
@@ -184,6 +184,57 @@ def get_persona_details(uid: str = Depends(auth.get_current_user_uid)):
             raise HTTPException(status_code=403, detail='You are not authorized to view this Persona')
 
     return app
+
+@router.post('/v1/user/persona', tags=['v1'])
+async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_uid)):
+    """Get or create a user persona.
+    
+    If the user already has a persona, return it.
+    If not, create a new one with default values.
+    """
+    # Check if user already has a persona
+    persona = get_user_persona_by_uid(uid)
+    
+    if persona:
+        # Return existing persona
+        return persona
+    
+    # Create a new persona for the user
+    user = get_user_from_uid(uid)
+    
+    # Generate a unique ID for the persona
+    persona_id = str(ULID())
+    
+    # Create persona data
+    persona_data = {
+        'id': persona_id,
+        'name': user.get('display_name', 'My Persona'),
+        'username': increment_username(user.get('display_name', 'MyPersona').replace(' ', '').lower()),
+        'description': f"This is {user.get('display_name', 'my')} personal AI clone.",
+        'image': '',  # Empty image as specified in the task
+        'uid': uid,
+        'author': user.get('display_name', ''),
+        'email': user.get('email', ''),
+        'approved': False,
+        'deleted': False,
+        'status': 'under-review',
+        'category': 'personality-emulation',
+        'capabilities': ['persona'],
+        'connected_accounts': ['omi'],
+        'created_at': datetime.now(timezone.utc),
+        'private': True
+    }
+    
+    # Generate persona prompt
+    persona_data['persona_prompt'] = await generate_persona_prompt(uid, persona_data)
+    
+    # Save username
+    save_username(persona_data['username'], uid)
+    
+    # Add persona to database
+    add_app_to_db(persona_data)
+    
+    return persona_data
 
 
 @router.get('/v1/apps/check-username', tags=['v1'])
