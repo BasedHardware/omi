@@ -351,7 +351,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         },
         child: Consumer<HomeProvider>(
           builder: (context, homeProvider, _) {
-            debugPrint("asd ${homeProvider.selectedIndex}");
             return Scaffold(
               backgroundColor: Theme.of(context).colorScheme.primary,
               appBar: homeProvider.selectedIndex == 3 ? null : _buildAppBar(context),

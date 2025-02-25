@@ -72,6 +72,7 @@ class CloneChatPageState extends State<CloneChatPage> {
                       ),
                     ),
                     onTap: () {
+                      personaProvider.setRouting(PersonaProfileRouting.no_device);
                       routeToPage(context, const PersonaProfilePage(), replace: true);
                     }),
                 personaProvider.isLoading || personaProvider.userPersona == null
