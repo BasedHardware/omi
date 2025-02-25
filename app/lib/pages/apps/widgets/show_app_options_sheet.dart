@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/apps/update_app.dart';
 import 'package:friend_private/pages/persona/persona_profile.dart';
+import 'package:friend_private/pages/persona/persona_provider.dart';
+import 'package:provider/provider.dart';
 import 'package:friend_private/pages/persona/update_persona.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -102,13 +104,10 @@ class ShowAppOptionsSheet extends StatelessWidget {
                       if (app.isNotPersona()) {
                         routeToPage(context, UpdateAppPage(app: app));
                       } else {
-                        // Navigate to Persona Profile page with apps routing and the current app
-                        routeToPage(
-                            context,
-                            PersonaProfilePage(
-                              routing: PersonaProfileRouting.apps_updates,
-                              app: app,
-                            ));
+                        // Set routing in provider and navigate to Persona Profile page
+                        Provider.of<PersonaProvider>(context, listen: false)
+                            .setRouting(PersonaProfileRouting.apps_updates, app: app);
+                        routeToPage(context, const PersonaProfilePage());
                       }
                     },
                   ),

@@ -3,7 +3,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/gen/assets.gen.dart';
-import 'dart:io';
 import 'package:friend_private/pages/chat/clone_chat_page.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
@@ -16,21 +15,9 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-enum PersonaProfileRouting {
-  no_device,
-  create_my_clone,
-  apps_updates,
-  home,
-}
-
 class PersonaProfilePage extends StatefulWidget {
-  final PersonaProfileRouting routing;
-  final App? app;
-
   const PersonaProfilePage({
     super.key,
-    this.routing = PersonaProfileRouting.no_device,
-    this.app,
   });
 
   @override
@@ -38,18 +25,18 @@ class PersonaProfilePage extends StatefulWidget {
 }
 
 class _PersonaProfilePageState extends State<PersonaProfilePage> {
-  bool _isPersonaEditable() {
-    return widget.routing == PersonaProfileRouting.apps_updates ||
-        widget.routing == PersonaProfileRouting.home ||
-        widget.routing == PersonaProfileRouting.create_my_clone;
+  bool _isPersonaEditable(PersonaProfileRouting routing) {
+    return routing == PersonaProfileRouting.apps_updates ||
+        routing == PersonaProfileRouting.home ||
+        routing == PersonaProfileRouting.create_my_clone;
   }
 
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final provider = Provider.of<PersonaProvider>(context, listen: false);
-      if (widget.app != null) {
-        provider.prepareUpdatePersona(widget.app!);
+      if (provider.routing == PersonaProfileRouting.apps_updates && provider.userPersona != null) {
+        provider.prepareUpdatePersona(provider.userPersona!);
       } else {
         await provider.getVerifiedUserPersona();
       }
@@ -73,55 +60,60 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
             backgroundColor: Colors.transparent,
             appBar: AppBar(
               backgroundColor: Colors.transparent,
-              leading: widget.routing == PersonaProfileRouting.apps_updates
-                  ? IconButton(
-                      icon: const Icon(Icons.arrow_back, color: Colors.white),
-                      onPressed: () {
-                        Navigator.pop(context);
-                      },
-                    )
-                  : GestureDetector(
-                      onTap: () {
-                        routeToPage(context, const CloneChatPage(), replace: false);
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: SvgPicture.asset(
-                          Assets.images.icCloneChat.path,
-                          width: 24,
-                          height: 24,
+              leading: Consumer<PersonaProvider>(builder: (context, personaProvider, _) {
+                return personaProvider.routing == PersonaProfileRouting.apps_updates
+                    ? IconButton(
+                        icon: const Icon(Icons.arrow_back, color: Colors.white),
+                        onPressed: () {
+                          Navigator.pop(context);
+                        },
+                      )
+                    : GestureDetector(
+                        onTap: () {
+                          routeToPage(context, const CloneChatPage(), replace: false);
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: SvgPicture.asset(
+                            Assets.images.icCloneChat.path,
+                            width: 24,
+                            height: 24,
+                          ),
                         ),
-                      ),
-                    ),
+                      );
+              }),
               actions: [
                 // Only show settings icon for create_my_clone or home routing
-                if (widget.routing == PersonaProfileRouting.create_my_clone ||
-                    widget.routing == PersonaProfileRouting.home)
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: GestureDetector(
-                      onTap: () async {
-                        MixpanelManager().pageOpened('Settings');
-                        String language = SharedPreferencesUtil().recordingsLanguage;
-                        bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
-                        String transcriptModel = SharedPreferencesUtil().transcriptionModel;
-                        await routeToPage(context, const SettingsPage());
+                Consumer<PersonaProvider>(builder: (context, personaProvider, _) {
+                  if (personaProvider.routing == PersonaProfileRouting.create_my_clone ||
+                      personaProvider.routing == PersonaProfileRouting.home)
+                    return Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: GestureDetector(
+                        onTap: () async {
+                          MixpanelManager().pageOpened('Settings');
+                          String language = SharedPreferencesUtil().recordingsLanguage;
+                          bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
+                          String transcriptModel = SharedPreferencesUtil().transcriptionModel;
+                          await routeToPage(context, const SettingsPage());
 
-                        if (language != SharedPreferencesUtil().recordingsLanguage ||
-                            hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
-                            transcriptModel != SharedPreferencesUtil().transcriptionModel) {
-                          if (context.mounted) {
-                            context.read<CaptureProvider>().onRecordProfileSettingChanged();
+                          if (language != SharedPreferencesUtil().recordingsLanguage ||
+                              hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
+                              transcriptModel != SharedPreferencesUtil().transcriptionModel) {
+                            if (context.mounted) {
+                              context.read<CaptureProvider>().onRecordProfileSettingChanged();
+                            }
                           }
-                        }
-                      },
-                      child: SvgPicture.asset(
-                        'assets/images/ic_setting_persona.svg',
-                        width: 44,
-                        height: 44,
+                        },
+                        child: SvgPicture.asset(
+                          'assets/images/ic_setting_persona.svg',
+                          width: 44,
+                          height: 44,
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                  return const SizedBox.shrink();
+                }),
               ],
             ),
             body: persona == null
@@ -139,7 +131,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                               alignment: Alignment.center,
                               children: [
                                 GestureDetector(
-                                  onTap: _isPersonaEditable() && !provider.isLoading
+                                  onTap: _isPersonaEditable(provider.routing) && !provider.isLoading
                                       ? () async {
                                           await provider.pickAndUpdateImage();
                                         }
@@ -171,7 +163,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                                     ),
                                         ),
                                       ),
-                                      if (_isPersonaEditable() && !provider.isLoading)
+                                      if (_isPersonaEditable(provider.routing) && !provider.isLoading)
                                         Positioned.fill(
                                           child: Opacity(
                                             opacity: 1.0,
@@ -214,7 +206,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                             ),
                             const SizedBox(height: 16),
                             GestureDetector(
-                              onTap: _isPersonaEditable()
+                              onTap: _isPersonaEditable(provider.routing)
                                   ? () {
                                       _showNameEditDialog(context, persona, provider);
                                     }
@@ -237,7 +229,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                     color: Colors.blue,
                                     size: 20,
                                   ),
-                                  if (_isPersonaEditable())
+                                  if (_isPersonaEditable(provider.routing))
                                     Container(
                                       margin: const EdgeInsets.only(left: 8.0),
                                       padding: const EdgeInsets.all(4),
@@ -287,7 +279,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                 ),
                               ),
                             ),
-                            if (_isPersonaEditable()) ...[
+                            if (_isPersonaEditable(provider.routing)) ...[
                               const SizedBox(height: 16),
                               Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 24.0),
