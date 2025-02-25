@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+<svg xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:svg="http://www.w3.org/2000/svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="66.145836mm" height="66.145836mm" viewBox="0 0 66.145836 66.145836" version="1.1" id="svg8" inkscape:version="0.92.2 (5c3e80d, 2017-08-06)" sodipodi:docname="iMessage logo.svg">
+  <title id="title907">iMessage  logo</title>
+  <defs id="defs2">
+    <linearGradient inkscape:collect="always" id="linearGradient899">
+      <stop style="stop-color:#0cbd2a;stop-opacity:1" offset="0" id="stop895"/>
+      <stop style="stop-color:#5bf675;stop-opacity:1" offset="1" id="stop897"/>
+    </linearGradient>
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient899" id="linearGradient901" x1="-25.272568" y1="207.52057" x2="-25.272568" y2="152.9982" gradientUnits="userSpaceOnUse" gradientTransform="matrix(0.98209275,0,0,0.98209275,-1.0651782,3.7961838)"/>
+  </defs>
+  <sodipodi:namedview id="base" pagecolor="#ffffff" bordercolor="#666666" borderopacity="1.0" inkscape:pageopacity="0.0" inkscape:pageshadow="2" inkscape:zoom="1" inkscape:cx="142.01984" inkscape:cy="61.975439" inkscape:document-units="px" inkscape:current-layer="layer1" showgrid="false" inkscape:snap-object-midpoints="false" showguides="true" inkscape:guide-bbox="true" inkscape:snap-intersection-paths="false" inkscape:window-width="1920" inkscape:window-height="1017" inkscape:window-x="1358" inkscape:window-y="-8" inkscape:window-maximized="1" fit-margin-top="0" fit-margin-left="0" fit-margin-right="0" fit-margin-bottom="0"/>
+  <metadata id="metadata5">
+    <rdf:RDF>
+      <cc:Work rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+        <dc:title>iMessage  logo</dc:title>
+        <dc:date>02/04/2018</dc:date>
+        <dc:creator>
+          <cc:Agent>
+            <dc:title>Apple, Inc.</dc:title>
+          </cc:Agent>
+        </dc:creator>
+        <dc:publisher>
+          <cc:Agent>
+            <dc:title>CMetalCore</dc:title>
+          </cc:Agent>
+        </dc:publisher>
+        <dc:source>https://upload.wikimedia.org/wikipedia/commons/8/85/IMessage_icon.png</dc:source>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <g inkscape:label="Capa 1" inkscape:groupmode="layer" id="layer1" transform="translate(59.483067,-145.8456)">
+    <g id="g963">
+      <rect ry="14.567832" rx="14.567832" y="145.8456" x="-59.483067" height="66.145836" width="66.145836" id="rect826" style="opacity:1;fill:url(#linearGradient901);fill-opacity:1;stroke:none;stroke-width:1.33634758;stroke-linecap:square;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;paint-order:markers stroke fill"/>
+      <path inkscape:connector-curvature="0" id="path922" d="m -26.410149,157.29606 a 24.278298,20.222157 0 0 0 -24.278105,20.22202 24.278298,20.222157 0 0 0 11.79463,17.31574 27.365264,20.222157 0 0 1 -4.245218,5.94228 23.85735,20.222157 0 0 0 9.86038,-3.87367 24.278298,20.222157 0 0 0 6.868313,0.83768 24.278298,20.222157 0 0 0 24.2781059,-20.22203 24.278298,20.222157 0 0 0 -24.2781059,-20.22202 z" style="opacity:1;fill:#ffffff;fill-opacity:1;stroke:none;stroke-width:1.56409621;stroke-linecap:square;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;paint-order:markers stroke fill"/>
+    </g>
+  </g>
+</svg>

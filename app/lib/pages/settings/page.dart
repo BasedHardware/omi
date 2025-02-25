@@ -120,6 +120,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         Navigator.of(context).pop();
                       }, () async {
                         SharedPreferencesUtil().hasOmiDevice = null;
+                        SharedPreferencesUtil().verifiedPersonaId = null;
                         await signOut();
                         Navigator.of(context).pop();
                         routeToPage(context, const DeciderWidget(), replace: true);

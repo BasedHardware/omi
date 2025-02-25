@@ -604,3 +604,21 @@ Future<bool> migrateAppOwnerId(String oldId) async {
     return false;
   }
 }
+
+Future<Map<String, dynamic>?> getUpsertUserPersonaServer() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/user/persona',
+    headers: {},
+    body: '',
+    method: 'POST',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return null;
+    log('getUpsertUserPersonaServer: ${response.body}');
+    return jsonDecode(response.body);
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return null;
+  }
+}
