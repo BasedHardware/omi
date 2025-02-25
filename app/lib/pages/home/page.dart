@@ -374,7 +374,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                             ConversationsPage(),
                             ChatPage(isPivotBottom: false),
                             AppsPage(),
-                            PersonaProfilePage(),
+                            PersonaProfilePage(bottomMargin: 120),
                           ],
                         ),
                       ),

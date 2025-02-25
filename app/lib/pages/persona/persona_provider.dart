@@ -20,7 +20,7 @@ class PersonaProvider extends ChangeNotifier {
   // Routing state for persona profile
   PersonaProfileRouting _routing = PersonaProfileRouting.home;
   PersonaProfileRouting get routing => _routing;
-  
+
   void setRouting(PersonaProfileRouting routing, {App? app}) {
     _routing = routing;
     if (app != null) {
@@ -29,6 +29,7 @@ class PersonaProvider extends ChangeNotifier {
     }
     notifyListeners();
   }
+
   final GlobalKey<FormState> formKey = GlobalKey<FormState>();
   TextEditingController nameController = TextEditingController(text: SharedPreferencesUtil().givenName);
   TextEditingController usernameController = TextEditingController();
@@ -112,9 +113,7 @@ class PersonaProvider extends ChangeNotifier {
   Future getVerifiedUserPersona() async {
     setIsLoading(true);
 
-    debugPrint("verified persona id ${_verifiedPersonaId}");
-
-    if (_verifiedPersonaId == null) {
+    if (_verifiedPersonaId == null || routing != PersonaProfileRouting.no_device) {
       // If no verified persona ID exists, get or create one
       var res = await getUpsertUserPersonaServer();
       if (res != null) {
@@ -380,5 +379,14 @@ class PersonaProvider extends ChangeNotifier {
     } finally {
       setIsLoading(false);
     }
+  }
+
+  Future onTwitterVerifiedCompleted() async {
+    if (routing == PersonaProfileRouting.no_device) {
+      return;
+    }
+
+    // update
+    updatePersona();
   }
 }

@@ -155,7 +155,8 @@ async def update_persona(persona_id: str, persona_data: str = Form(...), file: U
 
     # Image
     if file:
-        delete_plugin_logo(persona['image'])
+        if 'image' in persona and len(persona['image']) > 0:
+            delete_plugin_logo(persona['image'])
         os.makedirs(f'_temp/plugins', exist_ok=True)
         file_path = f"_temp/plugins/{file.filename}"
         with open(file_path, 'wb') as f:
@@ -269,7 +270,8 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
     if plugin['uid'] != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if file:
-        delete_plugin_logo(plugin['image'])
+        if 'image' in plugin and len(plugin['image']) > 0:
+            delete_plugin_logo(plugin['image'])
         os.makedirs(f'_temp/plugins', exist_ok=True)
         file_path = f"_temp/plugins/{file.filename}"
         with open(file_path, 'wb') as f:

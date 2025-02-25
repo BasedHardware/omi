@@ -6,6 +6,7 @@ import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/pages/chat/clone_chat_page.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
+import 'package:friend_private/pages/persona/twitter/social_profile.dart';
 import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -16,8 +17,11 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class PersonaProfilePage extends StatefulWidget {
+  final double? bottomMargin;
+
   const PersonaProfilePage({
     super.key,
+    this.bottomMargin,
   });
 
   @override
@@ -125,6 +129,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                 : Stack(
                     children: [
                       SingleChildScrollView(
+                        padding: EdgeInsets.only(bottom: widget.bottomMargin ?? 0),
                         child: Column(
                           children: [
                             Stack(
@@ -251,7 +256,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                     'persona_username': persona.username ?? '',
                                   });
                                   Share.share(
-                                    'Check out this Persona on Omi AI: ${persona.name} by me \n\nhttps://personas.omi.me/u/${persona.username}',
+                                    'https://personas.omi.me/u/${persona.username}',
                                     subject: '${persona.getName()} Persona',
                                   );
                                 },
@@ -485,10 +490,20 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                     ),
                                     const SizedBox(height: 12),
                                   ],
-                                  _buildSocialLink(
-                                    icon: Assets.images.xLogoMini.path,
-                                    text: persona.twitter?['username'] ?? 'username',
-                                    isConnected: provider.hasTwitterConnection,
+                                  GestureDetector(
+                                    onTap: () {
+                                      if (!provider.hasTwitterConnection) {
+                                        routeToPage(context, const SocialHandleScreen());
+                                      } else {
+                                        provider.disconnectTwitter();
+                                      }
+                                    },
+                                    child: _buildSocialLink(
+                                      icon: Assets.images.xLogoMini.path,
+                                      text: persona.twitter?['username'] ?? '@username',
+                                      isConnected: provider.hasTwitterConnection,
+                                      showConnect: !provider.hasTwitterConnection,
+                                    ),
                                   ),
                                   const SizedBox(height: 12),
                                   _buildSocialLink(

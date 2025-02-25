@@ -204,7 +204,10 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                         ),
                       ),
                     TextButton(
-                      onPressed: _handleNavigation,
+                      onPressed: () {
+                        provider.onTwitterVerifiedCompleted();
+                        _handleNavigation();
+                      },
                       child: Text(
                         FirebaseAuth.instance.currentUser?.isAnonymous == false
                             ? 'Continue creating your persona'
