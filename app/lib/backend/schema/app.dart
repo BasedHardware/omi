@@ -199,6 +199,7 @@ class App {
   List<String> thumbnailIds;
   List<String> thumbnailUrls;
   String? username;
+  String? appSecret;
 
   App({
     required this.id,
@@ -236,6 +237,7 @@ class App {
     this.username,
     this.connectedAccounts = const [],
     this.twitter,
+    this.appSecret,
   });
 
   String getName() {
@@ -294,6 +296,7 @@ class App {
       username: json['username'],
       connectedAccounts: (json['connected_accounts'] as List<dynamic>?)?.cast<String>() ?? [],
       twitter: json['twitter'],
+      appSecret: json['app_secret'],
     );
   }
 
@@ -380,6 +383,7 @@ class App {
       'price': price,
       'is_user_paid': isUserPaid,
       'payment_link': paymentLink,
+      'app_secret': appSecret,
     };
   }
 
