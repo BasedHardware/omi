@@ -35,6 +35,7 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
     } else {
       // Anonymous user, just go to profile
       Posthog().capture(eventName: 'x_connected', properties: {'existing_omi_user': false});
+      Provider.of<PersonaProvider>(context, listen: false).setRouting(PersonaProfileRouting.no_device);
       routeToPage(context, const PersonaProfilePage(), replace: true);
     }
   }

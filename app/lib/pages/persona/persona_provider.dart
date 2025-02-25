@@ -18,7 +18,7 @@ enum PersonaProfileRouting {
 
 class PersonaProvider extends ChangeNotifier {
   // Routing state for persona profile
-  PersonaProfileRouting _routing = PersonaProfileRouting.home;
+  PersonaProfileRouting _routing = PersonaProfileRouting.no_device;
   PersonaProfileRouting get routing => _routing;
 
   void setRouting(PersonaProfileRouting routing, {App? app}) {
