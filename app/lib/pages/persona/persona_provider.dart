@@ -167,7 +167,7 @@ class PersonaProvider extends ChangeNotifier {
 
   void validateForm() {
     bool hasValidImage = selectedImage != null || selectedImageUrl != null;
-    bool hasValidFormFields = formKey.currentState!.validate();
+    bool hasValidFormFields = true; //formKey.currentState!.validate(); // dont use form for now
     bool hasKnowledgeData = hasOmiConnection || hasTwitterConnection;
 
     isFormValid = hasValidImage && hasValidFormFields && hasKnowledgeData;

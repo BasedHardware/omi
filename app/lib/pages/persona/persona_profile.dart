@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/gen/assets.gen.dart';
+import 'dart:io';
 import 'package:friend_private/pages/chat/clone_chat_page.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
@@ -37,6 +38,7 @@ class PersonaProfilePage extends StatefulWidget {
 }
 
 class _PersonaProfilePageState extends State<PersonaProfilePage> {
+  bool _isUploading = false;
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -133,8 +135,16 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                               onTap: (widget.routing == PersonaProfileRouting.home ||
                                       widget.routing == PersonaProfileRouting.apps_updates ||
                                       widget.routing == PersonaProfileRouting.create_my_clone)
-                                  ? () {
-                                      provider.pickAndUpdateImage();
+                                  ? () async {
+                                      if (!_isUploading) {
+                                        setState(() {
+                                          _isUploading = true;
+                                        });
+                                        await provider.pickAndUpdateImage();
+                                        setState(() {
+                                          _isUploading = false;
+                                        });
+                                      }
                                     }
                                   : null,
                               child: Stack(
@@ -164,21 +174,39 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                                 ),
                                     ),
                                   ),
-                                  if (widget.routing == PersonaProfileRouting.apps_updates ||
-                                      widget.routing == PersonaProfileRouting.create_my_clone)
-                                    Positioned(
-                                      right: 0,
-                                      bottom: 0,
-                                      child: Container(
-                                        padding: const EdgeInsets.all(4),
-                                        decoration: const BoxDecoration(
-                                          color: Colors.blue,
-                                          shape: BoxShape.circle,
+                                  if ((widget.routing == PersonaProfileRouting.apps_updates ||
+                                          widget.routing == PersonaProfileRouting.home ||
+                                          widget.routing == PersonaProfileRouting.create_my_clone) &&
+                                      !_isUploading)
+                                    Positioned.fill(
+                                      child: Opacity(
+                                        opacity: 1.0,
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: Colors.black.withOpacity(0.3),
+                                          ),
+                                          child: const Center(
+                                            child: Icon(
+                                              Icons.camera_alt,
+                                              color: Colors.white,
+                                              size: 30,
+                                            ),
+                                          ),
                                         ),
-                                        child: const Icon(
-                                          Icons.edit,
-                                          color: Colors.white,
-                                          size: 16,
+                                      ),
+                                    ),
+                                  if (_isUploading)
+                                    Positioned.fill(
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Colors.black.withOpacity(0.5),
+                                        ),
+                                        child: const Center(
+                                          child: CircularProgressIndicator(
+                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -232,10 +260,12 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                 size: 20,
                               ),
                               if (widget.routing == PersonaProfileRouting.apps_updates ||
+                                  widget.routing == PersonaProfileRouting.home ||
                                   widget.routing == PersonaProfileRouting.create_my_clone)
-                                const Padding(
-                                  padding: EdgeInsets.only(left: 8.0),
-                                  child: Icon(
+                                Container(
+                                  margin: const EdgeInsets.only(left: 8.0),
+                                  padding: const EdgeInsets.all(4),
+                                  child: const Icon(
                                     Icons.edit,
                                     color: Colors.white,
                                     size: 16,
