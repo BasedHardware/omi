@@ -6,9 +6,12 @@ import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/pages/chat/clone_chat_page.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
+import 'package:friend_private/providers/app_provider.dart';
+import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/pages/persona/twitter/social_profile.dart';
 import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
+import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
@@ -73,8 +76,27 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                         },
                       )
                     : GestureDetector(
-                        onTap: () {
-                          routeToPage(context, const CloneChatPage(), replace: false);
+                        onTap: () async {
+                          if (personaProvider.routing == PersonaProfileRouting.no_device) {
+                            routeToPage(context, const CloneChatPage(), replace: false);
+                          } else {
+                            context.read<HomeProvider>().setIndex(1);
+                            if (context.read<HomeProvider>().onSelectedIndexChanged != null) {
+                              context.read<HomeProvider>().onSelectedIndexChanged!(1);
+                            }
+                            var appId = persona!.id;
+                            var appProvider = Provider.of<AppProvider>(context, listen: false);
+                            var messageProvider = Provider.of<MessageProvider>(context, listen: false);
+                            App? selectedApp;
+                            if (appId.isNotEmpty) {
+                              selectedApp = await appProvider.getAppFromId(appId);
+                            }
+                            appProvider.setSelectedChatAppId(appId);
+                            await messageProvider.refreshMessages();
+                            if (messageProvider.messages.isEmpty) {
+                              messageProvider.sendInitialAppMessage(selectedApp);
+                            }
+                          }
                         },
                         child: Padding(
                           padding: const EdgeInsets.all(16.0),
