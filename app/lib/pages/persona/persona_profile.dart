@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/pages/chat/clone_chat_page.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
-import 'package:friend_private/pages/persona/update_persona.dart';
-import 'package:friend_private/providers/auth_provider.dart';
-import 'package:friend_private/utils/alerts/app_snackbar.dart';
-import 'package:friend_private/utils/other/string_utils.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
@@ -15,9 +12,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class PersonaProfilePage extends StatefulWidget {
-  const PersonaProfilePage({
-    super.key,
-  });
+  const PersonaProfilePage({super.key});
 
   @override
   State<PersonaProfilePage> createState() => _PersonaProfilePageState();
@@ -36,6 +31,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
   @override
   Widget build(BuildContext context) {
     return Consumer<PersonaProvider>(builder: (context, provider, child) {
+      App? persona = provider.userPersona;
       return Stack(
         children: [
           Positioned.fill(
@@ -62,7 +58,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                 ),
               ),
             ),
-            body: provider.isLoading || provider.userPersona == null
+            body: provider.isLoading || persona == null
                 ? const Center(
                     child: CircularProgressIndicator(
                       valueColor: AlwaysStoppedAnimation(Colors.white),
@@ -86,10 +82,10 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                               ),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(50),
-                                child: provider.userPersona == null
+                                child: persona.image.isEmpty
                                     ? Image.asset(Assets.images.logoTransparentV2.path)
                                     : Image.network(
-                                        provider.userPersona!.image,
+                                        persona.image,
                                         fit: BoxFit.cover,
                                       ),
                               ),
@@ -119,7 +115,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                           children: [
                             const SizedBox(width: 4),
                             Text(
-                              provider.userPersona!.getName(),
+                              persona.getName(),
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 24,
@@ -148,11 +144,11 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                           child: TextButton(
                             onPressed: () async {
                               await Posthog().capture(eventName: 'share_persona_clicked', properties: {
-                                'persona_username': provider.userPersona!.username ?? '',
+                                'persona_username': persona.username ?? '',
                               });
                               Share.share(
-                                'Check out this Persona on Omi AI: ${provider.userPersona!.name} by me \n\nhttps://personas.omi.me/u/${provider.userPersona!.username}',
-                                subject: '${provider.userPersona!.getName()} Persona',
+                                'Check out this Persona on Omi AI: ${persona.name} by me \n\nhttps://personas.omi.me/u/${persona.username}',
+                                subject: '${persona.getName()} Persona',
                               );
                             },
                             style: TextButton.styleFrom(
@@ -346,7 +342,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                               ),
                               _buildSocialLink(
                                 icon: Assets.images.xLogoMini.path,
-                                text: provider.userPersona!.username ?? 'username',
+                                text: persona.username ?? 'username',
                                 isConnected: true,
                               ),
                               const SizedBox(height: 12),
