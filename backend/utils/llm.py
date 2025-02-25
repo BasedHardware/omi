@@ -1423,6 +1423,7 @@ class OutputQuestion(BaseModel):
 
 def extract_question_from_conversation(messages: List[Message]) -> str:
     # user last messages
+    print("extract_question_from_conversation")
     user_message_idx = len(messages)
     for i in range(len(messages) - 1, -1, -1):
         if messages[i].sender == MessageSender.ai:
