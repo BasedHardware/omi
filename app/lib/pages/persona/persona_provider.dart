@@ -126,6 +126,9 @@ class PersonaProvider extends ChangeNotifier {
     }
     makePersonaPublic = value;
     notifyListeners();
+
+    // Update
+    updatePersona();
   }
 
   void prepareUpdatePersona(App app) {
