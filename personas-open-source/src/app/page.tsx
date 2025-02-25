@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, query, where, getDocs, orderBy, startAfter, limit } from 'firebase/firestore';
+import { collection, addDoc, query, where, getDocs, orderBy, startAfter, limit, doc, setDoc } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Search, Plus, BadgeCheck } from 'lucide-react';
@@ -16,6 +16,8 @@ import { PreorderBanner } from '@/components/shared/PreorderBanner';
 import { Mixpanel } from '@/lib/mixpanel';
 import { useInView } from 'react-intersection-observer';
 import { TwitterProfile } from '@/types/twitter';
+import { ulid } from 'ulid';
+import { auth } from '@/lib/firebase';
 
 type Chatbot = {
   id: string;
@@ -261,29 +263,45 @@ ${extraPromptRules}
 
 Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your personality. Responses should help the conversation go deeper. You have strong opinions, slightly controversial.`;
 
+      const persona_id = ulid();
+      console.log(auth.currentUser?.uid);
+      console.log(persona_id);
+      const docData = {
+        'id': persona_id,
+        'name': profileData.name,
+        'username': cleanHandle.toLowerCase(),
+        'description': profileData.desc || 'This is my personal AI clone',
+        'image': formattedAvatarUrl,
+        'uid': auth.currentUser?.uid || null,
+        'author': profileData.name,
+        'email': '',
+        'approved': true,
+        'deleted': false,
+        'status': 'approved',
+        'category': 'personality-emulation',
+        'capabilities': ['persona'],
+        'connected_accounts': ['twitter'],
+        'created_at': new Date().toISOString(),
+        'private': false,
+        'persona_prompt': fullChatPrompt,
+        'avatar': formattedAvatarUrl,
+        'twitter': {
+          'username': cleanHandle.toLowerCase(),
+          'avatar': formattedAvatarUrl,
+          'connected_at': new Date().toISOString(),
+        }
+      };
 
-      try {
-        const createdAtFormatted = formatDate(new Date().toISOString());
-        const docRef = await addDoc(collection(db, 'plugins_data'), {
-          username: cleanHandle.toLowerCase().replace('@', ''),
-          avatar: formattedAvatarUrl,
-          profile: profileData.desc || 'No description available',
-          desc: enhancedDesc,
-          name: profileData.name,
-          sub_count: profileData.sub_count || 0,
-          category: 'twitter',
-          created_at: createdAtFormatted,
-          chat_prompt: fullChatPrompt,
-        });
+      const docRef = await setDoc(doc(db, 'plugins_data', persona_id), docData);
 
-        toast.success('Profile saved successfully!');
+      // Store the created persona ID in localStorage
+      const createdPersonas = JSON.parse(localStorage.getItem('createdPersonas') || '[]');
+      createdPersonas.push(persona_id);
+      localStorage.setItem('createdPersonas', JSON.stringify(createdPersonas));
 
-        router.push(`/chat?id=${docRef.id}`);
-      } catch (firebaseError) {
-        console.error('Firebase error:', firebaseError);
-        toast.error('Failed to save profile');
-      }
+      toast.success('Profile saved successfully!');
 
+      router.push(`/chat?id=${persona_id}`);
     } catch (error) {
       console.error('Error fetching Twitter profile:', error);
       toast.error('Failed to fetch Twitter profile');
