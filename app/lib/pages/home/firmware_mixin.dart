@@ -6,7 +6,9 @@ import 'package:flutter/widgets.dart';
 import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/env/env.dart';
+import 'package:friend_private/http/api/device.dart';
 import 'package:friend_private/services/services.dart';
+import 'package:friend_private/utils/device.dart';
 import 'package:nordic_dfu/nordic_dfu.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
@@ -21,6 +23,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   bool isInstalling = false;
   bool isInstalled = false;
   int installProgress = 1;
+  List<String> otaUpdateSteps = [];
 
   // TODO: thinh, use connection directly
   Future _bleDisconnectDevice(BtDevice btDevice) async {
@@ -84,57 +87,31 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       required String firmwareRevision,
       required String hardwareRevision,
       required String manufacturerName}) async {
-    var res = await makeApiCall(
-        url:
-            "${Env.apiBaseUrl}v2/firmware/latest?device_model=$deviceModelNumber&firmware_revision=$firmwareRevision&hardware_revision=$hardwareRevision&manufacturer_name=$manufacturerName",
-        headers: {},
-        body: '',
-        method: 'GET');
-    if (res == null) {
-      latestFirmwareDetails = {};
-      return;
-    }
-    if (res.statusCode == 200) {
-      latestFirmwareDetails = jsonDecode(res.body);
+    latestFirmwareDetails = await getLatestFirmwareVersion(
+      deviceModelNumber: deviceModelNumber,
+      firmwareRevision: firmwareRevision,
+      hardwareRevision: hardwareRevision,
+      manufacturerName: manufacturerName,
+    );
+    if (latestFirmwareDetails['ota_update_steps'] != null) {
+      otaUpdateSteps = List<String>.from(latestFirmwareDetails['ota_update_steps']);
     }
   }
 
-  Future<(String, bool)> shouldUpdateFirmware({required String currentFirmware, required String deviceName}) async {
-    Version currentVersion = Version.parse(currentFirmware);
-    if (latestFirmwareDetails.isEmpty) {
-      return ('Latest Version Not Available', false);
-    }
-    if (latestFirmwareDetails.isEmpty || latestFirmwareDetails['version'] == null) {
-      return ('Latest Version Not Available', false);
-    }
-    if (latestFirmwareDetails['version'] == null || latestFirmwareDetails['draft']) {
-      return ('Latest Version Not Available', false);
-    }
-    Version latestVersion = Version.parse(latestFirmwareDetails['version']);
-    Version minVersion = Version.parse(latestFirmwareDetails['min_version']);
-    if (currentVersion < minVersion) {
-      return ('0', false);
-    } else {
-      if (latestVersion > currentVersion) {
-        PackageInfo packageInfo = await PackageInfo.fromPlatform();
-        if (Version.parse(packageInfo.version) <= Version.parse(latestFirmwareDetails['min_app_version']) &&
-            int.parse(packageInfo.buildNumber) < int.parse(latestFirmwareDetails['min_app_version_code'])) {
-          return (
-            'The latest version of firmware is not compatible with this version of App (${packageInfo.version}+${packageInfo.buildNumber}). Please update the app from ${Platform.isAndroid ? 'Play Store' : 'App Store'}',
-            false
-          );
-        } else {
-          return ('A new version is available! Update your Omi now.', true);
-        }
-      } else {
-        return ('You are already on the latest version', false);
-      }
-    }
+  Future<(String, bool)> shouldUpdateFirmware({required String currentFirmware}) async {
+    return DeviceUtils.shouldUpdateFirmware(
+        currentFirmware: currentFirmware, latestFirmwareDetails: latestFirmwareDetails);
   }
 
   Future downloadFirmware() async {
+    final zipUrl = latestFirmwareDetails['zip_url'];
+    if (zipUrl == null) {
+      debugPrint('Error: zip_url is null in latestFirmwareDetails');
+      return;
+    }
+
     var httpClient = http.Client();
-    var request = http.Request('GET', Uri.parse(latestFirmwareDetails['zip_url']));
+    var request = http.Request('GET', Uri.parse(zipUrl));
     var response = httpClient.send(request);
     String dir = (await getApplicationDocumentsDirectory()).path;
 

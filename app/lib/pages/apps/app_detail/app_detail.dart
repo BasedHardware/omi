@@ -1,6 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shimmer/shimmer.dart';
+import 'package:friend_private/pages/apps/app_home_web_page.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:friend_private/pages/apps/widgets/full_screen_image_viewer.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -68,13 +71,26 @@ class _AppDetailPageState extends State<AppDetailPage> {
     app = widget.app;
     showInstallAppConfirmation = SharedPreferencesUtil().showInstallAppConfirmation;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Automatically open app home page if conditions are met
+      if (app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => AppHomeWebPage(app: app),
+          ),
+        );
+      }
+      // Load details
       setIsLoading(true);
       var res = await context.read<AppProvider>().getAppDetails(app.id);
-      setState(() {
-        if (res != null) {
-          app = res;
-        }
-      });
+      if (mounted) {
+        setState(() {
+          if (res != null) {
+            app = res;
+          }
+        });
+      }
+
       setIsLoading(false);
       context.read<AppProvider>().checkIsAppOwner(app.uid);
       context.read<AppProvider>().setIsAppPublicToggled(!app.private);
@@ -144,45 +160,65 @@ class _AppDetailPageState extends State<AppDetailPage> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         elevation: 0,
         actions: [
-          app.enabled && app.worksWithChat()
-              ? GestureDetector(
-                  child: const Icon(Icons.question_answer),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    context.read<HomeProvider>().setIndex(1);
-                    if (context.read<HomeProvider>().onSelectedIndexChanged != null) {
-                      context.read<HomeProvider>().onSelectedIndexChanged!(1);
-                    }
-                    var appId = app.id;
-                    var appProvider = Provider.of<AppProvider>(context, listen: false);
-                    var messageProvider = Provider.of<MessageProvider>(context, listen: false);
-                    App? selectedApp;
-                    if (appId.isNotEmpty) {
-                      selectedApp = await appProvider.getAppFromId(appId);
-                    }
-                    appProvider.setSelectedChatAppId(appId);
-                    await messageProvider.refreshMessages();
-                    if (messageProvider.messages.isEmpty) {
-                      messageProvider.sendInitialAppMessage(selectedApp);
-                    }
-                  },
-                )
-              : const SizedBox.shrink(),
-          app.enabled && app.worksWithChat()
-              ? const SizedBox(
-                  width: 24,
-                )
-              : const SizedBox.shrink(),
-          isLoading
+          if (app.enabled && app.worksWithChat()) ...[
+            GestureDetector(
+              child: const Icon(Icons.question_answer),
+              onTap: () async {
+                Navigator.pop(context);
+                context.read<HomeProvider>().setIndex(1);
+                if (context.read<HomeProvider>().onSelectedIndexChanged != null) {
+                  context.read<HomeProvider>().onSelectedIndexChanged!(1);
+                }
+                var appId = app.id;
+                var appProvider = Provider.of<AppProvider>(context, listen: false);
+                var messageProvider = Provider.of<MessageProvider>(context, listen: false);
+                App? selectedApp;
+                if (appId.isNotEmpty) {
+                  selectedApp = await appProvider.getAppFromId(appId);
+                }
+                appProvider.setSelectedChatAppId(appId);
+                await messageProvider.refreshMessages();
+                if (messageProvider.messages.isEmpty) {
+                  messageProvider.sendInitialAppMessage(selectedApp);
+                }
+              },
+            ),
+            const SizedBox(width: 24),
+          ],
+          if (app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true) ...[
+            GestureDetector(
+              child: const Icon(
+                Icons.open_in_browser_rounded,
+                color: Colors.white,
+              ),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => AppHomeWebPage(app: app),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(width: 24),
+          ],
+          isLoading || app.private
               ? const SizedBox.shrink()
               : GestureDetector(
                   child: const Icon(Icons.share),
                   onTap: () {
                     MixpanelManager().track('App Shared', properties: {'appId': app.id});
-                    Share.share(
-                      'Check out this app on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${app.id}',
-                      subject: app.name,
-                    );
+                    if (app.isNotPersona()) {
+                      Share.share(
+                        'Check out this app on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${app.id}',
+                        subject: app.name,
+                      );
+                    } else {
+                      Share.share(
+                        'Check out this Persona on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://personas.omi.me/u/${app.username}',
+                        subject: app.name,
+                      );
+                    }
                   },
                 ),
           !context.watch<AppProvider>().isAppOwner
@@ -601,24 +637,118 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       ),
                       title: const Text(
                         'Integration Instructions',
-                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+                        style: TextStyle(fontWeight: FontWeight.w500, fontSize: 18),
                       ),
                     )
                   : const SizedBox.shrink(),
+              if (app.thumbnailUrls.isNotEmpty) ...[
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 16),
+                  child: Text(
+                    'Preview',
+                    style: TextStyle(color: Colors.white, fontSize: 18),
+                  ),
+                ),
+                SizedBox(
+                  height: MediaQuery.of(context).size.width * 0.9,
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    scrollDirection: Axis.horizontal,
+                    itemCount: app.thumbnailUrls.length,
+                    itemBuilder: (context, index) {
+                      final screenWidth = MediaQuery.of(context).size.width;
+                      // Calculate width to show 1.5 thumbnails
+                      final width = screenWidth * 0.65;
+                      // Calculate height to maintain 2:3 ratio (height = width * 1.5)
+                      final height = width * 1.5;
+
+                      return GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => FullScreenImageViewer(
+                                imageUrl: app.thumbnailUrls[index],
+                              ),
+                            ),
+                          );
+                        },
+                        child: CachedNetworkImage(
+                          imageUrl: app.thumbnailUrls[index],
+                          imageBuilder: (context, imageProvider) => Container(
+                            width: width,
+                            height: height,
+                            clipBehavior: Clip.hardEdge,
+                            margin: EdgeInsets.only(
+                              left: index == 0 ? 16 : 8,
+                              right: index == app.thumbnailUrls.length - 1 ? 16 : 8,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: const Color(0xFF424242),
+                                width: 1,
+                              ),
+                              image: DecorationImage(
+                                image: imageProvider,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                          placeholder: (context, url) => Shimmer.fromColors(
+                            baseColor: Colors.grey[900]!,
+                            highlightColor: Colors.grey[800]!,
+                            child: Container(
+                              width: width,
+                              height: height,
+                              margin: EdgeInsets.only(
+                                left: index == 0 ? 16 : 8,
+                                right: index == app.thumbnailUrls.length - 1 ? 16 : 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                          errorWidget: (context, url, error) => Container(
+                            width: width,
+                            height: height,
+                            margin: EdgeInsets.only(
+                              left: index == 0 ? 16 : 8,
+                              right: index == app.thumbnailUrls.length - 1 ? 16 : 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[900],
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.error),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
               InfoCardWidget(
                 onTap: () {
                   if (app.description.decodeString.characters.length > 200) {
                     routeToPage(
-                        context, MarkdownViewer(title: 'About the App', markdown: app.description.decodeString));
+                        context,
+                        MarkdownViewer(
+                            title: 'About the ${app.isNotPersona() ? 'App' : 'Persona'}',
+                            markdown: app.description.decodeString));
                   }
                 },
-                title: 'About the App',
+                title: 'About the ${app.isNotPersona() ? 'App' : 'Persona'}',
                 description: app.description,
                 showChips: true,
-                chips: app
+                capabilityChips: app
                     .getCapabilitiesFromIds(context.read<AddAppProvider>().capabilities)
                     .map((e) => e.title)
                     .toList(),
+                connectionChips: app.getConnectedAccountNames(),
               ),
 
               app.conversationPrompt != null
@@ -658,7 +788,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 },
                 child: Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(18.0),
+                  padding: const EdgeInsets.all(16.0),
                   margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade900,
@@ -762,6 +892,20 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
       prefs.enableApp(appId);
       MixpanelManager().appEnabled(appId);
+
+      // Automatically open app home page after installation if available
+      if (app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
+        Future.delayed(const Duration(seconds: 1), () {
+          if (mounted) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => AppHomeWebPage(app: app),
+              ),
+            );
+          }
+        });
+      }
     } else {
       prefs.disableApp(appId);
       var res = await disableAppServer(appId);

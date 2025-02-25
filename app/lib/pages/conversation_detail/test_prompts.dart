@@ -56,7 +56,7 @@ class _TestPromptsPageState extends State<TestPromptsPage> {
                   padding: EdgeInsets.all(16),
                   child: Text(
                     'Result',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                   ),
                 ),
           result == ''

@@ -4,12 +4,12 @@ import 'package:app_links/app_links.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:friend_private/backend/auth.dart';
-import 'package:friend_private/backend/http/api/custom_auth.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/env/dev_env.dart';
 import 'package:friend_private/env/env.dart';
@@ -21,7 +21,10 @@ import 'package:friend_private/pages/apps/app_detail/app_detail.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:friend_private/pages/onboarding/device_selection.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
+import 'package:friend_private/pages/persona/persona_profile.dart';
+import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/providers/auth_provider.dart';
 import 'package:friend_private/providers/calendar_provider.dart';
@@ -46,6 +49,7 @@ import 'package:friend_private/utils/logger.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
+import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
@@ -68,15 +72,7 @@ Future<bool> _init() async {
   // TODO: thinh, move to app start
   await ServiceManager.instance().start();
 
-  bool isAuth = false;
-  try {
-    if (SharedPreferencesUtil().customBackendUrl.isNotEmpty) {
-      isAuth = await customAuthSignIn(SharedPreferencesUtil().email, SharedPreferencesUtil().customAuthPassword);
-    } else {
-      isAuth = (await getIdToken()) != null;
-    }
-  } catch (e) {} // if no connect this will fail
-
+  bool isAuth = (await getIdToken()) != null;
   if (isAuth) MixpanelManager().identify();
   initOpus(await opus_flutter.load());
 
@@ -84,6 +80,14 @@ Future<bool> _init() async {
   CalendarUtil.init();
   ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   return isAuth;
+}
+
+Future<void> initPostHog() async {
+  final config = PostHogConfig(Env.posthogApiKey!);
+  config.debug = true;
+  config.captureApplicationLifecycleEvents = true;
+  config.host = 'https://us.i.posthog.com';
+  await Posthog().setup(config);
 }
 
 void main() async {
@@ -94,6 +98,9 @@ void main() async {
     Env.init(DevEnv());
   }
   FlutterForegroundTask.initCommunicationPort();
+  if (Env.posthogApiKey != null) {
+    await initPostHog();
+  }
   // _setupAudioSession();
   bool isAuth = await _init();
   if (Env.instabugApiKey != null) {
@@ -205,12 +212,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 (previous?..setAppProvider(value)) ?? AddAppProvider(),
           ),
           ChangeNotifierProvider(create: (context) => PaymentMethodProvider()),
+          ChangeNotifierProvider(create: (context) => PersonaProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(
             child: MaterialApp(
               navigatorObservers: [
                 if (Env.instabugApiKey != null) InstabugNavigatorObserver(),
+                if (Env.posthogApiKey != null) PosthogObserver(),
               ],
               debugShowCheckedModeBanner: F.env == Environment.dev,
               title: F.title,
@@ -241,6 +250,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   textSelectionTheme: const TextSelectionThemeData(
                     cursorColor: Colors.white,
                     selectionColor: Colors.deepPurple,
+                    selectionHandleColor: Colors.white,
+                  ),
+                  cupertinoOverrideTheme: const CupertinoThemeData(
+                    primaryColor: Colors.white, // Controls the selection handles on iOS
                   )),
               themeMode: ThemeMode.dark,
               builder: (context, child) {
@@ -322,12 +335,16 @@ class _DeciderWidgetState extends State<DeciderWidget> {
         NotificationService.instance.saveNotificationToken();
       }
 
-      if (context.read<AuthenticationProvider>().user != null ||
-          (SharedPreferencesUtil().customBackendUrl.isNotEmpty && SharedPreferencesUtil().authToken.isNotEmpty)) {
+      if (context.read<AuthenticationProvider>().isSignedIn()) {
         context.read<HomeProvider>().setupHasSpeakerProfile();
-        IntercomManager.instance.intercom.loginIdentifiedUser(
-          userId: SharedPreferencesUtil().uid,
-        );
+        try {
+          await IntercomManager.instance.intercom.loginIdentifiedUser(
+            userId: SharedPreferencesUtil().uid,
+          );
+        } catch (e) {
+          debugPrint('Failed to login to Intercom: $e');
+        }
+
         context.read<MessageProvider>().setMessagesFromCache();
         context.read<AppProvider>().setAppsFromCache();
         context.read<MessageProvider>().refreshMessages();
@@ -343,13 +360,18 @@ class _DeciderWidgetState extends State<DeciderWidget> {
   Widget build(BuildContext context) {
     return Consumer<AuthenticationProvider>(
       builder: (context, authProvider, child) {
-        if (SharedPreferencesUtil().onboardingCompleted &&
-            (authProvider.user != null ||
-                (SharedPreferencesUtil().customBackendUrl.isNotEmpty &&
-                    SharedPreferencesUtil().authToken.isNotEmpty))) {
-          return const HomePageWrapper();
+        if (authProvider.isSignedIn()) {
+          if (SharedPreferencesUtil().onboardingCompleted) {
+            return const HomePageWrapper();
+          } else {
+            return const OnboardingWrapper();
+          }
+        } else if (SharedPreferencesUtil().hasOmiDevice == false &&
+            SharedPreferencesUtil().hasPersonaCreated &&
+            SharedPreferencesUtil().verifiedPersonaId != null) {
+          return const PersonaProfilePage();
         } else {
-          return const OnboardingWrapper();
+          return const DeviceSelectionPage();
         }
       },
     );

@@ -75,6 +75,34 @@ Future<bool> reviewApp(String appId, AppReview review) async {
   }
 }
 
+Future<Map<String, String>> uploadAppThumbnail(File file) async {
+  var request = http.MultipartRequest(
+    'POST',
+    Uri.parse('${Env.apiBaseUrl}v1/app/thumbnails'),
+  );
+  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+  request.headers.addAll({'Authorization': await getAuthHeader()});
+
+  try {
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      var data = jsonDecode(response.body);
+      return {
+        'thumbnail_url': data['thumbnail_url'],
+        'thumbnail_id': data['thumbnail_id'],
+      };
+    } else {
+      debugPrint('Failed to upload thumbnail. Status code: ${response.statusCode}');
+      return {};
+    }
+  } catch (e) {
+    debugPrint('An error occurred uploading thumbnail: $e');
+    return {};
+  }
+}
+
 Future<bool> updateAppReview(String appId, AppReview review) async {
   try {
     var response = await makeApiCall(
@@ -157,7 +185,7 @@ Future<bool> isAppSetupCompleted(String? url) async {
   }
 }
 
-Future<(bool, String)> submitAppServer(File file, Map<String, dynamic> appData) async {
+Future<(bool, String, String?)> submitAppServer(File file, Map<String, dynamic> appData) async {
   var request = http.MultipartRequest(
     'POST',
     Uri.parse('${Env.apiBaseUrl}v1/apps'),
@@ -165,25 +193,31 @@ Future<(bool, String)> submitAppServer(File file, Map<String, dynamic> appData) 
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
   request.headers.addAll({'Authorization': await getAuthHeader()});
   request.fields.addAll({'app_data': jsonEncode(appData)});
-  print(jsonEncode(appData));
+  debugPrint(jsonEncode(appData));
   try {
     var streamedResponse = await request.send();
     var response = await http.Response.fromStream(streamedResponse);
 
     if (response.statusCode == 200) {
-      debugPrint('submitAppServer Response body: ${jsonDecode(response.body)}');
-      return (true, '');
+      var respData = jsonDecode(response.body);
+      String? appId = respData['app_id'];
+      debugPrint('submitAppServer Response body: ${respData}');
+      return (true, '', appId);
     } else {
       debugPrint('Failed to submit app. Status code: ${response.statusCode}');
       if (response.body.isNotEmpty) {
-        return (false, jsonDecode(response.body)['detail'] as String);
+        return (
+          false,
+          jsonDecode(response.body)['detail'] as String,
+          null,
+        );
       } else {
-        return (false, 'Failed to submit app. Please try again later');
+        return (false, 'Failed to submit app. Please try again later', '');
       }
     }
   } catch (e) {
     debugPrint('An error occurred submitAppServer: $e');
-    return (false, 'Failed to submit app. Please try again later');
+    return (false, 'Failed to submit app. Please try again later', null);
   }
 }
 
@@ -197,7 +231,7 @@ Future<bool> updateAppServer(File? file, Map<String, dynamic> appData) async {
   }
   request.headers.addAll({'Authorization': await getAuthHeader()});
   request.fields.addAll({'app_data': jsonEncode(appData)});
-  print(jsonEncode(appData));
+  debugPrint(jsonEncode(appData));
   try {
     var streamedResponse = await request.send();
     var response = await http.Response.fromStream(streamedResponse);
@@ -378,5 +412,195 @@ Future<String> getGenratedDescription(String name, String description) async {
     debugPrint(e.toString());
     CrashReporting.reportHandledCrash(e, stackTrace);
     return '';
+  }
+}
+
+Future<Map> createPersonaApp(File file, Map<String, dynamic> personaData) async {
+  var request = http.MultipartRequest(
+    'POST',
+    Uri.parse('${Env.apiBaseUrl}v1/personas'),
+  );
+  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+  request.headers.addAll({'Authorization': await getAuthHeader()});
+  request.fields.addAll({'persona_data': jsonEncode(personaData)});
+  print(jsonEncode(personaData));
+  try {
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      debugPrint('createPersonaApp Response body: ${jsonDecode(response.body)}');
+      return jsonDecode(response.body);
+    } else {
+      debugPrint('Failed to submit app. Status code: ${response.statusCode}');
+      return {};
+    }
+  } catch (e) {
+    debugPrint('An error occurred createPersonaApp: $e');
+    return {};
+  }
+}
+
+Future<bool> updatePersonaApp(File? file, Map<String, dynamic> personaData) async {
+  var request = http.MultipartRequest(
+    'PATCH',
+    Uri.parse('${Env.apiBaseUrl}v1/personas/${personaData['id']}'),
+  );
+  if (file != null) {
+    request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+  }
+  request.headers.addAll({'Authorization': await getAuthHeader()});
+  request.fields.addAll({'persona_data': jsonEncode(personaData)});
+  debugPrint(jsonEncode(personaData));
+  try {
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      debugPrint('updatePersonaApp Response body: ${jsonDecode(response.body)}');
+      return true;
+    } else {
+      debugPrint('Failed to update app. Status code: ${response.statusCode}');
+      return false;
+    }
+  } catch (e) {
+    debugPrint('An error occurred updatePersonaApp: $e');
+    return false;
+  }
+}
+
+Future<bool> checkPersonaUsername(String username) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/apps/check-username?username=$username',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return false;
+    log('checkPersonaUsernames: ${response.body}');
+    return jsonDecode(response.body)['is_taken'];
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return true;
+  }
+}
+
+Future<Map?> getTwitterProfileData(String handle) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/personas/twitter/profile?handle=$handle',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return null;
+    log('getTwitterProfileData: ${response.body}');
+    return jsonDecode(response.body);
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return null;
+  }
+}
+
+Future<(bool, String?)> verifyTwitterOwnership(String username, String handle, String? personaId) async {
+  var url = '${Env.apiBaseUrl}v1/personas/twitter/verify-ownership?username=$username&handle=$handle';
+  if (personaId != null) {
+    url += '&persona_id=$personaId';
+  }
+  var response = await makeApiCall(
+    url: url,
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return (false, null);
+    log('verifyTwitterOwnership: ${response.body}');
+    var data = jsonDecode(response.body);
+    return (
+      (data['verified'] ?? false) as bool,
+      data['persona_id'] as String?,
+    );
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return (false, null);
+  }
+}
+
+Future<String> getPersonaInitialMessage(String username) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/personas/twitter/initial-message?username=$username',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return '';
+    log('getPersonaInitialMessage: ${response.body}');
+    return jsonDecode(response.body)['message'];
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return '';
+  }
+}
+
+Future<App?> getUserPersonaServer() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/personas',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return null;
+    log('getPersonaProfile: ${response.body}');
+    var res = jsonDecode(response.body);
+    return App.fromJson(res);
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return null;
+  }
+}
+
+Future<String?> generateUsername(String handle) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/personas/generate-username?handle=$handle',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return null;
+    log('generateUsername: ${response.body}');
+    var res = jsonDecode(response.body);
+    return res['username'];
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return null;
+  }
+}
+
+Future<bool> migrateAppOwnerId(String oldId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/apps/migrate-owner?old_id=$oldId',
+    headers: {},
+    body: '',
+    method: 'POST',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return false;
+    log('migrateAppOwnerId: ${response.body}');
+    return true;
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return false;
   }
 }

@@ -44,7 +44,8 @@ def get_app_by_id_db(app_id: str):
 def get_audio_apps_count(app_ids: List[str]):
     if not app_ids or len(app_ids) == 0:
         return 0
-    filters = [FieldFilter('id', 'in', app_ids), FieldFilter('deleted', '==', False), FieldFilter('external_integration.triggers_on', '==', 'audio_bytes')]
+    filters = [FieldFilter('id', 'in', app_ids), FieldFilter('deleted', '==', False),
+               FieldFilter('external_integration.triggers_on', '==', 'audio_bytes')]
     apps_ref = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).count().get()
     return apps_ref[0][0].value
 
@@ -110,6 +111,11 @@ def get_apps_for_tester_db(uid: str) -> List:
 def add_app_to_db(app_data: dict):
     app_ref = db.collection('plugins_data')
     app_ref.add(app_data, app_data['id'])
+
+
+def upsert_app_to_db(app_data: dict):
+    app_ref = db.collection('plugins_data').document(app_data['id'])
+    app_ref.set(app_data)
 
 
 def update_app_in_db(app_data: dict):
@@ -255,9 +261,97 @@ def get_personas_by_username_db(persona_id: str):
     return [{**doc.to_dict(), 'doc_id': doc.id} for doc in docs]
 
 
+def get_persona_by_username_db(username: str):
+    filters = [FieldFilter('username', '==', username), FieldFilter('capabilities', 'array_contains', 'persona'),
+               FieldFilter('deleted', '==', False)]
+    persona_ref = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).limit(1)
+    docs = persona_ref.get()
+    if not docs:
+        return None
+    doc = next(iter(docs), None)
+    if not doc:
+        return None
+    return doc.to_dict()
+
+
 def get_persona_by_id_db(persona_id: str):
     persona_ref = db.collection('plugins_data').document(persona_id)
     doc = persona_ref.get()
     if doc.exists:
         return doc.to_dict()
     return None
+
+
+def get_persona_by_uid_db(uid: str):
+    filters = [FieldFilter('uid', '==', uid), FieldFilter('capabilities', 'array_contains', 'persona'),
+               FieldFilter('deleted', '==', False)]
+    persona_ref = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).limit(1)
+    docs = persona_ref.get()
+    if not docs:
+        return None
+    doc = next(iter(docs), None)
+    if not doc:
+        return None
+    return doc.to_dict()
+
+
+def get_persona_by_twitter_handle_db(handle: str):
+    filters = [
+        FieldFilter('category', '==', 'personality-emulation'),
+        FieldFilter('deleted', '==', False),
+        FieldFilter('twitter.username', '==', handle)
+    ]
+    persona_ref = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).limit(1)
+    docs = persona_ref.get()
+    if not docs:
+        return None
+    doc = next(iter(docs), None)
+    if not doc:
+        return None
+    return {'id': doc.id, **doc.to_dict()}
+
+
+def get_persona_by_username_twitter_handle_db(username: str, handle: str):
+    filters = [
+        FieldFilter('username', '==', username),
+        FieldFilter('category', '==', 'personality-emulation'),
+        FieldFilter('deleted', '==', False),
+        FieldFilter('twitter.username', '==', handle)
+    ]
+    persona_ref = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).limit(1)
+    docs = persona_ref.get()
+    if not docs:
+        return None
+    doc = next(iter(docs), None)
+    if not doc:
+        return None
+    return {'id': doc.id, **doc.to_dict()}
+
+
+def get_omi_personas_by_uid_db(uid: str):
+    filters = [FieldFilter('uid', '==', uid), FieldFilter('capabilities', 'array_contains', 'persona'),
+               FieldFilter('deleted', '==', False)]
+    persona_ref = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters))
+    docs = persona_ref.get()
+    if not docs:
+        return []
+    docs = [doc.to_dict() for doc in docs if 'omi' in doc.to_dict().get('connected_accounts', [])]
+    return docs
+
+
+def add_persona_to_db(persona_data: dict):
+    persona_ref = db.collection('plugins_data')
+    persona_ref.add(persona_data, persona_data['id'])
+
+
+def update_persona_in_db(persona_data: dict):
+    persona_ref = db.collection('plugins_data').document(persona_data['id'])
+    persona_ref.update(persona_data)
+
+
+def migrate_app_owner_id_db(new_id: str, old_id: str):
+    filters = [FieldFilter('uid', '==', old_id), FieldFilter('deleted', '==', False)]
+    apps_ref = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
+    for app in apps_ref:
+        app_ref = db.collection('plugins_data').document(app.id)
+        app_ref.update({'uid': new_id})
