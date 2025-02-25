@@ -422,6 +422,25 @@ function ChatContent() {
           });
         }
 
+        // Update ownership of any personas created by this user
+        const createdPersonas = JSON.parse(localStorage.getItem('createdPersonas') || '[]');
+        for (const personaId of createdPersonas) {
+          try {
+            const personaRef = doc(db, 'plugins_data', personaId);
+            const personaSnap = await getDoc(personaRef);
+            
+            if (personaSnap.exists() && !personaSnap.data().uid) {
+              // Only update the uid field
+              await setDoc(personaRef, { uid: user.uid }, { merge: true });
+            }
+          } catch (error) {
+            console.error(`Error updating persona ${personaId}:`, error);
+          }
+        }
+        
+        // Clear the created personas list after updating ownership
+        localStorage.removeItem('createdPersonas');
+
         // Save current chat messages with pluginId
         if (messages.length > 0) {
           const userMessagesRef = collection(db, 'users', user.uid, 'messages');
