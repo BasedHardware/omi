@@ -113,6 +113,7 @@ class GraphState(TypedDict):
 
 
 def determine_conversation(state: GraphState):
+    print("determine_conversation")
     question = extract_question_from_conversation(state.get("messages", []))
     print("determine_conversation parsed question:", question)
 
@@ -127,6 +128,7 @@ def determine_conversation_type(
         state: GraphState,
 ) -> Literal["no_context_conversation", "context_dependent_conversation", "omi_question", "file_chat_question", "persona_question"]:
     # chat with files by attachments on the last message
+    print("determine_conversation_type")
     messages = state.get("messages", [])
     if len(messages) > 0 and len(messages[-1].files_id) > 0:
         return "file_chat_question"
