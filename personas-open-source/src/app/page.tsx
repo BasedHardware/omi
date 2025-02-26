@@ -1,34 +1,18 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { SetStateAction, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, query, where, getDocs, orderBy, startAfter, limit } from 'firebase/firestore';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Search, Plus, BadgeCheck } from 'lucide-react';
-import { FaDiscord } from 'react-icons/fa';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { PreorderBanner } from '@/components/shared/PreorderBanner';
 import { Mixpanel } from '@/lib/mixpanel';
 import { useInView } from 'react-intersection-observer';
-import { TwitterProfile } from '@/types/twitter';
-
-type Chatbot = {
-  id: string;
-  username?: string;
-  profile?: string;
-  avatar: string;
-  desc: string;
-  name: string;
-  sub_count?: number;
-  category: string;
-  created_at?: string;
-  verified?: boolean;
-};
+import { Header } from '@/components/Header';
+import { InputArea } from '@/components/InputArea';
+import { ChatbotList } from '@/components/ChatbotList';
+import { Footer } from '@/components/Footer';
+import { Chatbot, TwitterProfile, LinkedinProfile } from '@/types/profiles';
+import { PreorderBanner } from '@/components/shared/PreorderBanner';
 
 const formatTwitterAvatarUrl = (url: string): string => {
   if (!url) return '/omi-avatar.svg';
@@ -83,17 +67,221 @@ const fetchTwitterTimeline = async (screenname: string) => {
   }
 };
 
+const PlatformSelectionModal = ({
+  isOpen,
+  onClose,
+  platforms,
+  onSelect,
+  mode,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  platforms: { twitter: boolean; linkedin: boolean };
+  onSelect: (platform: 'twitter' | 'linkedin') => void;
+  mode: 'create' | 'add';
+}) => (
+  <div className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center ${isOpen ? '' : 'hidden'}`}>
+    <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full">
+      <h2 className="text-xl font-bold mb-4">
+        {mode === 'create' ? 'Select Platform' : 'Add Additional Profile'}
+      </h2>
+      <p className="text-zinc-400 mb-6">
+        {mode === 'create'
+          ? 'This handle is available on multiple platforms. Which one would you like to use?'
+          : 'We found an additional profile for this handle. Would you like to add it?'}
+      </p>
+      <div className="space-y-4">
+        {platforms.twitter && (
+          <button
+            onClick={() => onSelect('twitter')}
+            className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg"
+          >
+            Twitter Profile
+          </button>
+        )}
+        {platforms.linkedin && (
+          <button
+            onClick={() => onSelect('linkedin')}
+            className="w-full flex items-center justify-center gap-2 bg-[#0077b5] hover:bg-[#006399] text-white py-2 rounded-lg"
+          >
+            LinkedIn Profile
+          </button>
+        )}
+        <button onClick={onClose} className="w-full text-zinc-400 hover:text-white">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
 export default function HomePage() {
   const router = useRouter();
   const [chatbots, setChatbots] = useState<Chatbot[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [twitterHandle, setTwitterHandle] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [lastDoc, setLastDoc] = useState<any>(null);
   const { ref, inView } = useInView();
+  const [handle, setHandle] = useState('');
+  //modal state variables
+  const [showPlatformModal, setShowPlatformModal] = useState(false);
+  const [pendingCleanHandle, setPendingCleanHandle] = useState<string | null>(null);
+  const [availablePlatforms] = useState({ twitter: true, linkedin: true });
+  const [platformSelectionMode] = useState<'create' | 'add'>('create');
+
+  const handleInputChange = (e: { target: { value: SetStateAction<string>; }; }) => {
+    setHandle(e.target.value);
+  };
+  
+  //function to retrieve the document id from Firestore.
+  const getProfileDocId = async (cleanHandle: string, category: 'twitter' | 'linkedin'): Promise<string | null> => {
+    const q = query(
+      collection(db, 'plugins_data'),
+      where('username', '==', cleanHandle.toLowerCase()),
+      where('category', '==', category)
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.empty ? null : querySnapshot.docs[0].id;
+  };
+
+  //helper functions to extract handles from specific platforms
+  const extractTwitterHandle = (input: string): string | null => {
+    const trimmedInput = input.trim();
+    const twitterMatch = trimmedInput.match(/x\.com\/(?:#!\/)?@?([^/?]+)/i);
+    if (twitterMatch && twitterMatch[1]) {
+      return twitterMatch[1];
+    }
+    return null;
+  };
+
+  const extractLinkedinHandle = (input: string): string | null => {
+    const trimmedInput = input.trim();
+    const linkedinMatch = trimmedInput.match(/linkedin\.com\/in\/([^/?]+)/i);
+    if (linkedinMatch && linkedinMatch[1]) {
+      return linkedinMatch[1];
+    }
+    return null;
+  };
+
+  //helper function to extract a handle from a URL or raw handle input.
+  const extractHandle = (input: string): string => {
+    // Try platform-specific extractors first
+    const twitterHandle = extractTwitterHandle(input);
+    if (twitterHandle) return twitterHandle;
+    
+    const linkedinHandle = extractLinkedinHandle(input);
+    if (linkedinHandle) return linkedinHandle;
+    
+    // If not a URL, remove leading '@' if present
+    const trimmedInput = input.trim();
+    return trimmedInput.startsWith('@') ? trimmedInput.substring(1) : trimmedInput;
+  };
+
+  // Helper functions to determine input type
+  const isTwitterInput = (input: string): boolean => {
+    return /x\.com\//i.test(input.trim());
+  };
+
+  const isLinkedinInput = (input: string): boolean => {
+    return /linkedin\.com\//i.test(input.trim());
+  };
+
+  // handleCreatePersona function using redirectToChat in all cases.
+  const handleCreatePersona = async () => {
+    setIsCreating(true);
+    
+    try {
+      const trimmedInput = handle.trim();
+      const cleanHandle = extractHandle(trimmedInput);
+      
+      // Determine what type of profile to fetch based on input
+      if (!cleanHandle) {
+        toast.error('Invalid handle or URL');
+        return;
+      }
+      
+      // Track results from both platforms
+      let twitterResult = false;
+      let linkedinResult = false;
+      
+      // If input is specifically a Twitter URL
+      if (isTwitterInput(trimmedInput)) {
+        twitterResult = await fetchTwitterProfile(cleanHandle);
+        if (twitterResult) {
+          const docId = await getProfileDocId(cleanHandle, 'twitter');
+          if (docId) {
+            redirectToChat(docId);
+            return;
+          }
+        }
+      } 
+      // If input is specifically a LinkedIn URL
+      else if (isLinkedinInput(trimmedInput)) {
+        linkedinResult = await fetchLinkedinProfile(cleanHandle);
+        if (linkedinResult) {
+          const docId = await getProfileDocId(cleanHandle, 'linkedin');
+          if (docId) {
+            redirectToChat(docId);
+            return;
+          }
+        }
+      } 
+      // If input is a generic handle, try both platforms
+      else {
+        // Try Twitter first
+        twitterResult = await fetchTwitterProfile(cleanHandle);
+        // Then try LinkedIn
+        linkedinResult = await fetchLinkedinProfile(cleanHandle);
+        
+        // Handle the case where both platforms have results
+        if (twitterResult && linkedinResult) {
+          setPendingCleanHandle(cleanHandle);
+          setShowPlatformModal(true);
+          return;
+        }
+        
+        // Handle single platform results
+        if (twitterResult) {
+          const docId = await getProfileDocId(cleanHandle, 'twitter');
+          if (docId) {
+            redirectToChat(docId);
+            return;
+          }
+        } else if (linkedinResult) {
+          const docId = await getProfileDocId(cleanHandle, 'linkedin');
+          if (docId) {
+            redirectToChat(docId);
+            return;
+          }
+        }
+      }
+      
+      // If we got here, no profiles were found or created
+      toast.error('No profiles found for the given handle.');
+    } catch (error) {
+      console.error('Error in handleCreatePersona:', error);
+      toast.error('Failed to create or find the persona.');
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  //handler for modal selection.
+  const handlePlatformSelect = async (platform: 'twitter' | 'linkedin') => {
+    if (pendingCleanHandle) {
+      const docId = await getProfileDocId(pendingCleanHandle, platform);
+      if (docId) {
+        redirectToChat(docId);
+      } else {
+        toast.error('No profiles found for the given handle.');
+      }
+    }
+    setShowPlatformModal(false);
+    setPendingCleanHandle(null);
+  };
 
   const BOTS_PER_PAGE = 50;
 
@@ -114,7 +302,6 @@ export default function HomePage() {
       const chatbotsCollection = collection(db, 'plugins_data');
       let q = query(
         chatbotsCollection,
-        where('category', '==', 'twitter'),
         orderBy('sub_count', 'desc')
       );
 
@@ -126,21 +313,22 @@ export default function HomePage() {
 
       const querySnapshot = await getDocs(q);
 
-      // Single Map for all bots, keyed by lowercase username
+      // Single Map for all bots, keyed by lowercase username and category
       const allBotsMap = new Map();
 
-      // Process all docs
       querySnapshot.docs.forEach(doc => {
         const bot = { id: doc.id, ...doc.data() } as Chatbot;
-        // Normalize username
         const normalizedUsername = bot.username?.toLowerCase().trim();
+        const category = bot.category;
 
         if (!normalizedUsername || !bot.name) return;
 
-        const existingBot = allBotsMap.get(normalizedUsername);
-        // Only update if we don't have this bot or if this version has more followers
-        if (!existingBot || (bot.sub_count || 0) > (existingBot.sub_count || 0)) {
-          allBotsMap.set(normalizedUsername, bot);
+        const key = `${normalizedUsername}-${category}`;
+        const existingBot = allBotsMap.get(key);
+
+        // Only update if new bot has higher sub_count
+        if (!existingBot || ((bot.sub_count || 0) > (existingBot.sub_count || 0))) {
+          allBotsMap.set(key, bot);
         }
       });
 
@@ -155,23 +343,26 @@ export default function HomePage() {
           // First add existing bots to master map
           prev.forEach(bot => {
             const username = bot.username?.toLowerCase().trim();
+            const category = bot.category;
             if (username) {
-              masterMap.set(username, bot);
+              const key = `${username}-${category}`;
+              masterMap.set(key, bot);
             }
           });
 
-          // Then add new bots, only if they have higher sub_count
+          // Then add new bots, only updating if sub_count is higher
           uniqueBots.forEach(bot => {
             const username = bot.username?.toLowerCase().trim();
+            const category = bot.category;
             if (username) {
-              const existing = masterMap.get(username);
-              if (!existing || (bot.sub_count || 0) > (existing.sub_count || 0)) {
-                masterMap.set(username, bot);
+              const key = `${username}-${category}`;
+              const existingBot = masterMap.get(key);
+              if (!existingBot || ((bot.sub_count || 0) > (existingBot.sub_count || 0))) {
+                masterMap.set(key, bot);
               }
             }
           });
 
-          // Convert back to array and sort by sub_count
           return Array.from(masterMap.values())
             .sort((a, b) => (b.sub_count || 0) - (a.sub_count || 0));
         });
@@ -208,45 +399,45 @@ export default function HomePage() {
     (bot.username && bot.username.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  const fetchTwitterProfile = async () => {
-    if (!twitterHandle) return;
+  const redirectToChat = (id: string) => {
+    router.push(`/chat?id=${encodeURIComponent(id)}`);
+  };
 
+  const checkExistingProfile = async (cleanHandle: string, category: 'twitter' | 'linkedin'): Promise<boolean> => {
+    const q = query(
+      collection(db, 'plugins_data'),
+      where('username', '==', cleanHandle.toLowerCase()),
+      where('category', '==', category)
+    );
+    const querySnapshot = await getDocs(q);
+    if (!querySnapshot.empty) {
+      toast.success('Profile already exists.');
+      return true;
+    }
+    return false;
+  };
+
+  const fetchTwitterProfile = async (twitterHandle: string) => {
+    if (!twitterHandle) return false;
     const cleanHandle = twitterHandle.replace('@', '');
-
     setIsCreating(true);
     try {
-      const q = query(
-        collection(db, 'plugins_data'),
-        where('username', '==', cleanHandle.toLowerCase())
-      );
-      const querySnapshot = await getDocs(q);
-
-      if (!querySnapshot.empty) {
-        const existingDoc = querySnapshot.docs[0];
-        toast.success('Profile already exists, redirecting...');
-        router.push(`/chat?id=${existingDoc.id}`);
-        return;
-      }
-
+      if (await checkExistingProfile(cleanHandle, 'twitter')) return true;
       const profileResponse = await fetch(`https://${process.env.NEXT_PUBLIC_RAPIDAPI_HOST}/screenname.php?screenname=${cleanHandle}`, {
         headers: {
           'x-rapidapi-key': process.env.NEXT_PUBLIC_RAPIDAPI_KEY!,
           'x-rapidapi-host': process.env.NEXT_PUBLIC_RAPIDAPI_HOST!,
         },
       });
-
+      if (!profileResponse.ok) return false;
       const profileData: TwitterProfile = await profileResponse.json();
-
+      if (!profileData || !profileData.name) return false;
       const recentTweets = await fetchTwitterTimeline(cleanHandle);
-
       const formattedAvatarUrl = formatTwitterAvatarUrl(profileData.avatar);
-
       const enhancedDesc = `${profileData.desc || 'No description available'}\n\nHere are my recent tweets:\n${recentTweets.join('\n')}`;
-
       const extraPromptRules = process.env.NEXT_PUBLIC_EXTRA_PROMPT_RULES ?? "";
-
       const fullChatPrompt = `You are ${profileData.name} AI, you must personify ${profileData.name} as well as you can.
-
+      
 Style:
 - Interactive highly opinionated messages and questions.
 - Reference your tweets naturally
@@ -260,8 +451,6 @@ Rules:
 ${extraPromptRules}
 
 Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your personality. Responses should help the conversation go deeper. You have strong opinions, slightly controversial.`;
-
-
       try {
         const createdAtFormatted = formatDate(new Date().toISOString());
         const docRef = await addDoc(collection(db, 'plugins_data'), {
@@ -275,18 +464,103 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
           created_at: createdAtFormatted,
           chat_prompt: fullChatPrompt,
         });
-
         toast.success('Profile saved successfully!');
-
-        router.push(`/chat?id=${docRef.id}`);
+        return true;
       } catch (firebaseError) {
         console.error('Firebase error:', firebaseError);
         toast.error('Failed to save profile');
+        return false;
       }
-
     } catch (error) {
       console.error('Error fetching Twitter profile:', error);
-      toast.error('Failed to fetch Twitter profile');
+      return false;
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const fetchLinkedinProfile = async (linkedinHandle: string) => {
+    if (!linkedinHandle) return false;
+    const cleanHandle = linkedinHandle.replace('@', '');
+    setIsCreating(true);
+    try {
+      if (await checkExistingProfile(cleanHandle, 'linkedin')) return true;
+      const encodedHandle = encodeURIComponent(cleanHandle);
+      const profileResponse = await fetch(`https://${process.env.NEXT_PUBLIC_LINKEDIN_API_HOST}/profile-data-connection-count-posts?username=${encodedHandle}`, {
+        headers: {
+          'x-rapidapi-key': process.env.NEXT_PUBLIC_LINKEDIN_API_KEY!,
+          'x-rapidapi-host': process.env.NEXT_PUBLIC_LINKEDIN_API_HOST!,
+        },
+      });
+      if (!profileResponse.ok) return false;
+      const profileData: LinkedinProfile = await profileResponse.json();
+      if (!profileData || !profileData?.data?.firstName) return false;
+      const formattedAvatarUrl = profileData?.data?.profilePicture || '/omi-avatar.svg';
+      const fullName = `${profileData?.data?.firstName || ''} ${profileData?.data?.lastName || ''}`.trim();
+      const headline = profileData?.data?.headline || 'No headline available';
+      const summary = profileData?.data?.summary || 'No summary available';
+      const positions = Array.isArray(profileData?.data?.position)
+        ? profileData.data.position.map(pos => {
+            const title = pos?.title || 'Unknown Title';
+            const company = pos?.companyName || 'Unknown Company';
+            const startYear = pos?.start?.year || 'N/A';
+            const endYear = pos?.end?.year || 'Present';
+            return `${title} at ${company} (${startYear} - ${endYear})`;
+          }).join(', ')
+        : 'No positions available';
+      const skills = Array.isArray(profileData?.data?.skills)
+        ? profileData.data.skills.map(skill => skill?.name || '').filter(Boolean).join(', ')
+        : 'No skills available';
+      const recentPosts = Array.isArray(profileData?.posts)
+        ? profileData.posts.map(post => post?.text || '').filter(Boolean).join('\n')
+        : 'No recent posts available';
+      const enhancedDesc = `${summary}\n\nPositions: ${positions}\n\nSkills: ${skills}\n\nRecent Posts:\n${recentPosts}`;
+      const extraPromptRules = process.env.NEXT_PUBLIC_EXTRA_PROMPT_RULES ?? "";
+      const fullChatPrompt = `You are ${fullName}, an AI persona. Here is some information about you:
+      
+Name: ${fullName}
+Headline: ${headline}
+Summary: ${summary}
+Positions: ${positions}
+Skills: ${skills}
+
+Style:
+- Interactive highly opinionated messages and questions.
+- Reference your experiences and skills naturally.
+
+Rules:
+- Never mention being AI
+- No ** or formal language
+- 2-3 sentences for response. Never more than 20 words.
+- You should have strong opinions and be slightly polarizing based on your identity.
+- You must make the conversation flow. You excel at coherent conversations.
+${extraPromptRules}
+
+Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your personality. Responses should help the conversation go deeper. You have strong opinions, slightly controversial.`;
+      try {
+        const createdAtFormatted = formatDate(new Date().toISOString());
+        const docRef = await addDoc(collection(db, 'plugins_data'), {
+          username: cleanHandle.toLowerCase().replace('@', ''),
+          avatar: formattedAvatarUrl,
+          profile: summary,
+          desc: enhancedDesc,
+          name: fullName,
+          sub_count: profileData.follower || 0,
+          category: 'linkedin',
+          created_at: createdAtFormatted,
+          chat_prompt: fullChatPrompt,
+          connection_count: profileData.connection,
+        });
+        toast.success('Profile saved successfully!');
+        return true;
+      } catch (firebaseError) {
+        console.error('Firebase error:', firebaseError);
+        toast.error('Failed to save profile');
+        return false;
+      }
+    } catch (error) {
+      console.error('Error fetching LinkedIn profile:', error);
+      return false;
     } finally {
       setIsCreating(false);
     }
@@ -295,123 +569,37 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
   return (
     <div className="min-h-screen bg-black text-white">
       <PreorderBanner botName="your favorite personal" />
-      {/* Header */}
-      <div className="p-4 border-b border-zinc-800">
-        <div className="flex items-center justify-between max-w-3xl mx-auto">
-          <Link href="https://www.omi.me/products/friend-dev-kit-2?ref=personas&utm_source=personas.omi.me&utm_campaign=personas_top_banner" target="_blank">
-            <img src="/omilogo.png" alt="Logo" className="h-6" />
-          </Link>
-          <Link
-            href="https://www.omi.me/products/friend-dev-kit-2?ref=personas&utm_source=personas.omi.me&utm_campaign=personas_top_banner"
-            target="_blank"
-            className="bg-white hover:bg-gray-200 text-black px-4 py-2 rounded-full flex items-center"
-          >
-            <span className="mr-1">Take AI personas with you</span>
-            <span className="text-lg">↗</span>
-          </Link>
-        </div>
-      </div>
-
-      {/* Main Content */}
+      <Header />
       <div className="flex flex-col items-center px-4 py-8 md:py-16">
-        {/* Create Section */}
-        <div className="text-center max-w-md mx-auto">
-          <h1 className="text-4xl md:text-5xl font-serif mb-3 md:mb-4">AI personas</h1>
-          <p className="text-gray-400 text-sm md:text-base mb-8 md:mb-12">
-            Create new AI Twitter personalities
-          </p>
-        </div>
-
-        {/* Input Area */}
-        <div className="w-full max-w-sm space-y-4 mb-12 md:mb-16">
-          <Input
-            type="text"
-            placeholder="Enter Twitter handle (e.g., @elonmusk)..."
-            value={twitterHandle}
-            onChange={(e) => setTwitterHandle(e.target.value)}
-            className="rounded-full bg-gray-800 text-white border-gray-700 focus:border-gray-600"
-          />
-          <Button
-            className="w-full rounded-full bg-white text-black hover:bg-gray-200"
-            onClick={fetchTwitterProfile}
-            disabled={isCreating}
-          >
-            {isCreating ? 'Creating...' : 'Create AI Persona'}
-          </Button>
-        </div>
-
-        {/* Chatbot List */}
+        <InputArea
+          handle={handle}
+          handleInputChange={handleInputChange}
+          handleCreatePersona={handleCreatePersona}
+          isCreating={isCreating}
+        />
         {!loading && filteredChatbots.length > 0 && (
-          <div className="w-full max-w-3xl">
-            <div className="relative mb-6">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Search existing personas..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-zinc-900 text-white rounded-full py-2 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-zinc-700 border-0"
-              />
-            </div>
-
-            <div className="space-y-4">
-              {filteredChatbots.map(bot => (
-                <Card
-                  key={bot.id}
-                  onClick={() => handleChatbotClick(bot)}
-                  className="hover:bg-zinc-800 transition-colors cursor-pointer bg-zinc-900 border-zinc-700"
-                >
-                  <CardContent className="flex items-start space-x-4 p-4">
-                    <Avatar className="w-16 h-16 flex-shrink-0">
-                      <AvatarImage src={bot.avatar || '/omi-avatar.svg'} alt={bot.name} />
-                      <AvatarFallback>{bot.name[0]}</AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-lg font-semibold text-white truncate flex items-center">
-                          {bot.name}
-                          <BadgeCheck
-                            className="ml-1 h-5 w-5 stroke-zinc-900"
-                            style={{ fill: '#00acee' }}
-                          />
-                        </h2>
-                        <span className="text-sm text-zinc-400 truncate">
-                          @{bot.username || bot.profile}
-                        </span>
-                        {bot.sub_count !== undefined && (
-                          <span className="text-sm text-zinc-400">
-                            {bot.sub_count.toLocaleString()} followers
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-zinc-400 text-sm mt-1 line-clamp-2">
-                        {bot.profile || 'No profile available'}
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-
-              {hasMore && (
-                <div ref={ref} className="flex justify-center py-4">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-                </div>
-              )}
-            </div>
-          </div>
+          <ChatbotList
+            chatbots={filteredChatbots}
+            handleChatbotClick={handleChatbotClick}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            ref={ref}
+            hasMore={hasMore}
+          />
         )}
       </div>
-
-      {/* Footer */}
-      <footer className="max-w-4xl mx-auto px-4 py-4">
-        <div className="flex flex-col sm:flex-row justify-between text-xs text-zinc-400">
-          <span className="mb-2 sm:mb-0 sm:mr-8">Omi by Based Hardware © 2025</span>
-          <div className="flex gap-2">
-            <Button variant="link" className="p-0 h-auto text-xs text-zinc-400 hover:text-white">Terms & Conditions</Button>
-            <Button variant="link" className="p-0 h-auto text-xs text-zinc-400 hover:text-white">Privacy Policy</Button>
-          </div>
-        </div>
-      </footer>
+      <Footer />
+      {/* Render the modal */}
+      <PlatformSelectionModal
+        isOpen={showPlatformModal}
+        onClose={() => {
+          setShowPlatformModal(false);
+          setPendingCleanHandle(null);
+        }}
+        platforms={availablePlatforms}
+        onSelect={handlePlatformSelect}
+        mode={platformSelectionMode}
+      />
     </div>
   );
 }

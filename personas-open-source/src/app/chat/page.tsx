@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Send, Settings, Share, ArrowLeft, BadgeCheck, X } from 'lucide-react';
+import { FaLinkedin } from 'react-icons/fa';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Suspense } from 'react';
 import Link from 'next/link';
@@ -49,6 +50,7 @@ function ChatContent() {
     avatar: string;
     image?: string;
     username?: string;
+    category?: string;
   } | null>(null);
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -76,6 +78,7 @@ function ChatContent() {
             name: data.name,
             avatar: data.avatar,
             username: data.username,
+            category: data.category,
             image: data.image
           });
         }
@@ -91,6 +94,7 @@ function ChatContent() {
   const botName = botData?.name || 'Omi';
   const botImage = botData?.avatar || botData?.image || '/omi-avatar.svg';
   const username = botData?.username || '';
+  const botCategory = botData?.category || '';
 
   // Function to save messages to Firebase
   const saveMessagesToFirebase = useCallback(async () => {
@@ -591,12 +595,22 @@ function ChatContent() {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div className="flex items-center gap-2">
-          <Link href={`https://x.com/${username}`} target="_blank" rel="noopener noreferrer">
-            <h2 className="text-lg font-semibold text-white truncate flex items-center hover:underline">
-              {botName}
-              <BadgeCheck className="ml-1 h-5 w-5" style={{ fill: '#00acee', stroke: '#27272a' }} />
-            </h2>
-          </Link>
+          {botCategory === 'linkedin' ? (
+            <Link href={`https://www.linkedin.com/in/${username}`} target="_blank" rel="noopener noreferrer">
+              <h2 className="text-lg font-semibold text-white truncate flex items-center hover:underline">
+                {botName}
+                <FaLinkedin className="ml-1 h-5 w-5 stroke-zinc-900" style={{ fill: '#0077b5' }} />
+              </h2>
+            </Link>
+          ) : botCategory === 'twitter' ? (
+            <Link href={`https://x.com/${username}`} target="_blank" rel="noopener noreferrer">
+              <h2 className="text-lg font-semibold text-white truncate flex items-center hover:underline">
+                {botName}
+                <BadgeCheck className="ml-1 h-5 w-5 stroke-zinc-900" style={{ fill: '#00acee' }} />
+              </h2>
+            </Link>
+          ) : null
+          }
           <Avatar className="h-8 w-8">
             <AvatarImage src={botImage} alt={botName} />
             <AvatarFallback>{botName[0]}</AvatarFallback>
