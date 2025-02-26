@@ -59,6 +59,54 @@ class MessageConversation {
   }
 }
 
+class MessageFile {
+  String id;
+  String openaiFileId;
+  String? thumbnail;
+  String? thumbnailName;
+  String name;
+  String mimeType;
+  DateTime createdAt;
+
+  MessageFile(this.openaiFileId, this.thumbnail, this.name, this.mimeType, this.id, this.createdAt, this.thumbnailName);
+
+  static MessageFile fromJson(Map<String, dynamic> json) {
+    return MessageFile(
+      json['openai_file_id'],
+      json['thumbnail'],
+      json['name'],
+      json['mime_type'],
+      json['id'],
+      DateTime.parse(json['created_at']).toLocal(),
+      json['thumb_name'],
+    );
+  }
+
+  static List<MessageFile> fromJsonList(List<dynamic> json) {
+    return json.map((e) => MessageFile.fromJson(e)).toList();
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'openai_file_id': openaiFileId,
+      'thumbnail': thumbnail,
+      'name': name,
+      'mime_type': mimeType,
+      'id': id,
+      'created_at': createdAt.toUtc().toIso8601String(),
+      'thumb_name': thumbnailName,
+    };
+  }
+
+  String mimeTypeToFileType() {
+    if (mimeType.contains('image')) {
+      return 'image';
+    } else {
+      return 'file';
+    }
+  }
+}
+
 class ServerMessage {
   String id;
   DateTime createdAt;
@@ -68,6 +116,9 @@ class ServerMessage {
 
   String? appId;
   bool fromIntegration;
+
+  List<MessageFile> files;
+  List filesId;
 
   List<MessageConversation> memories;
   bool askForNps = false;
@@ -82,6 +133,8 @@ class ServerMessage {
     this.type,
     this.appId,
     this.fromIntegration,
+    this.files,
+    this.filesId,
     this.memories, {
     this.askForNps = false,
   });
@@ -95,6 +148,8 @@ class ServerMessage {
       MessageType.valuesFromString(json['type']),
       json['plugin_id'],
       json['from_integration'] ?? false,
+      ((json['files'] ?? []) as List<dynamic>).map((m) => MessageFile.fromJson(m)).toList(),
+      (json['files_id'] ?? []).map((m) => m.toString()).toList(),
       ((json['memories'] ?? []) as List<dynamic>).map((m) => MessageConversation.fromJson(m)).toList(),
       askForNps: json['ask_for_nps'] ?? false,
     );
@@ -111,7 +166,17 @@ class ServerMessage {
       'from_integration': fromIntegration,
       'memories': memories.map((m) => m.toJson()).toList(),
       'ask_for_nps': askForNps,
+      'files': files.map((m) => m.toJson()).toList(),
     };
+  }
+
+  bool areFilesOfSameType() {
+    if (files.isEmpty) {
+      return true;
+    }
+
+    final firstType = files.first.mimeTypeToFileType();
+    return files.every((element) => element.mimeTypeToFileType() == firstType);
   }
 
   static ServerMessage empty({String? appId}) {
@@ -123,6 +188,8 @@ class ServerMessage {
       MessageType.text,
       appId,
       false,
+      [],
+      [],
       [],
     );
   }
@@ -136,6 +203,8 @@ class ServerMessage {
       MessageType.text,
       null,
       false,
+      [],
+      [],
       [],
     );
   }

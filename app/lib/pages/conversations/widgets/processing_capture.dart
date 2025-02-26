@@ -171,7 +171,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     }
 
     // Right
-    Widget statusIndicator = const SizedBox.shrink();
+    Widget? statusIndicator;
     var stateText = "";
     if (!isHavingRecordingDevice && !isUsingPhoneMic) {
       stateText = "";
@@ -183,23 +183,25 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     } else if (!transcriptServiceStateOk) {
       stateText = "Connecting";
     }
-    Widget right = stateText.isNotEmpty
+    Widget right = stateText.isNotEmpty || statusIndicator != null
         ? Expanded(
             child: Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              SizedBox(
-                width: 16,
-                height: 16,
-                child: statusIndicator,
-              ),
-              const SizedBox(width: 8),
               Text(
                 stateText,
                 style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                 maxLines: 1,
                 textAlign: TextAlign.end,
-              )
+              ),
+              if (statusIndicator != null) ...[
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: statusIndicator,
+                )
+              ],
             ],
           ))
         : const SizedBox.shrink();
@@ -279,7 +281,7 @@ getPhoneMicRecordingButton(BuildContext context, toggleRecording, RecordingState
           state == RecordingState.initialising
               ? 'Initialising Recorder'
               : (state == RecordingState.record ? 'Stop Recording' : 'Try With Phone Mic'),
-          style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
+          style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white, fontWeight: FontWeight.w500),
         ),
         const SizedBox(width: 4),
       ],

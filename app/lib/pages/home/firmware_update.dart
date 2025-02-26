@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'firmware_update_dialog.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/pages/home/firmware_mixin.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/utils/analytics/intercom.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:gradient_borders/gradient_borders.dart';
-import 'package:intercom_flutter/intercom_flutter.dart';
 
 class FirmwareUpdate extends StatefulWidget {
   final BtDevice? device;
@@ -24,10 +24,12 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
   @override
   void initState() {
     var device = widget.device!;
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       setState(() {
         isLoading = true;
       });
+
       await getLatestVersion(
         deviceModelNumber: device.modelNumber,
         firmwareRevision: device.firmwareRevision,
@@ -35,7 +37,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
         manufacturerName: device.manufacturerName,
       );
       var (a, b) =
-          await shouldUpdateFirmware(currentFirmware: widget.device!.firmwareRevision, deviceName: widget.device!.name);
+          await shouldUpdateFirmware(currentFirmware: widget.device!.firmwareRevision);
       if (mounted) {
         setState(() {
           shouldUpdate = b;
@@ -122,6 +124,11 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: TextButton(
+                                    style: TextButton.styleFrom(
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    ),
                                     onPressed: () async {
                                       routeToPage(context, const HomePageWrapper(), replace: true);
                                     },
@@ -141,16 +148,23 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                                   style: const TextStyle(color: Colors.white, fontSize: 16),
                                 ),
                                 const SizedBox(height: 8),
-                                Text(
-                                  'Latest Version Available: ${latestFirmwareDetails['version']}',
-                                  style: const TextStyle(color: Colors.white, fontSize: 16),
-                                ),
-                                const SizedBox(height: 16),
+                                if (latestFirmwareDetails['version'] != null) ...[
+                                  Text(
+                                    'Latest Version Available: ${latestFirmwareDetails['version']}',
+                                    style: const TextStyle(color: Colors.white, fontSize: 16),
+                                  ),
+                                  const SizedBox(height: 16),
+                                ],
                                 if (updateMessage == '0')
                                   TextButton(
                                     onPressed: () async {
                                       await IntercomManager.instance.displayFirmwareUpdateArticle();
                                     },
+                                    style: TextButton.styleFrom(
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    ),
                                     child: const Text(
                                       'Open Update Guide',
                                       style: TextStyle(
@@ -183,12 +197,30 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                                           borderRadius: BorderRadius.circular(12),
                                         ),
                                         child: TextButton(
+                                          style: TextButton.styleFrom(
+                                            minimumSize: Size.zero,
+                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                          ),
                                           onPressed: () async {
-                                            await downloadFirmware();
-                                            await startDfu(widget.device!);
+                                            if (otaUpdateSteps.isEmpty) {
+                                              await downloadFirmware();
+                                              await startDfu(widget.device!);
+                                            } else {
+                                              showDialog(
+                                                context: context,
+                                                builder: (context) => FirmwareUpdateDialog(
+                                                  steps: otaUpdateSteps,
+                                                  onUpdateStart: () async {
+                                                    await downloadFirmware();
+                                                    await startDfu(widget.device!);
+                                                  },
+                                                ),
+                                              );
+                                            }
                                           },
-                                          child: const Text(
-                                            "Download Firmware",
+                                          child: Text(
+                                            otaUpdateSteps.isEmpty ? "Start Update" : "Update",
                                             style: TextStyle(color: Colors.white, fontSize: 16),
                                           ),
                                         ),

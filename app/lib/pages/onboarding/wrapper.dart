@@ -38,8 +38,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     _controller = TabController(length: hasSpeechProfile ? 5 : 6, vsync: this);
     _controller!.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (isSignedIn() ||
-          (SharedPreferencesUtil().customBackendUrl.isNotEmpty && SharedPreferencesUtil().authToken.isNotEmpty)) {
+      if (isSignedIn()) {
         // && !SharedPreferencesUtil().onboardingCompleted
         if (mounted) {
           context.read<HomeProvider>().setupHasSpeakerProfile();
@@ -80,15 +79,14 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       // TODO: if connected already, stop animation and display battery
       AuthComponent(
         onSignIn: () {
+          SharedPreferencesUtil().hasOmiDevice = true;
           MixpanelManager().onboardingStepCompleted('Auth');
           context.read<HomeProvider>().setupHasSpeakerProfile();
           IntercomManager.instance.intercom.loginIdentifiedUser(
             userId: SharedPreferencesUtil().uid,
           );
           if (SharedPreferencesUtil().onboardingCompleted) {
-            // previous users
-            // Not needed anymore, because AuthProvider already does this
-            // routeToPage(context, const HomePageWrapper(), replace: true);
+            routeToPage(context, const HomePageWrapper(), replace: true);
           } else {
             _goNext();
           }

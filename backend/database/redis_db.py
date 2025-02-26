@@ -70,6 +70,49 @@ def delete_app_cache_by_id(app_id: str):
 
 
 # ******************************************************
+# ********************** PERSONA ***********************
+# ******************************************************
+
+def is_username_taken(username: str) -> bool:
+    """Check if username is taken by checking if it exists in the username:uid mapping"""
+    value = r.exists(f'username:{username}:uid')
+    if value == 0:
+        return False
+    return True
+
+
+def get_uid_by_username(username: str) -> str | None:
+    """Get the UID that owns this username"""
+    uid = r.get(f'username:{username}:uid')
+    return uid.decode() if uid else None
+
+
+def get_usernames_by_uid(uid: str) -> List[str]:
+    """Get all usernames owned by a UID"""
+    usernames = r.smembers(f'uid:{uid}:usernames')
+    return [u.decode() for u in usernames] if usernames else []
+
+
+def delete_username(username: str):
+    """Delete username and remove it from owner's set"""
+    # Get current owner
+    uid = get_uid_by_username(username)
+    if uid:
+        # Remove from owner's set
+        r.srem(f'uid:{uid}:usernames', username)
+        # Delete username:uid mapping
+        r.delete(f'username:{username}:uid')
+
+
+def save_username(username: str, uid: str):
+    """Save username and add to owner's set"""
+    # Save username:uid mapping
+    r.set(f'username:{username}:uid', uid)
+    # Add to owner's set of usernames
+    r.sadd(f'uid:{uid}:usernames', username)
+
+
+# ******************************************************
 # *********************** APPS *************************
 # ******************************************************
 
@@ -157,6 +200,7 @@ def migrate_user_plugins_reviews(prev_uid: str, new_uid: str):
 
 def set_user_paid_app(app_id: str, uid: str, ttl: int):
     r.set(f'users:{uid}:paid_apps:{app_id}', app_id, ex=ttl)
+
 
 def get_user_paid_app(app_id: str, uid: str) -> str:
     val = r.get(f'users:{uid}:paid_apps:{app_id}')

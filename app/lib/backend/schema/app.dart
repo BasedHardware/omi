@@ -1,3 +1,4 @@
+import 'package:friend_private/utils/other/string_utils.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 
 class AppReview {
@@ -84,6 +85,7 @@ class ExternalIntegration {
   String setupInstructionsFilePath;
   bool isInstructionsUrl;
   List<AuthStep> authSteps;
+  String? appHomeUrl;
 
   ExternalIntegration({
     required this.triggersOn,
@@ -92,6 +94,7 @@ class ExternalIntegration {
     required this.setupInstructionsFilePath,
     required this.isInstructionsUrl,
     this.authSteps = const [],
+    this.appHomeUrl,
   });
 
   factory ExternalIntegration.fromJson(Map<String, dynamic> json) {
@@ -99,6 +102,7 @@ class ExternalIntegration {
       triggersOn: json['triggers_on'],
       webhookUrl: json['webhook_url'],
       setupCompletedUrl: json['setup_completed_url'],
+      appHomeUrl: json['app_home_url'],
       isInstructionsUrl: json['is_instructions_url'] ?? false,
       setupInstructionsFilePath: json['setup_instructions_file_path'],
       authSteps: json['auth_steps'] == null
@@ -123,6 +127,7 @@ class ExternalIntegration {
       'triggers_on': triggersOn,
       'webhook_url': webhookUrl,
       'setup_completed_url': setupCompletedUrl,
+      'app_home_url': appHomeUrl,
       'is_instructions_url': isInstructionsUrl,
       'setup_instructions_file_path': setupInstructionsFilePath,
       'auth_steps': authSteps.map((e) => e.toJson()).toList(),
@@ -169,6 +174,8 @@ class App {
   String description;
   String image;
   Set<String> capabilities;
+  List<String> connectedAccounts = [];
+  Map? twitter;
   bool private;
   bool approved;
   String? conversationPrompt;
@@ -189,6 +196,9 @@ class App {
   double? price;
   bool isUserPaid;
   String? paymentLink;
+  List<String> thumbnailIds;
+  List<String> thumbnailUrls;
+  String? username;
 
   App({
     required this.id,
@@ -221,7 +231,16 @@ class App {
     this.price,
     required this.isUserPaid,
     this.paymentLink,
+    this.thumbnailIds = const [],
+    this.thumbnailUrls = const [],
+    this.username,
+    this.connectedAccounts = const [],
+    this.twitter,
   });
+
+  String getName() {
+    return tryDecodingText(name);
+  }
 
   String? getRatingAvg() => ratingAvg?.toStringAsFixed(1);
 
@@ -229,7 +248,9 @@ class App {
 
   bool worksWithMemories() => hasCapability('memories');
 
-  bool worksWithChat() => hasCapability('chat');
+  bool worksWithChat() => hasCapability('chat') || hasCapability('persona');
+
+  bool isNotPersona() => !hasCapability('persona');
 
   bool worksExternally() => hasCapability('external_integration');
 
@@ -268,6 +289,11 @@ class App {
       price: json['price'] ?? 0.0,
       isUserPaid: json['is_user_paid'] ?? false,
       paymentLink: json['payment_link'],
+      thumbnailIds: (json['thumbnails'] as List<dynamic>?)?.cast<String>() ?? [],
+      thumbnailUrls: (json['thumbnail_urls'] as List<dynamic>?)?.cast<String>() ?? [],
+      username: json['username'],
+      connectedAccounts: (json['connected_accounts'] as List<dynamic>?)?.cast<String>() ?? [],
+      twitter: json['twitter'],
     );
   }
 
@@ -316,6 +342,10 @@ class App {
 
   List<AppCapability> getCapabilitiesFromIds(List<AppCapability> allCapabilities) {
     return allCapabilities.where((e) => capabilities.contains(e.id)).toList();
+  }
+
+  List<String> getConnectedAccountNames() {
+    return connectedAccounts.map((e) => e.capitalize()).toList();
   }
 
   Map<String, dynamic> toJson() {
