@@ -4,12 +4,6 @@ import { SetStateAction, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, query, where, getDocs, orderBy, startAfter, limit, doc, setDoc, or } from 'firebase/firestore';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Search, Plus, BadgeCheck } from 'lucide-react';
-import { FaDiscord } from 'react-icons/fa';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { Mixpanel } from '@/lib/mixpanel';
 import { useInView } from 'react-intersection-observer';
@@ -657,7 +651,7 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
           handleCreatePersona={handleCreatePersona}
           isCreating={isCreating}
         />
-        {!loading && filteredChatbots.length > 0 && (
+        {!loading && (
           <ChatbotList
             chatbots={filteredChatbots}
             handleChatbotClick={handleChatbotClick}
