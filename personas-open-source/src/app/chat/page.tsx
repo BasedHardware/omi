@@ -74,11 +74,30 @@ function ChatContent() {
         const botDoc = await getDoc(doc(db, 'plugins_data', botId));
         if (botDoc.exists()) {
           const data = botDoc.data();
+          let category = data.category;
+          
+          // If connected_accounts exists, determine category from it
+          if (category !== 'linkedin' && category !== 'twitter' && data.connected_accounts) {
+            if (data.connected_accounts.includes('omi')) {
+              category = 'omi';
+            } 
+            else if (category !== 'twitter' && category !== 'linkedin') {
+              if (data.connected_accounts.includes('twitter')) {
+                category = 'twitter';
+              } else if (data.connected_accounts.includes('linkedin')) {
+                category = 'linkedin';
+              } 
+              else {
+                category = data.connected_accounts[0];
+              }
+            }
+          }
+          
           setBotData({
             name: data.name,
             avatar: data.avatar,
             username: data.username,
-            category: data.category,
+            category: category,
             image: data.image
           });
         }
@@ -426,6 +445,25 @@ function ChatContent() {
           });
         }
 
+        // Update ownership of any personas created by this user
+        const createdPersonas = JSON.parse(localStorage.getItem('createdPersonas') || '[]');
+        for (const personaId of createdPersonas) {
+          try {
+            const personaRef = doc(db, 'plugins_data', personaId);
+            const personaSnap = await getDoc(personaRef);
+            
+            if (personaSnap.exists() && !personaSnap.data().uid) {
+              // Only update the uid field
+              await setDoc(personaRef, { uid: user.uid }, { merge: true });
+            }
+          } catch (error) {
+            console.error(`Error updating persona ${personaId}:`, error);
+          }
+        }
+        
+        // Clear the created personas list after updating ownership
+        localStorage.removeItem('createdPersonas');
+
         // Save current chat messages with pluginId
         if (messages.length > 0) {
           const userMessagesRef = collection(db, 'users', user.uid, 'messages');
@@ -604,6 +642,13 @@ function ChatContent() {
             </Link>
           ) : botCategory === 'twitter' ? (
             <Link href={`https://x.com/${username}`} target="_blank" rel="noopener noreferrer">
+              <h2 className="text-lg font-semibold text-white truncate flex items-center hover:underline">
+                {botName}
+                <BadgeCheck className="ml-1 h-5 w-5 stroke-zinc-900" style={{ fill: '#00acee' }} />
+              </h2>
+            </Link>
+          ) : botCategory === 'omi' ? (
+            <Link href={getStoreUrl} target="_blank" rel="noopener noreferrer">
               <h2 className="text-lg font-semibold text-white truncate flex items-center hover:underline">
                 {botName}
                 <BadgeCheck className="ml-1 h-5 w-5 stroke-zinc-900" style={{ fill: '#00acee' }} />
