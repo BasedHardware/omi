@@ -1,5 +1,6 @@
 import json
 import os
+import asyncio
 from datetime import datetime, timezone
 from typing import List
 import requests
@@ -9,7 +10,7 @@ from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, H
 from database.apps import change_app_approval_status, get_unapproved_public_apps_db, \
     add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db, \
     get_personas_by_username_db, get_persona_by_id_db, delete_persona_db, get_persona_by_twitter_handle_db, \
-    get_persona_by_username_db, migrate_app_owner_id_db
+    get_persona_by_username_db, migrate_app_owner_id_db, get_user_persona_by_uid, get_omi_persona_apps_by_uid_db
 from database.auth import get_user_from_uid
 from database.notifications import get_token_only
 from database.redis_db import delete_generic_cache, get_specific_user_review, increase_app_installs_count, \
@@ -144,26 +145,38 @@ async def create_persona(persona_data: str = Form(...), file: UploadFile = File(
 
 
 @router.patch('/v1/personas/{persona_id}', tags=['v1'])
-def update_persona(persona_id: str, persona_data: str = Form(...), file: UploadFile = File(None),
-                   uid=Depends(auth.get_current_user_uid)):
+async def update_persona(persona_id: str, persona_data: str = Form(...), file: UploadFile = File(None),
+                         uid=Depends(auth.get_current_user_uid)):
     data = json.loads(persona_data)
     persona = get_available_app_by_id(persona_id, uid)
     if not persona:
         raise HTTPException(status_code=404, detail='Persona not found')
     if persona['uid'] != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+
+    # Image
     if file:
-        delete_plugin_logo(persona['image'])
+        if 'image' in persona and len(persona['image']) > 0 and \
+                persona['image'].startswith('https://storage.googleapis.com/'):
+            delete_plugin_logo(persona['image'])
         os.makedirs(f'_temp/plugins', exist_ok=True)
         file_path = f"_temp/plugins/{file.filename}"
         with open(file_path, 'wb') as f:
             f.write(file.file.read())
         img_url = upload_plugin_logo(file_path, persona_id)
         data['image'] = img_url
+
     save_username(data['username'], uid)
     data['description'] = generate_persona_desc(uid, data['name'])
     data['updated_at'] = datetime.now(timezone.utc)
+
+    # Update 'omi' connected_accounts
+    if 'omi' in data.get('connected_accounts', []) and \
+            'omi' not in persona.get('connected_accounts', []):
+        data['persona_prompt'] = await generate_persona_prompt(uid, persona)
+
     update_app_in_db(data)
+
     if persona['approved'] and (persona['private'] is None or persona['private'] is False):
         delete_generic_cache('get_public_approved_apps_data')
     delete_app_cache_by_id(persona_id)
@@ -184,6 +197,56 @@ def get_persona_details(uid: str = Depends(auth.get_current_user_uid)):
             raise HTTPException(status_code=403, detail='You are not authorized to view this Persona')
 
     return app
+
+@router.post('/v1/user/persona', tags=['v1'])
+async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_uid)):
+    """Get or create a user persona.
+
+    If the user already has a persona, return it.
+    If not, create a new one with default values.
+    """
+    # Check if user already has a persona
+    persona = get_user_persona_by_uid(uid)
+    if persona:
+        # Return existing persona
+        return persona
+
+    # Create a new persona for the user
+    user = get_user_from_uid(uid)
+
+    # Generate a unique ID for the persona
+    persona_id = str(ULID())
+
+    # Create persona data
+    persona_data = {
+        'id': persona_id,
+        'name': user.get('display_name', 'My Persona'),
+        'username': increment_username(user.get('display_name', 'MyPersona').replace(' ', '').lower()),
+        'description': f"This is {user.get('display_name', 'my')} personal AI clone.",
+        'image': '',  # Empty image as specified in the task
+        'uid': uid,
+        'author': user.get('display_name', ''),
+        'email': user.get('email', ''),
+        'approved': False,
+        'deleted': False,
+        'status': 'under-review',
+        'category': 'personality-emulation',
+        'capabilities': ['persona'],
+        'connected_accounts': ['omi'],
+        'created_at': datetime.now(timezone.utc),
+        'private': True
+    }
+
+    # Generate persona prompt
+    persona_data['persona_prompt'] = await generate_persona_prompt(uid, persona_data)
+
+    # Save username
+    save_username(persona_data['username'], uid)
+
+    # Add persona to database
+    add_app_to_db(persona_data)
+
+    return persona_data
 
 
 @router.get('/v1/apps/check-username', tags=['v1'])
@@ -209,7 +272,9 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
     if plugin['uid'] != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if file:
-        delete_plugin_logo(plugin['image'])
+        if 'image' in plugin and len(plugin['image']) > 0 and \
+                plugin['image'].startswith('https://storage.googleapis.com/'):
+            delete_plugin_logo(plugin['image'])
         os.makedirs(f'_temp/plugins', exist_ok=True)
         file_path = f"_temp/plugins/{file.filename}"
         with open(file_path, 'wb') as f:
@@ -457,8 +522,13 @@ async def get_twitter_profile_data(handle: str, uid: str = Depends(auth.get_curr
     if res['avatar']:
         res['avatar'] = res['avatar'].replace('_normal', '')
 
+    # By user persona first
+    persona = get_user_persona_by_uid(uid)
+
     # Get matching persona if exists
-    persona = get_persona_by_twitter_handle_db(handle)
+    if not persona:
+        persona = get_persona_by_twitter_handle_db(handle)
+
     if persona:
         res['persona_id'] = persona['id']
         res['persona_username'] = persona['username']
@@ -495,6 +565,7 @@ async def verify_twitter_ownership_tweet(
         else:
             if persona_id:
                 persona = await add_twitter_to_persona(handle, persona_id)
+
     if persona:
         res['persona_id'] = persona['id']
 
@@ -511,8 +582,37 @@ async def get_twitter_initial_message(username: str, uid: str = Depends(auth.get
 
 
 @router.post('/v1/apps/migrate-owner', tags=['v1'])
-def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid)):
+async def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid)):
+    # Migrate app ownership in the database
     migrate_app_owner_id_db(uid, old_id)
+
+    # Start async task to update persona connected accounts
+    asyncio.create_task(update_omi_persona_connected_accounts(uid))
+
+    return {"status": "ok", "message": "Migration started"}
+
+async def update_omi_persona_connected_accounts(uid: str):
+    try:
+        # Get all personas owned by the user
+        personas = get_omi_persona_apps_by_uid_db(uid)
+
+        # Update each persona to add 'omi' to connected_accounts
+        for persona in personas:
+            connected_accounts = persona.get('connected_accounts', [])
+            if 'omi' not in connected_accounts:
+                connected_accounts.append('omi')
+
+                # Update the persona with the new connected_accounts
+                update_data = persona
+                update_data['connected_accounts'] = connected_accounts
+                update_data['updated_at'] = datetime.now(timezone.utc)
+                update_data['persona_prompt'] = await generate_persona_prompt(uid, update_data)
+                update_data['description'] = generate_persona_desc(uid, update_data['name'])
+
+                update_app_in_db(update_data)
+                delete_app_cache_by_id(persona['id'])
+    except Exception as e:
+        print(f"Error updating persona connected accounts: {e}")
 
 
 # ******************************************************

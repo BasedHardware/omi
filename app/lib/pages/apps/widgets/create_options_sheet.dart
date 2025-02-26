@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/pages/apps/add_app.dart';
 import 'package:friend_private/pages/persona/add_persona.dart';
+import 'package:friend_private/pages/persona/persona_profile.dart';
+import 'package:friend_private/pages/persona/persona_provider.dart';
+import 'package:friend_private/providers/home_provider.dart';
+import 'package:provider/provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 
@@ -60,7 +64,10 @@ class CreateOptionsSheet extends StatelessWidget {
               onTap: () {
                 Navigator.pop(context);
                 MixpanelManager().pageOpened('Create Persona');
-                routeToPage(context, const AddPersonaPage());
+                // Set routing in provider and navigate to Persona Profile page
+                Provider.of<PersonaProvider>(context, listen: false).setRouting(PersonaProfileRouting.create_my_clone);
+                Provider.of<HomeProvider>(context, listen: false).setIndex(3);
+                Provider.of<HomeProvider>(context, listen: false).onSelectedIndexChanged!(3);
               },
             ),
           ),
