@@ -33,7 +33,7 @@ export const InputArea: React.FC<InputAreaProps> = ({ handle, handleInputChange,
         className="rounded-full bg-gray-800 text-white border-gray-700 focus:border-gray-600 text-lg py-3"
       />
       <Button
-        className="w-full rounded-full bg-white text-black hover:bg-gray-200 text-lg py-3"
+        className="w-full rounded-full bg-white text-black hover:bg-gray-200"
         onClick={handleCreatePersona}
         disabled={isCreating}
       >
