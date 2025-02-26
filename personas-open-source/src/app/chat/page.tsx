@@ -76,12 +76,20 @@ function ChatContent() {
           const data = botDoc.data();
           let category = data.category;
           
-          // If category is not linkedin/twitter, check connected_accounts
+          // If connected_accounts exists, determine category from it
           if (category !== 'linkedin' && category !== 'twitter' && data.connected_accounts) {
-            if (data.connected_accounts.includes('twitter')) {
-              category = 'twitter';
-            } else if (data.connected_accounts.includes('linkedin')) {
-              category = 'linkedin';
+            if (data.connected_accounts.includes('omi')) {
+              category = 'omi';
+            } 
+            else if (category !== 'twitter' && category !== 'linkedin') {
+              if (data.connected_accounts.includes('twitter')) {
+                category = 'twitter';
+              } else if (data.connected_accounts.includes('linkedin')) {
+                category = 'linkedin';
+              } 
+              else {
+                category = data.connected_accounts[0];
+              }
             }
           }
           
@@ -634,6 +642,13 @@ function ChatContent() {
             </Link>
           ) : botCategory === 'twitter' ? (
             <Link href={`https://x.com/${username}`} target="_blank" rel="noopener noreferrer">
+              <h2 className="text-lg font-semibold text-white truncate flex items-center hover:underline">
+                {botName}
+                <BadgeCheck className="ml-1 h-5 w-5 stroke-zinc-900" style={{ fill: '#00acee' }} />
+              </h2>
+            </Link>
+          ) : botCategory === 'omi' ? (
+            <Link href={getStoreUrl} target="_blank" rel="noopener noreferrer">
               <h2 className="text-lg font-semibold text-white truncate flex items-center hover:underline">
                 {botName}
                 <BadgeCheck className="ml-1 h-5 w-5 stroke-zinc-900" style={{ fill: '#00acee' }} />
