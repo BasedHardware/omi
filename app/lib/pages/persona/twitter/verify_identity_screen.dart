@@ -239,7 +239,7 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
                         Column(
                           children: [
                             Text(
-                              tryDecodingText(provider.twitterProfile['name']),
+                              tryDecodingText(provider.twitterProfile['name'] ?? ""),
                               style: TextStyle(
                                 color: Colors.white.withOpacity(0.78),
                                 fontSize: 20,
