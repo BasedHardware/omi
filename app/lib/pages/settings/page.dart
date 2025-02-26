@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/auth.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/main.dart';
+import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/pages/settings/about.dart';
 import 'package:friend_private/pages/settings/developer.dart';
 import 'package:friend_private/pages/settings/profile.dart';
@@ -10,6 +11,7 @@ import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:provider/provider.dart';
 
 import 'device_settings.dart';
 
@@ -121,6 +123,8 @@ class _SettingsPageState extends State<SettingsPage> {
                       }, () async {
                         SharedPreferencesUtil().hasOmiDevice = null;
                         SharedPreferencesUtil().verifiedPersonaId = null;
+                        Provider.of<PersonaProvider>(context, listen: false)
+                            .setRouting(PersonaProfileRouting.no_device);
                         await signOut();
                         Navigator.of(context).pop();
                         routeToPage(context, const DeciderWidget(), replace: true);
