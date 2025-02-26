@@ -155,7 +155,8 @@ async def update_persona(persona_id: str, persona_data: str = Form(...), file: U
 
     # Image
     if file:
-        if 'image' in persona and len(persona['image']) > 0:
+        if 'image' in persona and len(persona['image']) > 0 and \
+                persona['image'].startswith('https://storage.googleapis.com/'):
             delete_plugin_logo(persona['image'])
         os.makedirs(f'_temp/plugins', exist_ok=True)
         file_path = f"_temp/plugins/{file.filename}"
@@ -169,7 +170,8 @@ async def update_persona(persona_id: str, persona_data: str = Form(...), file: U
     data['updated_at'] = datetime.now(timezone.utc)
 
     # Update 'omi' connected_accounts
-    if 'omi' in data.get('connected_accounts', []) and 'omi' not in persona.get('connected_accounts', []):
+    if 'omi' in data.get('connected_accounts', []) and \
+            'omi' not in persona.get('connected_accounts', []):
         data['persona_prompt'] = await generate_persona_prompt(uid, persona)
 
     update_app_in_db(data)
@@ -270,7 +272,8 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
     if plugin['uid'] != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if file:
-        if 'image' in plugin and len(plugin['image']) > 0:
+        if 'image' in plugin and len(plugin['image']) > 0 and \
+                plugin['image'].startswith('https://storage.googleapis.com/'):
             delete_plugin_logo(plugin['image'])
         os.makedirs(f'_temp/plugins', exist_ok=True)
         file_path = f"_temp/plugins/{file.filename}"
@@ -557,6 +560,7 @@ async def verify_twitter_ownership_tweet(
         else:
             if persona_id:
                 persona = await add_twitter_to_persona(handle, persona_id)
+
     if persona:
         res['persona_id'] = persona['id']
 
