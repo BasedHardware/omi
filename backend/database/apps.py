@@ -296,6 +296,7 @@ def get_persona_by_uid_db(uid: str):
 
 def get_user_persona_by_uid(uid: str):
     filters = [
+        FieldFilter('capabilities', 'array_contains', 'persona'),
         FieldFilter('category', '==', 'personality-emulation'),
         FieldFilter('deleted', '==', False),
         FieldFilter('uid', '==', uid),
