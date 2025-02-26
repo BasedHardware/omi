@@ -114,17 +114,20 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
               actions: [
                 // Only show settings icon for create_my_clone or home routing
                 Consumer<PersonaProvider>(builder: (context, personaProvider, _) {
-                  //if (personaProvider.routing == PersonaProfileRouting.no_device) {
-                  //  return Padding(
-                  //    padding: const EdgeInsets.all(16.0),
-                  //    child: GestureDetector(
-                  //      onTap: () async {
-                  //        _showSignOutDialog(context);
-                  //      },
-                  //      child: const Icon(Icons.logout, color: Colors.white, size: 24),
-                  //    ),
-                  //  );
-                  //}
+                  if (personaProvider.routing == PersonaProfileRouting.no_device)
+                    return Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: GestureDetector(
+                        onTap: () async {
+                          await routeToPage(context, const SettingsPage(mode: SettingsMode.no_device));
+                        },
+                        child: SvgPicture.asset(
+                          'assets/images/ic_setting_persona.svg',
+                          width: 44,
+                          height: 44,
+                        ),
+                      ),
+                    );
                   if (personaProvider.routing == PersonaProfileRouting.create_my_clone ||
                       personaProvider.routing == PersonaProfileRouting.home)
                     return Padding(
