@@ -229,12 +229,23 @@ class PersonaProvider extends ChangeNotifier {
   void disconnectTwitter() {
     _twitterProfile = {};
     hasTwitterConnection = false;
+
+    if (_isEditablePersona()) {
+      updatePersona();
+    }
     notifyListeners();
   }
 
   void disconnectOmi() {
     hasOmiConnection = false;
+    if (_isEditablePersona()) {
+      updatePersona();
+    }
     notifyListeners();
+  }
+
+  bool _isEditablePersona() {
+    return routing != PersonaProfileRouting.no_device;
   }
 
   Future<void> updatePersona() async {
