@@ -105,6 +105,7 @@ class ShowAppOptionsSheet extends StatelessWidget {
                       if (app.isNotPersona()) {
                         routeToPage(context, UpdateAppPage(app: app));
                       } else {
+                        Navigator.pop(context);
                         // Set routing in provider and navigate to Persona Profile page
                         Provider.of<PersonaProvider>(context, listen: false)
                             .setRouting(PersonaProfileRouting.create_my_clone);

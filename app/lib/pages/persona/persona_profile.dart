@@ -7,6 +7,7 @@ import 'package:friend_private/pages/chat/clone_chat_page.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/providers/app_provider.dart';
+import 'package:friend_private/providers/auth_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/pages/persona/twitter/social_profile.dart';
 import 'package:friend_private/pages/settings/page.dart';
@@ -327,7 +328,6 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                           value: provider.makePersonaPublic,
                                           onChanged: (value) {
                                             provider.setPersonaPublic(value);
-                                            provider.updatePersona();
                                           },
                                           activeColor: Colors.deepPurple,
                                         );
@@ -505,24 +505,38 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                     ),
                                   ),
                                   if (provider.hasOmiConnection) ...[
-                                    _buildSocialLink(
-                                      icon: Assets.images.logoTransparent.path,
-                                      text: persona.username ?? 'username',
-                                      isConnected: provider.hasOmiConnection,
+                                    GestureDetector(
+                                      onTap: () {
+                                        if (provider.routing == PersonaProfileRouting.no_device) {
+                                          var provider = Provider.of<AuthenticationProvider>(context, listen: false);
+                                          if (provider.user == null || provider.user!.isAnonymous) {
+                                            routeToPage(context, const OnboardingWrapper());
+                                          }
+                                        }
+                                      },
+                                      child: _buildSocialLink(
+                                        icon: Assets.images.logoTransparent.path,
+                                        text: persona.username ?? 'username',
+                                        isConnected: provider.hasOmiConnection,
+                                      ),
                                     ),
                                     const SizedBox(height: 12),
                                   ],
                                   GestureDetector(
                                     onTap: () {
+                                      if (!_isPersonaEditable(provider.routing)) {
+                                        return;
+                                      }
                                       if (!provider.hasTwitterConnection) {
                                         routeToPage(context, const SocialHandleScreen());
-                                      } else {
-                                        provider.disconnectTwitter();
+                                        return;
                                       }
+
+                                      _showDisconnectTwitterConfirmation(context, provider);
                                     },
                                     child: _buildSocialLink(
                                       icon: Assets.images.xLogoMini.path,
-                                      text: persona.twitter?['username'] ?? '@username',
+                                      text: provider.twitterProfile?['username'] ?? '@username',
                                       isConnected: provider.hasTwitterConnection,
                                       showConnect: !provider.hasTwitterConnection,
                                     ),
@@ -637,6 +651,37 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                 }
               },
               child: const Text('Save', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showDisconnectTwitterConfirmation(BuildContext context, PersonaProvider provider) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Theme.of(context).colorScheme.surface,
+          title: const Text('Disconnect Twitter', style: TextStyle(color: Colors.white)),
+          content: const Text(
+            'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.',
+            style: TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+            TextButton(
+              onPressed: () {
+                provider.disconnectTwitter();
+                Navigator.of(context).pop();
+              },
+              child: const Text('Disconnect', style: TextStyle(color: Colors.redAccent)),
             ),
           ],
         );
