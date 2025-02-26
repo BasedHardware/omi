@@ -45,6 +45,7 @@ class PersonaProvider extends ChangeNotifier {
   String? selectedImageUrl;
 
   Future updatePersonaName() async {
+    debugPrint("updatePersonaName");
     await updatePersona();
     notifyListeners();
   }
@@ -147,9 +148,13 @@ class PersonaProvider extends ChangeNotifier {
     if (value == null) {
       return;
     }
+    if (value == makePersonaPublic) {
+      return;
+    }
     makePersonaPublic = value;
 
     // Update
+    debugPrint("setPersonaPublic");
     updatePersona();
   }
 
@@ -185,6 +190,7 @@ class PersonaProvider extends ChangeNotifier {
       validateForm();
 
       // Update
+      debugPrint("pickAndUpdateImage");
       await updatePersona();
     }
     notifyListeners();
@@ -230,6 +236,7 @@ class PersonaProvider extends ChangeNotifier {
     _twitterProfile = {};
     hasTwitterConnection = false;
 
+    debugPrint("disconnectTwitter");
     if (_isEditablePersona()) {
       updatePersona();
     }
@@ -238,6 +245,7 @@ class PersonaProvider extends ChangeNotifier {
 
   void disconnectOmi() {
     hasOmiConnection = false;
+    debugPrint("disconnectOmi");
     if (_isEditablePersona()) {
       updatePersona();
     }
@@ -393,11 +401,13 @@ class PersonaProvider extends ChangeNotifier {
   }
 
   Future onTwitterVerifiedCompleted() async {
+    debugPrint("routing ${routing}");
     if (routing == PersonaProfileRouting.no_device) {
       return;
     }
 
     // update
+    debugPrint("onTwitterVerifiedCompleted");
     updatePersona();
   }
 }
