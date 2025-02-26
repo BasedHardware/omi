@@ -761,7 +761,6 @@ function ChatContent() {
 
       {showLoginPrompt && <LoginPrompt />}
       <SettingsDialog />
-      <DevicePopup />
     </div>
   );
 }
