@@ -379,6 +379,8 @@ def get_omi_personas_by_uid(uid: str):
 async def generate_persona_prompt(uid: str, persona: dict):
     """Generate a persona prompt based on user facts and memories."""
 
+    print(f"generate_persona_prompt {uid}")
+
     # Get latest facts and user info
     facts = get_facts(uid, limit=250)
     user_name = get_user_name(uid)
@@ -488,7 +490,7 @@ async def update_persona_prompt(persona: dict):
 
     condensed_tweets = None
     # Condense tweets
-    if "twitter" in persona['connected_accounts']:
+    if "twitter" in persona['connected_accounts'] and 'twitter' in persona:
         # Get latest tweets
         tweets = await get_twitter_timeline(persona['twitter']['username'])
         tweets = [tweet['text'] for tweet in tweets['timeline']]
