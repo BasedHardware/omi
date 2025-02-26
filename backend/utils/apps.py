@@ -380,7 +380,7 @@ async def generate_persona_prompt(uid: str, persona: dict):
     """Generate a persona prompt based on user facts and memories."""
 
     # Get latest facts and user info
-    facts = get_facts(uid, limit=1000)
+    facts = get_facts(uid, limit=250)
     user_name = get_user_name(uid)
 
     # Get and condense recent memories
@@ -457,7 +457,7 @@ async def generate_persona_prompt(uid: str, persona: dict):
 
 def generate_persona_desc(uid: str, persona_name: str):
     """Generate a persona description based on user facts."""
-    facts = get_facts(uid, limit=1000)
+    facts = get_facts(uid, limit=250)
 
     persona_description = generate_persona_description(facts, persona_name)
     return persona_description
@@ -478,7 +478,7 @@ async def update_persona_prompt(persona: dict):
     """Update a persona's chat prompt with latest facts and memories."""
 
     # Get latest facts and user info
-    facts = get_facts(persona['uid'], limit=1000)
+    facts = get_facts(persona['uid'], limit=250)
     user_name = get_user_name(persona['uid'])
 
     # Get and condense recent memories
