@@ -522,11 +522,13 @@ async def get_twitter_profile_data(handle: str, uid: str = Depends(auth.get_curr
     if res['avatar']:
         res['avatar'] = res['avatar'].replace('_normal', '')
 
+    # By user persona first
+    persona = get_user_persona_by_uid(uid)
+
     # Get matching persona if exists
-    persona = get_persona_by_twitter_handle_db(handle)
-    # Fallback to user persona
     if not persona:
-        persona = get_user_persona_by_uid(uid)
+        persona = get_persona_by_twitter_handle_db(handle)
+
     if persona:
         res['persona_id'] = persona['id']
         res['persona_username'] = persona['username']
