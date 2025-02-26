@@ -238,7 +238,6 @@ export default function HomePage() {
     try {
       const trimmedInput = handle.trim();
       const cleanHandle = extractHandle(trimmedInput);
-      
       if (!cleanHandle) {
         toast.error('Invalid handle or URL');
         return;
@@ -266,6 +265,15 @@ export default function HomePage() {
           toast.success('Profile already exists, redirecting...');
           redirectToChat(existingId);
           return;
+        } else {
+          linkedinResult = await fetchLinkedinProfile(cleanHandle);
+          if (linkedinResult) {
+            existingId = await checkExistingProfile(cleanHandle, 'linkedin');
+            if (existingId) {
+              redirectToChat(existingId);
+              return;
+            }
+          }
         }
       } 
       // If input is a generic handle, try both platforms
