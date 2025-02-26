@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:friend_private/backend/auth.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/gen/assets.gen.dart';
+import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/chat/clone_chat_page.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
@@ -112,6 +114,17 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
               actions: [
                 // Only show settings icon for create_my_clone or home routing
                 Consumer<PersonaProvider>(builder: (context, personaProvider, _) {
+                  //if (personaProvider.routing == PersonaProfileRouting.no_device) {
+                  //  return Padding(
+                  //    padding: const EdgeInsets.all(16.0),
+                  //    child: GestureDetector(
+                  //      onTap: () async {
+                  //        _showSignOutDialog(context);
+                  //      },
+                  //      child: const Icon(Icons.logout, color: Colors.white, size: 24),
+                  //    ),
+                  //  );
+                  //}
                   if (personaProvider.routing == PersonaProfileRouting.create_my_clone ||
                       personaProvider.routing == PersonaProfileRouting.home)
                     return Padding(
@@ -123,7 +136,6 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                           bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
                           String transcriptModel = SharedPreferencesUtil().transcriptionModel;
                           await routeToPage(context, const SettingsPage());
-
                           if (language != SharedPreferencesUtil().recordingsLanguage ||
                               hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
                               transcriptModel != SharedPreferencesUtil().transcriptionModel) {
@@ -620,7 +632,6 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          backgroundColor: Theme.of(context).colorScheme.surface,
           title: const Text('Edit Name', style: TextStyle(color: Colors.white)),
           content: TextField(
             controller: nameController,
@@ -682,6 +693,41 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                 Navigator.of(context).pop();
               },
               child: const Text('Disconnect', style: TextStyle(color: Colors.redAccent)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showSignOutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Sign Out', style: TextStyle(color: Colors.white)),
+          content: const Text(
+            'Are you sure you want to sign out?',
+            style: TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                SharedPreferencesUtil().hasOmiDevice = null;
+                SharedPreferencesUtil().verifiedPersonaId = null;
+                Provider.of<PersonaProvider>(context, listen: false).setRouting(PersonaProfileRouting.no_device);
+                await signOut();
+                Navigator.of(context).pop();
+                routeToPage(context, const DeciderWidget(), replace: true);
+              },
+              child: const Text('Sign Out', style: TextStyle(color: Colors.redAccent)),
             ),
           ],
         );
