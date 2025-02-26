@@ -75,7 +75,8 @@ class CloneChatPageState extends State<CloneChatPage> {
                     height: 28,
                   ),
                   onPressed: () {
-                    Navigator.pop(context);
+                    personaProvider.setRouting(PersonaProfileRouting.no_device);
+                    routeToPage(context, const PersonaProfilePage(), replace: true);
                   },
                 ),
               ],
