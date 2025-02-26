@@ -74,11 +74,22 @@ function ChatContent() {
         const botDoc = await getDoc(doc(db, 'plugins_data', botId));
         if (botDoc.exists()) {
           const data = botDoc.data();
+          let category = data.category;
+          
+          // If category is not linkedin/twitter, check connected_accounts
+          if (category !== 'linkedin' && category !== 'twitter' && data.connected_accounts) {
+            if (data.connected_accounts.includes('twitter')) {
+              category = 'twitter';
+            } else if (data.connected_accounts.includes('linkedin')) {
+              category = 'linkedin';
+            }
+          }
+          
           setBotData({
             name: data.name,
             avatar: data.avatar,
             username: data.username,
-            category: data.category,
+            category: category,
             image: data.image
           });
         }
