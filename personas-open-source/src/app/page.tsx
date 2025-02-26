@@ -146,67 +146,125 @@ export default function HomePage() {
     return querySnapshot.empty ? null : querySnapshot.docs[0].id;
   };
 
-  //helper function to extract a handle from a URL or raw handle input.
-  const extractHandle = (input: string): string => {
+  //helper functions to extract handles from specific platforms
+  const extractTwitterHandle = (input: string): string | null => {
     const trimmedInput = input.trim();
-    // Check for Twitter URL pattern.
     const twitterMatch = trimmedInput.match(/x\.com\/(?:#!\/)?@?([^/?]+)/i);
     if (twitterMatch && twitterMatch[1]) {
       return twitterMatch[1];
     }
-    // Check for LinkedIn URL pattern.
+    return null;
+  };
+
+  const extractLinkedinHandle = (input: string): string | null => {
+    const trimmedInput = input.trim();
     const linkedinMatch = trimmedInput.match(/linkedin\.com\/in\/([^/?]+)/i);
     if (linkedinMatch && linkedinMatch[1]) {
       return linkedinMatch[1];
     }
-    // If not a URL, remove leading '@' if present.
+    return null;
+  };
+
+  //helper function to extract a handle from a URL or raw handle input.
+  const extractHandle = (input: string): string => {
+    // Try platform-specific extractors first
+    const twitterHandle = extractTwitterHandle(input);
+    if (twitterHandle) return twitterHandle;
+    
+    const linkedinHandle = extractLinkedinHandle(input);
+    if (linkedinHandle) return linkedinHandle;
+    
+    // If not a URL, remove leading '@' if present
+    const trimmedInput = input.trim();
     return trimmedInput.startsWith('@') ? trimmedInput.substring(1) : trimmedInput;
+  };
+
+  // Helper functions to determine input type
+  const isTwitterInput = (input: string): boolean => {
+    return /x\.com\//i.test(input.trim());
+  };
+
+  const isLinkedinInput = (input: string): boolean => {
+    return /linkedin\.com\//i.test(input.trim());
   };
 
   // handleCreatePersona function using redirectToChat in all cases.
   const handleCreatePersona = async () => {
-    const trimmedInput = handle.trim();
-    const isTwitterURL = /x\.com\//i.test(trimmedInput);
-    const isLinkedinURL = /linkedin\.com\//i.test(trimmedInput);
-
-    // Extract the clean handle regardless.
-    const cleanHandle = extractHandle(handle);
-    let twitterResult = false;
-    let linkedinResult = false;
-
-    if (isTwitterURL && !isLinkedinURL) {
-      // If a Twitter URL is provided, only fetch Twitter.
-      twitterResult = await fetchTwitterProfile(cleanHandle);
-    } else if (isLinkedinURL && !isTwitterURL) {
-      // If a LinkedIn URL is provided, only fetch LinkedIn.
-      linkedinResult = await fetchLinkedinProfile(cleanHandle);
-    } else {
-      // For plain handles or ambiguous scenarios, fetch both.
-      twitterResult = await fetchTwitterProfile(cleanHandle);
-      linkedinResult = await fetchLinkedinProfile(cleanHandle);
-    }
-
-    let docId: string | null = null;
-    // If a specific platform was intended, use only that result.
-    if (isTwitterURL && twitterResult) {
-      docId = await getProfileDocId(cleanHandle, 'twitter');
-    } else if (isLinkedinURL && linkedinResult) {
-      docId = await getProfileDocId(cleanHandle, 'linkedin');
-    } else if (twitterResult && !linkedinResult) {
-      docId = await getProfileDocId(cleanHandle, 'twitter');
-    } else if (linkedinResult && !twitterResult) {
-      docId = await getProfileDocId(cleanHandle, 'linkedin');
-    } else if (twitterResult && linkedinResult) {
-      // If both are available and no specific URL intent, prompt the user.
-      setPendingCleanHandle(cleanHandle);
-      setShowPlatformModal(true);
-      return;
-    }
-
-    if (docId) {
-      redirectToChat(docId);
-    } else {
+    setIsCreating(true);
+    
+    try {
+      const trimmedInput = handle.trim();
+      const cleanHandle = extractHandle(trimmedInput);
+      
+      // Determine what type of profile to fetch based on input
+      if (!cleanHandle) {
+        toast.error('Invalid handle or URL');
+        return;
+      }
+      
+      // Track results from both platforms
+      let twitterResult = false;
+      let linkedinResult = false;
+      
+      // If input is specifically a Twitter URL
+      if (isTwitterInput(trimmedInput)) {
+        twitterResult = await fetchTwitterProfile(cleanHandle);
+        if (twitterResult) {
+          const docId = await getProfileDocId(cleanHandle, 'twitter');
+          if (docId) {
+            redirectToChat(docId);
+            return;
+          }
+        }
+      } 
+      // If input is specifically a LinkedIn URL
+      else if (isLinkedinInput(trimmedInput)) {
+        linkedinResult = await fetchLinkedinProfile(cleanHandle);
+        if (linkedinResult) {
+          const docId = await getProfileDocId(cleanHandle, 'linkedin');
+          if (docId) {
+            redirectToChat(docId);
+            return;
+          }
+        }
+      } 
+      // If input is a generic handle, try both platforms
+      else {
+        // Try Twitter first
+        twitterResult = await fetchTwitterProfile(cleanHandle);
+        // Then try LinkedIn
+        linkedinResult = await fetchLinkedinProfile(cleanHandle);
+        
+        // Handle the case where both platforms have results
+        if (twitterResult && linkedinResult) {
+          setPendingCleanHandle(cleanHandle);
+          setShowPlatformModal(true);
+          return;
+        }
+        
+        // Handle single platform results
+        if (twitterResult) {
+          const docId = await getProfileDocId(cleanHandle, 'twitter');
+          if (docId) {
+            redirectToChat(docId);
+            return;
+          }
+        } else if (linkedinResult) {
+          const docId = await getProfileDocId(cleanHandle, 'linkedin');
+          if (docId) {
+            redirectToChat(docId);
+            return;
+          }
+        }
+      }
+      
+      // If we got here, no profiles were found or created
       toast.error('No profiles found for the given handle.');
+    } catch (error) {
+      console.error('Error in handleCreatePersona:', error);
+      toast.error('Failed to create or find the persona.');
+    } finally {
+      setIsCreating(false);
     }
   };
 
