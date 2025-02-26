@@ -712,15 +712,7 @@ function ChatContent() {
       </ScrollArea>
 
       {/* Input Area */}
-      <div className="p-4 border-t border-zinc-800">
-          <div className="flex justify-center">
-            <Button
-              onClick={() => window.open(getStoreUrl, '_blank')}
-              className="w-full max-w-[250px] mb-4 py-6 text-base font-bold text-[16px] rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white hover:opacity-90"
-            >
-              Create your own clone
-            </Button>
-          </div>
+      <div className="p-4 pb-16 sm:pb-4 border-t border-zinc-800">
         <div className="max-w-4xl mx-auto flex gap-2">
           <Input
             ref={inputRef}
@@ -742,6 +734,16 @@ function ChatContent() {
             <Send className="h-5 w-5" />
           </Button>
         </div>
+        
+        <div className="flex justify-center mt-5 mb-6 sm:mb-2">
+          <Button
+            onClick={() => window.open(getStoreUrl, '_blank')}
+            className="w-full max-w-[250px] py-5 text-base font-bold text-[16px] rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white hover:opacity-90 shadow-lg"
+          >
+            Chat with My Own Clone!
+          </Button>
+        </div>
+        
         <div className="max-w-4xl mx-auto mt-4">
           <div className="flex flex-col sm:flex-row justify-between text-xs text-gray-500">
             <div className="flex gap-2 mb-2 sm:mb-0">
