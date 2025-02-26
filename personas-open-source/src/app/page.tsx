@@ -596,7 +596,6 @@ ${extraPromptRules}
 
 Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your personality. Responses should help the conversation go deeper. You have strong opinions, slightly controversial.`;
       try {
-        const createdAtFormatted = formatDate(new Date().toISOString());
         const persona_id = ulid();
         const docData = {
           'id': persona_id,
@@ -613,14 +612,14 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
           'category': 'personality-emulation',
           'capabilities': ['persona'],
           'connected_accounts': ['linkedin'],
-          'created_at': createdAtFormatted,
+          'connected_at': new Date().toISOString(),
           'private': false,
           'persona_prompt': fullChatPrompt,
           'avatar': formattedAvatarUrl,
           'linkedin': {
             'username': cleanHandle.toLowerCase(),
             'avatar': formattedAvatarUrl,
-            'connected_at': createdAtFormatted,
+            'connected_at': new Date().toISOString(),
           }
         };
 
