@@ -191,6 +191,8 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                                 properties: {'handle': handle, 'uid': FirebaseAuth.instance.currentUser?.uid ?? ''},
                               );
                               SharedPreferencesUtil().hasOmiDevice = false;
+                              Provider.of<PersonaProvider>(context, listen: false)
+                                  .setRouting(PersonaProfileRouting.no_device);
                               await provider.getTwitterProfile(handle);
                               if (provider.twitterProfile.isNotEmpty) {
                                 routeToPage(context, const VerifyIdentityScreen());
