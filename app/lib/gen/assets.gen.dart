@@ -86,6 +86,10 @@ class $AssetsImagesGen {
   AssetGenImage get appLauncherIconV2 =>
       const AssetGenImage('assets/images/app_launcher_icon_v2.png');
 
+  /// File path: assets/images/apple_logo.png
+  AssetGenImage get appleLogo =>
+      const AssetGenImage('assets/images/apple_logo.png');
+
   /// File path: assets/images/background.png
   AssetGenImage get background =>
       const AssetGenImage('assets/images/background.png');
@@ -93,9 +97,27 @@ class $AssetsImagesGen {
   /// File path: assets/images/blob.png
   AssetGenImage get blob => const AssetGenImage('assets/images/blob.png');
 
+  /// File path: assets/images/calendar_logo.png
+  AssetGenImage get calendarLogo =>
+      const AssetGenImage('assets/images/calendar_logo.png');
+
+  /// File path: assets/images/checkbox.svg
+  SvgGenImage get checkbox => const SvgGenImage('assets/images/checkbox.svg');
+
+  /// File path: assets/images/clone.png
+  AssetGenImage get clone => const AssetGenImage('assets/images/clone.png');
+
   /// File path: assets/images/emotional_feedback_1.png
   AssetGenImage get emotionalFeedback1 =>
       const AssetGenImage('assets/images/emotional_feedback_1.png');
+
+  /// File path: assets/images/google_logo.png
+  AssetGenImage get googleLogo =>
+      const AssetGenImage('assets/images/google_logo.png');
+
+  /// File path: assets/images/gradient_card.png
+  AssetGenImage get gradientCard =>
+      const AssetGenImage('assets/images/gradient_card.png');
 
   /// File path: assets/images/herologo.png
   AssetGenImage get herologo =>
@@ -116,8 +138,20 @@ class $AssetsImagesGen {
   /// File path: assets/images/ic_chart.svg
   SvgGenImage get icChart => const SvgGenImage('assets/images/ic_chart.svg');
 
+  /// File path: assets/images/ic_clone_chat.svg
+  SvgGenImage get icCloneChat =>
+      const SvgGenImage('assets/images/ic_clone_chat.svg');
+
+  /// File path: assets/images/ic_clone_plus.svg
+  SvgGenImage get icClonePlus =>
+      const SvgGenImage('assets/images/ic_clone_plus.svg');
+
   /// File path: assets/images/ic_dollar.svg
   SvgGenImage get icDollar => const SvgGenImage('assets/images/ic_dollar.svg');
+
+  /// File path: assets/images/instagram_logo.png
+  AssetGenImage get instagramLogo =>
+      const AssetGenImage('assets/images/instagram_logo.png');
 
   /// File path: assets/images/instruction_1.png
   AssetGenImage get instruction1 =>
@@ -131,6 +165,13 @@ class $AssetsImagesGen {
   AssetGenImage get instruction3 =>
       const AssetGenImage('assets/images/instruction_3.png');
 
+  /// File path: assets/images/link_icon.svg
+  SvgGenImage get linkIcon => const SvgGenImage('assets/images/link_icon.svg');
+
+  /// File path: assets/images/linkedin_logo.png
+  AssetGenImage get linkedinLogo =>
+      const AssetGenImage('assets/images/linkedin_logo.png');
+
   /// File path: assets/images/logo_transparent.png
   AssetGenImage get logoTransparent =>
       const AssetGenImage('assets/images/logo_transparent.png');
@@ -142,6 +183,14 @@ class $AssetsImagesGen {
   /// File path: assets/images/logo_transparent_v2.png
   AssetGenImage get logoTransparentV2 =>
       const AssetGenImage('assets/images/logo_transparent_v2.png');
+
+  /// File path: assets/images/new_background.png
+  AssetGenImage get newBackground =>
+      const AssetGenImage('assets/images/new_background.png');
+
+  /// File path: assets/images/notion_logo.png
+  AssetGenImage get notionLogo =>
+      const AssetGenImage('assets/images/notion_logo.png');
 
   /// File path: assets/images/recording_green_circle_icon.png
   AssetGenImage get recordingGreenCircleIcon =>
@@ -182,7 +231,15 @@ class $AssetsImagesGen {
   AssetGenImage get stars => const AssetGenImage('assets/images/stars.png');
 
   /// File path: assets/images/stripe_logo.svg
-  String get stripeLogo => 'assets/images/stripe_logo.svg';
+  SvgGenImage get stripeLogo =>
+      const SvgGenImage('assets/images/stripe_logo.svg');
+
+  /// File path: assets/images/x_logo.png
+  AssetGenImage get xLogo => const AssetGenImage('assets/images/x_logo.png');
+
+  /// File path: assets/images/x_logo_mini.png
+  AssetGenImage get xLogoMini =>
+      const AssetGenImage('assets/images/x_logo_mini.png');
 
   /// List of all assets
   List<dynamic> get values => [
@@ -190,21 +247,34 @@ class $AssetsImagesGen {
         appLauncherIcon,
         appLauncherIconV1,
         appLauncherIconV2,
+        appleLogo,
         background,
         blob,
+        calendarLogo,
+        checkbox,
+        clone,
         emotionalFeedback1,
+        googleLogo,
+        gradientCard,
         herologo,
         herologoV1,
         herologoV3,
         herologoV4,
         icChart,
+        icCloneChat,
+        icClonePlus,
         icDollar,
+        instagramLogo,
         instruction1,
         instruction2,
         instruction3,
+        linkIcon,
+        linkedinLogo,
         logoTransparent,
         logoTransparentV1,
         logoTransparentV2,
+        newBackground,
+        notionLogo,
         recordingGreenCircleIcon,
         speaker0Icon,
         speaker1Icon,
@@ -215,7 +285,9 @@ class $AssetsImagesGen {
         splashV1,
         splashV2,
         stars,
-        stripeLogo
+        stripeLogo,
+        xLogo,
+        xLogoMini
       ];
 }
 

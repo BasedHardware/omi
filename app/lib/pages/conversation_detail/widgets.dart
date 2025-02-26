@@ -285,7 +285,7 @@ class EventsListWidget extends StatelessWidget {
                   contentPadding: EdgeInsets.zero,
                   title: Text(
                     event.title.decodeString,
-                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                   ),
                   subtitle: Padding(
                     padding: const EdgeInsets.only(top: 4.0),
@@ -504,7 +504,7 @@ class GetAppsWidgets extends StatelessWidget {
                                           app.name.decodeString,
                                           maxLines: 1,
                                           style: const TextStyle(
-                                            fontWeight: FontWeight.w600,
+                                            fontWeight: FontWeight.w500,
                                             color: Colors.white,
                                             fontSize: 16,
                                           ),
@@ -557,7 +557,7 @@ class GetAppsWidgets extends StatelessWidget {
                                           'Unknown App',
                                           maxLines: 1,
                                           style: TextStyle(
-                                            fontWeight: FontWeight.w600,
+                                            fontWeight: FontWeight.w500,
                                             color: Colors.white,
                                             fontSize: 16,
                                           ),

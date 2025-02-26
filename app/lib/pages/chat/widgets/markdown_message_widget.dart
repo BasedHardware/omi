@@ -20,7 +20,7 @@ Widget getMarkdownWidget(BuildContext context, String content) {
         backgroundColor: Colors.transparent,
         decoration: TextDecoration.none,
         color: Colors.white,
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w500,
       ),
     ),
     data: content,

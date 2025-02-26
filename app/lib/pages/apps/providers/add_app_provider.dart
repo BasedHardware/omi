@@ -23,10 +23,9 @@ class AddAppProvider extends ChangeNotifier {
 
   TextEditingController appNameController = TextEditingController();
   TextEditingController appDescriptionController = TextEditingController();
-  TextEditingController creatorNameController = TextEditingController();
-  TextEditingController creatorEmailController = TextEditingController();
   TextEditingController chatPromptController = TextEditingController();
   TextEditingController conversationPromptController = TextEditingController();
+
   String? appCategory;
 
 // Trigger Event
@@ -35,6 +34,7 @@ class AddAppProvider extends ChangeNotifier {
   TextEditingController setupCompletedController = TextEditingController();
   TextEditingController instructionsController = TextEditingController();
   TextEditingController authUrlController = TextEditingController();
+  TextEditingController appHomeUrlController = TextEditingController();
 
   // Pricing
   TextEditingController priceController = TextEditingController();
@@ -52,6 +52,10 @@ class AddAppProvider extends ChangeNotifier {
   File? imageFile;
   String? imageUrl;
   String? updateAppId;
+
+  List<String> thumbnailUrls = [];
+  List<String> thumbnailIds = [];
+  bool isUploadingThumbnail = false;
   List<AppCapability> selectedCapabilities = [];
   List<NotificationScope> selectedScopes = [];
   List<AppCapability> capabilities = [];
@@ -79,8 +83,6 @@ class AddAppProvider extends ChangeNotifier {
     if (paymentPlans.isEmpty) {
       await getPaymentPlans();
     }
-    creatorNameController.text = SharedPreferencesUtil().givenName;
-    creatorEmailController.text = SharedPreferencesUtil().email;
     setIsLoading(false);
   }
 
@@ -127,9 +129,7 @@ class AddAppProvider extends ChangeNotifier {
     imageUrl = app.image;
     appNameController.text = app.name.decodeString;
     appDescriptionController.text = app.description.decodeString;
-    creatorNameController.text = app.author.decodeString;
     priceController.text = app.price.toString();
-    creatorEmailController.text = app.email ?? '';
     makeAppPublic = !app.private;
     selectedCapabilities = app.getCapabilitiesFromIds(capabilities);
     if (app.externalIntegration != null) {
@@ -137,6 +137,7 @@ class AddAppProvider extends ChangeNotifier {
       webhookUrlController.text = app.externalIntegration!.webhookUrl;
       setupCompletedController.text = app.externalIntegration!.setupCompletedUrl ?? '';
       instructionsController.text = app.externalIntegration!.setupInstructionsFilePath;
+      appHomeUrlController.text = app.externalIntegration!.appHomeUrl ?? '';
       if (app.externalIntegration!.authSteps.isNotEmpty) {
         authUrlController.text = app.externalIntegration!.authSteps.first.url;
       }
@@ -151,6 +152,10 @@ class AddAppProvider extends ChangeNotifier {
       selectedScopes = app.getNotificationScopesFromIds(
           capabilities.firstWhere((element) => element.id == 'proactive_notification').notificationScopes);
     }
+
+    // Set existing thumbnails
+    thumbnailUrls = app.thumbnailUrls;
+    thumbnailIds = app.thumbnailIds;
     isValid = false;
     setIsLoading(false);
     notifyListeners();
@@ -159,8 +164,6 @@ class AddAppProvider extends ChangeNotifier {
   void clear() {
     appNameController.clear();
     appDescriptionController.clear();
-    creatorNameController.clear();
-    creatorEmailController.clear();
     chatPromptController.clear();
     conversationPromptController.clear();
     triggerEvent = null;
@@ -170,6 +173,7 @@ class AddAppProvider extends ChangeNotifier {
     setupCompletedController.clear();
     instructionsController.clear();
     authUrlController.clear();
+    appHomeUrlController.clear();
     priceController.clear();
     selectePaymentPlan = null;
     termsAgreed = false;
@@ -180,6 +184,8 @@ class AddAppProvider extends ChangeNotifier {
     selectedScopes.clear();
     updateAppId = null;
     selectedCapabilities.clear();
+    thumbnailUrls = [];
+    thumbnailIds = [];
   }
 
   void setPaymentPlan(String? plan) {
@@ -241,9 +247,6 @@ class AddAppProvider extends ChangeNotifier {
       return true;
     }
     if (appDescriptionController.text != app.description) {
-      return true;
-    }
-    if (creatorNameController.text != app.author) {
       return true;
     }
     if (makeAppPublic != !app.private) {
@@ -405,14 +408,12 @@ class AddAppProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> updateApp() async {
+  Future<bool> updateApp() async {
     setIsUpdating(true);
 
     Map<String, dynamic> data = {
       'name': appNameController.text,
       'description': appDescriptionController.text,
-      'author': creatorNameController.text,
-      'email': creatorEmailController.text,
       'capabilities': selectedCapabilities.map((e) => e.id).toList(),
       'deleted': false,
       'uid': SharedPreferencesUtil().uid,
@@ -422,14 +423,16 @@ class AddAppProvider extends ChangeNotifier {
       'is_paid': isPaid,
       'price': priceController.text.isNotEmpty ? double.parse(priceController.text) : 0.0,
       'payment_plan': selectePaymentPlan,
+      'thumbnails': thumbnailIds,
     };
     for (var capability in selectedCapabilities) {
       if (capability.id == 'external_integration') {
         data['external_integration'] = {
           'triggers_on': triggerEvent,
-          'webhook_url': webhookUrlController.text,
-          'setup_completed_url': setupCompletedController.text,
-          'setup_instructions_file_path': instructionsController.text,
+          'webhook_url': webhookUrlController.text.trim(),
+          'setup_completed_url': setupCompletedController.text.trim(),
+          'setup_instructions_file_path': instructionsController.text.trim(),
+          'app_home_url': appHomeUrlController.text.trim(),
           'auth_steps': [],
         };
         if (authUrlController.text.isNotEmpty) {
@@ -453,28 +456,30 @@ class AddAppProvider extends ChangeNotifier {
         data['proactive_notification']['scopes'] = selectedScopes.map((e) => e.id).toList();
       }
     }
+    var success = false;
     var res = await updateAppServer(imageFile, data);
     if (res) {
+      await appProvider!.getApps();
       var app = await getAppDetailsServer(updateAppId!);
       appProvider!.updateLocalApp(App.fromJson(app!));
       AppSnackbar.showSnackbarSuccess('App updated successfully 🚀');
       clear();
-      appProvider!.getApps();
+      success = true;
     } else {
       AppSnackbar.showSnackbarError('Failed to update app. Please try again later');
+      success = false;
     }
     checkValidity();
     setIsUpdating(false);
+    return success;
   }
 
-  Future<void> submitApp() async {
+  Future<String?> submitApp() async {
     setIsSubmitting(true);
 
     Map<String, dynamic> data = {
-      'name': appNameController.text,
-      'description': appDescriptionController.text,
-      'author': creatorNameController.text,
-      'email': creatorEmailController.text,
+      'name': appNameController.text.trim(),
+      'description': appDescriptionController.text.trim(),
       'capabilities': selectedCapabilities.map((e) => e.id).toList(),
       'deleted': false,
       'uid': SharedPreferencesUtil().uid,
@@ -483,14 +488,16 @@ class AddAppProvider extends ChangeNotifier {
       'is_paid': isPaid,
       'price': priceController.text.isNotEmpty ? double.parse(priceController.text) : 0.0,
       'payment_plan': selectePaymentPlan,
+      'thumbnails': thumbnailIds,
     };
     for (var capability in selectedCapabilities) {
       if (capability.id == 'external_integration') {
         data['external_integration'] = {
           'triggers_on': triggerEvent,
-          'webhook_url': webhookUrlController.text,
-          'setup_completed_url': setupCompletedController.text,
-          'setup_instructions_file_path': instructionsController.text,
+          'webhook_url': webhookUrlController.text.trim(),
+          'setup_completed_url': setupCompletedController.text.trim(),
+          'setup_instructions_file_path': instructionsController.text.trim(),
+          'app_home_url': appHomeUrlController.text.trim(),
           'auth_steps': [],
         };
         if (authUrlController.text.isNotEmpty) {
@@ -502,10 +509,10 @@ class AddAppProvider extends ChangeNotifier {
         }
       }
       if (capability.id == 'chat') {
-        data['chat_prompt'] = chatPromptController.text;
+        data['chat_prompt'] = chatPromptController.text.trim();
       }
       if (capability.id == 'memories') {
-        data['memory_prompt'] = conversationPromptController.text;
+        data['memory_prompt'] = conversationPromptController.text.trim();
       }
       if (capability.id == 'proactive_notification') {
         if (data['proactive_notification'] == null) {
@@ -514,16 +521,60 @@ class AddAppProvider extends ChangeNotifier {
         data['proactive_notification']['scopes'] = selectedScopes.map((e) => e.id).toList();
       }
     }
+    String? appId;
     var res = await submitAppServer(imageFile!, data);
     if (res.$1) {
       AppSnackbar.showSnackbarSuccess('App submitted successfully 🚀');
-      appProvider!.getApps();
+      await appProvider!.getApps();
       clear();
+      appId = res.$3;
     } else {
       AppSnackbar.showSnackbarError(res.$2);
     }
     checkValidity();
     setIsSubmitting(false);
+    return appId;
+  }
+
+  Future<void> pickThumbnail() async {
+    ImagePicker imagePicker = ImagePicker();
+    try {
+      var file = await imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
+      if (file != null) {
+        setIsUploadingThumbnail(true);
+        var thumbnailFile = File(file.path);
+
+        // Upload thumbnail
+        var result = await uploadAppThumbnail(thumbnailFile);
+        if (result.isNotEmpty) {
+          thumbnailUrls.add(result['thumbnail_url']!);
+          thumbnailIds.add(result['thumbnail_id']!);
+        }
+        setIsUploadingThumbnail(false);
+      }
+    } on PlatformException catch (e) {
+      if (e.code == 'photo_access_denied') {
+        AppSnackbar.showSnackbarError('Photos permission denied. Please allow access to photos to select an image');
+      }
+      setIsUploadingThumbnail(false);
+    }
+    checkValidity();
+    notifyListeners();
+  }
+
+  void setIsUploadingThumbnail(bool uploading) {
+    isUploadingThumbnail = uploading;
+    notifyListeners();
+  }
+
+  void removeThumbnail(int index) {
+    thumbnailUrls.removeAt(index);
+    thumbnailIds.removeAt(index);
+    checkValidity();
+    notifyListeners();
   }
 
   Future pickImage() async {
@@ -565,7 +616,13 @@ class AddAppProvider extends ChangeNotifier {
     if (selectedCapabilities.contains(capability)) {
       selectedCapabilities.remove(capability);
     } else {
-      selectedCapabilities.add(capability);
+      if (selectedCapabilities.length == 1 && selectedCapabilities.first.id == 'persona') {
+        AppSnackbar.showSnackbarError('Other capabilities cannot be selected with Persona');
+      } else if (selectedCapabilities.isNotEmpty && capability.id == 'persona') {
+        AppSnackbar.showSnackbarError('Persona cannot be selected with other capabilities');
+      } else {
+        selectedCapabilities.add(capability);
+      }
     }
     checkValidity();
     notifyListeners();
@@ -662,6 +719,5 @@ class AddAppProvider extends ChangeNotifier {
 
   void setIsGenratingDescription(bool genrating) {
     isGenratingDescription = genrating;
-    notifyListeners();
   }
 }

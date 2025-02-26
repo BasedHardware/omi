@@ -138,7 +138,7 @@ class PaymentMethodCard extends StatelessWidget {
                     ),
                     child: const Text(
                       'Update',
-                      style: TextStyle(fontWeight: FontWeight.w600),
+                      style: TextStyle(fontWeight: FontWeight.w500),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -182,7 +182,7 @@ class PaymentMethodCard extends StatelessWidget {
                     ),
                     child: const Text(
                       'Connect',
-                      style: TextStyle(fontWeight: FontWeight.w600),
+                      style: TextStyle(fontWeight: FontWeight.w500),
                     ),
                   ),
                 ],

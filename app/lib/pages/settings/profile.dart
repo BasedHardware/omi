@@ -107,7 +107,7 @@ class _ProfilePageState extends State<ProfilePage> {
               alignment: Alignment.centerLeft,
               child: Text(
                 'CREATORS',
-                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                 textAlign: TextAlign.start,
               ),
             ),
@@ -126,7 +126,7 @@ class _ProfilePageState extends State<ProfilePage> {
               alignment: Alignment.centerLeft,
               child: Text(
                 'PREFERENCES',
-                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                 textAlign: TextAlign.start,
               ),
             ),
@@ -253,7 +253,7 @@ class _ProfilePageState extends State<ProfilePage> {
               alignment: Alignment.centerLeft,
               child: Text(
                 'OTHER',
-                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                 textAlign: TextAlign.start,
               ),
             ),
