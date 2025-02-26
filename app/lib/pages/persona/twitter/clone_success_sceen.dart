@@ -197,7 +197,7 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                             ),
                           ),
                           child: const Text(
-                            'Chat with my clone',
+                            'Start chatting!',
                             style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w500,
@@ -213,7 +213,7 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                       child: Text(
                         FirebaseAuth.instance.currentUser?.isAnonymous == false
                             ? 'Continue creating your persona'
-                            : 'Use public link instead',
+                            : 'Share public link',
                         style: TextStyle(
                           fontSize: 18,
                           color: Colors.white.withOpacity(0.6),
