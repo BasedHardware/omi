@@ -12,6 +12,7 @@ import { InputArea } from '@/components/InputArea';
 import { ChatbotList } from '@/components/ChatbotList';
 import { Footer } from '@/components/Footer';
 import { Chatbot, TwitterProfile, LinkedinProfile } from '@/types/profiles';
+import { PreorderBanner } from '@/components/shared/PreorderBanner';
 
 const formatTwitterAvatarUrl = (url: string): string => {
   if (!url) return '/omi-avatar.svg';
@@ -567,6 +568,7 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
 
   return (
     <div className="min-h-screen bg-black text-white">
+      <PreorderBanner botName="your favorite personal" />
       <Header />
       <div className="flex flex-col items-center px-4 py-8 md:py-16">
         <InputArea
