@@ -13,7 +13,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { Mixpanel } from '@/lib/mixpanel';
 import { useInView } from 'react-intersection-observer';
-import { TwitterProfile } from '@/types/twitter';
 import { ulid } from 'ulid';
 import { auth } from '@/lib/firebase';
 import { Header } from '@/components/Header';
@@ -22,19 +21,6 @@ import { ChatbotList } from '@/components/ChatbotList';
 import { Footer } from '@/components/Footer';
 import { Chatbot, TwitterProfile, LinkedinProfile } from '@/types/profiles';
 import { PreorderBanner } from '@/components/shared/PreorderBanner';
-
-type Chatbot = {
-  id: string;
-  username?: string;
-  profile?: string;
-  avatar: string;
-  desc: string;
-  name: string;
-  sub_count?: number;
-  category: string;
-  created_at?: string;
-  verified?: boolean;
-};
 
 const formatTwitterAvatarUrl = (url: string): string => {
   if (!url) return '/omi-avatar.svg';
@@ -512,27 +498,28 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
 
       toast.success('Profile saved successfully!');
 
-      router.push(`/chat?id=${persona_id}`);
-<!--       try {
-        const createdAtFormatted = formatDate(new Date().toISOString());
-        const docRef = await addDoc(collection(db, 'plugins_data'), {
-          username: cleanHandle.toLowerCase().replace('@', ''),
-          avatar: formattedAvatarUrl,
-          profile: profileData.desc || 'No description available',
-          desc: enhancedDesc,
-          name: profileData.name,
-          sub_count: profileData.sub_count || 0,
-          category: 'twitter',
-          created_at: createdAtFormatted,
-          chat_prompt: fullChatPrompt,
-        });
-        toast.success('Profile saved successfully!');
-        return true;
-      } catch (firebaseError) {
-        console.error('Firebase error:', firebaseError);
-        toast.error('Failed to save profile');
-        return false;
-      } -->
+      // router.push(`/chat?id=${persona_id}`);
+      return true;
+// try {
+//         const createdAtFormatted = formatDate(new Date().toISOString());
+//         const docRef = await addDoc(collection(db, 'plugins_data'), {
+//           username: cleanHandle.toLowerCase().replace('@', ''),
+//           avatar: formattedAvatarUrl,
+//           profile: profileData.desc || 'No description available',
+//           desc: enhancedDesc,
+//           name: profileData.name,
+//           sub_count: profileData.sub_count || 0,
+//           category: 'twitter',
+//           created_at: createdAtFormatted,
+//           chat_prompt: fullChatPrompt,
+//         });
+//         toast.success('Profile saved successfully!');
+//         return true;
+//       } catch (firebaseError) {
+//         console.error('Firebase error:', firebaseError);
+//         toast.error('Failed to save profile');
+//         return false;
+//       } 
 
     } catch (error) {
       console.error('Error fetching Twitter profile:', error);
