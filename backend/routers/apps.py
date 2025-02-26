@@ -207,7 +207,6 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
     """
     # Check if user already has a persona
     persona = get_user_persona_by_uid(uid)
-
     if persona:
         # Return existing persona
         return persona
