@@ -3,10 +3,18 @@
 import { SetStateAction, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, query, where, getDocs, orderBy, startAfter, limit } from 'firebase/firestore';
+import { collection, addDoc, query, where, getDocs, orderBy, startAfter, limit, doc, setDoc, or } from 'firebase/firestore';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Search, Plus, BadgeCheck } from 'lucide-react';
+import { FaDiscord } from 'react-icons/fa';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { Mixpanel } from '@/lib/mixpanel';
 import { useInView } from 'react-intersection-observer';
+import { ulid } from 'ulid';
+import { auth } from '@/lib/firebase';
 import { Header } from '@/components/Header';
 import { InputArea } from '@/components/InputArea';
 import { ChatbotList } from '@/components/ChatbotList';
@@ -141,10 +149,25 @@ export default function HomePage() {
     const q = query(
       collection(db, 'plugins_data'),
       where('username', '==', cleanHandle.toLowerCase()),
+      where('connected_accounts', 'array-contains', category)
+    );
+
+    const q2 = query(
+      collection(db, 'plugins_data'),
+      where('username', '==', cleanHandle.toLowerCase()),
       where('category', '==', category)
     );
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.empty ? null : querySnapshot.docs[0].id;
+
+    const [querySnapshot1, querySnapshot2] = await Promise.all([
+      getDocs(q),
+      getDocs(q2)
+    ]);
+
+    if (!querySnapshot1.empty || !querySnapshot2.empty) {
+      const doc = querySnapshot1.empty ? querySnapshot2.docs[0] : querySnapshot1.docs[0];
+      return doc.id;
+    }
+    return null;
   };
 
   //helper functions to extract handles from specific platforms
@@ -189,6 +212,31 @@ export default function HomePage() {
     return /linkedin\.com\//i.test(input.trim());
   };
 
+  const checkExistingProfile = async (cleanHandle: string, category: 'twitter' | 'linkedin'): Promise<string | null> => {
+    const q = query(
+      collection(db, 'plugins_data'),
+      where('username', '==', cleanHandle.toLowerCase()),
+      where('connected_accounts', 'array-contains', category)
+    );
+
+    const q2 = query(
+      collection(db, 'plugins_data'),
+      where('username', '==', cleanHandle.toLowerCase()),
+      where('category', '==', category)
+    );
+
+    const [querySnapshot1, querySnapshot2] = await Promise.all([
+      getDocs(q),
+      getDocs(q2)
+    ]);
+
+    if (!querySnapshot1.empty || !querySnapshot2.empty) {
+      const doc = querySnapshot1.empty ? querySnapshot2.docs[0] : querySnapshot1.docs[0];
+      return doc.id;
+    }
+    return null;
+  };
+
   // handleCreatePersona function using redirectToChat in all cases.
   const handleCreatePersona = async () => {
     setIsCreating(true);
@@ -197,70 +245,69 @@ export default function HomePage() {
       const trimmedInput = handle.trim();
       const cleanHandle = extractHandle(trimmedInput);
       
-      // Determine what type of profile to fetch based on input
       if (!cleanHandle) {
         toast.error('Invalid handle or URL');
         return;
       }
       
-      // Track results from both platforms
       let twitterResult = false;
       let linkedinResult = false;
+      let existingId: string | null = null;
       
       // If input is specifically a Twitter URL
       if (isTwitterInput(trimmedInput)) {
-        twitterResult = await fetchTwitterProfile(cleanHandle);
-        if (twitterResult) {
-          const docId = await getProfileDocId(cleanHandle, 'twitter');
-          if (docId) {
-            redirectToChat(docId);
-            return;
-          }
+        existingId = await checkExistingProfile(cleanHandle, 'twitter');
+        if (existingId) {
+          twitterResult = true;
+          toast.success('Profile already exists, redirecting...');
+          redirectToChat(existingId);
+          return;
         }
       } 
       // If input is specifically a LinkedIn URL
       else if (isLinkedinInput(trimmedInput)) {
-        linkedinResult = await fetchLinkedinProfile(cleanHandle);
-        if (linkedinResult) {
-          const docId = await getProfileDocId(cleanHandle, 'linkedin');
-          if (docId) {
-            redirectToChat(docId);
-            return;
-          }
+        existingId = await checkExistingProfile(cleanHandle, 'linkedin');
+        if (existingId) {
+          linkedinResult = true;
+          toast.success('Profile already exists, redirecting...');
+          redirectToChat(existingId);
+          return;
         }
       } 
       // If input is a generic handle, try both platforms
       else {
         // Try Twitter first
         twitterResult = await fetchTwitterProfile(cleanHandle);
+
         // Then try LinkedIn
         linkedinResult = await fetchLinkedinProfile(cleanHandle);
-        
+
         // Handle the case where both platforms have results
         if (twitterResult && linkedinResult) {
           setPendingCleanHandle(cleanHandle);
           setShowPlatformModal(true);
           return;
         }
-        
-        // Handle single platform results
         if (twitterResult) {
           const docId = await getProfileDocId(cleanHandle, 'twitter');
           if (docId) {
             redirectToChat(docId);
-            return;
           }
-        } else if (linkedinResult) {
+          return;
+        }
+        if (linkedinResult) {
           const docId = await getProfileDocId(cleanHandle, 'linkedin');
           if (docId) {
             redirectToChat(docId);
-            return;
           }
+          return;
         }
       }
       
       // If we got here, no profiles were found or created
-      toast.error('No profiles found for the given handle.');
+      if (!twitterResult && !linkedinResult) {
+        toast.error('No profiles found for the given handle.');
+      }
     } catch (error) {
       console.error('Error in handleCreatePersona:', error);
       toast.error('Failed to create or find the persona.');
@@ -272,9 +319,10 @@ export default function HomePage() {
   //handler for modal selection.
   const handlePlatformSelect = async (platform: 'twitter' | 'linkedin') => {
     if (pendingCleanHandle) {
-      const docId = await getProfileDocId(pendingCleanHandle, platform);
-      if (docId) {
-        redirectToChat(docId);
+      const existingId = await checkExistingProfile(pendingCleanHandle, platform);
+      if (existingId) {
+        toast.success('Profile already exists, redirecting...');
+        redirectToChat(existingId);
       } else {
         toast.error('No profiles found for the given handle.');
       }
@@ -403,20 +451,6 @@ export default function HomePage() {
     router.push(`/chat?id=${encodeURIComponent(id)}`);
   };
 
-  const checkExistingProfile = async (cleanHandle: string, category: 'twitter' | 'linkedin'): Promise<boolean> => {
-    const q = query(
-      collection(db, 'plugins_data'),
-      where('username', '==', cleanHandle.toLowerCase()),
-      where('category', '==', category)
-    );
-    const querySnapshot = await getDocs(q);
-    if (!querySnapshot.empty) {
-      toast.success('Profile already exists.');
-      return true;
-    }
-    return false;
-  };
-
   const fetchTwitterProfile = async (twitterHandle: string) => {
     if (!twitterHandle) return false;
     const cleanHandle = twitterHandle.replace('@', '');
@@ -451,26 +485,48 @@ Rules:
 ${extraPromptRules}
 
 Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your personality. Responses should help the conversation go deeper. You have strong opinions, slightly controversial.`;
-      try {
-        const createdAtFormatted = formatDate(new Date().toISOString());
-        const docRef = await addDoc(collection(db, 'plugins_data'), {
-          username: cleanHandle.toLowerCase().replace('@', ''),
-          avatar: formattedAvatarUrl,
-          profile: profileData.desc || 'No description available',
-          desc: enhancedDesc,
-          name: profileData.name,
-          sub_count: profileData.sub_count || 0,
-          category: 'twitter',
-          created_at: createdAtFormatted,
-          chat_prompt: fullChatPrompt,
-        });
-        toast.success('Profile saved successfully!');
-        return true;
-      } catch (firebaseError) {
-        console.error('Firebase error:', firebaseError);
-        toast.error('Failed to save profile');
-        return false;
+
+      const persona_id = ulid();
+      const docData = {
+        'id': persona_id,
+        'name': profileData.name,
+        'username': cleanHandle.toLowerCase(),
+        'description': profileData.desc || 'This is my personal AI clone',
+        'image': formattedAvatarUrl,
+        'uid': auth.currentUser?.uid || null,
+        'author': profileData.name,
+        'email': auth.currentUser?.email || '',
+        'approved': true,
+        'deleted': false,
+        'status': 'approved',
+        'category': 'personality-emulation',
+        'capabilities': ['persona'],
+        'connected_accounts': ['twitter'],
+        'created_at': new Date().toISOString(),
+        'private': false,
+        'persona_prompt': fullChatPrompt,
+        'avatar': formattedAvatarUrl,
+        'twitter': {
+          'username': cleanHandle.toLowerCase(),
+          'avatar': formattedAvatarUrl,
+          'connected_at': new Date().toISOString(),
+        }
+      };
+
+      const docRef = await setDoc(doc(db, 'plugins_data', persona_id), docData);
+
+      // Store the created persona ID in localStorage only if user is not authenticated
+      if (!auth.currentUser) {
+        const createdPersonas = JSON.parse(localStorage.getItem('createdPersonas') || '[]');
+        createdPersonas.push(persona_id);
+        localStorage.setItem('createdPersonas', JSON.stringify(createdPersonas));
       }
+
+      toast.success('Profile saved successfully!');
+
+      // router.push(`/chat?id=${persona_id}`);
+      return true;
+
     } catch (error) {
       console.error('Error fetching Twitter profile:', error);
       return false;
@@ -539,18 +595,42 @@ ${extraPromptRules}
 Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your personality. Responses should help the conversation go deeper. You have strong opinions, slightly controversial.`;
       try {
         const createdAtFormatted = formatDate(new Date().toISOString());
-        const docRef = await addDoc(collection(db, 'plugins_data'), {
-          username: cleanHandle.toLowerCase().replace('@', ''),
-          avatar: formattedAvatarUrl,
-          profile: summary,
-          desc: enhancedDesc,
-          name: fullName,
-          sub_count: profileData.follower || 0,
-          category: 'linkedin',
-          created_at: createdAtFormatted,
-          chat_prompt: fullChatPrompt,
-          connection_count: profileData.connection,
-        });
+        const persona_id = ulid();
+        const docData = {
+          'id': persona_id,
+          'name': fullName,
+          'username': cleanHandle.toLowerCase().replace('@', ''),
+          'description': enhancedDesc || 'This is my personal AI clone',
+          'image': formattedAvatarUrl,
+          'uid': auth.currentUser?.uid || null,
+          'author': fullName,
+          'email': auth.currentUser?.email || '',
+          'approved': true,
+          'deleted': false,
+          'status': 'approved',
+          'category': 'personality-emulation',
+          'capabilities': ['persona'],
+          'connected_accounts': ['linkedin'],
+          'created_at': createdAtFormatted,
+          'private': false,
+          'persona_prompt': fullChatPrompt,
+          'avatar': formattedAvatarUrl,
+          'linkedin': {
+            'username': cleanHandle.toLowerCase(),
+            'avatar': formattedAvatarUrl,
+            'connected_at': createdAtFormatted,
+          }
+        };
+
+        const docRef = await setDoc(doc(db, 'plugins_data', persona_id), docData);
+
+        // Store the created persona ID in localStorage only if user is not authenticated
+        if (!auth.currentUser) {
+          const createdPersonas = JSON.parse(localStorage.getItem('createdPersonas') || '[]');
+          createdPersonas.push(persona_id);
+          localStorage.setItem('createdPersonas', JSON.stringify(createdPersonas));
+        }
+
         toast.success('Profile saved successfully!');
         return true;
       } catch (firebaseError) {
