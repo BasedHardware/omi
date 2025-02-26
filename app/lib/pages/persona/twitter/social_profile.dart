@@ -11,8 +11,11 @@ import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 
 class SocialHandleScreen extends StatefulWidget {
+  final PersonaProfileRouting routing;
+
   const SocialHandleScreen({
     super.key,
+    this.routing = PersonaProfileRouting.no_device,
   });
 
   @override
@@ -191,8 +194,7 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                                 properties: {'handle': handle, 'uid': FirebaseAuth.instance.currentUser?.uid ?? ''},
                               );
                               SharedPreferencesUtil().hasOmiDevice = false;
-                              Provider.of<PersonaProvider>(context, listen: false)
-                                  .setRouting(PersonaProfileRouting.no_device);
+                              Provider.of<PersonaProvider>(context, listen: false).setRouting(widget.routing);
                               await provider.getTwitterProfile(handle);
                               if (provider.twitterProfile.isNotEmpty) {
                                 routeToPage(context, const VerifyIdentityScreen());
