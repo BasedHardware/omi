@@ -47,6 +47,7 @@ class _AuthComponentState extends State<AuthComponent> {
                       await provider.linkWithApple();
                       if (mounted) {
                         SharedPreferencesUtil().hasOmiDevice = true;
+                        SharedPreferencesUtil().verifiedPersonaId = null;
                         widget.onSignIn();
                       }
                     } else {
@@ -107,6 +108,7 @@ class _AuthComponentState extends State<AuthComponent> {
                     await provider.linkWithGoogle();
                     if (mounted) {
                       SharedPreferencesUtil().hasOmiDevice = true;
+                      SharedPreferencesUtil().verifiedPersonaId = null;
                       widget.onSignIn();
                     }
                   } else {
