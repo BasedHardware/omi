@@ -294,13 +294,14 @@ async def _websocket_util(
 
     # STT
     # Validate websocket_active before initiating STT
-    if not websocket_active:
+    if not websocket_active or websocket.client_state != WebSocketState.CONNECTED:
         print("websocket was closed", uid)
         if websocket.client_state == WebSocketState.CONNECTED:
             try:
                 await websocket.close(code=websocket_close_code)
             except Exception as e:
                 print(f"Error closing WebSocket: {e}", uid)
+        return
 
     # Process STT
     _send_message_event(MessageServiceStatusEvent(status="stt_initiating", status_text="STT Service Starting"))
