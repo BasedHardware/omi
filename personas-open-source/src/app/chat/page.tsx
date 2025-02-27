@@ -509,20 +509,20 @@ function ChatContent() {
   const SettingsDialog = () => (
     <Dialog open={showSettingsDialog} onOpenChange={setShowSettingsDialog}>
       <DialogContent className="bg-black border-0 p-0 h-screen sm:h-auto sm:max-w-lg">
-        {/* Back Button */}
-        <div className="absolute top-4 left-4">
+        {/* Back Button - Moved down to be fully visible on iOS */}
+        <div className="fixed sm:absolute top-12 left-4 z-50">
           <Button
             variant="ghost"
             size="icon"
             onClick={() => setShowSettingsDialog(false)}
-            className="text-white hover:text-gray-300"
+            className="text-white hover:text-gray-300 rounded-full h-12 w-12 flex items-center justify-center"
           >
-            <ArrowLeft className="h-5 w-5" />
+            <ArrowLeft className="h-6 w-6" />
           </Button>
         </div>
 
-        {/* Main Content */}
-        <div className="flex flex-col items-center justify-center min-h-[400px] px-4">
+        {/* Main Content - Adjusted padding to accommodate the new button position */}
+        <div className="flex flex-col items-center justify-center min-h-[400px] px-4 pt-28 sm:pt-4">
           {/* Logo/Text */}
           <div className="text-center mb-12">
             <h1 className="text-6xl font-serif mb-8 text-white">Settings</h1>
