@@ -115,12 +115,13 @@ class PureSocket implements IPureSocket {
       return false;
     }
 
+    debugPrint("request wss ${url}");
     _channel = IOWebSocketChannel.connect(
       url,
       headers: {
         'Authorization': await getAuthHeader(),
       },
-      pingInterval: const Duration(seconds: 10),
+      pingInterval: const Duration(seconds: 20),
       connectTimeout: const Duration(seconds: 30),
     );
     if (_channel?.ready == null) {
@@ -155,6 +156,7 @@ class PureSocket implements IPureSocket {
         that.onError(err, trace);
       },
       onDone: () {
+        debugPrint("onDone");
         that.onClosed();
       },
       cancelOnError: true,
@@ -170,6 +172,7 @@ class PureSocket implements IPureSocket {
       _channel?.sink.close(socket_channel_status.normalClosure);
     }
     _status = PureSocketStatus.disconnected;
+    debugPrint("disconnect");
     onClosed();
   }
 
