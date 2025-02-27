@@ -191,7 +191,7 @@ def process_memory(
 
     if not is_reprocess:
         threading.Thread(target=memory_created_webhook, args=(uid, memory,)).start()
-        # TODO: Bad code, cause the websocket was drop
+        # TODO: Bad code, cause the websocket was drop, need to check it carefully before enabling.
         # Update persona prompts with new memory
         # personas = get_omi_personas_by_uid_db(uid)
         # if personas:
