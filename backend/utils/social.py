@@ -20,7 +20,7 @@ async def get_twitter_profile(handle: str) -> Dict[str, Any]:
         "X-RapidAPI-Host": rapid_api_host
     }
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.get(url, headers=headers)
         response.raise_for_status()
         data = response.json()
@@ -36,7 +36,7 @@ async def get_twitter_timeline(handle: str) -> Dict[str, Any]:
         "X-RapidAPI-Host": rapid_api_host
     }
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.get(url, headers=headers)
         response.raise_for_status()
         data = response.json()
@@ -52,7 +52,7 @@ async def verify_latest_tweet(username: str, handle: str) -> Dict[str, Any]:
         "X-RapidAPI-Host": rapid_api_host
     }
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.get(url, headers=headers)
         response.raise_for_status()
         data = response.json()
