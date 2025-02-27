@@ -538,9 +538,13 @@ class CaptureProvider extends ChangeNotifier
       if (event.status == null) {
         return;
       }
-      _transcriptionServiceStatuses.add(event);
-      _transcriptionServiceStatuses = List.from(_transcriptionServiceStatuses);
-      notifyListeners();
+      
+      // Only add diagnostic messages if the feature is enabled
+      if (SharedPreferencesUtil().transcriptionDiagnosticEnabled) {
+        _transcriptionServiceStatuses.add(event);
+        _transcriptionServiceStatuses = List.from(_transcriptionServiceStatuses);
+        notifyListeners();
+      }
       return;
     }
   }
