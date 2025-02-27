@@ -77,7 +77,6 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     if cachedApps := get_generic_cache('get_public_approved_apps_data'):
         print('get_public_approved_plugins_data from cache----------------------------')
         public_approved_data = cachedApps
-        public_approved_data = get_public_approved_apps_db()
         public_unapproved_data = get_public_unapproved_apps(uid)
         private_data = get_private_apps(uid)
         pass
@@ -392,7 +391,7 @@ async def generate_persona_prompt(uid: str, persona: dict):
 
     tweets = None
     if "twitter" in persona['connected_accounts']:
-        print("twitter in connected accounts---------------------------")
+        print("twitter is in connected accounts")
         # Get latest tweets
         tweets = await get_twitter_timeline(persona['twitter']['username'])
         tweets = [{'tweet': tweet['text'], 'posted_at': tweet['created_at']} for tweet in tweets['timeline']]
@@ -472,13 +471,15 @@ def sync_update_persona_prompt(persona: dict):
     asyncio.set_event_loop(loop)
     try:
         return loop.run_until_complete(update_persona_prompt(persona))
+    except Exception as e:
+        print(f"Error in update_persona_prompt for persona {persona.get('id', 'unknown')}: {str(e)}")
+        return None
     finally:
         loop.close()
 
 
 async def update_persona_prompt(persona: dict):
     """Update a persona's chat prompt with latest facts and memories."""
-
     # Get latest facts and user info
     facts = get_facts(persona['uid'], limit=250)
     user_name = get_user_name(persona['uid'])
@@ -531,7 +532,7 @@ You have:
 
     # Add a guideline about tweets if they exist
     if condensed_tweets:
-        persona_prompt += "7. Utilize condensed tweets to enhance authenticity, incorporating common expressions, opinions, and phrasing from {user_name}’s social media presence.\n"
+        persona_prompt += "7. Utilize condensed tweets to enhance authenticity, incorporating common expressions, opinions, and phrasing from {user_name}'s social media presence.\n"
 
     persona_prompt += f"""
 **Rules:**  
@@ -556,6 +557,7 @@ Use these facts, conversations and tweets to shape your personality. Responses s
 
     persona['persona_prompt'] = persona_prompt
     persona['updated_at'] = datetime.now(timezone.utc)
+    
     update_persona_in_db(persona)
     delete_app_cache_by_id(persona['id'])
 
