@@ -180,8 +180,13 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       if (lastEvent?.status == "ready") {
         stateText = "Listening";
         statusIndicator = const RecordingStatusIndicator();
-      } else if (lastEvent != null) {
+      } else if (lastEvent != null && SharedPreferencesUtil().transcriptionDiagnosticEnabled) {
+        // Only show detailed status text if diagnostic mode is enabled
         stateText = lastEvent.statusText ?? "";
+      } else if (lastEvent != null) {
+        // When diagnostic is disabled, just show "Listening" for any status
+        stateText = "Listening";
+        statusIndicator = const RecordingStatusIndicator();
       }
     } else if (!internetConnectionStateOk) {
       stateText = "Waiting for network";
