@@ -459,6 +459,7 @@ class CaptureProvider extends ChangeNotifier
 
   @override
   void onClosed() {
+    _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
     debugPrint('[Provider] Socket is closed');
 
@@ -489,6 +490,7 @@ class CaptureProvider extends ChangeNotifier
 
   @override
   void onError(Object err) {
+    _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
     debugPrint('err: $err');
     notifyListeners();
@@ -538,13 +540,10 @@ class CaptureProvider extends ChangeNotifier
       if (event.status == null) {
         return;
       }
-      
-      // Only add diagnostic messages if the feature is enabled
-      if (SharedPreferencesUtil().transcriptionDiagnosticEnabled) {
-        _transcriptionServiceStatuses.add(event);
-        _transcriptionServiceStatuses = List.from(_transcriptionServiceStatuses);
-        notifyListeners();
-      }
+
+      _transcriptionServiceStatuses.add(event);
+      _transcriptionServiceStatuses = List.from(_transcriptionServiceStatuses);
+      notifyListeners();
       return;
     }
   }

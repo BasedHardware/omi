@@ -89,11 +89,6 @@ async def _websocket_util(
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
 
-    # Validate user
-    if not user_db.is_exists_user(uid):
-        await websocket.close(code=1008, reason="Bad user")
-        return
-
     async def _asend_message_event(msg: MessageEvent):
         nonlocal websocket_active
         print(f"Message: type ${msg.event_type}", uid)
@@ -128,7 +123,8 @@ async def _websocket_util(
             while websocket_active:
                 await asyncio.sleep(10)
                 if websocket.client_state == WebSocketState.CONNECTED:
-                    websocket.send_bytes(b'\x8A')  # Pong Frame
+                    # await websocket.send_bytes(b'\x8A')  # Pong Frame, later
+                    await websocket.send_text("pong")
                 else:
                     break
 
@@ -151,7 +147,15 @@ async def _websocket_util(
     # Start heart beat
     heartbeat_task = asyncio.create_task(send_heartbeat())
 
-    _send_message_event(MessageServiceStatusEvent(event_type="service_status", status="initiating", status_text="Service Initiating"))
+    _send_message_event(MessageServiceStatusEvent(event_type="service_status", status="initiating", status_text="Service Starting"))
+    await asyncio.sleep(15)
+
+    # Validate user
+    _send_message_event(MessageServiceStatusEvent(event_type="service_status", status="user_validating", status_text="Validating Users"))
+    if not user_db.is_exists_user(uid):
+        websocket_active = False
+        await websocket.close(code=1008, reason="Bad user")
+        return
 
     # Stream transcript
     async def _trigger_create_memory_with_delay(delay_seconds: int, finished_at: datetime):
@@ -247,7 +251,7 @@ async def _websocket_util(
                     _trigger_create_memory_with_delay(memory_creation_timeout - seconds_since_last_segment, finished_at)
                 )
 
-    _send_message_event(MessageServiceStatusEvent(status="in_progress_memories_processing", status_text="Memories Processing"))
+    _send_message_event(MessageServiceStatusEvent(status="in_progress_memories_processing", status_text="Processing Memories"))
     _process_in_progess_memories()
 
     def _get_or_create_in_progress_memory(segments: List[dict]):
@@ -300,7 +304,7 @@ async def _websocket_util(
                 print(f"Error closing WebSocket: {e}", uid)
 
     # Process STT
-    _send_message_event(MessageServiceStatusEvent(status="stt_initiating", status_text="STT Service Initiating"))
+    _send_message_event(MessageServiceStatusEvent(status="stt_initiating", status_text="STT Service Starting"))
     await asyncio.sleep(15)
     soniox_socket = None
     speechmatics_socket = None
