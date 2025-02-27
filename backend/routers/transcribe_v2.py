@@ -124,7 +124,7 @@ async def _websocket_util(
                 await asyncio.sleep(10)
                 if websocket.client_state == WebSocketState.CONNECTED:
                     # await websocket.send_bytes(b'\x8A')  # Pong Frame, later
-                    await websocket.send_text("pong")
+                    _send_message_event(PingEvent())
                 else:
                     break
 
@@ -148,10 +148,8 @@ async def _websocket_util(
     heartbeat_task = asyncio.create_task(send_heartbeat())
 
     _send_message_event(MessageServiceStatusEvent(event_type="service_status", status="initiating", status_text="Service Starting"))
-    await asyncio.sleep(15)
 
     # Validate user
-    _send_message_event(MessageServiceStatusEvent(event_type="service_status", status="user_validating", status_text="Validating Users"))
     if not user_db.is_exists_user(uid):
         websocket_active = False
         await websocket.close(code=1008, reason="Bad user")
