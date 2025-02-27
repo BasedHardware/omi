@@ -11,6 +11,7 @@ enum MessageEventType {
   processingConversationStatusChanged('processing_memory_status_changed'),
   ping('ping'),
   conversationBackwardSynced('memory_backward_synced'),
+  serviceStatus('service_status'),
   unknown('unknown'),
   ;
 
@@ -24,21 +25,19 @@ enum MessageEventType {
 
 class ServerMessageEvent {
   MessageEventType type;
-  // String? memoryId;
-  // String? processingMemoryId;
   ServerConversation? conversation;
   List<ServerMessage>? messages;
-  // ServerProcessingMemoryStatus? processingMemoryStatus;
   String? name;
+  String? status;
+  String? statusText;
 
   ServerMessageEvent(
     this.type,
-    // this.memoryId,
-    // this.processingMemoryId,
     this.conversation,
     this.messages,
-    // this.processingMemoryStatus,
     this.name,
+    this.status,
+    this.statusText,
   );
 
   static ServerMessageEvent fromJson(Map<String, dynamic> json) {
@@ -53,6 +52,8 @@ class ServerMessageEvent {
       //     : null,
 
       json['name'],
+      json['status'],
+      json['status_text'],
     );
   }
 }

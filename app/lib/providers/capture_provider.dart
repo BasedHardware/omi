@@ -55,6 +55,9 @@ class CaptureProvider extends ChangeNotifier
 
   get internetStatus => _internetStatus;
 
+  List<ServerMessageEvent> _transcriptionServiceStatuses = [];
+  List<ServerMessageEvent> get transcriptionServiceStatuses => _transcriptionServiceStatuses;
+
   CaptureProvider() {
     _internetStatusListener = PureCore().internetConnection.onStatusChange.listen((InternetStatus status) {
       onInternetSatusChanged(status);
@@ -471,7 +474,7 @@ class CaptureProvider extends ChangeNotifier
   void _startKeepAliveServices() {
     if (_recordingDevice != null && _socket?.state != SocketServiceState.connected) {
       _keepAliveTimer?.cancel();
-      _keepAliveTimer = Timer.periodic(const Duration(seconds: 15), (t) async {
+      _keepAliveTimer = Timer.periodic(const Duration(seconds: 30), (t) async {
         debugPrint("[Provider] keep alive...");
 
         if (_recordingDevice == null || _socket?.state == SocketServiceState.connected) {
@@ -528,6 +531,16 @@ class CaptureProvider extends ChangeNotifier
       event.conversation!.isNew = true;
       conversationProvider!.removeProcessingConversation(event.conversation!.id);
       _processConversationCreated(event.conversation, event.messages ?? []);
+      return;
+    }
+
+    if (event.type == MessageEventType.serviceStatus) {
+      if (event.status == null) {
+        return;
+      }
+      _transcriptionServiceStatuses.add(event);
+      _transcriptionServiceStatuses = List.from(_transcriptionServiceStatuses);
+      notifyListeners();
       return;
     }
   }
