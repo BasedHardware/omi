@@ -9,6 +9,7 @@ import 'package:friend_private/pages/conversation_capturing/page.dart';
 import 'package:friend_private/pages/processing_conversations/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
+import 'package:friend_private/providers/developer_mode_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/enums.dart';
@@ -115,9 +116,6 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         captureProvider.recordingState == RecordingState.initialising ||
         captureProvider.recordingState == RecordingState.pause;
 
-    // print(
-    //     'internetConnectionStateOk: $internetConnectionStateOk deviceServiceStateOk: $deviceServiceStateOk transcriptServiceStateOk: $transcriptServiceStateOk isUsingPhoneMic: $isUsingPhoneMic isHavingDesireDevie: $isHavingDesireDevice');
-
     // Left
     Widget? left;
     if (isUsingPhoneMic || !isHavingDesireDevice) {
@@ -180,13 +178,10 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       if (lastEvent?.status == "ready") {
         stateText = "Listening";
         statusIndicator = const RecordingStatusIndicator();
-      } else if (lastEvent != null && SharedPreferencesUtil().transcriptionDiagnosticEnabled) {
-        // Only show detailed status text if diagnostic mode is enabled
-        stateText = lastEvent.statusText ?? "";
-      } else if (lastEvent != null) {
-        // When diagnostic is disabled, just show "Listening" for any status
-        stateText = "Listening";
-        statusIndicator = const RecordingStatusIndicator();
+      } else {
+        var transcriptionDiagnosticEnabled =
+            Provider.of<DeveloperModeProvider>(context, listen: false).transcriptionDiagnosticEnabled;
+        stateText = transcriptionDiagnosticEnabled ? (lastEvent?.statusText ?? "") : "Connecting";
       }
     } else if (!internetConnectionStateOk) {
       stateText = "Waiting for network";
