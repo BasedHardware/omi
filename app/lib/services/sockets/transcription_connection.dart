@@ -109,8 +109,6 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
   @override
   void onMessage(event) {
-    if (event == 'ping') return;
-
     // Decode json
     dynamic jsonEvent;
     try {

@@ -113,18 +113,19 @@ async def _websocket_util(
     timeout_seconds = 420  # 7m # Soft timeout, should < MODAL_TIME_OUT - 3m
     has_timeout = os.getenv('NO_SOCKET_TIMEOUT') is None
 
-    # Send pong frame every 10s, due to Starlette is not support pong automatically
+    # Send pong every 10s then handle it in the app \
+    # since Starlette is not support pong automatically
     async def send_heartbeat():
         print("send_heartbeat", uid)
         nonlocal websocket_active
         nonlocal websocket_close_code
         nonlocal started_at
+
         try:
             while websocket_active:
                 await asyncio.sleep(10)
                 if websocket.client_state == WebSocketState.CONNECTED:
-                    # await websocket.send_bytes(b'\x8A')  # Pong Frame, later
-                    _send_message_event(PingEvent())
+                    await websocket.send_text("ping")
                 else:
                     break
 
@@ -303,7 +304,6 @@ async def _websocket_util(
 
     # Process STT
     _send_message_event(MessageServiceStatusEvent(status="stt_initiating", status_text="STT Service Starting"))
-    await asyncio.sleep(15)
     soniox_socket = None
     speechmatics_socket = None
     deepgram_socket = None
