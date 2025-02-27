@@ -121,7 +121,7 @@ class PureSocket implements IPureSocket {
       headers: {
         'Authorization': await getAuthHeader(),
       },
-      // pingInterval: const Duration(seconds: 20), // TODO: enable in v4
+      pingInterval: const Duration(seconds: 20),
       connectTimeout: const Duration(seconds: 30),
     );
     if (_channel?.ready == null) {
@@ -150,6 +150,12 @@ class PureSocket implements IPureSocket {
 
     _channel?.stream.listen(
       (message) {
+        if (message == "ping") {
+          debugPrint(message);
+          // Pong frame added manually https://www.rfc-editor.org/rfc/rfc6455#section-5.5.2
+          _channel?.sink.add([0x8A, 0x00]);
+          return;
+        }
         that.onMessage(message);
       },
       onError: (err, trace) {

@@ -179,8 +179,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         stateText = "Listening";
         statusIndicator = const RecordingStatusIndicator();
       } else {
-        var transcriptionDiagnosticEnabled =
-            Provider.of<DeveloperModeProvider>(context, listen: false).transcriptionDiagnosticEnabled;
+        bool transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
         stateText = transcriptionDiagnosticEnabled ? (lastEvent?.statusText ?? "") : "Connecting";
       }
     } else if (!internetConnectionStateOk) {
