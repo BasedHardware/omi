@@ -123,20 +123,21 @@ async def _websocket_util(
 
         try:
             while websocket_active:
-                await asyncio.sleep(10)
+                # ping fast
                 if websocket.client_state == WebSocketState.CONNECTED:
                     await websocket.send_text("ping")
                 else:
                     break
 
                 # timeout
-                if not has_timeout:
-                    continue
-
-                if time.time() - started_at >= timeout_seconds:
+                if has_timeout and time.time() - started_at >= timeout_seconds:
                     print(f"Session timeout is hit by soft timeout {timeout_seconds}", uid)
                     websocket_close_code = 1001
                     websocket_active = False
+                    break
+
+                # next
+                await asyncio.sleep(10)
         except WebSocketDisconnect:
             print("WebSocket disconnected", uid)
         except Exception as e:
