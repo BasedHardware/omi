@@ -1,7 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/providers/app_provider.dart';
@@ -11,10 +10,13 @@ import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
+enum ChatMode { chat, chat_clone }
+
 class ChatAppsDropdownWidget extends StatelessWidget {
   final PageController? controller;
+  final ChatMode mode;
 
-  ChatAppsDropdownWidget({super.key, this.controller});
+  ChatAppsDropdownWidget({super.key, this.controller, this.mode = ChatMode.chat});
 
   final FocusNode focusNode = FocusNode();
 
@@ -23,7 +25,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
     return Selector<HomeProvider, bool>(
       selector: (context, state) => state.selectedIndex == 1,
       builder: (context, isChatPage, child) {
-        if (!isChatPage) {
+        if (mode == ChatMode.chat && !isChatPage) {
           return const SizedBox(
             width: 16,
           );
@@ -50,7 +52,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                       maxWidth: 100,
                     ),
                     child: Text(
-                      selectedApp != null ? selectedApp.name : "Omi",
+                      selectedApp != null ? selectedApp.getName() : "Omi",
                       style: const TextStyle(color: Colors.white, fontSize: 16),
                       overflow: TextOverflow.fade,
                     ),
@@ -170,139 +172,198 @@ class ChatAppsDropdownWidget extends StatelessWidget {
     );
   }
 
-  _getAppsDropdownItems(BuildContext context, AppProvider provider) {
+  List<PopupMenuItem<String>> _getAppsDropdownItems(BuildContext context, AppProvider provider) {
+    return mode == ChatMode.chat_clone 
+        ? _getCloneChatDropdownItems(provider)
+        : _getChatDropdownItems(provider);
+  }
+
+  List<PopupMenuItem<String>> _getCloneChatDropdownItems(AppProvider provider) {
     var selectedApp = provider.apps.firstWhereOrNull((app) => app.id == provider.selectedChatAppId);
-    var items = [
-          const PopupMenuItem<String>(
-            height: 40,
-            value: 'clear_chat',
-            child: Padding(
-              padding: EdgeInsets.only(left: 32),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Clear Chat', style: TextStyle(color: Colors.redAccent, fontSize: 16)),
-                  SizedBox(
-                    width: 24,
-                    child: Icon(Icons.delete, color: Colors.redAccent, size: 16),
-                  ),
-                ],
+    return [
+      const PopupMenuItem<String>(
+        height: 40,
+        value: 'clear_chat',
+        child: Padding(
+          padding: EdgeInsets.only(left: 32),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Clear Chat', style: TextStyle(color: Colors.redAccent, fontSize: 16)),
+              SizedBox(
+                width: 24,
+                child: Icon(Icons.delete, color: Colors.redAccent, size: 16),
+              ),
+            ],
+          ),
+        ),
+      ),
+      const PopupMenuItem<String>(
+        height: 1,
+        child: Divider(height: 1),
+      ),
+      ...provider.apps.where((p) => p.enabled && p.worksWithChat()).map<PopupMenuItem<String>>((App app) {
+        return PopupMenuItem<String>(
+          height: 40,
+          value: app.id,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              _getAppAvatar(app),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        overflow: TextOverflow.fade,
+                        app.getName(),
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
+                      ),
+                    ),
+                    selectedApp?.id == app.id
+                        ? const SizedBox(
+                            width: 24,
+                            child: Icon(Icons.check, color: Colors.white60, size: 16),
+                          )
+                        : const SizedBox.shrink(),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    ];
+  }
+
+  List<PopupMenuItem<String>> _getChatDropdownItems(AppProvider provider) {
+    var selectedApp = provider.apps.firstWhereOrNull((app) => app.id == provider.selectedChatAppId);
+    return [
+      const PopupMenuItem<String>(
+        height: 40,
+        value: 'clear_chat',
+        child: Padding(
+          padding: EdgeInsets.only(left: 32),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Clear Chat', style: TextStyle(color: Colors.redAccent, fontSize: 16)),
+              SizedBox(
+                width: 24,
+                child: Icon(Icons.delete, color: Colors.redAccent, size: 16),
+              ),
+            ],
+          ),
+        ),
+      ),
+      const PopupMenuItem<String>(
+        height: 1,
+        child: Divider(height: 1),
+      ),
+      PopupMenuItem<String>(
+        value: 'enable',
+        height: 40,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.start,
+          mainAxisSize: MainAxisSize.max,
+          children: [
+            const SizedBox(
+              width: 24,
+              child: Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Container(
+                child: const Row(
+                  mainAxisSize: MainAxisSize.max,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Enable Apps', style: TextStyle(color: Colors.white, fontSize: 16)),
+                    SizedBox(
+                      width: 24,
+                      child: Icon(Icons.apps, color: Colors.white60, size: 16),
+                    ),
+                  ],
+                ),
               ),
             ),
-          )
-        ] +
-        [
-          const PopupMenuItem<String>(
-            height: 1,
-            child: Divider(
-              height: 1,
-            ),
-          ),
-          PopupMenuItem<String>(
-            value: 'enable',
-            height: 40,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              mainAxisAlignment: MainAxisAlignment.start,
-              mainAxisSize: MainAxisSize.max,
-              children: [
-                SizedBox(
-                  width: 24,
-                  child: Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Container(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.max,
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Enable Apps', style: TextStyle(color: Colors.white, fontSize: 16)),
-                        SizedBox(
-                          width: 24,
-                          child: Icon(Icons.apps, color: Colors.white60, size: 16),
-                        ),
-                      ],
+          ],
+        ),
+      ),
+      const PopupMenuItem<String>(
+        height: 1,
+        child: Divider(height: 1),
+      ),
+      PopupMenuItem<String>(
+        height: 40,
+        value: 'no_selected',
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _getOmiAvatar(),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Container(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      "Omi",
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                     ),
-                  ),
+                    selectedApp == null
+                        ? const SizedBox(
+                            width: 24,
+                            child: Icon(Icons.check, color: Colors.white60, size: 16),
+                          )
+                        : const SizedBox.shrink(),
+                  ],
                 ),
-              ],
+              ),
             ),
-          )
-        ] +
-        [
-          PopupMenuItem<String>(
-            height: 1,
-            child: Divider(
-              height: 1,
-            ),
-          ),
-          PopupMenuItem<String>(
-            height: 40,
-            value: 'no_selected',
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                _getOmiAvatar(),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Container(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          "Omi",
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
-                        ),
-                        selectedApp == null
-                            ? const SizedBox(
-                                width: 24,
-                                child: Icon(Icons.check, color: Colors.white60, size: 16),
-                              )
-                            : const SizedBox.shrink(),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          )
-        ] +
-        provider.apps.where((p) => p.enabled && p.worksWithChat()).map<PopupMenuItem<String>>((App app) {
-          return PopupMenuItem<String>(
-            height: 40,
-            value: app.id,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              mainAxisAlignment: MainAxisAlignment.start,
-              children: [
-                _getAppAvatar(app),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          overflow: TextOverflow.fade,
-                          app.name,
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
-                        ),
+          ],
+        ),
+      ),
+      ...provider.apps.where((p) => p.enabled && p.worksWithChat()).map<PopupMenuItem<String>>((App app) {
+        return PopupMenuItem<String>(
+          height: 40,
+          value: app.id,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              _getAppAvatar(app),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        overflow: TextOverflow.fade,
+                        app.getName(),
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                       ),
-                      selectedApp?.id == app.id
-                          ? const SizedBox(
-                              width: 24,
-                              child: Icon(Icons.check, color: Colors.white60, size: 16),
-                            )
-                          : const SizedBox.shrink(),
-                    ],
-                  ),
+                    ),
+                    selectedApp?.id == app.id
+                        ? const SizedBox(
+                            width: 24,
+                            child: Icon(Icons.check, color: Colors.white60, size: 16),
+                          )
+                        : const SizedBox.shrink(),
+                  ],
                 ),
-              ],
-            ),
-          );
-        }).toList();
-    return items;
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    ];
   }
 }

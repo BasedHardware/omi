@@ -83,11 +83,14 @@ class _AppDetailPageState extends State<AppDetailPage> {
       // Load details
       setIsLoading(true);
       var res = await context.read<AppProvider>().getAppDetails(app.id);
-      setState(() {
-        if (res != null) {
-          app = res;
-        }
-      });
+      if (mounted) {
+        setState(() {
+          if (res != null) {
+            app = res;
+          }
+        });
+      }
+
       setIsLoading(false);
       context.read<AppProvider>().checkIsAppOwner(app.uid);
       context.read<AppProvider>().setIsAppPublicToggled(!app.private);
@@ -199,16 +202,23 @@ class _AppDetailPageState extends State<AppDetailPage> {
             ),
             const SizedBox(width: 24),
           ],
-          isLoading
+          isLoading || app.private
               ? const SizedBox.shrink()
               : GestureDetector(
                   child: const Icon(Icons.share),
                   onTap: () {
                     MixpanelManager().track('App Shared', properties: {'appId': app.id});
-                    Share.share(
-                      'Check out this app on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${app.id}',
-                      subject: app.name,
-                    );
+                    if (app.isNotPersona()) {
+                      Share.share(
+                        'Check out this app on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${app.id}',
+                        subject: app.name,
+                      );
+                    } else {
+                      Share.share(
+                        'Check out this Persona on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://personas.omi.me/u/${app.username}',
+                        subject: app.name,
+                      );
+                    }
                   },
                 ),
           !context.watch<AppProvider>().isAppOwner
@@ -627,7 +637,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       ),
                       title: const Text(
                         'Integration Instructions',
-                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+                        style: TextStyle(fontWeight: FontWeight.w500, fontSize: 18),
                       ),
                     )
                   : const SizedBox.shrink(),
@@ -725,16 +735,20 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 onTap: () {
                   if (app.description.decodeString.characters.length > 200) {
                     routeToPage(
-                        context, MarkdownViewer(title: 'About the App', markdown: app.description.decodeString));
+                        context,
+                        MarkdownViewer(
+                            title: 'About the ${app.isNotPersona() ? 'App' : 'Persona'}',
+                            markdown: app.description.decodeString));
                   }
                 },
-                title: 'About the App',
+                title: 'About the ${app.isNotPersona() ? 'App' : 'Persona'}',
                 description: app.description,
                 showChips: true,
-                chips: app
+                capabilityChips: app
                     .getCapabilitiesFromIds(context.read<AddAppProvider>().capabilities)
                     .map((e) => e.title)
                     .toList(),
+                connectionChips: app.getConnectedAccountNames(),
               ),
 
               app.conversationPrompt != null

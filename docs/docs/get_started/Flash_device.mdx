@@ -3,75 +3,82 @@ title: Update OMI Firmware
 description: "This document outlines the process of updating the OMI firmware."
 ---
 
-To update the firmware of your OMI device, navigate to the OMI App:  
-**Settings > Device Settings > Update Firmware.**
+To update the firmware of your OMI device, you can either:
+- Use the OMI App: **Settings > Device Settings > Update Firmware**
+- Or follow the manual update process below
 
----
-
-## Manually Update the Firmware
-
-### Video Tutorial
+## Video Tutorial
 
 <div style={{ textAlign: "center" }}>
-  <video width="100%" height="auto" controls>
+  <video
+    width="100%"
+    height="auto"
+    controls
+    playsInline
+    preload="metadata"
+  >
     <source
-      src="https://github.com/BasedHardware/omi/blob/main/docs/static/images/updating_your_friend.mov"
+      src="../../static/images/updating_your_omi.mp4"
       type="video/mp4"
     />
-    Your browser does not support the video tag. <a href="https://github.com/BasedHardware/omi/blob/main/docs/static/images/updating_your_friend.mov">
-      Click here to watch the video
+    Your browser does not support the video tag. <a href="../../static/images/updating_your_omi.mp4">
+      Click here to download the video
     </a>.
   </video>
 </div>
 
----
+## Manual Update Process
 
-## Walkthrough
+### 1. Download Required Files
 
-### Downloading the Firmware
+1. **Bootloader** (required for first-time setup or if corrupted):
+   - Download [bootloader0.9.0.uf2](https://github.com/BasedHardware/omi/releases/download/v2.0.1-Omi/bootloader0.9.0.uf2)
+   - Compatible with Seeed XIAO nRF52840 Sense (SoftDevice S140 7.3.0)
 
-1. Visit the [OMI GitHub releases](https://github.com/BasedHardware/omi/releases).
-2. Download the latest firmware and bootloader `.uf2` files.  
-   **Important:** Ensure you select the correct files for your device:
-   - Developer Kit 2 firmware is **not** compatible with Developer Kit 1.
+2. **Firmware**:
+   - Go to [Omi GitHub Releases](https://github.com/BasedHardware/omi/releases)
+   - Download the `.uf2` file marked as **`Omi_DK`**
+   - Ensure you select the correct version for your device (DK1 or DK2)
 
----
+### 2. Prepare Your Device
 
-### Putting OMI into DFU Mode
+Before starting:
+- Ensure device battery is above 50%
+- Use a direct USB connection (avoid USB hubs)
+- Have a small pin ready for the reset button
 
-1. Plug the OMI device into your computer using a USB cable.
-2. **Locate the DFU Button:**
-   - For Developer Kit 2, remove the lid to access the button which is labeled "RST"
-     - <img
-         src="/images/dk2_rst_button.jpeg"
-         title="DFU Button Location, DevKit 2"
-         width="300"
-       />
-   - For Developer Kit 1, see the image below for button location:
-     - <img
-         src="/images/dfu_dev_kit_reset_button.png"
-         title="DFU Button Location, DevKit 1"
-         width="300"
-       />
-3. **Prepare a Pin:** Use a small pin or similar tool to press the tiny button.
-4. **Press the DFU Button Twice:** Quickly press the button twice in succession using the pin.
-5. **Check for Recognition:** After pressing the button, your computer should recognize a new drive.
-6. **Verify the Drive Name:** Look for a drive named `/Volumes/XIAO-SENSE` on your computer. This confirms the device is in DFU mode.
+### 3. Enter DFU Mode
 
----
+1. Connect your device via USB
+2. Locate the DFU/Reset button:
+   - **DevKit 2**: Remove lid, find button labeled "RST"
+     ![DFU Button Location, DevKit 2](../../static/images/dk2_rst_button.jpeg)
+   - **DevKit 1**: Use button shown below
+     ![DFU Button Location, DevKit 1](../../static/images/dfu_dev_kit_reset_button.png)
+3. Double-click the reset button quickly
+4. Your computer should show a drive named `/Volumes/XIAO-SENSE`
 
-### Flashing the Firmware
+### 4. Flash the Device
 
-1. Locate the `.uf2` files downloaded earlier.
-2. Drag and drop the **bootloader** `.uf2` file onto the `/Volumes/XIAO-SENSE` drive.
-   - The device will automatically eject itself after completing the bootloader flashing process.
-3. Put the OMI device back into DFU mode by double-tapping the reset button.
-4. Drag and drop the **firmware** `.uf2` file onto the `/Volumes/XIAO-SENSE` drive.
-   - **Note:** If your computer reports the transfer was incomplete, it is likely still successful.
+1. **Install Bootloader** (if needed):
+   - Drag `bootloader0.9.0.uf2` to the `/Volumes/XIAO-SENSE` drive
+   - Wait for the drive to eject automatically
+   - Put device back in DFU mode (repeat step 3)
+
+2. **Install Firmware**:
+   - Drag the firmware `.uf2` file to the `/Volumes/XIAO-SENSE` drive
+   - Wait for completion (ignore "transfer incomplete" messages)
+   - Device will restart automatically
+
+### Troubleshooting
+
+- If device isn't recognized: Try a different USB cable or port
+- If update fails: Retry the process
+- If you see "transfer incomplete": Wait 30 seconds before checking device status
+- For additional help: See [DevKit2 Firmware Guide](https://help.omi.me/en/articles/9995941-updating-your-devkit2-firmware)
 
 ---
 
 ## Congratulations!
 
-You have successfully flashed the latest firmware onto your OMI device.  
-Enjoy the enhanced functionality and features of your updated OMI!
+Your OMI device is now updated with the latest firmware. Enjoy the enhanced features!

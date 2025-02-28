@@ -1,5 +1,8 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:friend_private/pages/payments/payment_method_provider.dart';
+import 'package:friend_private/pages/payments/payments_page.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/apps/widgets/full_screen_image_viewer.dart';
@@ -29,6 +32,7 @@ class AddAppPage extends StatefulWidget {
 
 class _AddAppPageState extends State<AddAppPage> {
   late bool showSubmitAppConfirmation;
+
   @override
   void initState() {
     showSubmitAppConfirmation = SharedPreferencesUtil().showSubmitAppConfirmation;
@@ -114,8 +118,6 @@ class _AddAppPageState extends State<AddAppPage> {
                             appPricing: provider.isPaid ? 'Paid' : 'Free',
                             appNameController: provider.appNameController,
                             appDescriptionController: provider.appDescriptionController,
-                            creatorNameController: provider.creatorNameController,
-                            creatorEmailController: provider.creatorEmailController,
                             categories: provider.categories,
                             setAppCategory: provider.setAppCategory,
                             imageFile: provider.imageFile,
@@ -480,9 +482,89 @@ class _AddAppPageState extends State<AddAppPage> {
                                     if (appId != null) {
                                       app = await context.read<AppProvider>().getAppFromId(appId);
                                     }
+                                    var paymentProvider = context.read<PaymentMethodProvider>();
+                                    paymentProvider.getPaymentMethodsStatus();
+
                                     if (app != null && mounted && context.mounted) {
-                                      Navigator.pop(context);
-                                      routeToPage(context, AppDetailPage(app: app));
+                                      if (app.isPaid && paymentProvider.activeMethod == null) {
+                                        showCupertinoModalPopup(
+                                          context: context,
+                                          builder: (ctx) => Container(
+                                            padding: const EdgeInsets.all(20),
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey.shade900,
+                                              borderRadius: const BorderRadius.vertical(
+                                                top: Radius.circular(20),
+                                              ),
+                                            ),
+                                            child: Material(
+                                              color: Colors.transparent,
+                                              child: Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Container(
+                                                    width: 40,
+                                                    height: 4,
+                                                    margin: const EdgeInsets.only(bottom: 20),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.grey.shade700,
+                                                      borderRadius: BorderRadius.circular(2),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 20),
+                                                  const Text(
+                                                    'Start Earning! 💰',
+                                                    style: TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 24,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 12),
+                                                  const Text(
+                                                    'Connect Stripe or PayPal to receive payments for your app.',
+                                                    textAlign: TextAlign.center,
+                                                    style: TextStyle(
+                                                      color: Colors.grey,
+                                                      fontSize: 16,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 32),
+                                                  CupertinoButton(
+                                                    color: Colors.white,
+                                                    borderRadius: BorderRadius.circular(12),
+                                                    onPressed: () {
+                                                      Navigator.pop(ctx);
+                                                      routeToPage(context, const PaymentsPage());
+                                                    },
+                                                    child: const Text(
+                                                      'Connect Now',
+                                                      style: TextStyle(
+                                                        color: Colors.black,
+                                                        fontWeight: FontWeight.w600,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 8),
+                                                  CupertinoButton(
+                                                    onPressed: () => Navigator.pop(ctx),
+                                                    child: Text(
+                                                      'Maybe Later',
+                                                      style: TextStyle(
+                                                        color: Colors.grey.shade400,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  SizedBox(height: MediaQuery.of(context).padding.bottom),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      } else {
+                                        Navigator.pop(context);
+                                        routeToPage(context, AppDetailPage(app: app));
+                                      }
                                     }
                                   },
                                   onCancel: () {

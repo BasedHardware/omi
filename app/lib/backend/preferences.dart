@@ -29,6 +29,30 @@ class SharedPreferencesUtil {
 
   //-------------------------------- Device ----------------------------------//
 
+  bool? get hasOmiDevice => _preferences?.getBool('hasOmiDevice');
+
+  set hasOmiDevice(bool? value) {
+    if (value != null) {
+      _preferences?.setBool('hasOmiDevice', value);
+    } else {
+      _preferences?.remove('hasOmiDevice');
+    }
+  }
+
+  bool get hasPersonaCreated => getBool('hasPersonaCreated') ?? false;
+
+  set hasPersonaCreated(bool value) => saveBool('hasPersonaCreated', value);
+
+  String? get verifiedPersonaId => getString('verifiedPersonaId');
+
+  set verifiedPersonaId(String? value) {
+    if (value != null) {
+      _preferences?.setString('verifiedPersonaId', value);
+    } else {
+      _preferences?.remove('verifiedPersonaId');
+    }
+  }
+
   set btDevice(BtDevice value) {
     saveString('btDevice', jsonEncode(value.toJson()));
   }
@@ -92,6 +116,10 @@ class SharedPreferencesUtil {
   set devModeJoanFollowUpEnabled(bool value) => saveBool('devModeJoanFollowUpEnabled', value);
 
   bool get devModeJoanFollowUpEnabled => getBool('devModeJoanFollowUpEnabled') ?? false;
+
+  set transcriptionDiagnosticEnabled(bool value) => saveBool('transcriptionDiagnosticEnabled', value);
+
+  bool get transcriptionDiagnosticEnabled => getBool('transcriptionDiagnosticEnabled') ?? false;
 
   set conversationEventsToggled(bool value) => saveBool('conversationEventsToggled', value);
 
@@ -388,12 +416,4 @@ class SharedPreferencesUtil {
   Future<bool> clear() async {
     return await _preferences?.clear() ?? false;
   }
-
-  String get customBackendUrl => getString('customBackendUrl') ?? '';
-
-  set customBackendUrl(String value) => saveString('customBackendUrl', value);
-
-  String get customAuthPassword => getString('customAuthPassword') ?? '';
-
-  set customAuthPassword(String value) => saveString('customAuthPassword', value);
 }

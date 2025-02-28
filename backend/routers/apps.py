@@ -1,29 +1,34 @@
 import json
 import os
+import asyncio
 from datetime import datetime, timezone
 from typing import List
 import requests
 from ulid import ULID
-from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header, Response
+from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header
 
 from database.apps import change_app_approval_status, get_unapproved_public_apps_db, \
     add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db, \
-    get_personas_by_username_db, get_persona_by_id_db, delete_persona_db
+    get_personas_by_username_db, get_persona_by_id_db, delete_persona_db, get_persona_by_twitter_handle_db, \
+    get_persona_by_username_db, migrate_app_owner_id_db, get_user_persona_by_uid, get_omi_persona_apps_by_uid_db
+from database.auth import get_user_from_uid
 from database.notifications import get_token_only
 from database.redis_db import delete_generic_cache, get_specific_user_review, increase_app_installs_count, \
-    decrease_app_installs_count, enable_app, disable_app, delete_app_cache_by_id
-from database.users import get_stripe_connect_account_id
+    decrease_app_installs_count, enable_app, disable_app, delete_app_cache_by_id, is_username_taken, save_username
 from utils.apps import get_available_apps, get_available_app_by_id, get_approved_available_apps, \
     get_available_app_by_id_with_reviews, set_app_review, get_app_reviews, add_tester, is_tester, \
     add_app_access_for_tester, remove_app_access_for_tester, upsert_app_payment_link, get_is_user_paid_app, \
-    is_permit_payment_plan_get
-from utils.llm import generate_description
+    is_permit_payment_plan_get, generate_persona_prompt, generate_persona_desc, get_persona_by_uid, \
+    increment_username
+
+from utils.llm import generate_description, generate_persona_intro_message
 
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
 from models.app import App
 from utils.other.storage import upload_plugin_logo, delete_plugin_logo, upload_app_thumbnail, get_app_thumbnail_url
-from utils.stripe import is_onboarding_complete
+from utils.social import get_twitter_profile, get_twitter_timeline, verify_latest_tweet, \
+    upsert_persona_from_twitter_profile, add_twitter_to_persona
 
 router = APIRouter()
 
@@ -50,6 +55,10 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['status'] = 'under-review'
     data['name'] = data['name'].strip()
     data['id'] = str(ULID())
+    if not data.get('author') and not data.get('email'):
+        user = get_user_from_uid(uid)
+        data['author'] = user['display_name']
+        data['email'] = user['email']
     if not data.get('is_paid'):
         data['is_paid'] = False
     else:
@@ -76,16 +85,16 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     file_path = f"_temp/plugins/{file.filename}"
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
-    imgUrl = upload_plugin_logo(file_path, data['id'])
-    data['image'] = imgUrl
+    img_url = upload_plugin_logo(file_path, data['id'])
+    data['image'] = img_url
     data['created_at'] = datetime.now(timezone.utc)
 
     # Backward compatibility: Set app_home_url from first auth step if not provided
     if 'external_integration' in data:
         ext_int = data['external_integration']
-        if (not ext_int.get('app_home_url') and 
-            ext_int.get('auth_steps') and 
-            len(ext_int['auth_steps']) == 1):
+        if (not ext_int.get('app_home_url') and
+                ext_int.get('auth_steps') and
+                len(ext_int['auth_steps']) == 1):
             ext_int['app_home_url'] = ext_int['auth_steps'][0]['url']
 
     add_app_to_db(data)
@@ -95,6 +104,162 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     upsert_app_payment_link(app.id, app.is_paid, app.price, app.payment_plan, app.uid)
 
     return {'status': 'ok', 'app_id': app.id}
+
+
+@router.post('/v1/personas', tags=['v1'])
+async def create_persona(persona_data: str = Form(...), file: UploadFile = File(...),
+                         uid=Depends(auth.get_current_user_uid)):
+    data = json.loads(persona_data)
+    data['approved'] = False
+    data['deleted'] = False
+    data['status'] = 'under-review'
+    data['category'] = 'personality-emulation'
+    data['name'] = data['name'].strip()
+    data['id'] = str(ULID())
+    data['uid'] = uid
+    data['capabilities'] = ['persona']
+    user = get_user_from_uid(uid)
+    data['author'] = user['display_name']
+    data['email'] = user['email']
+
+    if 'username' not in data or data['username'] == '' or data['username'] is None:
+        data['username'] = data['name'].replace(' ', '').lower()
+        data['username'] = increment_username(data['username'])
+    save_username(data['username'], uid)
+
+    if 'connected_accounts' not in data or data['connected_accounts'] is None:
+        data['connected_accounts'] = ['omi']
+    data['persona_prompt'] = await generate_persona_prompt(uid, data)
+    data['description'] = generate_persona_desc(uid, data['name'])
+    os.makedirs(f'_temp/plugins', exist_ok=True)
+    file_path = f"_temp/plugins/{file.filename}"
+    with open(file_path, 'wb') as f:
+        f.write(file.file.read())
+    img_url = upload_plugin_logo(file_path, data['id'])
+    data['image'] = img_url
+    data['created_at'] = datetime.now(timezone.utc)
+
+    add_app_to_db(data)
+
+    return {'status': 'ok', 'app_id': data['id'], 'username': data['username']}
+
+
+@router.patch('/v1/personas/{persona_id}', tags=['v1'])
+async def update_persona(persona_id: str, persona_data: str = Form(...), file: UploadFile = File(None),
+                         uid=Depends(auth.get_current_user_uid)):
+    data = json.loads(persona_data)
+    persona = get_available_app_by_id(persona_id, uid)
+    if not persona:
+        raise HTTPException(status_code=404, detail='Persona not found')
+    if persona['uid'] != uid:
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+
+    # Image
+    if file:
+        if 'image' in persona and len(persona['image']) > 0 and \
+                persona['image'].startswith('https://storage.googleapis.com/'):
+            delete_plugin_logo(persona['image'])
+        os.makedirs(f'_temp/plugins', exist_ok=True)
+        file_path = f"_temp/plugins/{file.filename}"
+        with open(file_path, 'wb') as f:
+            f.write(file.file.read())
+        img_url = upload_plugin_logo(file_path, persona_id)
+        data['image'] = img_url
+
+    save_username(data['username'], uid)
+    data['description'] = generate_persona_desc(uid, data['name'])
+    data['updated_at'] = datetime.now(timezone.utc)
+
+    # Update 'omi' connected_accounts
+    if 'omi' in data.get('connected_accounts', []) and \
+            'omi' not in persona.get('connected_accounts', []):
+        data['persona_prompt'] = await generate_persona_prompt(uid, persona)
+
+    update_app_in_db(data)
+
+    if persona['approved'] and (persona['private'] is None or persona['private'] is False):
+        delete_generic_cache('get_public_approved_apps_data')
+    delete_app_cache_by_id(persona_id)
+    return {'status': 'ok', 'app_id': persona_id, 'username': data['username']}
+
+
+@router.get('/v1/personas', tags=['v1'])
+def get_persona_details(uid: str = Depends(auth.get_current_user_uid)):
+    app = get_persona_by_uid(uid)
+    print(app)
+    app = App(**app) if app else None
+    if not app:
+        raise HTTPException(status_code=404, detail='Persona not found')
+    if app.uid != uid:
+        raise HTTPException(status_code=404, detail='Persona not found')
+    if app.private is not None:
+        if app.private and app.uid != uid:
+            raise HTTPException(status_code=403, detail='You are not authorized to view this Persona')
+
+    return app
+
+@router.post('/v1/user/persona', tags=['v1'])
+async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_uid)):
+    """Get or create a user persona.
+
+    If the user already has a persona, return it.
+    If not, create a new one with default values.
+    """
+    # Check if user already has a persona
+    persona = get_user_persona_by_uid(uid)
+    if persona:
+        # Return existing persona
+        return persona
+
+    # Create a new persona for the user
+    user = get_user_from_uid(uid)
+
+    # Generate a unique ID for the persona
+    persona_id = str(ULID())
+
+    # Create persona data
+    persona_data = {
+        'id': persona_id,
+        'name': user.get('display_name', 'My Persona'),
+        'username': increment_username(user.get('display_name', 'MyPersona').replace(' ', '').lower()),
+        'description': f"This is {user.get('display_name', 'my')} personal AI clone.",
+        'image': '',  # Empty image as specified in the task
+        'uid': uid,
+        'author': user.get('display_name', ''),
+        'email': user.get('email', ''),
+        'approved': False,
+        'deleted': False,
+        'status': 'under-review',
+        'category': 'personality-emulation',
+        'capabilities': ['persona'],
+        'connected_accounts': ['omi'],
+        'created_at': datetime.now(timezone.utc),
+        'private': True
+    }
+
+    # Generate persona prompt
+    persona_data['persona_prompt'] = await generate_persona_prompt(uid, persona_data)
+
+    # Save username
+    save_username(persona_data['username'], uid)
+
+    # Add persona to database
+    add_app_to_db(persona_data)
+
+    return persona_data
+
+
+@router.get('/v1/apps/check-username', tags=['v1'])
+def check_username(username: str, uid: str = Depends(auth.get_current_user_uid)):
+    is_taken = is_username_taken(username)
+    return {'is_taken': is_taken}
+
+
+@router.get('/v1/personas/generate-username', tags=['v1'])
+def generate_username(handle: str, uid: str = Depends(auth.get_current_user_uid)):
+    username = handle.replace(' ', '')
+    username = increment_username(username)
+    return {'username': username}
 
 
 @router.patch('/v1/apps/{app_id}', tags=['v1'])
@@ -107,7 +272,9 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
     if plugin['uid'] != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if file:
-        delete_plugin_logo(plugin['image'])
+        if 'image' in plugin and len(plugin['image']) > 0 and \
+                plugin['image'].startswith('https://storage.googleapis.com/'):
+            delete_plugin_logo(plugin['image'])
         os.makedirs(f'_temp/plugins', exist_ok=True)
         file_path = f"_temp/plugins/{file.filename}"
         with open(file_path, 'wb') as f:
@@ -119,16 +286,17 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
     # Backward compatibility: Set app_home_url from first auth step if not provided
     if 'external_integration' in data:
         ext_int = data['external_integration']
-        if (not ext_int.get('app_home_url') and 
-            ext_int.get('auth_steps') and 
-            len(ext_int['auth_steps']) == 1):
+        if (not ext_int.get('app_home_url') and
+                ext_int.get('auth_steps') and
+                len(ext_int['auth_steps']) == 1):
             ext_int['app_home_url'] = ext_int['auth_steps'][0]['url']
 
     # Warn: the user can update any fields, e.g. approved.
     update_app_in_db(data)
 
     # payment link
-    upsert_app_payment_link(data.get('id'), data.get('is_paid', False), data.get('price'), data.get('payment_plan'), data.get('uid'),
+    upsert_app_payment_link(data.get('id'), data.get('is_paid', False), data.get('price'), data.get('payment_plan'),
+                            data.get('uid'),
                             previous_price=plugin.get("price", 0))
 
     if plugin['approved'] and (plugin['private'] is None or plugin['private'] is False):
@@ -343,6 +511,111 @@ def generate_description_endpoint(data: dict, uid: str = Depends(auth.get_curren
 
 
 # ******************************************************
+# ********************** SOCIAL ************************
+# ******************************************************
+
+@router.get('/v1/personas/twitter/profile', tags=['v1'])
+async def get_twitter_profile_data(handle: str, uid: str = Depends(auth.get_current_user_uid)):
+    if handle.startswith('@'):
+        handle = handle[1:]
+    res = await get_twitter_profile(handle)
+    if res['avatar']:
+        res['avatar'] = res['avatar'].replace('_normal', '')
+
+    # By user persona first
+    persona = get_user_persona_by_uid(uid)
+
+    # Get matching persona if exists
+    if not persona:
+        persona = get_persona_by_twitter_handle_db(handle)
+
+    if persona:
+        res['persona_id'] = persona['id']
+        res['persona_username'] = persona['username']
+
+    return res
+
+
+@router.get('/v1/personas/twitter/verify-ownership', tags=['v1'])
+async def verify_twitter_ownership_tweet(
+        username: str,
+        handle: str,
+        uid: str = Depends(auth.get_current_user_uid),
+        persona_id: str | None = None
+):
+    # Get user info to check auth provider
+    user = get_user_from_uid(uid)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Get provider info from Firebase
+    user_info = auth.get_user(uid)
+    provider_data = [p.provider_id for p in user_info.provider_data]
+
+    # Verify handle
+    if handle.startswith('@'):
+        handle = handle[1:]
+    if username.startswith('@'):
+        username = username[1:]
+    persona = None
+    res = await verify_latest_tweet(username, handle)
+    if res['verified']:
+        if not ('google.com' in provider_data or 'apple.com' in provider_data):
+            persona = await upsert_persona_from_twitter_profile(username, handle, uid)
+        else:
+            if persona_id:
+                persona = await add_twitter_to_persona(handle, persona_id)
+
+    if persona:
+        res['persona_id'] = persona['id']
+
+    return res
+
+
+@router.get('/v1/personas/twitter/initial-message', tags=['v1'])
+async def get_twitter_initial_message(username: str, uid: str = Depends(auth.get_current_user_uid)):
+    persona = get_persona_by_username_db(username)
+    if persona:
+        message = generate_persona_intro_message(persona['persona_prompt'], persona['name'])
+        return {'message': message}
+    return {'message': ''}
+
+
+@router.post('/v1/apps/migrate-owner', tags=['v1'])
+async def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid)):
+    # Migrate app ownership in the database
+    migrate_app_owner_id_db(uid, old_id)
+
+    # Start async task to update persona connected accounts
+    asyncio.create_task(update_omi_persona_connected_accounts(uid))
+
+    return {"status": "ok", "message": "Migration started"}
+
+async def update_omi_persona_connected_accounts(uid: str):
+    try:
+        # Get all personas owned by the user
+        personas = get_omi_persona_apps_by_uid_db(uid)
+
+        # Update each persona to add 'omi' to connected_accounts
+        for persona in personas:
+            connected_accounts = persona.get('connected_accounts', [])
+            if 'omi' not in connected_accounts:
+                connected_accounts.append('omi')
+
+                # Update the persona with the new connected_accounts
+                update_data = persona
+                update_data['connected_accounts'] = connected_accounts
+                update_data['updated_at'] = datetime.now(timezone.utc)
+                update_data['persona_prompt'] = await generate_persona_prompt(uid, update_data)
+                update_data['description'] = generate_persona_desc(uid, update_data['name'])
+
+                update_app_in_db(update_data)
+                delete_app_cache_by_id(persona['id'])
+    except Exception as e:
+        print(f"Error updating persona connected accounts: {e}")
+
+
+# ******************************************************
 # **************** ENABLE/DISABLE APPS *****************
 # ******************************************************
 
@@ -474,8 +747,8 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
 @router.delete('/v1/personas/{persona_id}', tags=['v1'])
 @router.post('/v1/app/thumbnails', tags=['v1'])
 async def upload_app_thumbnail_endpoint(
-    file: UploadFile = File(...),
-    uid: str = Depends(auth.get_current_user_uid)
+        file: UploadFile = File(...),
+        uid: str = Depends(auth.get_current_user_uid)
 ):
     """Upload a thumbnail image for an app.
 
@@ -508,6 +781,7 @@ async def upload_app_thumbnail_endpoint(
         # Cleanup temp file
         if os.path.exists(temp_path):
             os.remove(temp_path)
+
 
 def delete_persona(persona_id: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):

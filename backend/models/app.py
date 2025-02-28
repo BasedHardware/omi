@@ -61,6 +61,10 @@ class App(BaseModel):
     capabilities: Set[str]
     memory_prompt: Optional[str] = None
     chat_prompt: Optional[str] = None
+    persona_prompt: Optional[str] = None
+    username: Optional[str] = None
+    connected_accounts: List[str] = []
+    twitter: Optional[dict] = None
     external_integration: Optional[ExternalIntegration] = None
     reviews: List[AppReview] = []
     user_review: Optional[AppReview] = None
@@ -84,6 +88,7 @@ class App(BaseModel):
     is_user_paid: Optional[bool] = False
     thumbnails: Optional[List[str]] = []  # List of thumbnail IDs
     thumbnail_urls: Optional[List[str]] = []  # List of thumbnail URLs
+    is_influencer: Optional[bool] = False
 
     def get_rating_avg(self) -> Optional[str]:
         return f'{self.rating_avg:.1f}' if self.rating_avg is not None else None
@@ -95,7 +100,10 @@ class App(BaseModel):
         return self.has_capability('memories')
 
     def works_with_chat(self) -> bool:
-        return self.has_capability('chat')
+        return self.has_capability('chat') or self.has_capability('persona')
+
+    def is_a_persona(self) -> bool:
+        return self.has_capability('persona')
 
     def works_externally(self) -> bool:
         return self.has_capability('external_integration')

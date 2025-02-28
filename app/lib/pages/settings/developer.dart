@@ -49,7 +49,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                       padding: EdgeInsets.symmetric(horizontal: 4.0),
                       child: Text(
                         'Save',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16),
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                       ),
                     ),
                   )
@@ -239,7 +239,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                     children: [
                       const Text(
                         'Webhooks',
-                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
                       ),
                       Spacer(),
                       GestureDetector(
@@ -363,12 +363,26 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   const SizedBox(height: 32),
                   const Text(
                     'Experimental',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Try the latest experimental features from Omi Team.',
                     style: TextStyle(color: Colors.grey.shade200, fontSize: 14),
+                  ),
+                  const SizedBox(height: 16.0),
+                  CheckboxListTile(
+                    contentPadding: const EdgeInsets.all(0),
+                    title: const Text(
+                      'Transcription service diagnostic status',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    subtitle: const Text(
+                      'Enable detailed diagnostic messages from the transcription service',
+                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                    value: provider.transcriptionDiagnosticEnabled,
+                    onChanged: provider.onTranscriptionDiagnosticChanged,
                   ),
                   const SizedBox(height: 16.0),
                   CheckboxListTile(
@@ -383,7 +397,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   const SizedBox(height: 36),
                   const Text(
                     'Pilot Features',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 8),
                   Text(
