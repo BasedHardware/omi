@@ -5,7 +5,7 @@ export function Footer() {
   return (
     <div className="fixed bottom-4 w-full max-w-4xl mx-auto px-4">
       <div className="flex justify-between text-sm text-white/60">
-        <span>Omi Chat © 2024</span>
+        <span>Omi Chat © 2025</span>
         <div className="flex gap-4">
           <Button variant="link" className="p-0 h-auto text-white/60 hover:text-white">Terms & Conditions</Button>
           <Link href="https://www.omi.me/pages/privacy" target="_blank" rel="noopener noreferrer">

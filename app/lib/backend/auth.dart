@@ -192,7 +192,7 @@ Future<void> signOut() async {
   // context.pushReplacementNamed('auth');
 }
 
-bool isSignedIn() => FirebaseAuth.instance.currentUser != null;
+bool isSignedIn() => FirebaseAuth.instance.currentUser != null && !FirebaseAuth.instance.currentUser!.isAnonymous;
 
 getFirebaseUser() {
   return FirebaseAuth.instance.currentUser;
@@ -203,5 +203,16 @@ Future<void> updateGivenName(String fullName) async {
   var user = FirebaseAuth.instance.currentUser;
   if (user != null) {
     await user.updateProfile(displayName: fullName);
+  }
+}
+
+Future<void> signInAnonymously() async {
+  try {
+    await FirebaseAuth.instance.signInAnonymously();
+    var user = FirebaseAuth.instance.currentUser!;
+    SharedPreferencesUtil().uid = user.uid;
+    await getIdToken();
+  } catch (e) {
+    Logger.handle(e, null, message: 'An error occurred while signing in. Please try again later.');
   }
 }

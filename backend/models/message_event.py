@@ -11,8 +11,8 @@ class MessageEvent(BaseModel):
     def to_json(self):
         j = self.model_dump(mode="json")
         j["type"] = self.event_type
+        del j["event_type"]
         return j
-
 
 class MemoryEvent(MessageEvent):
     memory: Memory
@@ -21,6 +21,7 @@ class MemoryEvent(MessageEvent):
     def to_json(self):
         j = self.model_dump(mode="json")
         j["type"] = self.event_type
+        del j["event_type"]
         return j
 
 
@@ -34,6 +35,7 @@ class NewMemoryCreated(MessageEvent):
     def to_json(self):
         j = self.model_dump(mode="json")
         j["type"] = self.event_type
+        del j["event_type"]
         return j
 
 
@@ -44,6 +46,7 @@ class NewProcessingMemoryCreated(MessageEvent):
     def to_json(self):
         j = self.model_dump(mode="json")
         j["type"] = self.event_type
+        del j["event_type"]
         return j
 
 
@@ -55,6 +58,7 @@ class ProcessingMemoryStatusChanged(MessageEvent):
     def to_json(self):
         j = self.model_dump(mode="json")
         j["type"] = self.event_type
+        del j["event_type"]
         return j
 
 class MemoryBackwardSycnedEvent(MessageEvent):
@@ -63,4 +67,25 @@ class MemoryBackwardSycnedEvent(MessageEvent):
     def to_json(self):
         j = self.model_dump(mode="json")
         j["type"] = self.event_type
+        del j["event_type"]
+        return j
+
+class MessageServiceStatusEvent(MessageEvent):
+    event_type: str = "service_status"
+    status: str
+    status_text: Optional[str] = None
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        del j["event_type"]
+        return j
+
+class PingEvent(MessageEvent):
+    event_type: str = "ping"
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        del j["event_type"]
         return j

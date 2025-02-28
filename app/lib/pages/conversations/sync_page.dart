@@ -80,7 +80,7 @@ class _WalListItemState extends State<WalListItem> {
                       leading: Padding(
                         padding: const EdgeInsets.only(top: 6.0),
                         child: Text(widget.wal.device == "phone" ? "📱" : "💾",
-                            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
+                            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500)),
                       ),
                       title: Text(
                         secondsToHumanReadable(widget.wal.seconds),
