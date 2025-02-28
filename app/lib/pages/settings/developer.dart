@@ -374,6 +374,20 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   CheckboxListTile(
                     contentPadding: const EdgeInsets.all(0),
                     title: const Text(
+                      'Transcription service diagnostic status',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    subtitle: const Text(
+                      'Enable detailed diagnostic messages from the transcription service',
+                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                    value: provider.transcriptionDiagnosticEnabled,
+                    onChanged: provider.onTranscriptionDiagnosticChanged,
+                  ),
+                  const SizedBox(height: 16.0),
+                  CheckboxListTile(
+                    contentPadding: const EdgeInsets.all(0),
+                    title: const Text(
                       'Local Sync',
                       style: TextStyle(color: Colors.white, fontSize: 16),
                     ),
