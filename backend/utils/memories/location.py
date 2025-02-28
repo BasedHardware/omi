@@ -13,7 +13,7 @@ def get_google_maps_location(latitude: float, longitude: float) -> Optional[Geol
     url = f"https://maps.googleapis.com/maps/api/geocode/json?latlng={latitude},{longitude}&key={key}"
     response = requests.get(url)
     data = response.json()
-    print('get_google_maps_location', data)
+    # print('get_google_maps_location', data)
     if data['status'] != 'OK' or not data.get('results'):
         return None
     place = data['results'][0]

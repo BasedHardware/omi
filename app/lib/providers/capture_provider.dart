@@ -55,6 +55,9 @@ class CaptureProvider extends ChangeNotifier
 
   get internetStatus => _internetStatus;
 
+  List<ServerMessageEvent> _transcriptionServiceStatuses = [];
+  List<ServerMessageEvent> get transcriptionServiceStatuses => _transcriptionServiceStatuses;
+
   CaptureProvider() {
     _internetStatusListener = PureCore().internetConnection.onStatusChange.listen((InternetStatus status) {
       onInternetSatusChanged(status);
@@ -456,6 +459,7 @@ class CaptureProvider extends ChangeNotifier
 
   @override
   void onClosed() {
+    _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
     debugPrint('[Provider] Socket is closed');
 
@@ -486,6 +490,7 @@ class CaptureProvider extends ChangeNotifier
 
   @override
   void onError(Object err) {
+    _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
     debugPrint('err: $err');
     notifyListeners();
@@ -528,6 +533,17 @@ class CaptureProvider extends ChangeNotifier
       event.conversation!.isNew = true;
       conversationProvider!.removeProcessingConversation(event.conversation!.id);
       _processConversationCreated(event.conversation, event.messages ?? []);
+      return;
+    }
+
+    if (event.type == MessageEventType.serviceStatus) {
+      if (event.status == null) {
+        return;
+      }
+
+      _transcriptionServiceStatuses.add(event);
+      _transcriptionServiceStatuses = List.from(_transcriptionServiceStatuses);
+      notifyListeners();
       return;
     }
   }
