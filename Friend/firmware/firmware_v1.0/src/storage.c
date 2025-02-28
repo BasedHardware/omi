@@ -224,8 +224,39 @@ static uint8_t parse_storage_command(void *buf,uint16_t len)
 
 }
 
+// Add chunk management
+static uint32_t current_chunk_start = 0;
+static uint32_t current_chunk_bytes = 0;
+
+static void check_chunk_rotation(void) {
+    uint32_t current_time = k_uptime_get() / 1000;
+    
+    if (current_chunk_start == 0) {
+        current_chunk_start = current_time;
+        return;
+    }
+
+    // Check if we need to rotate to a new chunk file
+    if (current_time - current_chunk_start >= AUDIO_CHUNK_SECONDS) {
+        // Save current file
+        save_offset(current_chunk_bytes);
+        
+        // Increment file count and create new file
+        file_count++;
+        initialize_audio_file(file_count);
+        
+        // Reset chunk tracking
+        current_chunk_start = current_time;
+        current_chunk_bytes = 0;
+    }
+}
+
 static ssize_t storage_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags) 
 {
+    // Add chunk rotation check
+    check_chunk_rotation();
+    
+    // Existing write handling code...
     LOG_INF("about to schedule the storage");
     LOG_INF("was sent %d  ", ((uint8_t*)buf)[0] );
 
@@ -236,6 +267,10 @@ static ssize_t storage_write_handler(struct bt_conn *conn, const struct bt_gatt_
     LOG_INF("result: %d ", result);
     bt_gatt_notify(conn, &storage_service.attrs[1], &result_buffer,1);
     k_msleep(500);
+    
+    // Rest of existing code...
+    current_chunk_bytes += len;
+    
     return len;
 }
 

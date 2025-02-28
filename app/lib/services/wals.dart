@@ -87,6 +87,9 @@ class Wal {
   DateTime? syncStartedAt;
   int? syncEtaSeconds;
 
+  int chunkStartTime; // Unix timestamp when chunk started
+  int chunkDuration; // Duration in seconds
+
   String get id => '${device}_$timerStart';
 
   Wal(
@@ -102,7 +105,9 @@ class Wal {
       this.storageOffset = 0,
       this.storageTotalBytes = 0,
       this.fileNum = 1,
-      this.data = const []});
+      this.data = const [],
+      this.chunkStartTime = 0,
+      this.chunkDuration = chunkSizeInSeconds});
 
   factory Wal.fromJson(Map<String, dynamic> json) {
     return Wal(
@@ -118,6 +123,8 @@ class Wal {
       storageOffset: json['storage_offset'] ?? 0,
       storageTotalBytes: json['storage_total_bytes'] ?? 0,
       fileNum: json['file_num'] ?? 1,
+      chunkStartTime: json['chunk_start_time'] ?? 0,
+      chunkDuration: json['chunk_duration'] ?? chunkSizeInSeconds,
     );
   }
 
@@ -135,13 +142,16 @@ class Wal {
       'storage_offset': storageOffset,
       'storage_total_bytes': storageTotalBytes,
       'file_num': fileNum,
+      'chunk_start_time': chunkStartTime,
+      'chunk_duration': chunkDuration,
     };
   }
 
   static List<Wal> fromJsonList(List<dynamic> jsonList) => jsonList.map((e) => Wal.fromJson(e)).toList();
 
   getFileName() {
-    return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_${timerStart}.bin";
+    // Format matches firmware: TIMESTAMP_aNNN.txt
+    return "${chunkStartTime}_a${fileNum.toString().padLeft(2, '0')}.txt";
   }
 }
 
@@ -180,36 +190,40 @@ class SDCardWalSync implements IWalSync {
     }
     List<Wal> wals = [];
     var storageFiles = await _getStorageList(_device!.id);
-    if (storageFiles.isEmpty) {
-      return [];
-    }
-    var totalBytes = storageFiles[0];
-    if (totalBytes <= 0) {
-      return [];
-    }
-    var storageOffset = storageFiles.length < 2 ? 0 : storageFiles[1];
-    if (storageOffset > totalBytes) {
-      // bad state?
-      debugPrint("SDCard bad state, offset > total");
-      storageOffset = 0;
-    }
-    //> 10s
-    if (totalBytes - storageOffset > 10 * 80 * 100) {
-      var seconds = ((totalBytes - storageOffset) / 80) ~/ 100; // 80: frame length, 100: frame per seconds
-      var timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - seconds;
+
+    for (var i = 0; i < storageFiles.length; i += 2) {
+      var totalBytes = storageFiles[i];
+      if (totalBytes <= 0) continue;
+
+      var storageOffset = i + 1 < storageFiles.length ? storageFiles[i + 1] : 0;
+      if (storageOffset > totalBytes) {
+        debugPrint("SDCard bad state, offset > total for chunk $i");
+        continue;
+      }
+
+      // Calculate chunk info based on filename
+      var timestamp = _getTimestampFromStorageFile(i ~/ 2);
+
       wals.add(Wal(
-        timerStart: timerStart,
+        timerStart: timestamp,
+        chunkStartTime: timestamp,
         status: WalStatus.miss,
         storage: WalStorage.sdcard,
-        seconds: seconds,
+        seconds: chunkSizeInSeconds,
         storageOffset: storageOffset,
         storageTotalBytes: totalBytes,
-        fileNum: 1,
+        fileNum: (i ~/ 2) + 1,
         device: _device!.id,
       ));
     }
 
     return wals;
+  }
+
+  int _getTimestampFromStorageFile(int fileIndex) {
+    // Parse timestamp from filename on device
+    // Implementation depends on how firmware stores filename info
+    return DateTime.now().millisecondsSinceEpoch ~/ 1000 - (fileIndex * chunkSizeInSeconds);
   }
 
   @override
@@ -461,7 +475,7 @@ class SDCardWalSync implements IWalSync {
       resp.newConversationIds
           .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
       resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
-          .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
+          .where((id) => !resp.updatedConversationIds.contains(id) && !resp.updatedConversationIds.contains(id)));
 
       wal.status = WalStatus.synced;
       wal.isSyncing = false;

@@ -253,25 +253,13 @@ int initialize_audio_file(uint8_t num)
     return 0;
 }
 
-char* generate_new_audio_header(uint8_t num) 
-{
-    if (num > 99 ) return NULL;
-    char *ptr_ = k_malloc(14);
-    ptr_[0] = 'a';
-    ptr_[1] = 'u';
-    ptr_[2] = 'd';
-    ptr_[3] = 'i';
-    ptr_[4] = 'o';
-    ptr_[5] = '/';
-    ptr_[6] = 'a';
-    ptr_[7] = 48 + (num / 10);
-    ptr_[8] = 48 + (num % 10);
-    ptr_[9] = '.';
-    ptr_[10] = 't';
-    ptr_[11] = 'x';
-    ptr_[12] = 't';
-    ptr_[13] = '\0';
+char* generate_new_audio_header(uint8_t num) {
+    // Use 32 bytes for longer filename with timestamp
+    char *ptr_ = k_malloc(32);
+    uint32_t timestamp = k_uptime_get() / 1000; // Current time in seconds
 
+    // Format: audio/TIMESTAMP_aNNN.txt
+    snprintf(ptr_, 32, "audio/%u_a%02d.txt", timestamp, num);
     return ptr_;
 }
 
