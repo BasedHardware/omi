@@ -543,7 +543,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                         return;
                                       }
                                       if (!provider.hasTwitterConnection) {
-                                        routeToPage(context, const SocialHandleScreen());
+                                        routeToPage(context, SocialHandleScreen(routing: provider.routing));
                                         return;
                                       }
 
