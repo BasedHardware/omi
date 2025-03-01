@@ -116,6 +116,60 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
               contentPadding: const EdgeInsets.only(left: 8),
               // controlAffinity: ListTileControlAffinity.leading,
               checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              onTap: () async {
+                var (serviceStatus, permissionStatus) = await provider.askForLocationPermissions();
+                if (!serviceStatus) {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) {
+                      return getDialog(
+                        context,
+                        () => Navigator.of(context).pop(),
+                        () => Navigator.of(context).pop(),
+                        'Location Service Disabled',
+                        'Location Service is Disabled. Please go to Settings > Privacy & Security > Location Services and enable it',
+                        singleButton: true,
+                      );
+                    },
+                  );
+                } else {
+                  if (permissionStatus.isGranted) {
+                    await provider.alwaysAllowLocation();
+                    Permission.locationAlways.onDeniedCallback(() {
+                      showDialog(
+                        context: context,
+                        builder: (ctx) {
+                          return getDialog(
+                            context,
+                            () => Navigator.of(context).pop(),
+                            () => Navigator.of(context).pop(),
+                            'Background Location Access Denied',
+                            'Please go to device settings and set location permission to "Always Allow"',
+                            singleButton: true,
+                          );
+                        },
+                      );
+                    });
+                    Permission.locationAlways.onGrantedCallback(() {
+                      provider.updateLocationPermission(true);
+                    });
+                  } else {
+                    showDialog(
+                      context: context,
+                      builder: (ctx) {
+                        return getDialog(
+                          context,
+                          () => Navigator.of(context).pop(),
+                          () => Navigator.of(context).pop(),
+                          'Background Location Access Denied',
+                          'Please go to device settings and set location permission to "Always Allow"',
+                          singleButton: true,
+                        );
+                      },
+                    );
+                  }
+                }
+              },
             ),
             CheckboxListTile(
               value: provider.hasNotificationPermission,
@@ -135,6 +189,9 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
               contentPadding: const EdgeInsets.only(left: 8),
               // controlAffinity: ListTileControlAffinity.leading,
               checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              onTap: () async {
+                await provider.askForNotificationPermissions();
+              },
             ),
             const SizedBox(height: 16),
             provider.isLoading
