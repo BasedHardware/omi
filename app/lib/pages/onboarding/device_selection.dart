@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/gen/assets.gen.dart';
-
 import 'package:friend_private/pages/persona/twitter/social_profile.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:friend_private/providers/auth_provider.dart';
+import 'package:friend_private/pages/onboarding/wrapper.dart';
+import 'package:friend_private/utils/other/temp.dart';
 
 class DeviceSelectionPage extends StatefulWidget {
   const DeviceSelectionPage({super.key});
@@ -106,6 +109,25 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                               fontWeight: FontWeight.bold,
                             ),
                           ),
+                        ),
+                        const SizedBox(height: 16),
+                        Consumer<AuthenticationProvider>(
+                          builder: (context, authProvider, child) {
+                            return TextButton(
+                              onPressed: () {
+                                // Navigate to OnboardingWrapper (AuthWrapper) screen
+                                routeToPage(context, const OnboardingWrapper());
+                              },
+                              child: Text(
+                                'Sign In',
+                                style: TextStyle(
+                                  color: Colors.grey.shade200,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),
