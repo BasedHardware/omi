@@ -263,7 +263,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                               "Are you sure you want to stop recording and summarize the conversation now?",
                                           checkboxValue: !showSummarizeConfirmation,
                                           checkboxText: "Don't ask me again",
-                                          updateCheckboxValue: (value) {
+                                          onCheckboxChanged: (value) {
                                             if (value != null) {
                                               setState(() {
                                                 showSummarizeConfirmation = !value;

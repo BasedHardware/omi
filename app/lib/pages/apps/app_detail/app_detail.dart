@@ -460,13 +460,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                                   'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app',
                                               checkboxText: "Don't show it again",
                                               checkboxValue: !showInstallAppConfirmation,
-                                              updateCheckboxValue: (value) {
-                                                if (value != null) {
-                                                  setState(() {
-                                                    showInstallAppConfirmation = !value;
-                                                    SharedPreferencesUtil().showInstallAppConfirmation = !value;
-                                                  });
-                                                }
+                                              onCheckboxChanged: (value) {
+                                                setState(() {
+                                                  showInstallAppConfirmation = !value;
+                                                  SharedPreferencesUtil().showInstallAppConfirmation = !value;
+                                                });
                                               },
                                               onConfirm: () {
                                                 _toggleApp(app.id, true);

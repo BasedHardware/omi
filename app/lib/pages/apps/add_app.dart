@@ -452,12 +452,10 @@ class _AddAppPageState extends State<AddAppPage> {
                                       : 'Your app will be reviewed and made available to you privately. You can start using it immediately, even during the review!',
                                   checkboxText: "Don't show it again",
                                   checkboxValue: !showSubmitAppConfirmation,
-                                  updateCheckboxValue: (value) {
-                                    if (value != null) {
-                                      setState(() {
-                                        showSubmitAppConfirmation = !value;
-                                      });
-                                    }
+                                  onCheckboxChanged: (value) {
+                                    setState(() {
+                                      showSubmitAppConfirmation = !value;
+                                    });
                                   },
                                   onConfirm: () async {
                                     if (provider.makeAppPublic) {
