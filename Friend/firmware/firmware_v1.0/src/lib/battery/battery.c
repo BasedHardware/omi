@@ -142,53 +142,59 @@ int battery_charge_stop()
     return gpio_pin_set(gpio_battery_dev, GPIO_BATTERY_CHARGING_ENABLE, 0);
 }
 
-int battery_get_millivolt(uint16_t *battery_millivolt)
-{
-
-    int ret = 0;
-
-    // Voltage divider circuit (Should tune R1 in software if possible)
-    const uint16_t R1 = 1037; // Originally 1M ohm, calibrated after measuring actual voltage values. Can happen due to resistor tolerances, temperature ect..
-    const uint16_t R2 = 510;  // 510K ohm
-
-    // ADC measure
-    uint16_t adc_vref = adc_ref_internal(adc_battery_dev);
-    int adc_mv = 0;
-
-    k_mutex_lock(&battery_mut, K_FOREVER);
-    ret |= adc_read(adc_battery_dev, &sequence);
-
-    if (ret)
-    {
-        LOG_WRN("ADC read failed (error %d)", ret);
-    }
-
-    // Get average sample value.
-    for (uint8_t sample = 0; sample < ADC_TOTAL_SAMPLES; sample++)
-    {
-        adc_mv += sample_buffer[sample]; // ADC value, not millivolt yet.
-    }
-    adc_mv /= ADC_TOTAL_SAMPLES;
-
-    // Convert ADC value to millivolts
-    ret |= adc_raw_to_millivolts(adc_vref, ADC_GAIN, ADC_RESOLUTION, &adc_mv);
-
-    // Calculate battery voltage.
-    *battery_millivolt = adc_mv * ((R1 + R2) / R2);
-    k_mutex_unlock(&battery_mut);
-
-    LOG_DBG("%d mV", *battery_millivolt);
-    return ret;
-}
-
+ int battery_get_millivolt(uint16_t *battery_millivolt)
+ {
+     int ret = 0;
+ 
+     // Voltage divider circuit (Should tune R1 in software if possible)
+     const uint16_t R1 = 1037; // Originally 1M ohm, calibrated after measuring actual voltage values. Can happen due to resistor tolerances, temperature ect..
+     const uint16_t R2 = 510;  // 510K ohm
+ 
+     // ADC measure
+     uint16_t adc_vref = adc_ref_internal(adc_battery_dev);
+     int adc_mv = 0;
+ 
+     k_mutex_lock(&battery_mut, K_FOREVER);
+     ret |= adc_read(adc_battery_dev, &sequence);
+ 
+     if (ret)
+     {
+         LOG_WRN("ADC read failed (error %d)", ret);
+     }
+ 
+     // Get average sample value.
+     for (uint8_t sample = 0; sample < ADC_TOTAL_SAMPLES; sample++)
+     {
+         adc_mv += sample_buffer[sample]; // ADC value, not millivolt yet.
+     }
+     adc_mv /= ADC_TOTAL_SAMPLES;
+ 
+     // Convert ADC value to millivolts
+     ret |= adc_raw_to_millivolts(adc_vref, ADC_GAIN, ADC_RESOLUTION, &adc_mv);
+ 
+     // Calculate battery voltage.
+     *battery_millivolt = adc_mv * ((R1 + R2) / R2);
+     k_mutex_unlock(&battery_mut);
+ 
+     // Debug logs to track ADC and voltage values
+     LOG_DBG("Raw ADC Value: %d", adc_mv); // Add this line
+     LOG_DBG("Battery Voltage: %d mV", *battery_millivolt); // Add this line
+     return ret;
+ }
+ 
 int battery_get_percentage(uint8_t *battery_percentage, uint16_t battery_millivolt)
 {
-
     // Ensure voltage is within bounds
     if (battery_millivolt > battery_states[0].voltage)
+    {
         *battery_percentage = 100;
+        return 0; // Add this line
+    }
     if (battery_millivolt < battery_states[BATTERY_STATES_COUNT - 1].voltage)
+    {
         *battery_percentage = 0;
+        return 0; // Add this line
+    }
 
     for (uint16_t i = 0; i < BATTERY_STATES_COUNT - 1; i++)
     {
@@ -199,9 +205,10 @@ int battery_get_percentage(uint8_t *battery_percentage, uint16_t battery_millivo
             *battery_percentage = battery_states[i].percentage +
                                   ((float)(battery_millivolt - battery_states[i].voltage) *
                                    ((float)(battery_states[i + 1].percentage - battery_states[i].percentage) /
-                                    (float)(battery_states[i + 1].voltage - battery_states[i].voltage)));
+                                   (float)(battery_states[i + 1].voltage - battery_states[i].voltage)));
 
-            LOG_DBG("%d %%", *battery_percentage);
+            // Debug log to track battery percentage
+            LOG_DBG("Battery Percentage: %d %%", *battery_percentage); // Update this line
             return 0;
         }
     }
