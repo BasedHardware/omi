@@ -163,6 +163,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     var pageAlias = "home";
     var homePageIdx = 0;
     String? detailPageId;
+
     if (widget.navigateToRoute != null && widget.navigateToRoute!.isNotEmpty) {
       navigateToUri = Uri.tryParse("http://localhost.com${widget.navigateToRoute!}");
       debugPrint("initState ${navigateToUri?.pathSegments.join("...")}");
