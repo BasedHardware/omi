@@ -220,7 +220,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                                           },
                                           child: Text(
                                             otaUpdateSteps.isEmpty ? "Start Update" : "Update",
-                                            style: TextStyle(color: Colors.white, fontSize: 16),
+                                            style: const TextStyle(color: Colors.white, fontSize: 16),
                                           ),
                                         ),
                                       )
