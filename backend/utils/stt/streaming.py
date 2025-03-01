@@ -46,18 +46,28 @@ async def send_initial_file(data: List[List[int]], transcript_socket):
 
 
 # Initialize Deepgram client based on environment configuration
+deepgram_options = {"keepalive": "true", "termination_exception_connect": "true"}
+
+# Deepgram Cloud
+deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), DeepgramClientOptions(options=deepgram_options))
+
+# Deepgram Self-Hosted
+deepgram_self_hosted = None
+deepgram_self_hosted_supported_languages = os.getenv('DEEPGRAM_SELF_HOSTED_SUPPORT_LANGUAGES', [])
 is_dg_self_hosted = os.getenv('DEEPGRAM_SELF_HOSTED_ENABLED', '').lower() == 'true'
-deepgram_options = DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"})
-
 if is_dg_self_hosted:
-    dg_self_hosted_url = os.getenv('DEEPGRAM_SELF_HOSTED_URL')
-    if not dg_self_hosted_url:
+    dg_url = os.getenv('DEEPGRAM_SELF_HOSTED_URL')
+    if not dg_url or len(dg_url) == 0:
         raise ValueError("DEEPGRAM_SELF_HOSTED_URL must be set when DEEPGRAM_SELF_HOSTED_ENABLED is true")
-    # Override only the URL while keeping all other options
-    deepgram_options.url = dg_self_hosted_url
-    print(f"Using Deepgram self-hosted at: {dg_self_hosted_url}")
+    deepgram_self_hosted = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), DeepgramClientOptions(url=dg_url,options=deepgram_options))
 
-deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), deepgram_options)
+
+def _get_deepgram_client(language: str = 'en'):
+    if deepgram_self_hosted:
+        if language in deepgram_self_hosted_supported_languages:
+            return deepgram_self_hosted
+
+    return deepgram
 
 
 async def process_audio_dg(
@@ -136,9 +146,8 @@ def connect_to_deepgram_with_backoff(on_message, on_error, language: str, sample
 
 
 def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, channels: int):
-    # 'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=8000&language=$recordingsLanguage&model=nova-2-general&no_delay=true&endpointing=100&interim_results=false&smart_format=true&diarize=true'
     try:
-        dg_connection = deepgram.listen.websocket.v("1")
+        dg_connection = _get_deepgram_client(language).listen.websocket.v("1")
         dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
         dg_connection.on(LiveTranscriptionEvents.Error, on_error)
 
