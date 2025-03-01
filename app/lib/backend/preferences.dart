@@ -153,9 +153,9 @@ class SharedPreferencesUtil {
 
   set showInstallAppConfirmation(bool value) => saveBool('showInstallAppConfirmation', value);
   
-  bool get showFirmwareUpdateDialog => getBool('showFirmwareUpdateDialog') ?? true;
+  bool get showFirmwareUpdateDialog => getBool('v2/showFirmwareUpdateDialog') ?? true;
 
-  set showFirmwareUpdateDialog(bool value) => saveBool('showFirmwareUpdateDialog', value);
+  set showFirmwareUpdateDialog(bool value) => saveBool('v2/showFirmwareUpdateDialog', value);
 
   String get recordingsLanguage => getString('recordingsLanguage') ?? 'en';
 

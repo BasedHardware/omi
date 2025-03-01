@@ -1,24 +1,19 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/env/env.dart';
 import 'package:friend_private/http/api/device.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/home/firmware_update.dart';
-import 'package:friend_private/utils/device.dart';
-import 'package:version/version.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/services/devices.dart';
 import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:friend_private/utils/device.dart';
 import 'package:friend_private/widgets/confirmation_dialog.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
 
 class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption {
   CaptureProvider? captureProvider;

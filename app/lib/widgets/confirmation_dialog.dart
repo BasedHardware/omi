@@ -147,6 +147,7 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
           style: const TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w600,
+            color: Colors.white,
           ),
         ),
         content: Column(
@@ -156,8 +157,11 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
             const SizedBox(height: 16),
             Text(
               widget.description,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 14),
+              textAlign: TextAlign.start,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade200,
+              ),
             ),
             const SizedBox(height: 20),
             Row(
@@ -167,12 +171,15 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
                 CupertinoCheckbox(
                   value: _checkboxValue,
                   onChanged: _updateCheckboxValue,
-                  activeColor: CupertinoColors.systemPurple,
+                  activeColor: Colors.deepPurple,
                 ),
                 const SizedBox(width: 8),
                 Text(
                   widget.checkboxText,
-                  style: const TextStyle(fontSize: 14),
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey.shade300,
+                  ),
                 ),
               ],
             ),
@@ -181,10 +188,13 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
         actions: [
           CupertinoDialogAction(
             onPressed: widget.onCancel,
-            isDestructiveAction: true,
+            isDestructiveAction: false,
             child: Text(
               widget.cancelText ?? "Cancel", 
-              style: const TextStyle(fontSize: 16),
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey.shade300,
+              ),
             ),
           ),
           CupertinoDialogAction(
@@ -192,7 +202,11 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
             isDefaultAction: true,
             child: Text(
               widget.confirmText ?? "Confirm", 
-              style: const TextStyle(fontSize: 16),
+              style: const TextStyle(
+                fontSize: 16,
+                color: Colors.deepPurple,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
