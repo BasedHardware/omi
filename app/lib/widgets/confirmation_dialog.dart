@@ -55,8 +55,17 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
   Widget build(BuildContext context) {
     if (Platform.isAndroid) {
       return AlertDialog(
-        contentPadding: const EdgeInsets.only(top: 10, left: 24, right: 24, bottom: 10),
-        title: Text(widget.title),
+        backgroundColor: Colors.grey.shade900,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        contentPadding: const EdgeInsets.only(top: 20, left: 24, right: 24, bottom: 10),
+        title: Text(
+          widget.title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -65,17 +74,45 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
             Text(
               widget.description,
               textAlign: TextAlign.start,
+              style: TextStyle(
+                color: Colors.grey.shade200,
+                fontSize: 14,
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.start,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Checkbox(
-                  value: _checkboxValue,
-                  onChanged: _updateCheckboxValue,
+                Theme(
+                  data: Theme.of(context).copyWith(
+                    checkboxTheme: CheckboxThemeData(
+                      fillColor: MaterialStateProperty.resolveWith<Color>(
+                        (Set<MaterialState> states) {
+                          if (states.contains(MaterialState.selected)) {
+                            return Colors.deepPurple;
+                          }
+                          return Colors.grey.shade700;
+                        },
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                  child: Checkbox(
+                    value: _checkboxValue,
+                    onChanged: _updateCheckboxValue,
+                  ),
                 ),
-                Text(widget.checkboxText),
+                const SizedBox(width: 8),
+                Text(
+                  widget.checkboxText,
+                  style: TextStyle(
+                    color: Colors.grey.shade300,
+                    fontSize: 14,
+                  ),
+                ),
               ],
             ),
           ],
@@ -83,17 +120,35 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
         actions: [
           TextButton(
             onPressed: widget.onCancel,
-            child: Text(widget.cancelText ?? "Cancel", style: const TextStyle(color: Colors.white)),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.grey.shade300,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            ),
+            child: Text(widget.cancelText ?? "Cancel"),
           ),
           TextButton(
             onPressed: widget.onConfirm,
-            child: Text(widget.confirmText ?? "Confirm", style: const TextStyle(color: Colors.white)),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.white,
+              backgroundColor: Colors.deepPurple,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: Text(widget.confirmText ?? "Confirm"),
           ),
         ],
       );
     } else {
       return CupertinoAlertDialog(
-        title: Text(widget.title),
+        title: Text(
+          widget.title,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -104,7 +159,7 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 14),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.start,
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -112,8 +167,13 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
                 CupertinoCheckbox(
                   value: _checkboxValue,
                   onChanged: _updateCheckboxValue,
+                  activeColor: CupertinoColors.systemPurple,
                 ),
-                Text(widget.checkboxText),
+                const SizedBox(width: 8),
+                Text(
+                  widget.checkboxText,
+                  style: const TextStyle(fontSize: 14),
+                ),
               ],
             ),
           ],
@@ -121,11 +181,19 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
         actions: [
           CupertinoDialogAction(
             onPressed: widget.onCancel,
-            child: Text(widget.cancelText ?? "Cancel", style: const TextStyle(color: Colors.white, fontSize: 14)),
+            isDestructiveAction: true,
+            child: Text(
+              widget.cancelText ?? "Cancel", 
+              style: const TextStyle(fontSize: 16),
+            ),
           ),
           CupertinoDialogAction(
             onPressed: widget.onConfirm,
-            child: Text(widget.confirmText ?? "Confirm", style: const TextStyle(color: Colors.white, fontSize: 14)),
+            isDefaultAction: true,
+            child: Text(
+              widget.confirmText ?? "Confirm", 
+              style: const TextStyle(fontSize: 16),
+            ),
           ),
         ],
       );
