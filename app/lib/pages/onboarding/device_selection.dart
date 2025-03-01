@@ -121,8 +121,8 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                             'Sign in',
                             style: TextStyle(
                               color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 16,
                             ),
                           ),
                         ),
