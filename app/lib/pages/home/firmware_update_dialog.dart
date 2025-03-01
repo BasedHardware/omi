@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 
 class FirmwareUpdateStep {
   final String title;
@@ -30,10 +29,9 @@ class FirmwareUpdateDialog extends StatefulWidget {
 }
 
 class _FirmwareUpdateDialogState extends State<FirmwareUpdateDialog> {
-  final PageController _pageController = PageController();
-  int _currentPage = 0;
-
   late final List<FirmwareUpdateStep> updateSteps;
+  bool hasUsbStep = false;
+  bool isConfirmed = false;
 
   @override
   void initState() {
@@ -44,33 +42,25 @@ class _FirmwareUpdateDialogState extends State<FirmwareUpdateDialog> {
       'no_usb': FirmwareUpdateStep(
         title: 'No USB',
         description:
-            "Please disconnect your Omi device from any USB connection.\n\n⚠️ Keeping USB connected during updates may damage your device.",
+            "Disconnect your Omi device from any USB connection. USB connection during updates may damage your device.",
         icon: Icons.usb_off,
       ),
       'battery': FirmwareUpdateStep(
         title: 'Battery > 15%',
         description:
-            "Please check that your Omi device has at least 15% battery remaining.\n\nTip: We recommend charging your device first to ensure a safe update process.",
+            "Ensure your Omi device has at least 15% battery remaining for a safe update.",
         icon: Icons.battery_5_bar,
       ),
       'internet': FirmwareUpdateStep(
         title: 'Stable Internet',
         description:
-            'Please ensure you have a stable WiFi or cellular connection.\n\nTip: WiFi is recommended for faster and more reliable updates. Avoid updating while in areas with weak signal.',
+            'Connect to a stable WiFi or cellular network for reliable firmware download.',
         icon: Icons.wifi,
       ),
     };
 
     updateSteps = widget.steps.map((step) => stepMap[step]!).toList();
-    // Mark last step
-    if (updateSteps.isNotEmpty) {
-      updateSteps.last = FirmwareUpdateStep(
-        title: updateSteps.last.title,
-        description: updateSteps.last.description,
-        icon: updateSteps.last.icon,
-        isLastStep: true,
-      );
-    }
+    hasUsbStep = widget.steps.contains('no_usb');
   }
 
   @override
@@ -82,130 +72,163 @@ class _FirmwareUpdateDialogState extends State<FirmwareUpdateDialog> {
           maxHeight: 500,
         ),
         decoration: BoxDecoration(
-          color: const Color(0xFF1D1D1D),
-          borderRadius: BorderRadius.circular(20),
+          color: Colors.grey.shade900,
+          borderRadius: BorderRadius.circular(16),
         ),
-        child: PageView.builder(
-          controller: _pageController,
-          itemCount: updateSteps.length,
-          onPageChanged: (int page) {
-            setState(() {
-              _currentPage = page;
-            });
-          },
-          itemBuilder: (context, index) {
-            final step = updateSteps[index];
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 40),
-              child: Column(
-                mainAxisSize: MainAxisSize.max,
-                children: [
-                  Expanded(
-                    child: Column(
-                      children: [
-                        Text(
-                          step.title,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 24,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 40),
-                        ShaderMask(
-                          shaderCallback: (Rect bounds) {
-                            return const LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Color(0xFFE8EAED),
-                                Color(0xFF848587),
-                              ],
-                            ).createShader(bounds);
-                          },
-                          child: Icon(
-                            step.icon,
-                            size: 54,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 40),
-                        Text(
-                          step.description,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Color(0xFFAAAAAA),
-                            fontSize: 14,
-                            height: 1.5,
-                          ),
-                        ),
-                      ],
-                    ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Update Requirements',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 24),
+              // Scrollable area for steps
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: updateSteps.map((step) => _buildStepItem(step)).toList(),
                   ),
-                  const SizedBox(height: 40),
-                  Row(
-                    mainAxisSize: MainAxisSize.max,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        decoration: updateSteps[_currentPage].isLastStep
-                            ? BoxDecoration(
-                                border: const GradientBoxBorder(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      Color.fromARGB(127, 208, 208, 208),
-                                      Color.fromARGB(127, 188, 99, 121),
-                                      Color.fromARGB(127, 86, 101, 182),
-                                      Color.fromARGB(127, 126, 190, 236)
-                                    ],
-                                  ),
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                              )
-                            : null,
-                        child: TextButton(
-                          style: TextButton.styleFrom(
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          ),
-                          onPressed: () {
-                            if (_currentPage < updateSteps.length - 1) {
-                              _pageController.nextPage(
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeInOut,
-                              );
-                            } else {
-                              Navigator.of(context).pop();
-                              try {
-                                widget.onUpdateStart();
-                              } catch (e) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Failed to start update: $e'),
-                                    backgroundColor: Colors.red,
-                                  ),
-                                );
-                              }
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Confirmation checkbox
+              Row(
+                children: [
+                  Theme(
+                    data: Theme.of(context).copyWith(
+                      checkboxTheme: CheckboxThemeData(
+                        fillColor: MaterialStateProperty.resolveWith<Color>(
+                          (Set<MaterialState> states) {
+                            if (states.contains(MaterialState.selected)) {
+                              return Colors.deepPurple;
                             }
+                            return Colors.grey.shade700;
                           },
-                          // Add container with gradient for last step
-                          child: Text(
-                            updateSteps[_currentPage].isLastStep ? 'Start Update' : 'Next',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                            ),
-                          ),
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(4),
                         ),
                       ),
-                    ],
+                    ),
+                    child: Checkbox(
+                      value: isConfirmed,
+                      onChanged: (value) {
+                        setState(() {
+                          isConfirmed = value ?? false;
+                        });
+                      },
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      hasUsbStep 
+                          ? "I've disconnected USB and understand the risks."
+                          : "I confirm I want to update my device firmware.",
+                      style: TextStyle(
+                        color: Colors.grey.shade300,
+                        fontSize: 14,
+                        height: 1.5,
+                      ),
+                    ),
                   ),
                 ],
               ),
-            );
-          },
+              const SizedBox(height: 16),
+              // Update button (disabled until confirmed)
+              TextButton(
+                onPressed: isConfirmed ? () {
+                  Navigator.of(context).pop();
+                  try {
+                    widget.onUpdateStart();
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to start update: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                } : null,
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  backgroundColor: isConfirmed ? Colors.deepPurple : Colors.grey.shade800,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  minimumSize: const Size(double.infinity, 0),
+                ),
+                child: const Text(
+                  'Start Update',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+  
+  Widget _buildStepItem(FirmwareUpdateStep step) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ShaderMask(
+            shaderCallback: (Rect bounds) {
+              return const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xFFE8EAED),
+                  Color(0xFF848587),
+                ],
+              ).createShader(bounds);
+            },
+            child: Icon(
+              step.icon,
+              size: 32,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  step.title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  step.description,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade300,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
