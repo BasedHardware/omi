@@ -368,7 +368,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
             'A new firmware update (${_latestFirmwareVersion}) is available for your Omi device. Would you like to update now?',
         checkboxText: "Don't show me again",
         checkboxValue: dontShowAgain,
-        updateCheckboxValue: (value) {
+        onCheckboxChanged: (value) {
           dontShowAgain = value ?? false;
         },
         confirmText: 'Update',
