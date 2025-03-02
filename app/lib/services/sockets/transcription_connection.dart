@@ -44,6 +44,8 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   SocketServiceState get state =>
       _socket.status == PureSocketStatus.connected ? SocketServiceState.connected : SocketServiceState.disconnected;
 
+  Future<void> get ready => _socket.ready;
+
   int sampleRate;
   BleAudioCodec codec;
   String language;
