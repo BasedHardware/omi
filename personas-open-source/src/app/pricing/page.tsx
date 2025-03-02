@@ -37,6 +37,7 @@ const plans = [
       'Unlimited messages',
       'Premium AI models (3.5 Sonnet, GPT-4)',
       'Fast response time',
+      'Access to Latest AI models',
       'Priority support',
     ],
     limitations: []
