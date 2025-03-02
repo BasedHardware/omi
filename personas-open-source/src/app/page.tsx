@@ -3,7 +3,7 @@
 import { SetStateAction, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, query, where, getDocs, orderBy, startAfter, limit, doc, setDoc, or } from 'firebase/firestore';
+import { collection, addDoc, query, where, getDocs, orderBy, startAfter, limit, doc, setDoc, or, getDoc } from 'firebase/firestore';
 import { toast } from 'sonner';
 import { Mixpanel } from '@/lib/mixpanel';
 import { useInView } from 'react-intersection-observer';
@@ -24,20 +24,6 @@ const formatTwitterAvatarUrl = (url: string): string => {
     formattedUrl = formattedUrl.replace('/profile_images/', '/profile_images/');
   }
   return formattedUrl;
-};
-
-const formatDate = (dateString: string): string => {
-  const date = new Date(dateString);
-  return new Intl.DateTimeFormat('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    timeZoneName: 'short',
-    hour12: false,
-  }).format(date).replace(',', ' at');
 };
 
 const fetchTwitterTimeline = async (screenname: string) => {

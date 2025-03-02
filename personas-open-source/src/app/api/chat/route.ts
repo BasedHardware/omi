@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import OpenAI from 'openai';
+import { auth as adminAuth, db as adminDb } from '@/lib/firebase-admin';
+import { cookies } from 'next/headers';
 
 const getOpenAIClient = () => {
   return new OpenAI({
@@ -17,17 +19,37 @@ export async function POST(req: Request) {
   try {
     const { message, botId, conversationHistory } = await req.json();
 
+    // Default to free tier model
+    let isPro = false;
+
+    // Check subscription only if user is signed in
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get('session')?.value;
+    
+    if (sessionCookie) {
+      try {
+        const decodedClaims = await adminAuth.verifySessionCookie(sessionCookie);
+        const userRef = adminDb.collection('users').doc(decodedClaims.uid).collection('subscriptions').doc('active');
+        const userDoc = await userRef.get();
+        isPro = userDoc.exists && (userDoc.data()?.status === 'active');
+      } catch (error) {
+        console.error('Error checking subscription:', error);
+        // Continue with free tier if there's an error checking subscription
+      }
+    }
+
     var chatPrompt;
     var isInfluencer = false;
 
     if (!botId) return NextResponse.json({ message: "Bad param" }, { status: 400 });
 
     try {
-      const botDoc = await getDoc(doc(db, 'plugins_data', botId));
-      if (botDoc.exists()) {
+      const botRef = adminDb.collection('plugins_data').doc(botId);
+      const botDoc = await botRef.get();
+      if (botDoc.exists) {
         const bot = botDoc.data();
-        chatPrompt = bot.chat_prompt ?? bot.persona_prompt;
-        isInfluencer = bot.is_influencer ?? false;
+        chatPrompt = bot?.chat_prompt ?? bot?.persona_prompt;
+        isInfluencer = bot?.is_influencer ?? false;
       }
     } catch (error) {
       console.error('Error fetching bot data:', error);
@@ -56,10 +78,9 @@ export async function POST(req: Request) {
 
     console.log('Formatted messages:', formattedMessages);
 
-
-    // LLM model, use a better model for specific people
+    // LLM model selection based on subscription status
     var llmModel = "google/gemini-flash-1.5-8b";
-    if (isInfluencer) {
+    if (isPro || isInfluencer) {
       llmModel = "anthropic/claude-3.5-sonnet";
     }
 
