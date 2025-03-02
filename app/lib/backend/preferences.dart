@@ -210,6 +210,10 @@ class SharedPreferencesUtil {
   int get enabledAppsIntegrationsCount =>
       appsList.where((element) => element.enabled && element.worksExternally()).length;
 
+  bool get showConversationDeleteConfirmation => getBool('showConversationDeleteConfirmation') ?? true;
+  
+  set showConversationDeleteConfirmation(bool value) => saveBool("showConversationDeleteConfirmation", value);
+
   List<App> get appsList {
     final List<String> apps = getStringList('appsList') ?? [];
     return App.fromJsonList(apps.map((e) => jsonDecode(e)).toList());
