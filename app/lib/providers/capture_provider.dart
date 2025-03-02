@@ -357,8 +357,17 @@ class CaptureProvider extends ChangeNotifier
   Future<void> _ensureSocketConnection() async {
     var codec = SharedPreferencesUtil().deviceCodec;
     var language = SharedPreferencesUtil().recordingsLanguage;
-    if (language != _socket?.language || codec != _socket?.codec || _socket?.state != SocketServiceState.connected) {
+
+    if (language != _socket?.language || codec != _socket?.codec) {
       await _initiateWebsocket(audioCodec: codec, force: true);
+      return;
+    }
+
+    // track socket status
+    await _socket?.ready;
+    if (_socket?.state != SocketServiceState.connected) {
+      await _initiateWebsocket(audioCodec: codec, force: true);
+      return;
     }
   }
 

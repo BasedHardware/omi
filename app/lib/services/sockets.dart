@@ -44,11 +44,11 @@ class SocketServicePool extends ISocketService {
     mutex = true;
 
     try {
-      if (!force &&
-          _socket?.codec == codec &&
-          _socket?.sampleRate == sampleRate &&
-          _socket?.state == SocketServiceState.connected) {
-        return _socket;
+      if (!force && _socket?.codec == codec && _socket?.sampleRate == sampleRate) {
+        await _socket?.ready;
+        if (_socket?.state == SocketServiceState.connected) {
+          return _socket;
+        }
       }
 
       debugPrint("_connect force ${force} state ${_socket?.state}");
