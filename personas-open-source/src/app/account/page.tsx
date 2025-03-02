@@ -46,7 +46,14 @@ export default function AccountPage() {
 
   const handleSignOut = async () => {
     try {
+      // First sign out from Firebase Auth (client-side)
       await signOut(auth);
+      
+      // Then call our API to clear the session cookie (server-side)
+      await fetch('/api/auth/sign-out', {
+        method: 'POST',
+      });
+      
       router.push('/');
     } catch (error) {
       console.error('Error signing out:', error);
@@ -159,4 +166,4 @@ export default function AccountPage() {
       <Footer />
     </div>
   );
-} 
+}
