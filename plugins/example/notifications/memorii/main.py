@@ -29,54 +29,48 @@ logger = logging.getLogger(__name__)
 
 # Initialize OpenAI client
 use_fallback = False
+client = None
 try:
-    client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-    if not os.getenv('OPENAI_API_KEY'):
+    api_key = os.getenv('OPENAI_API_KEY')
+    if not api_key:
         logger.warning("OPENAI_API_KEY not found in environment variables, using fallback implementation")
         use_fallback = True
+    else:
+        client = OpenAI(api_key=api_key)
+        logger.info("OpenAI client initialized successfully")
 except Exception as e:
-    logger.warning(f"Error initializing OpenAI client: {str(e)}, using fallback implementation")
+    logger.error(f"Error initializing OpenAI client: {str(e)}")
     use_fallback = True
 
-class ConversationHistory:
+class ConversationManager:
     def __init__(self):
-        self.histories = {}  # session_id -> list of messages
+        self.conversations = {}  # session_id -> list of messages
         self.lock = threading.Lock()
-        self.example_qa_pairs = [
-            {"question": "What is the cat's name?", "answer": "Tom"},
-            {"question": "Where is the book?", "answer": "The book is on the table."},
-            {"question": "Who is the president?", "answer": "Joe Biden"},
-            {"question": "What time is it?", "answer": "It's 3:30 PM."},
-            {"question": "What is the table made of?", "answer": "The table is made of wood."},
-            {"question": "Where is the box?", "answer": "The box is on the ground."}
-        ]
-        logger.info(f"Initialized ConversationHistory with {len(self.example_qa_pairs)} example QA pairs")
+        logger.info("ConversationManager initialized")
         
     def add_message(self, session_id, message):
         """Add a message to the conversation history"""
         with self.lock:
-            if session_id not in self.histories:
-                logger.info(f"Creating new conversation history for session {session_id}")
-                self.histories[session_id] = []
+            if session_id not in self.conversations:
+                logger.info(f"Creating new conversation for session {session_id}")
+                self.conversations[session_id] = []
             
-            self.histories[session_id].append(message)
-            logger.debug(f"Added message to history for session {session_id}: '{message['text']}'")
-            logger.debug(f"Session {session_id} now has {len(self.histories[session_id])} messages in history")
+            self.conversations[session_id].append(message)
+            logger.debug(f"Added message for session {session_id}: '{message['text']}'")
     
-    def get_history(self, session_id):
+    def get_conversation(self, session_id):
         """Get the conversation history for a session"""
         with self.lock:
-            if session_id not in self.histories:
-                logger.debug(f"No history found for session {session_id}, creating empty history")
-                self.histories[session_id] = []
-            return self.histories[session_id]
+            if session_id not in self.conversations:
+                self.conversations[session_id] = []
+            return self.conversations[session_id]
     
     def clean_old_sessions(self, max_age=3600):
         """Clean up sessions older than max_age seconds"""
         current_time = time.time()
         with self.lock:
             sessions_to_remove = []
-            for session_id, messages in self.histories.items():
+            for session_id, messages in self.conversations.items():
                 if not messages:
                     continue
                 latest_message_time = max(msg.get('timestamp', 0) for msg in messages)
@@ -85,628 +79,456 @@ class ConversationHistory:
             
             for session_id in sessions_to_remove:
                 logger.info(f"Removing old session {session_id}")
-                del self.histories[session_id]
-            
-            if sessions_to_remove:
-                logger.info(f"Cleaned up {len(sessions_to_remove)} old sessions")
+                del self.conversations[session_id]
 
-def analyze_conversation(history, current_question):
+def find_answer_in_conversation(conversation, current_question):
     """
-    Analyze the conversation history to see if the current question has been asked before
-    and if there's a relevant answer in the history.
+    Find an answer to the current question in the conversation history.
     """
-    if not history or not current_question:
+    if not conversation:
+        logger.debug("Empty conversation history")
         return None
     
-    logger.info(f"Analyzing conversation history for question: '{current_question}'")
+    # Skip if the question doesn't have a question mark
+    if "?" not in current_question:
+        logger.debug(f"Not a question: '{current_question}'")
+        return None
     
-    if use_fallback:
-        return fallback_analyze_conversation(history, current_question)
-    
-    try:
-        # Prepare the conversation history for the LLM
-        conversation_text = []
-        for msg in history:
-            speaker = "User" if msg.get('is_user', False) else "Assistant"
-            conversation_text.append(f"{speaker}: {msg['text']}")
-        
-        conversation_str = "\n".join(conversation_text)
-        
-        # Ask OpenAI to analyze the conversation
-        logger.debug(f"Sending conversation history to OpenAI for analysis")
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "You are analyzing a conversation to determine if a question has been asked and answered before. If the latest message is a question and a similar question was asked and answered earlier in the conversation, extract the previous answer. If not, or if the latest message isn't a question, return 'No answer found'."},
-                {"role": "user", "content": f"Here's the conversation history:\n\n{conversation_str}\n\nThe latest message is: {current_question}\n\nIs this latest message a question that was asked and answered before in this conversation? If yes, what was the answer? Format your response as JSON with fields 'is_repeated_question' (boolean) and 'previous_answer' (string)."}
-            ],
-            temperature=0.1,
-            max_tokens=500,
-            response_format={"type": "json_object"}
-        )
-        
-        result = json.loads(response.choices[0].message.content)
-        
-        is_repeated = result.get('is_repeated_question', False)
-        previous_answer = result.get('previous_answer', None)
-        
-        if is_repeated and previous_answer and previous_answer != "No answer found":
-            logger.info(f"Found repeated question with answer: '{previous_answer}'")
-            return previous_answer
-        else:
-            logger.debug(f"No repeated question found or no relevant answer")
-            return None
-            
-    except Exception as e:
-        logger.error(f"Error in LLM analysis: {str(e)}")
-        return fallback_analyze_conversation(history, current_question)
+    # For performance reasons, always use the fallback method which is now optimized
+    # for a self-answering single user scenario
+    return fallback_find_answer(conversation, current_question)
 
-def is_question(text):
-    """Determine if text is a question"""
-    logger.debug(f"Checking if text is a question: '{text}'")
-    if not text:
-        return False
-        
-    # Simple fallback implementation - check for question marks or common question words
-    text_lower = text.lower()
+def fallback_find_answer(conversation, current_question):
+    """
+    A simplified, faster method to find answers in conversation history.
+    Treats all messages as coming from the same user who is asking and answering themselves.
+    """
+    logger.info(f"Using fallback method for: '{current_question}'")
     
-    # Filter out rhetorical questions and common phrases
-    rhetorical_patterns = [
-        "you know?", "right?", "isn't it?", "don't you think?", "wouldn't you?", 
-        "wouldn't it?", "ain't it?", "okay?", "correct?", "got it?"
+    # Extract question topic and keywords
+    current_question_lower = current_question.lower().strip()
+    
+    # Check if this is a very short question - require more context for these
+    is_short_question = len(current_question_lower.split()) <= 2
+    
+    # Quick check for factual questions about a specific topic
+    question_topics = []
+    
+    # Extract question type
+    question_type = None
+    if current_question_lower.startswith("who"):
+        question_type = "who"
+    elif current_question_lower.startswith("where"):
+        question_type = "where"
+    elif current_question_lower.startswith("when"):
+        question_type = "when"
+    elif current_question_lower.startswith("what"):
+        question_type = "what"
+    elif current_question_lower.startswith("how"):
+        question_type = "how"
+    elif current_question_lower.startswith("why"):
+        question_type = "why"
+    
+    # Extract potential topics from "who is X", "where is X", etc.
+    topic_patterns = [
+        "who is the", "who is", "where is the", "where is", 
+        "what is the", "what is", "when is the", "when is",
+        "how to", "why is", "why does", "how old is"
     ]
     
-    # If it's a short phrase ending with a question mark and matches a rhetorical pattern
-    if len(text_lower.split()) <= 5 and any(text_lower.endswith(pattern) for pattern in rhetorical_patterns):
-        logger.debug(f"Detected rhetorical question: '{text}'")
-        return False
+    for pattern in topic_patterns:
+        if pattern in current_question_lower:
+            topic = current_question_lower.split(pattern, 1)[1].strip()
+            if topic:
+                # Clean up the topic - remove punctuation and common filler words
+                clean_topic = topic.replace("?", "").replace(".", "").strip()
+                if len(clean_topic) > 1:  # Only add if we have something meaningful
+                    question_topics.append(clean_topic)
     
-    # Check for actual question indicators
-    question_words = ["what", "where", "when", "who", "why", "how", "is", "are", "can", "could", "would", "will"]
-    has_question_mark = "?" in text
-    starts_with_question_word = any(text_lower.startswith(word) for word in question_words)
-    
-    # Require more evidence for actual questions
-    if has_question_mark:
-        if starts_with_question_word:
-            result = True
-        elif len(text.split()) >= 4:  # Longer questions with question marks are likely real questions
-            result = True
-        else:
-            # Short phrases with just question marks might be rhetorical
-            result = False
-    else:
-        # Without a question mark, be more strict
-        result = starts_with_question_word and len(text.split()) >= 4
-    
-    logger.debug(f"Question detection result for '{text}': {result}")
-    return result
-
-def are_questions_similar(q1, q2):
-    """Check if two questions are similar using semantic comparison"""
-    # Log the comparison being made
-    logger.debug(f"Comparing questions for similarity: '{q1}' and '{q2}'")
-    
-    # Normalize questions
-    q1 = q1.lower().replace("'s", " is").replace("?", "").strip()
-    q2 = q2.lower().replace("'s", " is").replace("?", "").strip()
-    
-    # Check for exact match
-    if q1 == q2:
-        logger.debug(f"Exact match between '{q1}' and '{q2}'")
-        return True
-    
-    # Get question types
-    q1_type = get_question_type(q1)
-    q2_type = get_question_type(q2)
-    
-    # Log question types for debugging
-    logger.debug(f"Question type for '{q1}': {q1_type}")
-    logger.debug(f"Question type for '{q2}': {q2_type}")
-    
-    # If the questions are of different types, they're less likely to be similar
-    if q1_type and q2_type and q1_type != q2_type:
-        logger.debug(f"Different question types: '{q1}' type: {q1_type}, '{q2}' type: {q2_type}")
-        return False
-    
-    # Special case for where questions
-    if q1_type == "where" and q2_type == "where":
-        # Extract the object being asked about
-        q1_obj = q1.replace("where is", "").strip().replace("the", "").strip()
-        q2_obj = q2.replace("where is", "").strip().replace("the", "").strip()
-        
-        # If asking about the same object, they're similar
-        if q1_obj == q2_obj:
-            logger.debug(f"Where-question object match: '{q1_obj}' and '{q2_obj}'")
-            return True
-        
-        # If objects are similar enough (e.g., box/boxes)
-        if q1_obj.startswith(q2_obj) or q2_obj.startswith(q1_obj):
-            # Make sure they're actually related (e.g., "box" and "boxing" aren't related)
-            if len(q1_obj) - len(q2_obj) <= 2 or len(q2_obj) - len(q1_obj) <= 2:
-                logger.debug(f"Where-question similar objects: '{q1_obj}' and '{q2_obj}'")
-                return True
-    
-    # Normalize "what is X made of" and "what is X made from" patterns
-    q1_normalized = q1.replace("made of", "made from").replace("made from", "made of")
-    q2_normalized = q2.replace("made of", "made from").replace("made from", "made of")
-    
-    if q1_normalized == q2_normalized:
-        logger.debug(f"Normalized match between '{q1}' and '{q2}'")
-        return True
-    
-    # Create a function to extract the subject of "what is X made of" questions
-    def extract_made_of_subject(q):
-        import re
-        match = re.search(r"what is (?:the )?(.*?) made", q)
-        if match:
-            return match.group(1)
-        return None
-    
-    # Check for "what is X made of" pattern
-    q1_subject = extract_made_of_subject(q1)
-    q2_subject = extract_made_of_subject(q2)
-    
-    if q1_subject and q2_subject and q1_subject == q2_subject:
-        logger.debug(f"Made-of subject match between '{q1}' and '{q2}': both about '{q1_subject}'")
-        return True
-    
-    # Extract key entities and question types
-    q1_entities = extract_entities(q1)
-    q2_entities = extract_entities(q2)
-    
-    # Log entities for debugging
-    logger.debug(f"Entities in '{q1}': {q1_entities}")
-    logger.debug(f"Entities in '{q2}': {q2_entities}")
-    
-    # If the questions are about different entities, they're not similar
-    common_entities = q1_entities.intersection(q2_entities)
-    if not common_entities:
-        logger.debug(f"Different entities in questions: '{q1}' entities: {q1_entities}, '{q2}' entities: {q2_entities}")
-        return False
-    else:
-        # Check if the common entities are significant enough
-        # If there are multiple entities in each question but only one in common, they're likely not similar
-        if len(q1_entities) >= 2 and len(q2_entities) >= 2 and len(common_entities) < 2:
-            logger.debug(f"Not enough common entities: '{common_entities}' out of '{q1_entities}' and '{q2_entities}'")
-            return False
-        logger.debug(f"Common entities: {common_entities}")
-    
-    # Check for word overlap
-    words1 = set(q1.split())
-    words2 = set(q2.split())
-    common_words = words1.intersection(words2)
-    
-    # Filter out stop words from common words
-    stop_words = {"what", "where", "when", "who", "why", "how", "is", "are", "the", "a", "an", "in", "on", "at", "to", "for", "with", "by", "about"}
-    meaningful_common_words = [w for w in common_words if w not in stop_words]
-    
-    # Require at least some meaningful common words
-    if not meaningful_common_words:
-        logger.debug(f"No meaningful common words between '{q1}' and '{q2}'")
-        return False
-    
-    # If more than 75% of words match and they share entities, consider them similar
-    overlap_ratio = len(common_words) / min(len(words1), len(words2))
-    logger.debug(f"Word overlap ratio: {overlap_ratio:.2f}, common words: {common_words}")
-    
-    if overlap_ratio >= 0.75:
-        logger.debug(f"High word overlap ({overlap_ratio:.2f}) between '{q1}' and '{q2}'")
-        return True
-    
-    logger.debug(f"Questions not similar: '{q1}' and '{q2}' (overlap: {overlap_ratio:.2f})")
-    return False
-
-def extract_entities(text):
-    """Extract potential entities (nouns) from text"""
-    # Simple entity extraction - just get potential nouns
-    # More extensive stop words list to filter out common words
-    stop_words = {
-        "what", "where", "when", "who", "why", "how", "is", "are", "the", "a", "an", "in", "on", 
-        "at", "to", "for", "with", "by", "about", "like", "from", "of", "that", "this", "these", 
-        "those", "it", "they", "them", "their", "there", "here", "you", "your", "my", "mine", 
-        "our", "ours", "his", "her", "hers", "its", "have", "has", "had", "get", "got", "been",
-        "was", "were", "be", "being", "am", "go", "going", "went", "gone", "come", "coming",
-        "just", "very", "really", "quite", "so", "much", "many", "few", "little", "some", "any",
-        "all", "most", "more", "less", "too", "also", "as", "well", "good", "bad", "nice", 
-        "great", "big", "small", "high", "low", "tall", "short", "long", "see", "saw", "seen",
-        "now", "then", "when", "where", "why", "how", "if", "but", "and", "or", "not", "no",
-        "yes", "yeah", "okay", "ok", "right", "left", "up", "down", "out", "in", "over", 
-        "under", "yet", "still", "only", "even", "ever", "never", "always", "sometimes"
-    }
-    
-    words = text.lower().split()
-    entities = set()
+    # Add key nouns from the question as topics
+    words = current_question_lower.replace("?", "").split()
+    stop_words = ["what", "where", "when", "who", "why", "how", "again", "is", "are", "the", 
+                  "this", "that", "these", "those", "sir", "please", "could", "would", "sorry", 
+                  "excuse", "me", "a", "an", "in", "on", "at", "to", "for", "with", "by", "about"]
     
     for word in words:
-        if word not in stop_words and len(word) > 2:  # Skip short words and common words
-            # Remove any trailing punctuation
-            word = word.rstrip(".,;:!?")
-            if word:  # Check if the word is not empty after stripping
-                entities.add(word)
+        if len(word) > 3 and word not in stop_words:
+            question_topics.append(word)
     
-    return entities
-
-def get_question_type(text):
-    """Get the type of question (what, where, when, who, why, how)"""
-    question_types = {"what", "where", "when", "who", "why", "how"}
-    words = text.lower().split()
+    # Special handling for specific question types (e.g., president, location)
+    if "president" in current_question_lower:
+        if "russia" in current_question_lower:
+            question_topics.append("russia president")
+            question_topics.append("president of russia")
+            question_topics.append("putin")
+        elif "america" in current_question_lower or "us" in current_question_lower or "united states" in current_question_lower:
+            question_topics.append("america president")
+            question_topics.append("president of america")
+            question_topics.append("us president")
+            question_topics.append("trump")
     
-    if words:
-        if words[0] in question_types:
-            return words[0]
+    # Handle special question patterns
+    if "lunch" in current_question_lower:
+        question_topics.append("lunch")
+        # For lunch questions, look for time markers
+        if "when" in current_question_lower or "time" in current_question_lower:
+            question_topics.append("lunch time")
+            question_topics.append("pm")
+            question_topics.append("am")
     
-    return None
-
-def has_location_indicators(text):
-    """
-    Check if the text contains indicators of a location.
-    This helps determine if a text is answering a 'where' question.
-    """
-    text = text.lower()
+    # Special case for door code, password, or PIN
+    if any(term in current_question_lower for term in ["code", "password", "pin"]):
+        question_topics.append("code")
+        question_topics.append("password")
+        question_topics.append("pin")
+        if "door" in current_question_lower:
+            question_topics.append("door code")
     
-    # Common location prepositions and indicators
-    location_indicators = [
-        ' in ', ' on ', ' at ', ' under ', ' above ', ' below ', ' beside ', 
-        ' next to ', ' near ', ' by ', ' inside ', ' outside ', ' behind ',
-        ' in front of ', ' across from ', ' around ', ' between ', ' left ',
-        ' right ', ' top ', ' bottom ', ' north ', ' south ', ' east ', ' west ',
-        ' upstairs ', ' downstairs ', ' here ', ' there ', ' somewhere ',
-        ' location ', ' place ', ' area ', ' region ', ' room ', ' building '
-    ]
-    
-    # Common words that might appear in "on" phrases that aren't locations
-    non_location_words = ['wait', 'hold on', 'going on', 'come on', 'hang on', 'depends on', 
-                          'carry on', 'later on', 'based on', 'working on', 'keep on',
-                          'going on', 'rely on', 'count on', 'put on', 'taking on',
-                          'from now on', 'right on']
-    
-    # First check if any non-location phrases are in the text
-    for phrase in non_location_words:
-        if phrase in text:
-            # If the phrase is in the text, remove it before continuing
-            text = text.replace(phrase, '')
-    
-    # Now check for location indicators
-    for indicator in location_indicators:
-        if indicator in text:
-            # Make sure it's not just a false positive
-            words_after = text.split(indicator)[-1].strip()
-            if words_after and len(words_after) > 1:  # Ensure there's meaningful content after the indicator
-                return True
-    
-    # Additional check for common location nouns often used to answer "where" questions
-    location_nouns = [
-        'table', 'desk', 'chair', 'floor', 'wall', 'ceiling', 'room', 'house', 
-        'apartment', 'office', 'building', 'street', 'road', 'avenue', 'store',
-        'shop', 'mall', 'market', 'school', 'university', 'library', 'park',
-        'garden', 'yard', 'kitchen', 'bathroom', 'bedroom', 'living room',
-        'home', 'work', 'car', 'bus', 'train', 'plane', 'cabinet', 'drawer',
-        'closet', 'shelf', 'counter', 'couch', 'sofa', 'corner', 'window',
-        'door', 'hallway', 'corridor', 'stairway', 'elevator', 'garage'
-    ]
-    
-    for noun in location_nouns:
-        if f" {noun} " in f" {text} " or text.endswith(f" {noun}") or text.startswith(f"{noun} "):
-            return True
-    
-    return False
-
-def create_faq_response(question, answer):
-    """Create a response with the answer"""
-    logger.info(f"Creating response for question: '{question}' with answer: '{answer}'")
-    return {
-        "message": f"I remember this! The answer is: {answer}"
-    }
-
-def is_answer_relevant(question, answer):
-    """
-    Check if an answer is relevant to the question.
-    
-    Returns:
-        bool: True if answer seems relevant, False otherwise
-    """
-    if not answer or len(answer.strip()) < 3:
-        return False
-    
-    # Check for generic non-answers
-    non_answers = ["i don't know", "not sure", "no idea", "i'm not", "wait", "one second", 
-                  "just a moment", "ask", "let me", "okay", "yeah", "cool", "never mind",
-                  "not enough time"]
-    
-    lower_answer = answer.lower()
-    for phrase in non_answers:
-        if phrase in lower_answer:
-            return False
-    
-    # Get question type and check for appropriate answer patterns
-    question_type = get_question_type(question)
-    
-    # For 'where' questions, check if answer contains location indicators
-    if question_type == 'where':
-        return has_location_indicators(answer)
-    
-    # For 'what is' questions, check if answer seems like a definition or description
-    elif question_type == 'what' and 'what is' in question.lower():
-        # Answer should be longer than just a few words for a definition
-        if len(answer.split()) < 3:
-            return False
+    # Handle empty topic list for short questions
+    if len(question_topics) == 0 and is_short_question:
+        logger.debug(f"Question with no topics: '{current_question}'")
+        if len(conversation) > 1:
+            # Look for recent discussions to extract previous topics
+            recent_messages = conversation[-10:] if len(conversation) >= 10 else conversation
             
-        # Answer should not be a question
-        if is_question(answer):
-            return False
+            # First, find recent questions to see what was being discussed
+            recent_topics = []
+            message_index = len(conversation) - 1
             
-        # Answer should contain nouns or be descriptive
-        subject = extract_entities(question)
-        if subject and any(entity in answer.lower() for entity in subject):
-            return True
+            # Go backwards through conversation looking for recent questions and their topics
+            for i, msg in enumerate(reversed(recent_messages)):
+                if msg.get('text') == current_question:
+                    continue
+                
+                text = msg.get('text', '').lower()
+                if "?" in text:
+                    # Found a recent question, extract its topics
+                    for pattern in topic_patterns:
+                        if pattern in text:
+                            topic = text.split(pattern, 1)[1].strip().replace("?", "").strip()
+                            if topic and len(topic) > 1:
+                                recent_topics.append(topic)
+                    
+                    # Also check for nouns in the question
+                    words = [w for w in text.replace("?", "").split() if len(w) > 3 and w not in stop_words]
+                    for word in words:
+                        if word not in recent_topics:
+                            recent_topics.append(word)
+                            
+                # Check if we found topics from recent questions
+                if recent_topics:
+                    break
             
-        # If the answer has enough content, it's likely relevant
-        return len(answer.split()) >= 5
-        
-    # For 'who' questions, check if answer likely refers to a person
-    elif question_type == 'who':
-        person_indicators = ['he', 'she', 'they', 'name is', 'person', 'mr', 'ms', 'mrs', 'dr']
-        return any(indicator in answer.lower() for indicator in person_indicators)
+            # If we have recent topics, add them to our search
+            if recent_topics:
+                logger.debug(f"Found recent topics: {recent_topics}")
+                for topic in recent_topics:
+                    if topic not in question_topics:
+                        question_topics.append(topic)
+            
+            # If it still fails, extract nouns from recent messages
+            if not question_topics:
+                for msg in reversed(recent_messages):
+                    if msg.get('text') == current_question:
+                        continue
+                    
+                    prev_text = msg.get('text', '').lower()
+                    prev_words = [w for w in prev_text.split() if len(w) > 3 and w not in stop_words]
+                    for word in prev_words:
+                        if word not in question_topics:
+                            question_topics.append(word)
+            
+            # For lunch/time questions, also look at the message just before the question
+            if "when" in current_question_lower and len(conversation) >= 2:
+                previous_msg = conversation[-2]['text'].lower() if len(conversation) > 1 else ""
+                
+                # Extract time information from previous message
+                if "pm" in previous_msg or "am" in previous_msg or any(t in previous_msg for t in ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"]):
+                    logger.debug(f"Found potential time information in previous message: '{previous_msg}'")
+                    
+                    # For questions about time, the previous message might be the answer
+                    # Add it as a high-scoring candidate answer
+                    return conversation[-2]['text']
     
-    # For 'how' questions, check for explanatory answers
-    elif question_type == 'how':
-        if len(answer.split()) < 5:  # Explanations are usually longer
-            return False
-        return True
-        
-    # For 'when' questions, check for time indicators
-    elif question_type == 'when':
-        time_indicators = ['today', 'tomorrow', 'yesterday', 'morning', 'afternoon', 'evening', 
-                          'night', 'day', 'week', 'month', 'year', 'minute', 'hour', 'am', 'pm',
-                          'january', 'february', 'march', 'april', 'may', 'june', 'july', 
-                          'august', 'september', 'october', 'november', 'december']
-        return any(indicator in answer.lower() for indicator in time_indicators)
+    logger.debug(f"Extracted topics: {question_topics}")
     
-    # Default: answer should be reasonably long and not be a question itself
-    if is_question(answer):
-        return False
-        
-    # Default check - answer should be substantial
-    return len(answer.split()) >= 3
-
-def fallback_analyze_conversation(history, current_question):
-    """
-    Analyze the conversation history to find an answer to the current question using simple text matching.
-    This is used when the LLM is not available or as a fallback method.
-    """
-    logger.debug(f"Using fallback method to analyze conversation for question: '{current_question}'")
-    
-    if not is_question(current_question):
+    # If we still have no topics and it's a very short question, we shouldn't try to answer
+    if len(question_topics) == 0 and is_short_question:
+        logger.debug("Short question with no context - not attempting to answer")
         return None
     
-    # Track all previously asked questions and their answers
-    previous_qa_pairs = []
-    
-    # Extract subject of current question for better matching
-    question_type = get_question_type(current_question)
-    question_entities = extract_entities(current_question)
-    logger.debug(f"Current question type: {question_type}, entities: {question_entities}")
-    
-    # First, check example QA pairs for an exact or similar match
-    for qa_pair in conversation_history.example_qa_pairs:
-        if are_questions_similar(current_question, qa_pair["question"]):
-            logger.info(f"Found matching example QA pair: Q: '{qa_pair['question']}' A: '{qa_pair['answer']}'")
-            return qa_pair["answer"]
-    
-    # Special handling for repeated questions - look for exact matches first
-    for i, msg in enumerate(history):
-        if i == len(history) - 1:  # Skip the last message (current one)
-            continue
-            
-        text = msg.get('text', '').strip()
+    # Function to check if a potential answer is of good quality
+    def is_good_answer(text):
+        # Reject answers that are questions
+        if "?" in text:
+            return False
         
-        # If this is the exact same question as the current one
-        if text.lower() == current_question.lower():
-            logger.debug(f"Found exact repeat of the current question at index {i}")
+        # Reject very short answers
+        if len(text.split()) < 2:
+            return False
             
-            # Look for an answer after this question
-            # Try to combine consecutive messages that might form a complete answer
-            combined_answer = ""
-            last_speaker = None
+        # Reject answers that contain filler words but little substance
+        filler_words = ["um", "uh", "like", "you know", "well", "so", "yeah"]
+        clean_text = text.lower()
+        for word in filler_words:
+            clean_text = clean_text.replace(word, "")
+        
+        if len(clean_text.strip()) < 5:
+            return False
             
-            for j in range(i + 1, min(i + 5, len(history))):
-                if j >= len(history):
-                    break
-                    
-                answer_msg = history[j]
-                current_speaker = "user" if answer_msg.get('is_user', False) else "other"
-                answer_text = answer_msg.get('text', '').strip()
+        # Ideally return complete sentences
+        if not text.strip().endswith((".", "!", "?", "\"", "'", ")", "]")):
+            # If it doesn't end with punctuation, check if it's still a complete thought
+            if len(text.split()) < 5:
+                return False
+        
+        return True
+    
+    # Function to check if an answer is relevant to the question type
+    def is_relevant_to_question_type(answer_text, q_type):
+        if not q_type:
+            return True  # No specific question type to check
+            
+        answer_lower = answer_text.lower()
+        
+        if q_type == "who" and any(term in answer_lower for term in ["is", "was", "named", "called", "name is"]):
+            return True
+        elif q_type == "where" and any(term in answer_lower for term in ["in", "at", "on", "near", "by", "location", "place"]):
+            return True
+        elif q_type == "when" and any(term in answer_lower for term in ["on", "at", "in", "during", "time", "date", "year", "month", "day"]):
+            return True
+        elif q_type == "how" and "old" in current_question_lower and any(term in answer_lower for term in ["year", "age", "old"]):
+            return True
+        elif q_type == "what" and "code" in current_question_lower and any(term in answer_lower for term in ["code", "password", "pin", "number"]):
+            return True
+        
+        # For other types, we're less strict
+        return True
+    
+    # NEW FUNCTION: Check if a message continues a previous message
+    def is_continuation(msg_index, max_distance=2):
+        """Check if a message is likely a continuation of previous messages"""
+        if msg_index < 1 or msg_index >= len(conversation):
+            return False, None
+            
+        current_msg = conversation[msg_index]['text'].lower()
+        
+        # Skip if current message is too long or contains a question
+        if len(current_msg.split()) > 10 or "?" in current_msg:
+            return False, None
+            
+        # Look back a few messages to find potential start
+        for i in range(msg_index-1, max(0, msg_index-max_distance-1), -1):
+            prev_msg = conversation[i]['text'].lower()
+            
+            # Check if previous message looks like the start of a statement
+            if any(prev_msg.lower().startswith(start) for start in ["the", "my", "your", "our", "their", "his", "her"]):
+                # Previous message looks like a beginning of a statement
+                if len(prev_msg.split()) <= 10 and "?" not in prev_msg:
+                    # Check if it's a statement that could need continuation
+                    if not prev_msg.endswith((".", "!", "?")):
+                        return True, i
+                        
+            # Check for specific patterns like "X is" or "X are"
+            if (" is " in prev_msg or prev_msg.endswith(" is")) and not any(punct in prev_msg for punct in [".", "!", "?"]):
+                return True, i
                 
-                # Skip if it's a question itself
-                if is_question(answer_text):
-                    # If we already started building an answer, break to use what we have
-                    if combined_answer:
-                        break
-                    # Otherwise, skip this question and continue looking
-                    continue
+        return False, None
+    
+    # NEW FUNCTION: Reconstruct multi-part answers
+    def reconstruct_answer(start_index, max_parts=3):
+        """Reconstruct a complete answer that might span multiple messages"""
+        if start_index < 0 or start_index >= len(conversation):
+            return None
+            
+        parts = [conversation[start_index]['text']]
+        
+        # Look at the next few messages to see if they continue this statement
+        for i in range(start_index + 1, min(len(conversation), start_index + max_parts + 1)):
+            msg_text = conversation[i]['text']
+            
+            # Skip questions
+            if "?" in msg_text:
+                break
                 
-                # Handle speaker changes - if different person starts talking, likely end of previous answer
-                if last_speaker and current_speaker != last_speaker and combined_answer:
-                    break
-                    
-                last_speaker = current_speaker
+            # Check if this message looks like a continuation
+            if len(msg_text.split()) <= 10 and not any(msg_text.lower().startswith(w) for w in ["the", "my", "your", "i", "we", "they"]):
+                parts.append(msg_text)
+            else:
+                # Doesn't seem like a continuation
+                break
                 
-                # Append this message to our combined answer
+        # Combine the parts
+        combined = " ".join(parts)
+        return combined
+    
+    # Pattern 1: Find self-answering messages first - these are highest quality matches
+    for msg in conversation:
+        if msg.get('text') == current_question:
+            continue  # Skip the current question
+            
+        text = msg.get('text', '')
+        
+        # Check if message contains both a question and answer about the topic
+        if "?" in text and any(topic in text.lower() for topic in question_topics):
+            # Extract the answer part (after the question mark)
+            parts = text.split("?", 1)
+            if len(parts) > 1:
+                answer = parts[1].strip()
+                if is_good_answer(answer) and is_relevant_to_question_type(answer, question_type):
+                    logger.info(f"Found answer in self-answering message: '{answer}'")
+                    return answer
+    
+    # NEW PATTERN: Check for multi-part answers where a statement is continued across messages
+    code_related_topics = ["code", "password", "pin", "number"]
+    if any(topic in code_related_topics for topic in question_topics):
+        logger.debug("Checking for multi-part answers for codes/passwords")
+        for i, msg in enumerate(conversation):
+            text = msg.get('text', '').lower()
+            
+            # Skip the current question
+            if msg.get('text') == current_question:
+                continue
+                
+            # Look for messages that might start an answer about a code
+            if any(topic in text for topic in code_related_topics) and any(starter in text for starter in ["is", "equals", "="]):
+                # This might be the start of a code or password
+                logger.debug(f"Found potential code/password statement: '{msg.get('text')}'")
+                
+                combined_answer = reconstruct_answer(i, max_parts=3)
                 if combined_answer:
-                    combined_answer += " " + answer_text
-                else:
-                    combined_answer = answer_text
-                
-                # Check if we have a relevant answer now
-                if is_answer_relevant(text, combined_answer):
-                    logger.info(f"Found combined answer to repeat question: '{combined_answer}'")
-                    return combined_answer
-            
-            # If we collected some text but it didn't pass the relevance check,
-            # try anyways for "where" questions since they might have simple answers
-            if combined_answer and question_type == "where" and len(combined_answer.split()) >= 2:
-                # For "where" questions, check if the answer contains the entity being asked about
-                # and a location indicator
-                entity_mentioned = any(entity in combined_answer.lower() for entity in question_entities)
-                has_location = has_location_indicators(combined_answer)
-                
-                if entity_mentioned and has_location:
-                    logger.info(f"Found partial location answer: '{combined_answer}'")
+                    logger.info(f"Reconstructed multi-part answer: '{combined_answer}'")
                     return combined_answer
     
-    # Process the history to collect all question-answer pairs
-    for i, msg in enumerate(history):
-        if i >= len(history) - 1:  # Skip the last message (current one)
+    # Pattern 2: Find a direct statement about the topic
+    best_statements = []
+    for topic in question_topics:
+        # Skip very short topics
+        if len(topic) < 3:
             continue
             
-        text = msg.get('text', '').strip()
-        
-        # Skip exact matches with current question as they were checked above
-        if text.lower() == current_question.lower():
-            continue
+        for msg_idx, msg in enumerate(reversed(conversation)):  # Start with most recent messages
+            text = msg.get('text', '').lower()
+            original_text = msg.get('text', '')
             
-        if is_question(text):
-            # For each question, look for answers in subsequent messages
-            combined_answer = ""
-            last_speaker = None
-            answer_start_idx = 0
-            
-            for j in range(i + 1, min(i + 5, len(history))):
-                if j >= len(history):
-                    break
-                    
-                answer_msg = history[j]
-                current_speaker = "user" if answer_msg.get('is_user', False) else "other"
-                answer_text = answer_msg.get('text', '').strip()
+            # Skip the current question and questions in general
+            if text == current_question_lower or "?" in text:
+                continue
                 
-                # If this is a question and we haven't started building an answer yet, it's likely
-                # not an answer to the previous question
-                if is_question(answer_text):
-                    if not combined_answer:  # No answer started yet
-                        answer_start_idx = j + 1  # Start with the next message
+            # Look for statements about the topic
+            if topic in text:
+                # Check if this might be part of a multi-part answer
+                is_cont, start_idx = is_continuation(len(conversation) - 1 - msg_idx)
+                if is_cont and start_idx is not None:
+                    # Found a multi-part answer
+                    combined_answer = reconstruct_answer(start_idx)
+                    if combined_answer and is_relevant_to_question_type(combined_answer, question_type):
+                        best_statements.append((6, combined_answer))  # Highest score for reconstructed answers
                         continue
-                    else:
-                        # If we already have part of an answer, stop here
+                
+                # Direct fact patterns are high quality
+                patterns = [
+                    f"{topic} is ", f"{topic} was ", f"{topic} has ", 
+                    f"{topic} will ", f"the {topic} is ", f"a {topic} is "
+                ]
+                
+                for pattern in patterns:
+                    if pattern in text and is_relevant_to_question_type(original_text, question_type):
+                        best_statements.append((5, original_text))  # Increased score for direct matches
                         break
-                
-                # Handle speaker changes - unless it's a short continuation
-                if last_speaker and current_speaker != last_speaker:
-                    # Allow short continuations (like "Ukraine." after "Alex is in")
-                    if len(answer_text.split()) <= 2 and combined_answer and not is_question(answer_text):
-                        # Continue building the answer
-                        pass
-                    elif combined_answer:
-                        # If we have an answer and speaker changed with a longer message, end the answer
-                        break
-                
-                last_speaker = current_speaker
-                
-                # Append this message to our combined answer
-                if combined_answer:
-                    combined_answer += " " + answer_text
                 else:
-                    combined_answer = answer_text
-                    answer_start_idx = j
+                    # If no direct fact pattern but contains the topic, still a good candidate
+                    if is_relevant_to_question_type(original_text, question_type):
+                        best_statements.append((3, original_text))  # Increased from 2 to 3
+    
+    # Find all possible answers and score them
+    all_matches = []
+    
+    # Add the best statements we found
+    for score, statement in best_statements:
+        all_matches.append((score, statement))
+    
+    # Pattern 3: Find statements that are likely to be answers
+    for msg_idx, msg in enumerate(conversation):
+        text = msg.get('text', '')
+        
+        # Skip questions and very short messages
+        if "?" in text or len(text.split()) < 3:
+            continue
+            
+        # Check for multi-part answers
+        is_cont, start_idx = is_continuation(msg_idx)
+        if is_cont and start_idx is not None:
+            combined_answer = reconstruct_answer(start_idx)
+            if combined_answer and is_good_answer(combined_answer) and is_relevant_to_question_type(combined_answer, question_type):
+                # Check if the combined answer contains any of our topics
+                if any(topic in combined_answer.lower() for topic in question_topics):
+                    all_matches.append((6, combined_answer))  # Highest score for relevant reconstructed answers
+                else:
+                    all_matches.append((4, combined_answer))  # Good score for reconstructed answers
+            continue
+            
+        # Check for factual statements
+        lower_text = text.lower()
+        
+        # Look for statements that sound like answers
+        answer_starts = ["it is ", "it's ", "that is ", "that's ", "yes, ", "no, ", 
+                        "the answer is ", "i think it's ", "his name is ", "her name is ",
+                        "they are ", "they're ", "we are ", "we're "]
+                        
+        for start in answer_starts:
+            if lower_text.startswith(start) and is_good_answer(text) and is_relevant_to_question_type(text, question_type):
+                all_matches.append((4, text))  # Increased from 3 to 4
+                break
                 
-                # Check if we have a relevant answer now
-                if is_answer_relevant(text, combined_answer):
-                    previous_qa_pairs.append({
-                        'question': text,
-                        'answer': combined_answer,
-                        'index': i,
-                        'answer_index': answer_start_idx
-                    })
-                    break
-
-            # Special handling for "where" questions that might have short or split answers
-            if not previous_qa_pairs and question_type == "where" and get_question_type(text) == "where":
-                q_entities = extract_entities(text)
-                if combined_answer and len(combined_answer.split()) >= 2:
-                    entity_mentioned = any(entity in combined_answer.lower() for entity in q_entities)
-                    has_location = has_location_indicators(combined_answer)
-                    
-                    if entity_mentioned and has_location:
-                        previous_qa_pairs.append({
-                            'question': text,
-                            'answer': combined_answer,
-                            'index': i,
-                            'answer_index': answer_start_idx
-                        })
+        # Look for factual sentence patterns like "X is Y"
+        if (" is " in lower_text or " are " in lower_text) and is_good_answer(text) and is_relevant_to_question_type(text, question_type):
+            # Check if any topic is mentioned
+            if any(topic in lower_text for topic in question_topics):
+                all_matches.append((3, text))
+            else:
+                # Only add low-scoring matches if they're very relevant to the question
+                if question_type and is_relevant_to_question_type(text, question_type):
+                    all_matches.append((2, text))  # Increased from 1 to 2
     
-    # Now evaluate all collected QA pairs against the current question
-    potential_matches = []
+    # Sort matches by score (higher is better)
+    all_matches.sort(reverse=True, key=lambda x: x[0])
     
-    for qa_pair in previous_qa_pairs:
-        similarity = are_questions_similar(current_question, qa_pair['question'])
-        if similarity:
-            # Score based on similarity and recency (higher index = more recent)
-            score = similarity * (0.8 + 0.2 * (qa_pair['index'] / len(history)))
-            potential_matches.append({
-                'question': qa_pair['question'],
-                'answer': qa_pair['answer'],
-                'score': score
-            })
+    # Define a minimum score threshold - higher for shorter questions
+    min_score_threshold = 3 if is_short_question else 2
     
-    # Log all potential matches for debugging
-    if potential_matches:
-        logger.debug(f"Found {len(potential_matches)} potential matches for '{current_question}'")
-        for i, match in enumerate(potential_matches):
-            logger.debug(f"Match {i+1}: Q: '{match['question']}' A: '{match['answer']}' Score: {match['score']:.2f}")
+    # Return the best match if any and it meets our threshold
+    if all_matches and all_matches[0][0] >= min_score_threshold:
+        best_answer = all_matches[0][1]
+        
+        # Clean up the answer - ensure it's a complete sentence that makes sense
+        sentences = [s.strip() for s in best_answer.split('.') if s.strip()]
+        if sentences:
+            # Take the most relevant sentence
+            for sentence in sentences:
+                if any(topic in sentence.lower() for topic in question_topics) and is_good_answer(sentence):
+                    logger.info(f"Found high-quality answer: '{sentence}'")
+                    return sentence + "."  # Add period to ensure it looks complete
+        
+        logger.info(f"Using best match: '{best_answer}' with score {all_matches[0][0]}")
+        return best_answer
     
-    # Sort by score (higher is better)
-    potential_matches.sort(key=lambda x: x['score'], reverse=True)
-    
-    if potential_matches:
-        best_match = potential_matches[0]
-        logger.info(f"Found similar question in history: Q: '{best_match['question']}' A: '{best_match['answer']}'")
-        return best_match['answer']
-    
-    # Last resort: look for entity-based answers for "where" questions
-    if question_type == "where" and question_entities:
-        entity_name = list(question_entities)[0] if question_entities else None
-        if entity_name:
-            logger.debug(f"Searching for location of entity: '{entity_name}'")
-            
-            # Look for messages mentioning this entity and locations
-            location_fragments = []
-            
-            for i, msg in enumerate(history):
-                if i == len(history) - 1:  # Skip current message
-                    continue
-                    
-                text = msg.get('text', '').strip().lower()
-                if entity_name in text and (
-                    "is in" in text or 
-                    "is at" in text or 
-                    "is on" in text or
-                    has_location_indicators(text)
-                ):
-                    location_fragments.append(text)
-                    
-                    # Also check the next message in case the location continues there
-                    if i+1 < len(history)-1:
-                        next_text = history[i+1].get('text', '').strip()
-                        if not is_question(next_text) and len(next_text.split()) <= 3:
-                            location_fragments.append(next_text)
-            
-            if location_fragments:
-                combined_location = " ".join(location_fragments)
-                logger.info(f"Found location fragments for entity '{entity_name}': '{combined_location}'")
-                return combined_location
-    
-    logger.debug(f"No similar question found in history for '{current_question}'")
+    # No high-quality match found
+    if all_matches:
+        logger.debug(f"Best match score {all_matches[0][0]} below threshold {min_score_threshold}, not answering")
+    else:
+        logger.debug("No answer found")
     return None
 
-# Initialize conversation history
-conversation_history = ConversationHistory()
+# Initialize conversation manager
+conversation_manager = ConversationManager()
 
 # Cleanup thread
 def cleanup_thread_function():
     while True:
         try:
             time.sleep(3600)  # Run once per hour
-            conversation_history.clean_old_sessions()
+            conversation_manager.clean_old_sessions()
         except Exception as e:
             logger.error(f"Error in cleanup thread: {str(e)}")
 
@@ -719,11 +541,9 @@ def webhook():
     """
     Handle webhook requests from the Omi service.
     """
-    global conversation_history
-    
     try:
         # Extract session ID from query parameters
-        session_id = request.args.get('uid', 'test_session')
+        session_id = request.args.get('uid', 'default_session')
         
         # Parse the incoming JSON data
         data = request.json
@@ -737,53 +557,34 @@ def webhook():
             if not text:
                 continue
                 
-            is_user = segment.get('is_user', False)
+            # IMPORTANT: Always treat messages as user messages - this is a memory aid for a single user
+            is_user = True  # Override any is_user flags from the input
             timestamp = segment.get('timestamp', time.time())
             
-            logger.debug(f"Processing segment from {'User' if is_user else 'Other'}: '{text}' with timestamp {timestamp}")
+            logger.debug(f"Processing message: '{text}'")
             
             # Add the message to conversation history
-            conversation_history.add_message(session_id, {
+            conversation_manager.add_message(session_id, {
                 'text': text,
                 'is_user': is_user,
                 'timestamp': timestamp
             })
             
-            history = conversation_history.get_history(session_id)
-            logger.debug(f"Session {session_id} now has {len(history)} messages in history")
-            
-            # If this is a user message, check if it's a question
-            if is_user:
-                logger.debug(f"Checking if user message is a question: '{text}'")
+            # Only process messages that might be questions
+            if "?" in text:
+                logger.info(f"Message contains a question: '{text}'")
                 
-                if is_question(text):
-                    logger.info(f"User message is a question: '{text}'")
-                    
-                    # Check if this is a repeated question we've seen before
-                    repeat_count = sum(1 for msg in history[:-1] if msg.get('text', '').lower().strip() == text.lower().strip())
-                    if repeat_count > 0:
-                        logger.info(f"This question has been asked {repeat_count} times before")
-                    
-                    # Check if it's similar to a previous question in the history
-                    answer = analyze_conversation(history, text)
-                    
-                    if answer:
-                        # Before sending the response, check if the answer is relevant
-                        if is_answer_relevant(text, answer):
-                            response = create_faq_response(text, answer)
-                            logger.info(f"Found answer in conversation history, sending response: {response}")
-                            return jsonify(response), 200
-                        else:
-                            logger.info(f"Found answer but it's not relevant: '{answer}'. Not sending a response.")
-                            
-                            # For "where" questions, make an extra attempt with lower threshold
-                            question_type = get_question_type(text)
-                            if question_type == "where":
-                                logger.info("This is a 'where' question, trying with lower relevance threshold")
-                                if answer and has_location_indicators(answer):
-                                    logger.info(f"Answer has location indicators, accepting: '{answer}'")
-                                    response = create_faq_response(text, answer)
-                                    return jsonify(response), 200
+                # Get the conversation history
+                conversation = conversation_manager.get_conversation(session_id)
+                
+                # Try to find an answer in the conversation
+                answer = find_answer_in_conversation(conversation, text)
+                
+                if answer:
+                    # Create and send the response
+                    response = {"message": f"I remember this! The answer is: {answer}"}
+                    logger.info(f"Sending response: {response}")
+                    return jsonify(response), 200
         
         # No response was sent
         return '', 202
@@ -799,7 +600,8 @@ def setup_status():
 @app.route('/status', methods=['GET'])
 def status():
     return jsonify({
-        "active_sessions": len(conversation_history.histories),
+        "active_sessions": len(conversation_manager.conversations),
+        "openai_client_initialized": client is not None,
         "uptime": time.time() - start_time
     })
 
