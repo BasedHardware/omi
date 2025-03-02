@@ -11,28 +11,16 @@ import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
 import 'category_facts_page.dart';
-import 'facts_review_page.dart';
+import 'widgets/fact_review_sheet.dart';
 
-class FactsPage extends StatelessWidget {
+class FactsPage extends StatefulWidget {
   const FactsPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => FactsProvider(),
-      child: const _FactsPage(),
-    );
-  }
+  State<FactsPage> createState() => FactsPageState();
 }
 
-class _FactsPage extends StatefulWidget {
-  const _FactsPage();
-
-  @override
-  State<_FactsPage> createState() => _FactsPageState();
-}
-
-class _FactsPageState extends State<_FactsPage> {
+class FactsPageState extends State<FactsPage> {
   @override
   void initState() {
     () async {
@@ -96,13 +84,28 @@ class _FactsPageState extends State<_FactsPage> {
                           child: SearchBar(
                             hintText: 'Search your facts',
                             leading: const Icon(Icons.search, color: Colors.white70),
-                            backgroundColor: MaterialStateProperty.all(Colors.grey.shade900),
-                            elevation: MaterialStateProperty.all(0),
-                            padding: MaterialStateProperty.all(
-                              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            backgroundColor: WidgetStateProperty.all(Colors.grey.shade900),
+                            elevation: WidgetStateProperty.all(0),
+                            padding: WidgetStateProperty.all(
+                              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             ),
-                            hintStyle: MaterialStateProperty.all(
-                              TextStyle(color: Colors.grey.shade400, fontSize: 16),
+                            trailing: provider.searchQuery.isNotEmpty
+                                ? [
+                                    IconButton(
+                                      icon: const Icon(Icons.close, color: Colors.white70),
+                                      onPressed: () {
+                                        provider.setSearchQuery('');
+                                      },
+                                    )
+                                  ]
+                                : null,
+                            hintStyle: WidgetStateProperty.all(
+                              TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                            ),
+                            shape: WidgetStateProperty.all(
+                              RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                             onChanged: (value) => provider.setSearchQuery(value),
                           ),
@@ -116,7 +119,7 @@ class _FactsPageState extends State<_FactsPage> {
                               crossAxisCount: 2,
                               mainAxisSpacing: 12,
                               crossAxisSpacing: 12,
-                              childAspectRatio: 2,
+                              childAspectRatio: 1.8,
                             ),
                             delegate: SliverChildBuilderDelegate(
                               (context, index) {
@@ -133,7 +136,6 @@ class _FactsPageState extends State<_FactsPage> {
                                       MaterialPageRoute(
                                         builder: (context) => CategoryFactsPage(
                                           category: category,
-                                          provider: provider,
                                           showFactDialog: _showFactDialog,
                                         ),
                                       ),
@@ -153,13 +155,13 @@ class _FactsPageState extends State<_FactsPage> {
                                               category.toString().split('.').last.substring(1),
                                           style: const TextStyle(
                                             color: Colors.white,
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.w600,
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w500,
                                           ),
                                         ),
-                                        const SizedBox(height: 8),
+                                        const SizedBox(height: 10),
                                         Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                                           decoration: BoxDecoration(
                                             color: Colors.black26,
                                             borderRadius: BorderRadius.circular(12),
@@ -212,7 +214,7 @@ class _FactsPageState extends State<_FactsPage> {
                                         key: Key(fact.id),
                                         direction: DismissDirection.endToStart,
                                         onDismissed: (direction) {
-                                          provider.deleteFactProvider(fact);
+                                          provider.deleteFact(fact);
                                           MixpanelManager().factsPageDeletedFact(fact);
                                         },
                                         background: Container(
@@ -587,7 +589,7 @@ class _FactsPageState extends State<_FactsPage> {
             CupertinoDialogAction(
               isDestructiveAction: true,
               onPressed: () {
-                provider.deleteFactProvider(fact);
+                provider.deleteFact(fact);
                 Navigator.pop(context); // Close dialog
                 Navigator.pop(context); // Close edit sheet
               },
@@ -620,7 +622,7 @@ class _FactsPageState extends State<_FactsPage> {
             ),
             TextButton(
               onPressed: () {
-                provider.deleteFactProvider(fact);
+                provider.deleteFact(fact);
                 Navigator.pop(context); // Close dialog
                 Navigator.pop(context); // Close edit sheet
               },
@@ -650,129 +652,6 @@ class _FactsPageState extends State<_FactsPage> {
               provider: context.read<FactsProvider>(),
             );
           }),
-    );
-  }
-}
-
-class FactReviewSheet extends StatelessWidget {
-  final List<Fact> facts;
-  final FactsProvider provider;
-
-  const FactReviewSheet({
-    super.key,
-    required this.facts,
-    required this.provider,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.grey.shade900,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            margin: const EdgeInsets.only(bottom: 20),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: MediaQuery.of(context).size.width * 0.74,
-                          child: Text(
-                            'Review and save ${facts.length} facts generated from today\'s conversation with Omi',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w400,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        // Text(
-                        //   '${facts.length} facts to review',
-                        //   style: TextStyle(
-                        //     color: Colors.grey.shade400,
-                        //     fontSize: 14,
-                        //   ),
-                        // ),
-                      ],
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white70),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        style: TextButton.styleFrom(
-                          backgroundColor: Colors.white.withOpacity(0.1),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: () => Navigator.pop(context),
-                        child: Text(
-                          'Review later',
-                          style: TextStyle(
-                            color: Colors.grey.shade300,
-                            fontSize: 15,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextButton(
-                        style: TextButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: () {
-                          Navigator.pop(context);
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => FactReviewPage(
-                                facts: facts,
-                                provider: provider,
-                              ),
-                            ),
-                          );
-                        },
-                        child: const Text(
-                          'Review now',
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

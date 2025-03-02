@@ -6,119 +6,120 @@ import 'package:friend_private/backend/schema/fact.dart';
 import 'package:friend_private/providers/facts_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
+import 'package:provider/provider.dart';
 
 class CategoryFactsPage extends StatelessWidget {
   final FactCategory category;
-  final FactsProvider provider;
   final Function(BuildContext, FactsProvider, {Fact? fact}) showFactDialog;
 
   const CategoryFactsPage({
     super.key,
     required this.category,
-    required this.provider,
     required this.showFactDialog,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primary,
-      appBar: AppBar(
+    return Consumer<FactsProvider>(builder: (context, provider, child) {
+      return Scaffold(
         backgroundColor: Theme.of(context).colorScheme.primary,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              category.toString().split('.').last[0].toUpperCase() + category.toString().split('.').last.substring(1),
-            ),
-            Text(
-              '${provider.filteredFacts.length} facts',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade400,
-                fontWeight: FontWeight.normal,
+        appBar: AppBar(
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                category.toString().split('.').last[0].toUpperCase() + category.toString().split('.').last.substring(1),
               ),
+              Text(
+                '${provider.filteredFacts.length} facts',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade400,
+                  fontWeight: FontWeight.normal,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.add),
+              onPressed: () {
+                showFactDialog(context, provider);
+                MixpanelManager().factsPageCreateFactBtn();
+              },
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () {
-              showFactDialog(context, provider);
-              MixpanelManager().factsPageCreateFactBtn();
-            },
-          ),
-        ],
-      ),
-      body: provider.filteredFacts.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.note_add, size: 48, color: Colors.grey.shade600),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No facts in this category yet',
-                    style: TextStyle(
-                      color: Colors.grey.shade400,
-                      fontSize: 18,
+        body: provider.filteredFacts.isEmpty
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.note_add, size: 48, color: Colors.grey.shade600),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No facts in this category yet',
+                      style: TextStyle(
+                        color: Colors.grey.shade400,
+                        fontSize: 18,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: () => showFactDialog(context, provider),
-                    child: const Text('Add your first fact'),
-                  ),
-                ],
-              ),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: provider.filteredFacts.length,
-              itemBuilder: (context, index) {
-                final fact = provider.filteredFacts[index];
-                return Dismissible(
-                  key: Key(fact.id),
-                  direction: DismissDirection.endToStart,
-                  onDismissed: (direction) {
-                    provider.deleteFactProvider(fact);
-                    MixpanelManager().factsPageDeletedFact(fact);
-                  },
-                  background: Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade900,
-                      borderRadius: BorderRadius.circular(12),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: () => showFactDialog(context, provider),
+                      child: const Text('Add your first fact'),
                     ),
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.only(right: 20),
-                    child: const Icon(Icons.delete_outline, color: Colors.white),
-                  ),
-                  child: GestureDetector(
-                    onTap: () => _showQuickEditSheet(context, fact, provider),
-                    child: Container(
+                  ],
+                ),
+              )
+            : ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: provider.filteredFacts.length,
+                itemBuilder: (context, index) {
+                  final fact = provider.filteredFacts[index];
+                  return Dismissible(
+                    key: Key(fact.id),
+                    direction: DismissDirection.endToStart,
+                    onDismissed: (direction) {
+                      provider.deleteFact(fact);
+                      MixpanelManager().factsPageDeletedFact(fact);
+                    },
+                    background: Container(
                       margin: const EdgeInsets.only(bottom: 8),
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade900,
+                        color: Colors.red.shade900,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        title: Text(
-                          fact.content.decodeString,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 20),
+                      child: const Icon(Icons.delete_outline, color: Colors.white),
+                    ),
+                    child: GestureDetector(
+                      onTap: () => _showQuickEditSheet(context, fact, provider),
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade900,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          title: Text(
+                            fact.content.decodeString,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              },
-            ),
-    );
+                  );
+                },
+              ),
+      );
+    });
   }
 
   void _showQuickEditSheet(BuildContext context, Fact fact, FactsProvider provider) {
@@ -264,7 +265,7 @@ class CategoryFactsPage extends StatelessWidget {
             CupertinoDialogAction(
               isDestructiveAction: true,
               onPressed: () {
-                provider.deleteFactProvider(fact);
+                provider.deleteFact(fact);
                 Navigator.pop(context); // Close dialog
                 Navigator.pop(context); // Close edit sheet
               },
@@ -297,7 +298,7 @@ class CategoryFactsPage extends StatelessWidget {
             ),
             TextButton(
               onPressed: () {
-                provider.deleteFactProvider(fact);
+                provider.deleteFact(fact);
                 Navigator.pop(context); // Close dialog
                 Navigator.pop(context); // Close edit sheet
               },

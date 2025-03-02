@@ -58,10 +58,11 @@ class FactsProvider extends BaseProvider {
     _setCategories();
   }
 
-  void deleteFactProvider(Fact fact) async {
-    deleteFact(fact.id);
+  void deleteFact(Fact fact) async {
+    deleteFactServer(fact.id);
     facts.remove(fact);
     _setCategories();
+    notifyListeners();
   }
 
   void createFactProvider(String content, FactCategory category) async {
@@ -103,7 +104,7 @@ class FactsProvider extends BaseProvider {
       if (!approved) {
         fact.deleted = true;
         facts.removeAt(idx);
-        deleteFactProvider(fact);
+        deleteFact(fact);
       } else {
         facts[idx] = fact;
       }
