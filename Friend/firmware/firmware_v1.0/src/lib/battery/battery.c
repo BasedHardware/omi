@@ -177,8 +177,8 @@ int battery_charge_stop()
      k_mutex_unlock(&battery_mut);
  
      // Debug logs to track ADC and voltage values
-     LOG_DBG("Raw ADC Value: %d", adc_mv); // Add this line
-     LOG_DBG("Battery Voltage: %d mV", *battery_millivolt); // Add this line
+     LOG_DBG("Raw ADC Value: %d", adc_mv); 
+     LOG_DBG("Battery Voltage: %d mV", *battery_millivolt); 
      return ret;
  }
  
@@ -188,12 +188,12 @@ int battery_get_percentage(uint8_t *battery_percentage, uint16_t battery_millivo
     if (battery_millivolt > battery_states[0].voltage)
     {
         *battery_percentage = 100;
-        return 0; // Add this line
+        return 0; 
     }
     if (battery_millivolt < battery_states[BATTERY_STATES_COUNT - 1].voltage)
     {
         *battery_percentage = 0;
-        return 0; // Add this line
+        return 0; 
     }
 
     for (uint16_t i = 0; i < BATTERY_STATES_COUNT - 1; i++)
@@ -208,7 +208,7 @@ int battery_get_percentage(uint8_t *battery_percentage, uint16_t battery_millivo
                                    (float)(battery_states[i + 1].voltage - battery_states[i].voltage)));
 
             // Debug log to track battery percentage
-            LOG_DBG("Battery Percentage: %d %%", *battery_percentage); // Update this line
+            LOG_DBG("Battery Percentage: %d %%", *battery_percentage); 
             return 0;
         }
     }
