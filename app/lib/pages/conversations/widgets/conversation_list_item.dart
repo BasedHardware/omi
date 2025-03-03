@@ -155,26 +155,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   var conversationIdx = widget.conversationIdx;
                   provider.deleteConversationLocally(
                       conversation, conversationIdx, widget.date);
-                  ScaffoldMessenger.of(context)
-                    ..hideCurrentSnackBar()
-                    ..showSnackBar(
-                      SnackBar(
-                        content: const Text(
-                          'Conversation deleted.',
-                          style: TextStyle(
-                            color: Color.fromARGB(255, 255, 255, 255),
-                          ),
-                        ),
-                        duration: const Duration(seconds: 3),
-                        action: SnackBarAction(
-                          label: 'Undo',
-                          textColor: const Color.fromARGB(255, 255, 255, 255),
-                          onPressed: () {
-                            provider.undoDeletedConversation(conversation);
-                          },
-                        ),
-                      ),
-                    );
                 },
                 child: Padding(
                   padding: const EdgeInsetsDirectional.all(16),
