@@ -17,7 +17,7 @@ import database.users as user_db
 from database import redis_db
 from database.redis_db import get_cached_user_geolocation
 from models.memory import Memory, TranscriptSegment, MemoryStatus, Structured, Geolocation
-from models.message_event import MemoryEvent, MessageEvent, MessageServiceStatusEvent, PingEvent
+from models.message_event import MemoryEvent, MessageEvent, MessageServiceStatusEvent, PingEvent, LastMemoryEvent
 from utils.apps import is_audio_bytes_app_enabled
 from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory
@@ -205,6 +205,13 @@ async def _websocket_util(
     # Process processing memories
     processing = memories_db.get_processing_memories(uid)
     asyncio.create_task(finalize_processing_memories(processing))
+
+    # Send last completed memory to client
+    async def send_last_memory():
+        last_memory = memories_db.get_last_completed_memory(uid)
+        if last_memory:
+            await _send_message_event(LastMemoryEvent(memory_id=last_memory['id']))
+    asyncio.create_task(send_last_memory())
 
     async def _create_current_memory():
         print("_create_current_memory", uid)
