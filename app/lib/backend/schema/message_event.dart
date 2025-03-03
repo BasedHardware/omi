@@ -12,6 +12,7 @@ enum MessageEventType {
   ping('ping'),
   conversationBackwardSynced('memory_backward_synced'),
   serviceStatus('service_status'),
+  lastConversation('last_memory'),
   unknown('unknown'),
   ;
 
@@ -30,6 +31,7 @@ class ServerMessageEvent {
   String? name;
   String? status;
   String? statusText;
+  String? memoryId;
 
   ServerMessageEvent(
     this.type,
@@ -38,6 +40,7 @@ class ServerMessageEvent {
     this.name,
     this.status,
     this.statusText,
+    this.memoryId,
   );
 
   static ServerMessageEvent fromJson(Map<String, dynamic> json) {
@@ -54,6 +57,7 @@ class ServerMessageEvent {
       json['name'],
       json['status'],
       json['status_text'],
+      json['memory_id'],
     );
   }
 }
