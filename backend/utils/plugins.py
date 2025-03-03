@@ -224,6 +224,7 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
 
 
 async def trigger_realtime_integrations(uid: str, segments: list[dict], memory_id: str | None):
+    print("trigger_realtime_integrations", uid)
     """REALTIME STREAMING"""
     # TODO: don't retrieve token before knowing if to notify
     token = notification_db.get_token_only(uid)
@@ -231,6 +232,7 @@ async def trigger_realtime_integrations(uid: str, segments: list[dict], memory_i
 
 
 async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
+    print("trigger_realtime_audio_bytes", uid)
     """REALTIME AUDIO STREAMING"""
     _trigger_realtime_audio_bytes(uid, sample_rate, data)
 
@@ -362,7 +364,6 @@ def _trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
     [t.join() for t in threads]
 
     return results
-
 
 
 def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], memory_id: str | None) -> dict:
