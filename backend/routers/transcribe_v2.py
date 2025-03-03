@@ -407,7 +407,7 @@ async def _websocket_util(
                         print(f"Pusher transcripts Connection closed: {e}", uid)
                         transcript_ws = None
                         pusher_connected = False
-                        await reconnect()
+                        await connect()
                     except Exception as e:
                         print(f"Pusher transcripts failed: {e}", uid)
 
@@ -439,19 +439,19 @@ async def _websocket_util(
                         print(f"Pusher audio_bytes Connection closed: {e}", uid)
                         audio_bytes_ws = None
                         pusher_connected = False
-                        await reconnect()
+                        await connect()
                     except Exception as e:
                         print(f"Pusher audio_bytes failed: {e}", uid)
 
-        async def reconnect():
+        async def connect():
             nonlocal pusher_connected
             nonlocal pusher_connect_lock
             async with pusher_connect_lock:
                 if pusher_connected:
                     return
-                await connect()
+                await _connect()
 
-        async def connect():
+        async def _connect():
             nonlocal pusher_ws
             nonlocal transcript_ws
             nonlocal audio_bytes_ws
@@ -479,6 +479,7 @@ async def _websocket_util(
     transcript_consume = None
     audio_bytes_send = None
     audio_bytes_consume = None
+
     pusher_connect, pusher_close, \
         transcript_send, transcript_consume, \
         audio_bytes_send, audio_bytes_consume = create_pusher_task_handler()
