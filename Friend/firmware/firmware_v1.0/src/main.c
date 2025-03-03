@@ -1,5 +1,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/kernel.h>
+#include <helpers/nrfx_reset_reason.h>
+#include <nrfx_power.h>
 #include "transport.h"
 #include "mic.h"
 #include "utils.h"
@@ -117,14 +119,43 @@ void set_led_state()
 
 int main(void)
 {
-    int err;
+	int err;
 
+    // TODO: what does it mean ? disabled from_usb_event for now
+    // for system power off, we have no choice but to handle usb detect wakeup events. if off, and this was the reason, initialize, skip lightshow, start not recording
+#ifdef CONFIG_OMI_USE_LEGACY_SDK
     // Store reset reason code
     uint32_t reset_reason = NRF_POWER->RESETREAS;
 
     NRF_POWER->DCDCEN=1;
     NRF_POWER->DCDCEN0=1;
     NRF_POWER->RESETREAS=1;
+#else
+    uint32_t reset_reason = nrfx_reset_reason_get();
+
+    // DC-DC
+#if NRF_POWER_HAS_DCDCEN
+	nrf_power_dcdcen_set(NRF_POWER, true);
+#endif
+
+#if NRF_POWER_HAS_DCDCEN_VDDH
+	nrf_power_dcdcen_vddh_set(NRF_POWER, true);
+#endif
+
+#if !NRF_POWER_HAS_DCDCEN && !NRF_POWER_HAS_DCDCEN_VDDH
+#pragma message "DC-DC related commands have no effect!"
+#endif
+
+    nrfx_reset_reason_clear(1);
+#endif
+
+    // bool from_usb_event = (reset_reason & VBUS_DETECT);
+    bool from_wakeup =  (reset_reason & WAKEUP_DETECT);
+    // if (from_usb_event)
+    // {
+    //     k_msleep(100);
+    //     printf("from reset \n");
+    //     is_off = true;
 
     LOG_INF("Booting...\n");
 
@@ -239,7 +270,7 @@ int main(void)
 #endif
 
     // Enable usb
-#ifdef CONFIG_ENABLE_USB
+#ifdef CONFIG_OMI_ENABLE_USB
     LOG_PRINTK("\n");
     LOG_INF("Initializing power supply check...\n");
 
