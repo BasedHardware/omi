@@ -372,13 +372,10 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   String? lastDeletedConversationId;
   Map<String, DateTime> deleteTimestamps = {};
 
-  void deleteConversationLocally(
-      ServerConversation conversation, int index, DateTime date) {
+  void deleteConversationLocally(ServerConversation conversation, int index, DateTime date) {
     if (lastDeletedConversationId != null &&
         memoriesToDelete.containsKey(lastDeletedConversationId) &&
-        DateTime.now()
-                .difference(deleteTimestamps[lastDeletedConversationId]!) <
-            const Duration(seconds: 3)) {
+        DateTime.now().difference(deleteTimestamps[lastDeletedConversationId]!) < const Duration(seconds: 3)) {
       deleteConversationOnServer(lastDeletedConversationId!);
     }
 
@@ -392,8 +389,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     }
     notifyListeners();
     Future.delayed(const Duration(seconds: 3), () {
-      if (memoriesToDelete.containsKey(conversation.id) &&
-          lastDeletedConversationId == conversation.id) {
+      if (memoriesToDelete.containsKey(conversation.id) && lastDeletedConversationId == conversation.id) {
         deleteConversationOnServer(conversation.id);
       }
     });
@@ -410,9 +406,9 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
   void undoDeletedConversation(ServerConversation conversation) {
     if (!conversations.any((e) => e.id == conversation.id)) {
-        conversations.add(conversation);
-        conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        _groupConversationsByDateWithoutNotify();
+      conversations.add(conversation);
+      conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      _groupConversationsByDateWithoutNotify();
     }
     memoriesToDelete.remove(conversation.id);
     deleteTimestamps.remove(conversation.id);
