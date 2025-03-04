@@ -33,7 +33,7 @@ Future<List<Fact>> getFacts({int limit = 100, int offset = 0}) async {
   return facts.map((fact) => Fact.fromJson(fact)).toList();
 }
 
-Future<bool> deleteFact(String factId) async {
+Future<bool> deleteFactServer(String factId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/facts/$factId',
     headers: {},
