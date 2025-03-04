@@ -255,6 +255,15 @@ export default function HomePage() {
           toast.success('Profile already exists, redirecting...');
           redirectToChat(existingId);
           return;
+        } else {
+          twitterResult = await fetchTwitterProfile(cleanHandle);
+          if (twitterResult) {
+            existingId = await checkExistingProfile(cleanHandle, 'twitter');
+            if (existingId) {
+              redirectToChat(existingId);
+              return;
+            }
+          }
         }
       } 
       // If input is specifically a LinkedIn URL
