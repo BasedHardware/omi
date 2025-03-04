@@ -105,47 +105,38 @@ class _ConversationListItemState extends State<ConversationListItem> {
                 confirmDismiss: (direction) {
                   bool showDeleteConfirmation = SharedPreferencesUtil().showConversationDeleteConfirmation;
                   if (!showDeleteConfirmation) return Future.value(true);
-                  final connectivityProvider =
-                      Provider.of<ConnectivityProvider>(context, listen: false);
+                  final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                   if (connectivityProvider.isConnected) {
                     return showDialog(
-                      context: context,
-                      builder: (context) {
-                        return StatefulBuilder(
-                          builder: (context, setState) {
-                            return ConfirmationDialog(
-                              title: "Delete Conversation?",
-                              description:
-                                  "Are you sure you want to delete this conversation? This action cannot be undone.",
-                              checkboxValue: !showDeleteConfirmation,
-                              checkboxText: "Don't ask me again",
-                              updateCheckboxValue: (value) {
-                                if (value != null) {
+                        context: context,
+                        builder: (context) {
+                          return StatefulBuilder(
+                            builder: (context, setState) {
+                              return ConfirmationDialog(
+                                title: "Delete Conversation?",
+                                description:
+                                    "Are you sure you want to delete this conversation? This action cannot be undone.",
+                                checkboxValue: !showDeleteConfirmation,
+                                checkboxText: "Don't ask me again",
+                                onCheckboxChanged: (value) {
                                   setState(() {
                                     showDeleteConfirmation = !value;
                                   });
-                                }
-                              },
-                              onCancel: () => Navigator.of(context).pop(),
-                              onConfirm: () {
-                                SharedPreferencesUtil().showConversationDeleteConfirmation =
-                                    showDeleteConfirmation;
-                                return Navigator.pop(context, true);
-                              },
-                            );
-                          },
-                      );
-                    });
+                                },
+                                onCancel: () => Navigator.of(context).pop(),
+                                onConfirm: () {
+                                  SharedPreferencesUtil().showConversationDeleteConfirmation = showDeleteConfirmation;
+                                  return Navigator.pop(context, true);
+                                },
+                              );
+                            },
+                          );
+                        });
                   } else {
                     return showDialog(
-                      builder: (c) => getDialog(
-                          context,
-                          () => Navigator.pop(context),
-                          () => Navigator.pop(context),
-                          'Unable to Delete Conversation',
-                          'Please check your internet connection and try again.',
-                          singleButton: true,
-                          okButtonText: 'OK'),
+                      builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context),
+                          'Unable to Delete Conversation', 'Please check your internet connection and try again.',
+                          singleButton: true, okButtonText: 'OK'),
                       context: context,
                     );
                   }
@@ -153,8 +144,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                 onDismissed: (direction) async {
                   var conversation = widget.conversation;
                   var conversationIdx = widget.conversationIdx;
-                  provider.deleteConversationLocally(
-                      conversation, conversationIdx, widget.date);
+                  provider.deleteConversationLocally(conversation, conversationIdx, widget.date);
                 },
                 child: Padding(
                   padding: const EdgeInsetsDirectional.all(16),
