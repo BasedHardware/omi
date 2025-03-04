@@ -369,20 +369,57 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   ////////// Delete Memory With Undo Functionality ///////////////
 
   Map<String, ServerConversation> memoriesToDelete = {};
+  String? lastDeletedConversationId;
+  Map<String, DateTime> deleteTimestamps = {};
 
-  void deleteConversationLocally(ServerConversation conversation, int index, DateTime date) {
+  void deleteConversationLocally(
+      ServerConversation conversation, int index, DateTime date) {
+    if (lastDeletedConversationId != null &&
+        memoriesToDelete.containsKey(lastDeletedConversationId) &&
+        DateTime.now()
+                .difference(deleteTimestamps[lastDeletedConversationId]!) <
+            const Duration(seconds: 3)) {
+      deleteConversationOnServer(lastDeletedConversationId!);
+    }
+
     memoriesToDelete[conversation.id] = conversation;
+    lastDeletedConversationId = conversation.id;
+    deleteTimestamps[conversation.id] = DateTime.now();
     conversations.removeWhere((element) => element.id == conversation.id);
     groupedConversations[date]!.removeAt(index);
     if (groupedConversations[date]!.isEmpty) {
       groupedConversations.remove(date);
     }
     notifyListeners();
+    Future.delayed(const Duration(seconds: 3), () {
+      if (memoriesToDelete.containsKey(conversation.id) &&
+          lastDeletedConversationId == conversation.id) {
+        deleteConversationOnServer(conversation.id);
+      }
+    });
   }
 
   void deleteConversationOnServer(String conversationId) {
     deleteConversationServer(conversationId);
     memoriesToDelete.remove(conversationId);
+    deleteTimestamps.remove(conversationId);
+    if (lastDeletedConversationId == conversationId) {
+      lastDeletedConversationId = null;
+    }
+  }
+
+  void undoDeletedConversation(ServerConversation conversation) {
+    if (!conversations.any((e) => e.id == conversation.id)) {
+        conversations.add(conversation);
+        conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        _groupConversationsByDateWithoutNotify();
+    }
+    memoriesToDelete.remove(conversation.id);
+    deleteTimestamps.remove(conversation.id);
+    if (lastDeletedConversationId == conversation.id) {
+      lastDeletedConversationId = null;
+    }
+    notifyListeners();
   }
 
   /////////////////////////////////////////////////////////////////
