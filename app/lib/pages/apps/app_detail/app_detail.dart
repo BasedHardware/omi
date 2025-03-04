@@ -294,7 +294,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        app.author,
+                        app.author.decodeString,
                         style: const TextStyle(color: Colors.grey, fontSize: 14),
                       ),
                     ],
