@@ -4,6 +4,8 @@ import 'package:friend_private/providers/facts_provider.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
+import 'widgets/category_chip.dart';
+
 class FactReviewPage extends StatefulWidget {
   final List<Fact> facts;
 
@@ -21,6 +23,7 @@ class _FactReviewPageState extends State<FactReviewPage> {
   late List<Fact> displayedFacts;
   FactCategory? selectedCategory;
   bool isReviewing = false;
+  bool _isProcessing = false;
 
   @override
   void initState() {
@@ -43,6 +46,55 @@ class _FactReviewPageState extends State<FactReviewPage> {
       counts[fact.category] = (counts[fact.category] ?? 0) + 1;
     }
     return counts;
+  }
+
+  void _processBatchAction(bool approve) async {
+    if (_isProcessing) return;
+
+    setState(() => _isProcessing = true);
+
+    List<Fact> factsToProcess = selectedCategory == null
+        ? List.from(remainingFacts)
+        : remainingFacts.where((f) => f.category == selectedCategory).toList();
+
+    final count = factsToProcess.length;
+
+    // Process facts with a small delay to allow UI to update
+    for (var fact in factsToProcess) {
+      await Future.delayed(const Duration(milliseconds: 20));
+      context.read<FactsProvider>().reviewFact(fact, approve);
+    }
+
+    setState(() {
+      remainingFacts.removeWhere((f) => factsToProcess.contains(f));
+      displayedFacts = selectedCategory == null
+          ? List.from(remainingFacts)
+          : remainingFacts.where((f) => f.category == selectedCategory).toList();
+      _isProcessing = false;
+    });
+
+    // Show feedback
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          approve ? 'Saved $count facts' : 'Discarded $count facts',
+          style: const TextStyle(color: Colors.white),
+        ),
+        backgroundColor: Colors.grey.shade800,
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      ),
+    );
+
+    if (remainingFacts.isEmpty) {
+      Navigator.pop(context);
+    }
   }
 
   @override
@@ -160,26 +212,9 @@ class _FactReviewPageState extends State<FactReviewPage> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white.withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const Icon(Icons.label_outline, size: 13, color: Colors.white),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            fact.category.toString().split('.').last,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                                    CategoryChip(
+                                      category: fact.category,
+                                      showIcon: true,
                                     ),
                                     const SizedBox(height: 12),
                                     Text(
@@ -205,16 +240,18 @@ class _FactReviewPageState extends State<FactReviewPage> {
                                           ),
                                         ),
                                       ),
-                                      onPressed: () {
-                                        provider.reviewFact(fact, false);
-                                        setState(() {
-                                          remainingFacts.remove(fact);
-                                          displayedFacts.remove(fact);
-                                        });
-                                        if (remainingFacts.isEmpty) {
-                                          Navigator.pop(context);
-                                        }
-                                      },
+                                      onPressed: _isProcessing
+                                          ? null
+                                          : () {
+                                              provider.reviewFact(fact, false);
+                                              setState(() {
+                                                remainingFacts.remove(fact);
+                                                displayedFacts.remove(fact);
+                                              });
+                                              if (remainingFacts.isEmpty) {
+                                                Navigator.pop(context);
+                                              }
+                                            },
                                       child: Padding(
                                         padding: const EdgeInsets.symmetric(vertical: 12),
                                         child: Row(
@@ -249,16 +286,18 @@ class _FactReviewPageState extends State<FactReviewPage> {
                                           ),
                                         ),
                                       ),
-                                      onPressed: () {
-                                        provider.reviewFact(fact, true);
-                                        setState(() {
-                                          remainingFacts.remove(fact);
-                                          displayedFacts.remove(fact);
-                                        });
-                                        if (remainingFacts.isEmpty) {
-                                          Navigator.pop(context);
-                                        }
-                                      },
+                                      onPressed: _isProcessing
+                                          ? null
+                                          : () {
+                                              provider.reviewFact(fact, true);
+                                              setState(() {
+                                                remainingFacts.remove(fact);
+                                                displayedFacts.remove(fact);
+                                              });
+                                              if (remainingFacts.isEmpty) {
+                                                Navigator.pop(context);
+                                              }
+                                            },
                                       child: Padding(
                                         padding: const EdgeInsets.symmetric(vertical: 12),
                                         child: Row(
@@ -298,102 +337,74 @@ class _FactReviewPageState extends State<FactReviewPage> {
                   ),
                 ),
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        style: TextButton.styleFrom(
-                          backgroundColor: Colors.red.shade900.withOpacity(0.3),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                child: _isProcessing
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            strokeWidth: 3,
                           ),
                         ),
-                        onPressed: () {
-                          List<Fact> factsToDiscard = selectedCategory == null
-                              ? List.from(remainingFacts)
-                              : remainingFacts.where((f) => f.category == selectedCategory).toList();
-
-                          for (var fact in factsToDiscard) {
-                            provider.reviewFact(fact, false);
-                          }
-
-                          setState(() {
-                            remainingFacts.removeWhere((f) => factsToDiscard.contains(f));
-                            displayedFacts = selectedCategory == null
-                                ? List.from(remainingFacts)
-                                : remainingFacts.where((f) => f.category == selectedCategory).toList();
-                          });
-
-                          if (remainingFacts.isEmpty) {
-                            Navigator.pop(context);
-                          }
-                        },
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.delete_outline, size: 18, color: Colors.red.shade400),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Discard all',
-                              style: TextStyle(
-                                color: Colors.red.shade400,
-                                fontSize: 15,
+                      )
+                    : Row(
+                        children: [
+                          Expanded(
+                            child: TextButton(
+                              style: TextButton.styleFrom(
+                                backgroundColor: Colors.red.shade900.withOpacity(0.3),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              onPressed: () => _processBatchAction(false),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.delete_outline, size: 18, color: Colors.red.shade400),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Discard all',
+                                    style: TextStyle(
+                                      color: Colors.red.shade400,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextButton(
-                        style: TextButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
                           ),
-                        ),
-                        onPressed: () {
-                          List<Fact> factsToSave = selectedCategory == null
-                              ? List.from(remainingFacts)
-                              : remainingFacts.where((f) => f.category == selectedCategory).toList();
-
-                          for (var fact in factsToSave) {
-                            provider.reviewFact(fact, true);
-                          }
-
-                          setState(() {
-                            remainingFacts.removeWhere((f) => factsToSave.contains(f));
-                            displayedFacts = selectedCategory == null
-                                ? List.from(remainingFacts)
-                                : remainingFacts.where((f) => f.category == selectedCategory).toList();
-                          });
-
-                          if (remainingFacts.isEmpty) {
-                            Navigator.pop(context);
-                          }
-                        },
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.check, size: 18, color: Colors.black),
-                            SizedBox(width: 8),
-                            Text(
-                              'Save all',
-                              style: TextStyle(
-                                color: Colors.black,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextButton(
+                              style: TextButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              onPressed: () => _processBatchAction(true),
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.check, size: 18, color: Colors.black),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Save all',
+                                    style: TextStyle(
+                                      color: Colors.black,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
-                ),
               ),
           ],
         ),
