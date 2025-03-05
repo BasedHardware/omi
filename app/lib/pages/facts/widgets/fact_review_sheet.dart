@@ -99,10 +99,7 @@ class FactReviewSheet extends StatelessWidget {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => FactReviewPage(
-                                facts: facts,
-                                provider: provider,
-                              ),
+                              builder: (context) => FactReviewPage(facts: facts),
                             ),
                           );
                         },
