@@ -11,7 +11,7 @@ router = APIRouter()
 
 @router.post('/v1/facts', tags=['facts'], response_model=FactDB)
 def create_fact(fact: Fact, uid: str = Depends(auth.get_current_user_uid)):
-    fact_db = FactDB.from_fact(fact, uid, None, None)
+    fact_db = FactDB.from_fact(fact, uid, None, None, True)
     fact_db.manually_added = True
     facts_db.create_fact(uid, fact_db.dict())
     return fact_db

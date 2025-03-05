@@ -127,7 +127,7 @@ def _extract_facts(uid: str, memory: Memory):
     new_facts = new_facts_extractor(uid, memory.transcript_segments)
     parsed_facts = []
     for fact in new_facts:
-        parsed_facts.append(FactDB.from_fact(fact, uid, memory.id, memory.structured.category))
+        parsed_facts.append(FactDB.from_fact(fact, uid, memory.id, memory.structured.category, False))
         print('_extract_facts:', fact.category.value.upper(), '|', fact.content)
     if len(parsed_facts) == 0:
         return
