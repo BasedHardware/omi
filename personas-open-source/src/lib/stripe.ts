@@ -17,7 +17,7 @@ export const getStripe = async () => {
 export const getStripeInstance = (): Stripe => {
   const secretKey = process.env.STRIPE_SECRET_KEY!;
   return new Stripe(secretKey, {
-    apiVersion: '2025-02-24.acacia', // Use the latest stable API version
+    apiVersion: '2025-02-24.acacia',
   });
 };
 

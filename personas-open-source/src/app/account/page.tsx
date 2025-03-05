@@ -9,7 +9,6 @@ import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { useSubscription } from '@/lib/subscription-context';
 import Link from 'next/link';
-import { formatPrice } from '@/lib/stripe';
 import { toast } from 'sonner';
 
 export default function AccountPage() {
@@ -79,15 +78,6 @@ export default function AccountPage() {
       console.error('Error accessing customer portal:', error);
       toast.error('Failed to access customer portal');
     }
-  };
-
-  const formatDate = (timestamp: number) => {
-    if (!timestamp) return 'N/A';
-    return new Date(timestamp).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
   };
 
   if (loading || isLoading) {

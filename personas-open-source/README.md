@@ -73,6 +73,20 @@ You'll need to obtain the following API keys and credentials:
    NEXT_PUBLIC_FIREBASE_APP_ID=your_firebase_app_id
    NEXT_PUBLIC_FIREBASE_VAPID_KEY=your_firebase_vapid_key
 
+   # Firebase Admin
+   FIREBASE_PROJECT_ID=your_firebase_project_id
+   FIREBASE_CLIENT_EMAIL=firebase_client_email
+   FIREBASE_PRIVATE_KEY=your_firebase_admin_private_key
+
+
+   # Stripe
+   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=stripe_publishable_key
+   STRIPE_SECRET_KEY=stripe_secret_key
+   STRIPE_WEBHOOK_SECRET=webhook_secret
+   STRIPE_PRICE_PRO_MONTHLY=pro_price_id
+
+   NEXT_PUBLIC_SITE_URL=deployment_url
+
    # API Keys
    NEXT_PUBLIC_RAPIDAPI_KEY=your_rapidapi_key
    OPENROUTER_API_KEY=your_openrouter_api_key

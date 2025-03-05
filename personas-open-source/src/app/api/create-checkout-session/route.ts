@@ -11,9 +11,6 @@ export async function POST(req: NextRequest) {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get('session')?.value;
 
-  // Debug log
-  console.log('Session Cookie:', sessionCookie ? 'Present' : 'Missing');
-
   if (!sessionCookie) {
     return NextResponse.json(
       { error: 'You must be logged in to create a checkout session' },
@@ -25,10 +22,7 @@ export async function POST(req: NextRequest) {
   const decodedClaims = await auth.verifySessionCookie(sessionCookie, true); // Added true for checkRevoked
   const userId = decodedClaims.uid;
 
-  console.log('Decoded Claims:', decodedClaims);
-
   if (!userId) {
-    console.log('No user ID in decoded claims');
     return NextResponse.json(
       { error: 'Invalid session' },
       { status: 401 }
@@ -43,8 +37,6 @@ export async function POST(req: NextRequest) {
 
   if (planId === 'pro' && interval === 'month') {
     priceId = process.env.STRIPE_PRICE_PRO_MONTHLY!;
-  } else if (planId === 'pro' && interval === 'year') {
-    priceId = process.env.STRIPE_PRICE_PRO_YEARLY!;
   } else {
     return NextResponse.json(
       { error: 'Invalid plan or interval' },

@@ -6,7 +6,7 @@ import { auth } from '@/lib/firebase';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { useSubscription } from '@/lib/subscription-context';
-import { formatPrice, getStripe } from '@/lib/stripe';
+import { getStripe } from '@/lib/stripe';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 

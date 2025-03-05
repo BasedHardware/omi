@@ -4,7 +4,7 @@ import { db } from '@/lib/firebase-admin';
 import { headers } from 'next/headers';
 import Stripe from 'stripe';
 
-// This is your Stripe webhook secret for testing your endpoint locally.
+
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
 // Disable body parsing for this route
