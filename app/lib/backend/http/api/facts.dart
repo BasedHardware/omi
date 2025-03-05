@@ -5,7 +5,7 @@ import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/schema/fact.dart';
 import 'package:friend_private/env/env.dart';
 
-Future<bool> createFact(String content, FactCategory category) async {
+Future<bool> createFactServer(String content, FactCategory category) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/facts',
     headers: {},
@@ -45,7 +45,7 @@ Future<bool> deleteFactServer(String factId) async {
   return response.statusCode == 200;
 }
 
-Future<bool> reviewFact(String factId, bool value) async {
+Future<bool> reviewFactServer(String factId, bool value) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/facts/$factId/review?value=$value',
     headers: {},
@@ -57,7 +57,7 @@ Future<bool> reviewFact(String factId, bool value) async {
   return response.statusCode == 200;
 }
 
-Future<bool> editFact(String factId, String value) async {
+Future<bool> editFactServer(String factId, String value) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/facts/$factId?value=$value',
     headers: {},
