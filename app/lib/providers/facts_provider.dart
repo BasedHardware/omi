@@ -13,7 +13,8 @@ class FactsProvider extends BaseProvider {
   FactCategory? selectedCategory;
   String searchQuery = '';
 
-  List<Fact> get unreviewed => facts.where((f) => !f.reviewed).toList();
+  List<Fact> get unreviewed =>
+      facts.where((f) => !f.reviewed && f.createdAt.isAfter(DateTime.now().subtract(const Duration(days: 1)))).toList();
 
   void setCategory(FactCategory? category) {
     selectedCategory = category;
@@ -65,8 +66,8 @@ class FactsProvider extends BaseProvider {
     notifyListeners();
   }
 
-  void createFactProvider(String content, FactCategory category) async {
-    createFact(content, category);
+  void createFact(String content, FactCategory category) async {
+    createFactServer(content, category);
     facts.add(Fact(
       id: const Uuid().v4(),
       uid: SharedPreferencesUtil().uid,
@@ -85,9 +86,9 @@ class FactsProvider extends BaseProvider {
     _setCategories();
   }
 
-  void editFactProvider(Fact fact, String value, FactCategory category) async {
+  void editFact(Fact fact, String value, FactCategory category) async {
     var idx = facts.indexWhere((f) => f.id == fact.id);
-    editFact(fact.id, value);
+    editFactServer(fact.id, value);
     fact.content = value;
     fact.category = category;
     fact.updatedAt = DateTime.now();
@@ -107,6 +108,7 @@ class FactsProvider extends BaseProvider {
         deleteFact(fact);
       } else {
         facts[idx] = fact;
+        reviewFactServer(fact.id, approved);
       }
       _setCategories();
       notifyListeners();

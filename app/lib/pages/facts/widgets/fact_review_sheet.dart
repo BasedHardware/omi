@@ -25,8 +25,8 @@ class FactReviewSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            padding: const EdgeInsets.all(24),
-            margin: const EdgeInsets.only(bottom: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            margin: const EdgeInsets.only(bottom: 16),
             child: Column(
               children: [
                 Row(
@@ -47,13 +47,6 @@ class FactReviewSheet extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        // Text(
-                        //   '${facts.length} facts to review',
-                        //   style: TextStyle(
-                        //     color: Colors.grey.shade400,
-                        //     fontSize: 14,
-                        //   ),
-                        // ),
                       ],
                     ),
                     IconButton(
