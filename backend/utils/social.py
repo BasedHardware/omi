@@ -10,7 +10,7 @@ from utils.llm import condense_tweets, generate_twitter_persona_prompt
 
 rapid_api_host = os.getenv('RAPID_API_HOST')
 rapid_api_key = os.getenv('RAPID_API_KEY')
-
+rapid_api_timeout = float(os.getenv('RAPID_API_TIMEOUT', 5))
 
 async def get_twitter_profile(handle: str) -> Dict[str, Any]:
     url = f"https://{rapid_api_host}/screenname.php?screenname={handle}"
@@ -20,7 +20,7 @@ async def get_twitter_profile(handle: str) -> Dict[str, Any]:
         "X-RapidAPI-Host": rapid_api_host
     }
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=rapid_api_timeout) as client:
         response = await client.get(url, headers=headers)
         response.raise_for_status()
         data = response.json()
@@ -36,7 +36,7 @@ async def get_twitter_timeline(handle: str) -> Dict[str, Any]:
         "X-RapidAPI-Host": rapid_api_host
     }
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=rapid_api_timeout) as client:
         response = await client.get(url, headers=headers)
         response.raise_for_status()
         data = response.json()
@@ -52,11 +52,12 @@ async def verify_latest_tweet(username: str, handle: str) -> Dict[str, Any]:
         "X-RapidAPI-Host": rapid_api_host
     }
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=rapid_api_timeout) as client:
         response = await client.get(url, headers=headers)
         response.raise_for_status()
         data = response.json()
         # from the timeline, the first tweet is the latest
+        latest_tweet = None
         timeline = data.get('timeline', [])
         if len(timeline) > 0:
             latest_tweet = timeline[0]
@@ -69,7 +70,7 @@ async def verify_latest_tweet(username: str, handle: str) -> Dict[str, Any]:
 
 async def upsert_persona_from_twitter_profile(username: str, handle: str, uid: str) -> Dict[str, Any]:
     profile = await get_twitter_profile(handle)
-    profile['avatar'] = profile['avatar'].replace('_normal', '')
+    profile['avatar'] = (profile.get('avatar') or '').replace('_normal', '')
     persona = get_persona_by_username_twitter_handle_db(username, handle)
 
     if not persona:
@@ -115,7 +116,7 @@ async def upsert_persona_from_twitter_profile(username: str, handle: str, uid: s
 async def add_twitter_to_persona(handle: str, persona_id) -> Dict[str, Any]:
     persona = get_persona_by_id_db(persona_id)
     twitter = await get_twitter_profile(handle)
-    twitter['avatar'] = twitter['avatar'].replace('_normal', '')
+    twitter['avatar'] = (twitter.get('avatar') or '').replace('_normal', '')
     if 'twitter' not in persona['connected_accounts']:
         persona['connected_accounts'].append('twitter')
     persona['twitter'] = {
