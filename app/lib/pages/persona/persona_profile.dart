@@ -114,7 +114,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
               actions: [
                 // Only show settings icon for create_my_clone or home routing
                 Consumer<PersonaProvider>(builder: (context, personaProvider, _) {
-                  if (personaProvider.routing == PersonaProfileRouting.no_device)
+                  if (personaProvider.routing == PersonaProfileRouting.no_device) {
                     return Padding(
                       padding: const EdgeInsets.all(8.0),
                       child: GestureDetector(
@@ -122,14 +122,15 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                           await routeToPage(context, const SettingsPage(mode: SettingsMode.no_device));
                         },
                         child: SvgPicture.asset(
-                          'assets/images/ic_setting_persona.svg',
+                          Assets.images.icSettingPersona.path,
                           width: 44,
                           height: 44,
                         ),
                       ),
                     );
+                  }
                   if (personaProvider.routing == PersonaProfileRouting.create_my_clone ||
-                      personaProvider.routing == PersonaProfileRouting.home)
+                      personaProvider.routing == PersonaProfileRouting.home) {
                     return Padding(
                       padding: const EdgeInsets.all(8.0),
                       child: GestureDetector(
@@ -148,12 +149,13 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                           }
                         },
                         child: SvgPicture.asset(
-                          'assets/images/ic_setting_persona.svg',
+                          Assets.images.icSettingPersona.path,
                           width: 44,
                           height: 44,
                         ),
                       ),
                     );
+                  }
                   return const SizedBox.shrink();
                 }),
               ],
@@ -364,7 +366,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                       children: [
                                         Positioned.fill(
                                           child: Image.asset(
-                                            'assets/images/new_background.png',
+                                            Assets.images.newBackground.path,
                                             fit: BoxFit.cover,
                                           ),
                                         ),

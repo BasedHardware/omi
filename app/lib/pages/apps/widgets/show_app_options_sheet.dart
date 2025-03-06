@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/apps/update_app.dart';
-import 'package:friend_private/pages/persona/persona_profile.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:friend_private/pages/persona/update_persona.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
-import 'package:provider/provider.dart';
 
 class ShowAppOptionsSheet extends StatelessWidget {
   final App app;
