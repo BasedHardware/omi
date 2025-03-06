@@ -6,6 +6,7 @@ import 'package:friend_private/pages/apps/widgets/filter_sheet.dart';
 import 'package:friend_private/pages/apps/list_item.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
+import 'package:friend_private/utils/other/debouncer.dart';
 import 'package:provider/provider.dart';
 
 import 'widgets/create_options_sheet.dart';
@@ -30,6 +31,7 @@ class ExploreInstallPage extends StatefulWidget {
 
 class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKeepAliveClientMixin {
   late TextEditingController searchController;
+  Debouncer debouncer = Debouncer(delay: const Duration(milliseconds: 500));
 
   @override
   void initState() {
@@ -149,7 +151,9 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                             controller: searchController,
                             focusNode: context.read<HomeProvider>().appsSearchFieldFocusNode,
                             onChanged: (value) {
-                              provider.searchApps(value);
+                              debouncer.run(() {
+                                provider.searchApps(value);
+                              });
                             },
                             decoration: InputDecoration(
                               hintText: 'Search Apps',
