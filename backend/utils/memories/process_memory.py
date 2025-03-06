@@ -32,17 +32,17 @@ from utils.webhooks import memory_created_webhook
 
 
 def _get_structured(
-        uid: str, language_code: str, memory: Union[Memory, CreateMemory, WorkflowCreateMemory],
+        uid: str, language_code: str, memory: Union[Memory, CreateMemory, ExternalIntegrationCreateMemory],
         force_process: bool = False, retries: int = 1
 ) -> Tuple[Structured, bool]:
     try:
         tz = notification_db.get_user_time_zone(uid)
         if memory.source == MemorySource.workflow:
-            if memory.text_source == WorkflowMemorySource.audio:
+            if memory.text_source == ExternalIntegrationMemorySource.audio:
                 structured = get_transcript_structure(memory.text, memory.started_at, language_code, tz)
                 return structured, False
 
-            if memory.text_source == WorkflowMemorySource.other:
+            if memory.text_source == ExternalIntegrationMemorySource.other:
                 structured = summarize_experience_text(memory.text)
                 return structured, False
 
@@ -70,7 +70,7 @@ def _get_structured(
         return _get_structured(uid, language_code, memory, force_process, retries + 1)
 
 
-def _get_memory_obj(uid: str, structured: Structured, memory: Union[Memory, CreateMemory, WorkflowCreateMemory]):
+def _get_memory_obj(uid: str, structured: Structured, memory: Union[Memory, CreateMemory, ExternalIntegrationCreateMemory]):
     discarded = structured.title == ''
     if isinstance(memory, CreateMemory):
         memory = Memory(
@@ -84,7 +84,7 @@ def _get_memory_obj(uid: str, structured: Structured, memory: Union[Memory, Crea
         )
         if memory.photos:
             memories_db.store_memory_photos(uid, memory.id, memory.photos)
-    elif isinstance(memory, WorkflowCreateMemory):
+    elif isinstance(memory, ExternalIntegrationCreateMemory):
         create_memory = memory
         memory = Memory(
             id=str(uuid.uuid4()),
@@ -175,7 +175,7 @@ def save_structured_vector(uid: str, memory: Memory, update_only: bool = False):
 
 
 def process_memory(
-        uid: str, language_code: str, memory: Union[Memory, CreateMemory, WorkflowCreateMemory],
+        uid: str, language_code: str, memory: Union[Memory, CreateMemory, ExternalIntegrationCreateMemory],
         force_process: bool = False, is_reprocess: bool = False
 ) -> Memory:
     structured, discarded = _get_structured(uid, language_code, memory, force_process)

@@ -1,5 +1,5 @@
 from datetime import datetime
-from enum import Enum
+from enum import Enum, auto
 from typing import List, Optional, Set
 
 from pydantic import BaseModel
@@ -32,6 +32,14 @@ class AuthStep(BaseModel):
     url: str
 
 
+class ActionType(str, Enum):
+    CREATE_MEMORY = "create_memory"
+
+
+class Action(BaseModel):
+    action: ActionType
+
+
 class ExternalIntegration(BaseModel):
     triggers_on: str
     webhook_url: str
@@ -40,6 +48,7 @@ class ExternalIntegration(BaseModel):
     is_instructions_url: bool = True
     auth_steps: Optional[List[AuthStep]] = []
     app_home_url: Optional[str] = None
+    actions: Optional[List[Action]] = []
 
 
 class ProactiveNotification(BaseModel):

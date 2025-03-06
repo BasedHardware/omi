@@ -81,6 +81,18 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
                 external_integration['is_instructions_url'] = True
             else:
                 external_integration['is_instructions_url'] = False
+        
+        # Handle actions field
+        if actions := external_integration.get('actions'):
+            # Validate that each action has the required fields
+            for action in actions:
+                if not action.get('action'):
+                    raise HTTPException(status_code=422, detail='Action field is required for each action')
+                # Validate that action is one of the supported types
+                from models.app import ActionType
+                if action.get('action') not in [action_type.value for action_type in ActionType]:
+                    raise HTTPException(status_code=422, 
+                                       detail=f'Unsupported action type. Supported types: {", ".join([action_type.value for action_type in ActionType])}')
     os.makedirs(f'_temp/plugins', exist_ok=True)
     file_path = f"_temp/plugins/{file.filename}"
     with open(file_path, 'wb') as f:
@@ -471,6 +483,8 @@ def get_plugin_capabilities():
             {'title': 'Audio Bytes', 'id': 'audio_bytes'},
             {'title': 'Memory Creation', 'id': 'memory_creation'},
             {'title': 'Transcript Processed', 'id': 'transcript_processed'},
+        ], 'actions': [
+            {'title': 'Create Memory', 'id': 'create_memory'}
         ]},
         {'title': 'Notification', 'id': 'proactive_notification', 'scopes': [
             {'title': 'User Name', 'id': 'user_name'},

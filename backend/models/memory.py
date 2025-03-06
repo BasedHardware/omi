@@ -242,16 +242,16 @@ class CreateMemory(BaseModel):
         return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
 
 
-class WorkflowMemorySource(str, Enum):
+class ExternalIntegrationMemorySource(str, Enum):
     audio = 'audio_transcript'
     other = 'other_text'
 
 
-class WorkflowCreateMemory(BaseModel):
+class ExternalIntegrationCreateMemory(BaseModel):
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     text: str
-    text_source: WorkflowMemorySource = WorkflowMemorySource.audio
+    text_source: ExternalIntegrationMemorySource = ExternalIntegrationMemorySource.audio
     geolocation: Optional[Geolocation] = None
 
     source: MemorySource = MemorySource.workflow
