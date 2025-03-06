@@ -25,7 +25,7 @@ from utils.llm import generate_description, generate_persona_intro_message
 
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
-from models.app import App
+from models.app import App, ActionType
 from utils.other.storage import upload_plugin_logo, delete_plugin_logo, upload_app_thumbnail, get_app_thumbnail_url
 from utils.social import get_twitter_profile, get_twitter_timeline, verify_latest_tweet, \
     upsert_persona_from_twitter_profile, add_twitter_to_persona
@@ -81,18 +81,15 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
                 external_integration['is_instructions_url'] = True
             else:
                 external_integration['is_instructions_url'] = False
-        
+
         # Handle actions field
         if actions := external_integration.get('actions'):
-            # Validate that each action has the required fields
             for action in actions:
                 if not action.get('action'):
                     raise HTTPException(status_code=422, detail='Action field is required for each action')
-                # Validate that action is one of the supported types
-                from models.app import ActionType
                 if action.get('action') not in [action_type.value for action_type in ActionType]:
-                    raise HTTPException(status_code=422, 
-                                       detail=f'Unsupported action type. Supported types: {", ".join([action_type.value for action_type in ActionType])}')
+                    raise HTTPException(status_code=422,
+                                        detail=f'Unsupported action type. Supported types: {", ".join([action_type.value for action_type in ActionType])}')
     os.makedirs(f'_temp/plugins', exist_ok=True)
     file_path = f"_temp/plugins/{file.filename}"
     with open(file_path, 'wb') as f:
@@ -484,7 +481,7 @@ def get_plugin_capabilities():
             {'title': 'Memory Creation', 'id': 'memory_creation'},
             {'title': 'Transcript Processed', 'id': 'transcript_processed'},
         ], 'actions': [
-            {'title': 'Create Memory', 'id': 'create_memory'}
+            {'title': 'Create memories', 'id': 'create_memory', 'doc_url': 'https://docs.omi.me/actions/create-memory'}
         ]},
         {'title': 'Notification', 'id': 'proactive_notification', 'scopes': [
             {'title': 'User Name', 'id': 'user_name'},

@@ -27,6 +27,7 @@ class AddAppProvider extends ChangeNotifier {
   TextEditingController conversationPromptController = TextEditingController();
 
   String? appCategory;
+  List<Map<String, dynamic>> actions = [];
 
 // Trigger Event
   String? triggerEvent;
@@ -141,6 +142,16 @@ class AddAppProvider extends ChangeNotifier {
       if (app.externalIntegration!.authSteps.isNotEmpty) {
         authUrlController.text = app.externalIntegration!.authSteps.first.url;
       }
+      
+      // Load actions if they exist
+      actions = [];
+      if (app.externalIntegration!.actions != null) {
+        for (var action in app.externalIntegration!.actions!) {
+          actions.add({
+            'action': action.action,
+          });
+        }
+      }
     }
     if (app.chatPrompt != null) {
       chatPromptController.text = app.chatPrompt!.decodeString;
@@ -186,6 +197,44 @@ class AddAppProvider extends ChangeNotifier {
     selectedCapabilities.clear();
     thumbnailUrls = [];
     thumbnailIds = [];
+    actions.clear();
+  }
+  
+  void addSpecificAction(String actionTypeId) {
+    // Check if this action type already exists
+    if (!actions.any((action) => action['action'] == actionTypeId)) {
+      actions.add({
+        'action': actionTypeId,
+      });
+      notifyListeners();
+    }
+  }
+
+  void removeActionByType(String actionTypeId) {
+    actions.removeWhere((action) => action['action'] == actionTypeId);
+    notifyListeners();
+  }
+    
+  List<CapacityAction> getActionTypes() {
+    for (var capability in capabilities) {
+      if (capability.id == 'external_integration') {
+        if (capability.actions.isNotEmpty) {
+          return capability.actions;
+        }
+      }
+    }
+    
+    // Return empty list if no actions found in capabilities
+    return [];
+  }
+  
+  CapacityAction? getActionTypeById(String id) {
+    final actionTypes = getActionTypes();
+    try {
+      return actionTypes.firstWhere((element) => element.id == id);
+    } catch (e) {
+      return null;
+    }
   }
 
   void setPaymentPlan(String? plan) {
@@ -442,6 +491,11 @@ class AddAppProvider extends ChangeNotifier {
             'name': 'Setup ${appNameController.text}',
           });
         }
+        
+        // Add actions if they exist
+        if (actions.isNotEmpty) {
+          data['external_integration']['actions'] = actions;
+        }
       }
       if (capability.id == 'chat') {
         data['chat_prompt'] = chatPromptController.text;
@@ -506,6 +560,11 @@ class AddAppProvider extends ChangeNotifier {
             'url': authUrlController.text,
             'name': 'Setup ${appNameController.text}',
           });
+        }
+        
+        // Add actions if they exist
+        if (actions.isNotEmpty) {
+          data['external_integration']['actions'] = actions;
         }
       }
       if (capability.id == 'chat') {

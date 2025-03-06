@@ -13,6 +13,7 @@ import 'package:friend_private/pages/apps/widgets/app_metadata_widget.dart';
 import 'package:friend_private/pages/apps/widgets/external_trigger_fields_widget.dart';
 import 'package:friend_private/pages/apps/widgets/notification_scopes_chips_widget.dart';
 import 'package:friend_private/pages/apps/widgets/payment_details_widget.dart';
+import 'package:friend_private/pages/apps/widgets/action_fields_widget.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -339,6 +340,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                 ),
                               ],
                             ),
+                          const ActionFieldsWidget(),
                           const ExternalTriggerFieldsWidget(),
                           if (provider.isCapabilitySelectedById('proactive_notification'))
                             Column(
