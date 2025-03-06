@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
+import 'dart:async' show Completer;
 
 import 'package:flutter/material.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -92,6 +93,10 @@ class PureSocket implements IPureSocket {
   IPureSocketListener? _listener;
 
   int _retries = 0;
+  
+  // Completer to track ready status
+  Completer<void>? _readyCompleter;
+  Future<void> get ready => _readyCompleter?.future ?? Future.value();
 
   String url;
 
@@ -107,6 +112,8 @@ class PureSocket implements IPureSocket {
 
   @override
   Future<bool> connect() async {
+    // Create a new completer for tracking ready status
+    _readyCompleter = Completer<void>();
     return await _connect();
   }
 
@@ -144,6 +151,10 @@ class PureSocket implements IPureSocket {
     }
     _status = PureSocketStatus.connected;
     _retries = 0;
+    // Complete the ready completer since we're now connected
+    if (_readyCompleter != null && !_readyCompleter!.isCompleted) {
+      _readyCompleter!.complete();
+    }
     onConnected();
 
     final that = this;
@@ -178,6 +189,11 @@ class PureSocket implements IPureSocket {
       _channel?.sink.close(socket_channel_status.normalClosure);
     }
     _status = PureSocketStatus.disconnected;
+    // Reset the ready completer
+    if (_readyCompleter != null && !_readyCompleter!.isCompleted) {
+      _readyCompleter!.completeError(Exception('Socket disconnected'));
+    }
+    _readyCompleter = null;
     debugPrint("disconnect");
     onClosed();
   }
@@ -195,6 +211,11 @@ class PureSocket implements IPureSocket {
   @override
   void onClosed() {
     _status = PureSocketStatus.disconnected;
+    // Reset the ready completer if it exists and isn't completed
+    if (_readyCompleter != null && !_readyCompleter!.isCompleted) {
+      _readyCompleter!.completeError(Exception('Socket closed'));
+    }
+    _readyCompleter = null;
     debugPrint("Socket closed");
     _listener?.onClosed();
   }
@@ -202,6 +223,11 @@ class PureSocket implements IPureSocket {
   @override
   void onError(Object err, StackTrace trace) {
     _status = PureSocketStatus.disconnected;
+    // Complete the ready completer with an error if it exists and isn't completed
+    if (_readyCompleter != null && !_readyCompleter!.isCompleted) {
+      _readyCompleter!.completeError(err, trace);
+    }
+    _readyCompleter = null;
     print("Error: ${err}");
     debugPrintStack(stackTrace: trace);
 
