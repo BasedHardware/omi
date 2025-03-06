@@ -17,6 +17,7 @@ from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
 from models.facts import FactDB
 from models.memory import *
+from models.memory import ExternalIntegrationCreateMemory, Memory, CreateMemory
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
 from models.notification_message import NotificationMessage
@@ -24,7 +25,7 @@ from utils.apps import get_available_apps, update_persona_prompt, sync_update_pe
 from utils.llm import obtain_emotional_message, retrieve_metadata_fields_from_transcript
 from utils.llm import summarize_open_glass, get_transcript_structure, generate_embedding, \
     get_plugin_result, should_discard_memory, summarize_experience_text, new_facts_extractor, \
-    trends_extractor
+    trends_extractor, get_email_structure, get_post_structure, get_message_structure
 from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
 from utils.retrieval.rag import retrieve_rag_memory_context
@@ -37,17 +38,29 @@ def _get_structured(
 ) -> Tuple[Structured, bool]:
     try:
         tz = notification_db.get_user_time_zone(uid)
-        if memory.source == MemorySource.workflow:
+        if memory.source == MemorySource.workflow or memory.source == MemorySource.external_integration:
             if memory.text_source == ExternalIntegrationMemorySource.audio:
                 structured = get_transcript_structure(memory.text, memory.started_at, language_code, tz)
                 return structured, False
 
-            if memory.text_source == ExternalIntegrationMemorySource.other:
-                structured = summarize_experience_text(memory.text)
+            if memory.text_source == ExternalIntegrationMemorySource.email:
+                structured = get_email_structure(memory.text, memory.started_at, language_code, tz)
                 return structured, False
 
-            # not workflow memory source support
-            raise HTTPException(status_code=400, detail='Invalid workflow memory source')
+            if memory.text_source == ExternalIntegrationMemorySource.post:
+                structured = get_post_structure(memory.text, memory.started_at, language_code, tz, memory.text_source_spec)
+                return structured, False
+
+            if memory.text_source == ExternalIntegrationMemorySource.message:
+                structured = get_message_structure(memory.text, memory.started_at, language_code, tz, memory.text_source_spec)
+                return structured, False
+
+            if memory.text_source == ExternalIntegrationMemorySource.other:
+                structured = summarize_experience_text(memory.text, memory.text_source_spec)
+                return structured, False
+
+            # not supported memory source
+            raise HTTPException(status_code=400, detail=f'Invalid memory source: {memory.text_source}')
 
         # from OpenGlass
         if memory.photos:
@@ -95,6 +108,7 @@ def _get_memory_obj(uid: str, structured: Structured, memory: Union[Memory, Crea
             discarded=discarded,
         )
         memory.external_data = create_memory.dict()
+        memory.app_id = create_memory.app_id
     else:
         memory.structured = structured
         memory.discarded = discarded
