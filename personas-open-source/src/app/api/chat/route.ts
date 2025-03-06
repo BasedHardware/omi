@@ -26,23 +26,13 @@ export async function POST(req: Request) {
     const cookieStore = await cookies();
     const sessionCookie = cookieStore.get('session')?.value;
     
-    console.log('Session cookie present:', !!sessionCookie, 
-                'Length:', sessionCookie ? sessionCookie.length : 0);
-    
     if (sessionCookie) {
       try {
         const decodedClaims = await adminAuth.verifySessionCookie(sessionCookie);
-        console.log('User authenticated, UID:', decodedClaims.uid);
         
         const userRef = adminDb.collection('users').doc(decodedClaims.uid).collection('subscriptions').doc('active');
         const userDoc = await userRef.get();
         isPro = userDoc.exists && (userDoc.data()?.status === 'active');
-        
-        console.log('Subscription status:', {
-          docExists: userDoc.exists,
-          status: userDoc.exists ? userDoc.data()?.status : null,
-          isPro: isPro
-        });
       } catch (error) {
         console.error('Error checking subscription:', error);
         // Continue with free tier if there's an error checking subscription
