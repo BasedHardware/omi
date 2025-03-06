@@ -6,7 +6,7 @@ from fastapi.templating import Jinja2Templates
 
 from db import get_zapier_user_status, store_zapier_user_status, store_zapier_subscribes, get_zapier_subscribes, \
     remove_zapier_subscribes
-from models import Memory, WorkflowCreateMemory, EndpointResponse
+from models import Memory, ExternalIntegrationCreateMemory, EndpointResponse
 from .client import get_zapier, get_friend
 from .models import ZapierSubcribeModel, ZapierCreateMemory, ZapierActionCreateMemory
 
@@ -220,7 +220,7 @@ def zapier_action_memories(create_memory: ZapierActionCreateMemory, uid: str):
     Create new memory by action from Zapier.
     """
 
-    memory = WorkflowCreateMemory(
+    memory = ExternalIntegrationCreateMemory(
         text=create_memory.text,
         text_source=create_memory.source,
         started_at=create_memory.started_at,

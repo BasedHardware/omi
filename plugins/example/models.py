@@ -145,16 +145,16 @@ class MemorySource(str, Enum):
     workflow = 'workflow'
 
 
-class WorkflowMemorySource(str, Enum):
+class ExternalIntegrationMemorySource(str, Enum):
     audio = 'audio_transcript'
     other = 'other_text'
 
 
-class WorkflowCreateMemory(BaseModel):
+class ExternalIntegrationCreateMemory(BaseModel):
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     text: str
-    text_source: WorkflowMemorySource = WorkflowMemorySource.audio
+    text_source: ExternalIntegrationMemorySource = ExternalIntegrationMemorySource.audio
     language: Optional[str] = None
     geolocation: Optional[Geolocation] = None
 
