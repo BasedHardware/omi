@@ -568,3 +568,17 @@ def increment_username(username: str):
         return f"{username}{i}"
     else:
         return username
+
+def app_has_action(app: App, action_name: str) -> bool:
+    """Check if an app has a specific action capability"""
+    if not app:
+        return False
+
+    if not app.get('external_integration') or not app.get('external_integration').get('actions'):
+        return False
+
+    for action in app.get('external_integration').get('actions'):
+        if action.get('action') == action_name:
+            return True
+
+    return False
