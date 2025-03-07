@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/chat/page.dart';
@@ -62,23 +63,21 @@ class CloneChatPageState extends State<CloneChatPage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                GestureDetector(
-                    child: SizedBox(
-                      width: 44,
-                      height: 44,
-                      child: Padding(
-                        padding: const EdgeInsets.all(0.0),
-                        child: SvgPicture.asset('assets/images/ic_clone_plus.svg'),
-                      ),
-                    ),
-                    onTap: () {
-                      routeToPage(context, const PersonaProfilePage(), replace: true);
-                    }),
+                const SizedBox(width: 44),
                 personaProvider.isLoading || personaProvider.userPersona == null
                     ? const SizedBox(width: 44)
                     : ChatAppsDropdownWidget(mode: ChatMode.chat_clone),
-                const SizedBox(
-                  width: 44,
+                IconButton(
+                  padding: const EdgeInsets.all(8.0),
+                  icon: SvgPicture.asset(
+                    'assets/images/ic_persona_profile.svg',
+                    width: 28,
+                    height: 28,
+                  ),
+                  onPressed: () {
+                    personaProvider.setRouting(PersonaProfileRouting.no_device);
+                    routeToPage(context, const PersonaProfilePage(), replace: true);
+                  },
                 ),
               ],
             ),

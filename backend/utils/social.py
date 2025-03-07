@@ -105,8 +105,7 @@ async def upsert_persona_from_twitter_profile(username: str, handle: str, uid: s
 
     tweets = await get_twitter_timeline(handle)
     tweets = [{'tweet': tweet['text'], 'posted_at': tweet['created_at']} for tweet in tweets['timeline']]
-    condensed_tweets = condense_tweets(tweets, persona["name"])
-    persona['persona_prompt'] = generate_twitter_persona_prompt(condensed_tweets, persona["name"])
+    persona['persona_prompt'] = generate_twitter_persona_prompt(tweets, persona["name"])
     upsert_app_to_db(persona)
     save_username(persona['username'], uid)
     delete_generic_cache('get_public_approved_apps_data')

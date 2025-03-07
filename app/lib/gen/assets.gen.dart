@@ -107,9 +107,17 @@ class $AssetsImagesGen {
   /// File path: assets/images/clone.png
   AssetGenImage get clone => const AssetGenImage('assets/images/clone.png');
 
+  /// File path: assets/images/email_logo.png
+  AssetGenImage get emailLogo =>
+      const AssetGenImage('assets/images/email_logo.png');
+
   /// File path: assets/images/emotional_feedback_1.png
   AssetGenImage get emotionalFeedback1 =>
       const AssetGenImage('assets/images/emotional_feedback_1.png');
+
+  /// File path: assets/images/facebook_logo.png
+  AssetGenImage get facebookLogo =>
+      const AssetGenImage('assets/images/facebook_logo.png');
 
   /// File path: assets/images/google_logo.png
   AssetGenImage get googleLogo =>
@@ -142,8 +150,24 @@ class $AssetsImagesGen {
   SvgGenImage get icCloneChat =>
       const SvgGenImage('assets/images/ic_clone_chat.svg');
 
+  /// File path: assets/images/ic_clone_plus.svg
+  SvgGenImage get icClonePlus =>
+      const SvgGenImage('assets/images/ic_clone_plus.svg');
+
   /// File path: assets/images/ic_dollar.svg
   SvgGenImage get icDollar => const SvgGenImage('assets/images/ic_dollar.svg');
+
+  /// File path: assets/images/ic_persona_profile.svg
+  SvgGenImage get icPersonaProfile =>
+      const SvgGenImage('assets/images/ic_persona_profile.svg');
+
+  /// File path: assets/images/ic_setting_persona.svg
+  SvgGenImage get icSettingPersona =>
+      const SvgGenImage('assets/images/ic_setting_persona.svg');
+
+  /// File path: assets/images/imessage_logo.svg
+  SvgGenImage get imessageLogo =>
+      const SvgGenImage('assets/images/imessage_logo.svg');
 
   /// File path: assets/images/instagram_logo.png
   AssetGenImage get instagramLogo =>
@@ -192,6 +216,10 @@ class $AssetsImagesGen {
   AssetGenImage get recordingGreenCircleIcon =>
       const AssetGenImage('assets/images/recording_green_circle_icon.png');
 
+  /// File path: assets/images/slack_logo.png
+  AssetGenImage get slackLogo =>
+      const AssetGenImage('assets/images/slack_logo.png');
+
   /// File path: assets/images/speaker_0_icon.png
   AssetGenImage get speaker0Icon =>
       const AssetGenImage('assets/images/speaker_0_icon.png');
@@ -230,12 +258,24 @@ class $AssetsImagesGen {
   SvgGenImage get stripeLogo =>
       const SvgGenImage('assets/images/stripe_logo.svg');
 
+  /// File path: assets/images/telegram_logo.png
+  AssetGenImage get telegramLogo =>
+      const AssetGenImage('assets/images/telegram_logo.png');
+
+  /// File path: assets/images/whatsapp_logo.png
+  AssetGenImage get whatsappLogo =>
+      const AssetGenImage('assets/images/whatsapp_logo.png');
+
   /// File path: assets/images/x_logo.png
   AssetGenImage get xLogo => const AssetGenImage('assets/images/x_logo.png');
 
   /// File path: assets/images/x_logo_mini.png
   AssetGenImage get xLogoMini =>
       const AssetGenImage('assets/images/x_logo_mini.png');
+
+  /// File path: assets/images/youtube_logo.png
+  AssetGenImage get youtubeLogo =>
+      const AssetGenImage('assets/images/youtube_logo.png');
 
   /// List of all assets
   List<dynamic> get values => [
@@ -249,7 +289,9 @@ class $AssetsImagesGen {
         calendarLogo,
         checkbox,
         clone,
+        emailLogo,
         emotionalFeedback1,
+        facebookLogo,
         googleLogo,
         gradientCard,
         herologo,
@@ -258,7 +300,11 @@ class $AssetsImagesGen {
         herologoV4,
         icChart,
         icCloneChat,
+        icClonePlus,
         icDollar,
+        icPersonaProfile,
+        icSettingPersona,
+        imessageLogo,
         instagramLogo,
         instruction1,
         instruction2,
@@ -271,6 +317,7 @@ class $AssetsImagesGen {
         newBackground,
         notionLogo,
         recordingGreenCircleIcon,
+        slackLogo,
         speaker0Icon,
         speaker1Icon,
         splash,
@@ -281,8 +328,11 @@ class $AssetsImagesGen {
         splashV2,
         stars,
         stripeLogo,
+        telegramLogo,
+        whatsappLogo,
         xLogo,
-        xLogoMini
+        xLogoMini,
+        youtubeLogo
       ];
 }
 

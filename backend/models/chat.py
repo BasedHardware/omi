@@ -35,7 +35,6 @@ class FileChat(BaseModel):
     deleted: bool = False
     thumb_name: Optional[str] = ""
 
-
     def is_image(self):
         return self.mime_type.startswith("image")
 
@@ -114,13 +113,13 @@ class Message(BaseModel):
                 <content>
                     {message.text}
                 </content>
+                {('<attachments>' + ''.join(f"<file>{file.name}</file>" for file in message.files) + '</attachments>') if message.files and len(message.files) > 0 else ''}
                 </message>
             """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
             for message in sorted_messages
         ]
 
         return '\n'.join(formatted_messages)
-
 
 
 class ResponseMessage(Message):
@@ -150,4 +149,3 @@ class ChatSession(BaseModel):
     def retrieve_new_file(self, file_ids) -> List:
         existing_files = set(self.file_ids or [])
         return list(set(file_ids) - existing_files)
-

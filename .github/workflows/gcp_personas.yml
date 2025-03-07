@@ -46,6 +46,8 @@ jobs:
             --build-arg NEXT_PUBLIC_FIREBASE_APP_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }} \
             --build-arg NEXT_PUBLIC_RAPIDAPI_KEY=${{ secrets.NEXT_PUBLIC_RAPIDAPI_KEY }} \
             --build-arg NEXT_PUBLIC_RAPIDAPI_HOST=${{ secrets.NEXT_PUBLIC_RAPIDAPI_HOST }} \
+            --build-arg NEXT_PUBLIC_LINKEDIN_API_KEY=${{ secrets.NEXT_PUBLIC_LINKEDIN_API_KEY }} \
+            --build-arg NEXT_PUBLIC_LINKEDIN_API_HOST=${{ secrets.NEXT_PUBLIC_LINKEDIN_API_HOST }} \
             --build-arg CLAUDE_API_KEY=${{ secrets.CLAUDE_API_KEY }} \
             --build-arg NEXT_PUBLIC_FIREBASE_VAPID_KEY=${{ secrets.NEXT_PUBLIC_FIREBASE_VAPID_KEY }} \
             --build-arg OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }} \

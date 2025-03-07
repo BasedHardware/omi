@@ -4,6 +4,7 @@ import 'package:app_links/app_links.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
@@ -249,6 +250,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   textSelectionTheme: const TextSelectionThemeData(
                     cursorColor: Colors.white,
                     selectionColor: Colors.deepPurple,
+                    selectionHandleColor: Colors.white,
+                  ),
+                  cupertinoOverrideTheme: const CupertinoThemeData(
+                    primaryColor: Colors.white, // Controls the selection handles on iOS
                   )),
               themeMode: ThemeMode.dark,
               builder: (context, child) {

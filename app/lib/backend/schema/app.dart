@@ -347,6 +347,10 @@ class App {
     return allCapabilities.where((e) => capabilities.contains(e.id)).toList();
   }
 
+  List<String> getConnectedAccountNames() {
+    return connectedAccounts.map((e) => e.capitalize()).toList();
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

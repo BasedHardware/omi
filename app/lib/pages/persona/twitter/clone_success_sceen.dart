@@ -4,6 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/pages/chat/clone_chat_page.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
+import 'package:friend_private/utils/other/string_utils.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
@@ -13,9 +14,11 @@ import '../persona_profile.dart';
 
 class CloneSuccessScreen extends StatefulWidget {
   final String message;
+  final PersonaProfileRouting routing;
   const CloneSuccessScreen({
     super.key,
     required this.message,
+    this.routing = PersonaProfileRouting.no_device,
   });
 
   @override
@@ -35,6 +38,7 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
     } else {
       // Anonymous user, just go to profile
       Posthog().capture(eventName: 'x_connected', properties: {'existing_omi_user': false});
+      Provider.of<PersonaProvider>(context, listen: false).setRouting(widget.routing);
       routeToPage(context, const PersonaProfilePage(), replace: true);
     }
   }
@@ -131,11 +135,11 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                             Padding(
                               padding: const EdgeInsets.only(bottom: 2.0),
                               child: Text(
-                                provider.twitterProfile['name'],
+                                tryDecodingText(provider.twitterProfile['name']),
                                 style: TextStyle(
                                   color: Colors.white.withOpacity(0.74),
                                   fontSize: 20,
-                                  fontWeight: FontWeight.w600,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
                             ),
@@ -195,20 +199,23 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                             ),
                           ),
                           child: const Text(
-                            'Chat with my clone',
+                            'Start chatting!',
                             style: TextStyle(
                               fontSize: 17,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ),
                       ),
                     TextButton(
-                      onPressed: _handleNavigation,
+                      onPressed: () {
+                        _handleNavigation();
+                        provider.onTwitterVerifiedCompleted();
+                      },
                       child: Text(
                         FirebaseAuth.instance.currentUser?.isAnonymous == false
                             ? 'Continue creating your persona'
-                            : 'Use public link instead',
+                            : 'Share public link',
                         style: TextStyle(
                           fontSize: 18,
                           color: Colors.white.withOpacity(0.6),

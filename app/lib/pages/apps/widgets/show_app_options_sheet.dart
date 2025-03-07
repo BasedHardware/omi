@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/apps/update_app.dart';
+import 'package:friend_private/pages/persona/persona_profile.dart';
+import 'package:friend_private/pages/persona/persona_provider.dart';
+import 'package:friend_private/providers/home_provider.dart';
+import 'package:provider/provider.dart';
 import 'package:friend_private/pages/persona/update_persona.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -43,7 +47,7 @@ class ShowAppOptionsSheet extends StatelessWidget {
               child: ListTile(
                 title: Text(
                   app.isNotPersona() ? 'Keep App Public' : 'Keep Persona Public',
-                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                 ),
                 trailing: Switch(
                   value: provider.appPublicToggled,
@@ -101,7 +105,12 @@ class ShowAppOptionsSheet extends StatelessWidget {
                       if (app.isNotPersona()) {
                         routeToPage(context, UpdateAppPage(app: app));
                       } else {
-                        routeToPage(context, UpdatePersonaPage(app: app, fromNewFlow: false));
+                        Navigator.pop(context);
+                        // Set routing in provider and navigate to Persona Profile page
+                        Provider.of<PersonaProvider>(context, listen: false)
+                            .setRouting(PersonaProfileRouting.create_my_clone);
+                        Provider.of<HomeProvider>(context, listen: false).setIndex(3);
+                        Provider.of<HomeProvider>(context, listen: false).onSelectedIndexChanged!(3);
                       }
                     },
                   ),
