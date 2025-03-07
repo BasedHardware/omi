@@ -460,13 +460,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                                   'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app',
                                               checkboxText: "Don't show it again",
                                               checkboxValue: !showInstallAppConfirmation,
-                                              updateCheckboxValue: (value) {
-                                                if (value != null) {
-                                                  setState(() {
-                                                    showInstallAppConfirmation = !value;
-                                                    SharedPreferencesUtil().showInstallAppConfirmation = !value;
-                                                  });
-                                                }
+                                              onCheckboxChanged: (value) {
+                                                setState(() {
+                                                  showInstallAppConfirmation = !value;
+                                                  SharedPreferencesUtil().showInstallAppConfirmation = !value;
+                                                });
                                               },
                                               onConfirm: () {
                                                 _toggleApp(app.id, true);
@@ -637,7 +635,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       ),
                       title: const Text(
                         'Integration Instructions',
-                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+                        style: TextStyle(fontWeight: FontWeight.w500, fontSize: 18),
                       ),
                     )
                   : const SizedBox.shrink(),
@@ -744,10 +742,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 title: 'About the ${app.isNotPersona() ? 'App' : 'Persona'}',
                 description: app.description,
                 showChips: true,
-                chips: app
+                capabilityChips: app
                     .getCapabilitiesFromIds(context.read<AddAppProvider>().capabilities)
                     .map((e) => e.title)
                     .toList(),
+                connectionChips: app.getConnectedAccountNames(),
               ),
 
               app.conversationPrompt != null

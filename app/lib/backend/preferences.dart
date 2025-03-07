@@ -117,6 +117,10 @@ class SharedPreferencesUtil {
 
   bool get devModeJoanFollowUpEnabled => getBool('devModeJoanFollowUpEnabled') ?? false;
 
+  set transcriptionDiagnosticEnabled(bool value) => saveBool('transcriptionDiagnosticEnabled', value);
+
+  bool get transcriptionDiagnosticEnabled => getBool('transcriptionDiagnosticEnabled') ?? false;
+
   set conversationEventsToggled(bool value) => saveBool('conversationEventsToggled', value);
 
   bool get conversationEventsToggled => getBool('conversationEventsToggled') ?? false;
@@ -148,6 +152,10 @@ class SharedPreferencesUtil {
   bool get showInstallAppConfirmation => getBool('showInstallAppConfirmation') ?? true;
 
   set showInstallAppConfirmation(bool value) => saveBool('showInstallAppConfirmation', value);
+  
+  bool get showFirmwareUpdateDialog => getBool('v2/showFirmwareUpdateDialog') ?? true;
+
+  set showFirmwareUpdateDialog(bool value) => saveBool('v2/showFirmwareUpdateDialog', value);
 
   String get recordingsLanguage => getString('recordingsLanguage') ?? 'en';
 
@@ -201,6 +209,10 @@ class SharedPreferencesUtil {
 
   int get enabledAppsIntegrationsCount =>
       appsList.where((element) => element.enabled && element.worksExternally()).length;
+
+  bool get showConversationDeleteConfirmation => getBool('showConversationDeleteConfirmation') ?? true;
+  
+  set showConversationDeleteConfirmation(bool value) => saveBool("showConversationDeleteConfirmation", value);
 
   List<App> get appsList {
     final List<String> apps = getStringList('appsList') ?? [];

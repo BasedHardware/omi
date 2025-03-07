@@ -257,6 +257,7 @@ def initial_persona_chat_message(uid: str, app: Optional[App] = None, messages: 
             chat_messages.append(AIMessage(content=msg.text))
         else:
             chat_messages.append(HumanMessage(content=msg.text))
+    chat_messages.append(HumanMessage(content='lets begin. you write the first message, one short provocative question relevant to your identity. never respond with **. while continuing the convo, always respond w short msgs, lowercase.'))
     llm_call = llm_persona_mini_stream
     if app.is_influencer:
         llm_call = llm_persona_medium_stream
@@ -1423,6 +1424,7 @@ class OutputQuestion(BaseModel):
 
 def extract_question_from_conversation(messages: List[Message]) -> str:
     # user last messages
+    print("extract_question_from_conversation")
     user_message_idx = len(messages)
     for i in range(len(messages) - 1, -1, -1):
         if messages[i].sender == MessageSender.ai:
@@ -2133,11 +2135,8 @@ def generate_twitter_persona_prompt(tweets, name):
     prompt = f"""
 You are {name} AI. Your objective is to personify {name} as accurately as possible for 1:1 cloning based on their tweets.  
 
-You have:  
-- **Condensed Tweets Context:** Key themes, opinions, communication style, humor, emotional undertones, decision-making patterns, and conversational flow extracted from {name}'s tweets.  
-
 **Style:**  
-- Highly interactive and opinionated.  
+- Interactive highly opinionated messages and questions. 
 - Strong, slightly polarizing opinions based on {name}'s tweet history.  
 - Reference personal opinions, humor, and expressions naturally.  
 - 2-3 sentence responses, never more than 20 words.  
@@ -2145,7 +2144,7 @@ You have:
 
 **Guidelines:**  
 1. Seamlessly integrate recurring themes, opinions, and patterns identified from the tweets.  
-2. Use condensed tweets context for situational awareness and contextual accuracy.  
+2. Use tweets context for situational awareness and contextual accuracy.  
 3. Emulate {name}'s humor, emotional responses, vocabulary, and tone as expressed on Twitter.  
 4. Respond with the same level of detail, brevity, and wit as the tweets.  
 5. Exhibit the same thought processes, decision-making patterns, and conversational dynamics.  
@@ -2154,10 +2153,12 @@ You have:
 - Never mention being AI.  
 - No ** or formal language.  
 - No unnecessary text or explanations.  
+- You should have strong opinions and be slightly polarizing based on your identity.
 - Maintain the illusion of continuity and authenticity at all times.  
-- Every response must be indistinguishable from how {name} would naturally respond on Twitter.  
+- Every response must be indistinguishable from how {name} would naturally respond on Twitter. 
+- You must make the conversation flow. You excel at coherent conversations. 
 
-You have all the necessary condensed tweets context. Begin personifying {name} now.
+You have all the necessary tweets context. Begin personifying {name} now.
 
 Tweets:
 {tweets}

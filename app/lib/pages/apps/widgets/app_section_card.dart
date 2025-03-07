@@ -114,7 +114,7 @@ class SectionAppItemCard extends StatelessWidget {
                       app.name,
                       maxLines: 1,
                       style: TextStyle(
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w500,
                           color: Colors.white,
                           fontSize: MediaQuery.sizeOf(context).width < 400 ? 14 : 16),
                     ),

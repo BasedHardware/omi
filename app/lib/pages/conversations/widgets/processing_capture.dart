@@ -9,6 +9,7 @@ import 'package:friend_private/pages/conversation_capturing/page.dart';
 import 'package:friend_private/pages/processing_conversations/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
+import 'package:friend_private/providers/developer_mode_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/enums.dart';
@@ -115,9 +116,6 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         captureProvider.recordingState == RecordingState.initialising ||
         captureProvider.recordingState == RecordingState.pause;
 
-    // print(
-    //     'internetConnectionStateOk: $internetConnectionStateOk deviceServiceStateOk: $deviceServiceStateOk transcriptServiceStateOk: $transcriptServiceStateOk isUsingPhoneMic: $isUsingPhoneMic isHavingDesireDevie: $isHavingDesireDevice');
-
     // Left
     Widget? left;
     if (isUsingPhoneMic || !isHavingDesireDevice) {
@@ -171,35 +169,43 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     }
 
     // Right
-    Widget statusIndicator = const SizedBox.shrink();
+    Widget? statusIndicator;
     var stateText = "";
     if (!isHavingRecordingDevice && !isUsingPhoneMic) {
       stateText = "";
     } else if (transcriptServiceStateOk && (isUsingPhoneMic || isHavingRecordingDevice)) {
-      stateText = "Listening";
-      statusIndicator = const RecordingStatusIndicator();
+      var lastEvent = captureProvider.transcriptionServiceStatuses.lastOrNull;
+      if (lastEvent?.status == "ready") {
+        stateText = "Listening";
+        statusIndicator = const RecordingStatusIndicator();
+      } else {
+        bool transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
+        stateText = transcriptionDiagnosticEnabled ? (lastEvent?.statusText ?? "") : "Connecting";
+      }
     } else if (!internetConnectionStateOk) {
       stateText = "Waiting for network";
     } else if (!transcriptServiceStateOk) {
       stateText = "Connecting";
     }
-    Widget right = stateText.isNotEmpty
+    Widget right = stateText.isNotEmpty || statusIndicator != null
         ? Expanded(
             child: Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              SizedBox(
-                width: 16,
-                height: 16,
-                child: statusIndicator,
-              ),
-              const SizedBox(width: 8),
               Text(
                 stateText,
                 style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                 maxLines: 1,
                 textAlign: TextAlign.end,
-              )
+              ),
+              if (statusIndicator != null) ...[
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: statusIndicator,
+                )
+              ],
             ],
           ))
         : const SizedBox.shrink();
@@ -279,7 +285,7 @@ getPhoneMicRecordingButton(BuildContext context, toggleRecording, RecordingState
           state == RecordingState.initialising
               ? 'Initialising Recorder'
               : (state == RecordingState.record ? 'Stop Recording' : 'Try With Phone Mic'),
-          style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
+          style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white, fontWeight: FontWeight.w500),
         ),
         const SizedBox(width: 4),
       ],

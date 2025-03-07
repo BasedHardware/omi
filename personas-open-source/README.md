@@ -44,6 +44,11 @@ You'll need to obtain the following API keys and credentials:
    - Create an account at [Mixpanel](https://mixpanel.com)
    - Get your project token
 
+5. **RapidAPI LinkedIn API**
+   - Subscribe to [LinkedIn API](https://rapidapi.com/rockapis-rockapis-default/api/linkedin-api8)
+   - Get your API key
+   - Access to profile data and posts
+   
 ## Setup Instructions
 
 1. Clone the repository:
@@ -72,6 +77,8 @@ You'll need to obtain the following API keys and credentials:
    NEXT_PUBLIC_RAPIDAPI_KEY=your_rapidapi_key
    OPENROUTER_API_KEY=your_openrouter_api_key
    NEXT_PUBLIC_MIXPANEL_TOKEN=your_mixpanel_token
+   NEXT_PUBLIC_LINKEDIN_API_HOST=your_rapidapi_linkedin_host
+   NEXT_PUBLIC_LINKEDIN_API_KEY=your_rapidapi_linkedin_key
    ```
 
 4. Run the development server:

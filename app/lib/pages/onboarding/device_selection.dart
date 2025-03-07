@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/gen/assets.gen.dart';
+import 'package:friend_private/pages/onboarding/wrapper.dart';
 
 import 'package:friend_private/pages/persona/twitter/social_profile.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
+
 
 class DeviceSelectionPage extends StatefulWidget {
   const DeviceSelectionPage({super.key});
@@ -104,6 +107,22 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(
+                          height: 24,
+                        ),
+                        TextButton(
+                          onPressed: () async {
+                            routeToPage(context, const OnboardingWrapper());
+                          },
+                          child: const Text(
+                            'Sign in',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 16,
                             ),
                           ),
                         ),

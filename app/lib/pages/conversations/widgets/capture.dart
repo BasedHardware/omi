@@ -57,47 +57,10 @@ class LiteCaptureWidgetState extends State<LiteCaptureWidget> with AutomaticKeep
   Widget build(BuildContext context) {
     super.build(context);
     return Consumer2<CaptureProvider, DeviceProvider>(builder: (context, provider, deviceProvider, child) {
-      return MessageListener<CaptureProvider>(
-        showInfo: (info) {
-          // This probably will never be called because this has been handled even before we start the audio stream. But it's here just in case.
-          if (info == 'FIM_CHANGE') {
-            showDialog(
-              context: context,
-              barrierDismissible: false,
-              builder: (c) => getDialog(
-                context,
-                () async {
-                  var connectedDevice = deviceProvider.connectedDevice;
-                  var codec = await _getAudioCodec(connectedDevice!.id);
-                  await context.read<CaptureProvider>().changeAudioRecordProfile(codec);
-                  if (Navigator.canPop(context)) {
-                    Navigator.pop(context);
-                  }
-                },
-                () => {},
-                'Firmware change detected!',
-                'You are currently using a different firmware version than the one you were using before. Please restart the app to apply the changes.',
-                singleButton: true,
-                okButtonText: 'Restart',
-              ),
-            );
-          }
-        },
-        showError: (error) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                error,
-                style: const TextStyle(color: Colors.white, fontSize: 14),
-              ),
-            ),
-          );
-        },
-        child: getLiteTranscriptWidget(
-          provider.segments,
-          [],
-          deviceProvider.connectedDevice,
-        ),
+      return getLiteTranscriptWidget(
+        provider.segments,
+        [],
+        deviceProvider.connectedDevice,
       );
     });
   }

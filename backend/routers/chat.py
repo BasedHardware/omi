@@ -77,6 +77,9 @@ def send_message(
 
         if len(new_file_ids) > 0:
             message.files_id = new_file_ids
+            files = chat_db.get_chat_files(uid, new_file_ids)
+            files = [FileChat(**f) if f else None for f in files]
+            message.files = files
             fc.add_files(new_file_ids)
 
     if chat_session:

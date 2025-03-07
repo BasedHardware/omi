@@ -119,7 +119,7 @@ class _AddPersonaPageState extends State<AddPersonaPage> {
                       style: TextStyle(
                         color: Colors.black,
                         fontSize: 14,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
@@ -262,7 +262,7 @@ class _AddPersonaPageState extends State<AddPersonaPage> {
                             onChanged: (value) {
                               provider.setPersonaPublic(value);
                             },
-                            activeColor: Colors.white,
+                            activeColor: Colors.deepPurple,
                           ),
                         ],
                       ),
@@ -297,16 +297,16 @@ class _AddPersonaPageState extends State<AddPersonaPage> {
                               ),
                               const SizedBox(width: 12),
                               Text(
-                                provider.twitterProfile.isEmpty
-                                    ? 'Connect Twitter'
-                                    : provider.twitterProfile['username'] ?? '',
+                                provider.hasTwitterConnection
+                                    ? (provider.twitterProfile['name'] ?? '')
+                                    : 'Connect Twitter',
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 16,
                                 ),
                               ),
                               const Spacer(),
-                              if (provider.twitterProfile.isEmpty)
+                              if (!provider.hasTwitterConnection)
                                 GestureDetector(
                                   onTap: () {
                                     routeToPage(context, const SocialHandleScreen());
@@ -327,20 +327,73 @@ class _AddPersonaPageState extends State<AddPersonaPage> {
                                   ),
                                 )
                               else
-                                Container(
+                                GestureDetector(
+                                  onTap: () => provider.disconnectTwitter(),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[800],
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: const Text(
+                                      'Disconnect',
+                                      style: TextStyle(
+                                        color: Colors.red,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[900],
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Image.asset(
+                                Assets.images.logoTransparent.path,
+                                width: 24,
+                                height: 24,
+                              ),
+                              const SizedBox(width: 12),
+                              const Text(
+                                'Connect Omi',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const Spacer(),
+                              GestureDetector(
+                                onTap: () {
+                                  if (!provider.hasOmiConnection) {
+                                    provider.toggleOmiConnection(true);
+                                  } else {
+                                    provider.disconnectOmi();
+                                  }
+                                  provider.validateForm();
+                                },
+                                child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                   decoration: BoxDecoration(
                                     color: Colors.grey[800],
                                     borderRadius: BorderRadius.circular(16),
                                   ),
-                                  child: const Text(
-                                    'Connected',
+                                  child: Text(
+                                    provider.hasOmiConnection ? 'Disconnect' : 'Connect',
                                     style: TextStyle(
-                                      color: Colors.grey,
+                                      color: provider.hasOmiConnection ? Colors.red : Colors.white,
                                       fontSize: 12,
                                     ),
                                   ),
                                 ),
+                              ),
                             ],
                           ),
                         ),
@@ -367,7 +420,7 @@ class _AddPersonaPageState extends State<AddPersonaPage> {
                 textStyle: const TextStyle(
                   color: Colors.black,
                   fontSize: 16,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),
