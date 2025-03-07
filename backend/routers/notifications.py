@@ -1,11 +1,12 @@
 import os
+import hashlib
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from typing import Tuple
 
 from database.redis_db import get_enabled_plugins, r as redis_client
-from utils.apps import get_available_app_by_id
+from utils.apps import get_available_app_by_id, verify_app_secret
 from utils.plugins import send_plugin_notification
 import database.notifications as notification_db
 from models.other import SaveFcmTokenRequest
@@ -21,8 +22,6 @@ router = APIRouter()
 # Rate limit settings - more conservative limits to prevent notification fatigue
 RATE_LIMIT_PERIOD = 3600  # 1 hour in seconds
 MAX_NOTIFICATIONS_PER_HOUR = 10  # Maximum notifications per hour per app per user
-BURST_LIMIT = 3  # Maximum notifications in a 5-minute window
-BURST_WINDOW = 300  # 5 minutes in seconds
 
 def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
     """
@@ -31,7 +30,6 @@ def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
     """
     now = datetime.utcnow()
     hour_key = f"notification_rate_limit:{app_id}:{user_id}:{now.strftime('%Y-%m-%d-%H')}"
-    burst_key = f"notification_rate_limit_burst:{app_id}:{user_id}:{int(now.timestamp() // BURST_WINDOW)}"
     
     # Check hourly limit
     hour_count = redis_client.get(hour_key)
@@ -41,33 +39,18 @@ def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
     else:
         hour_count = int(hour_count)
 
-    # Check burst limit
-    burst_count = redis_client.get(burst_key)
-    if burst_count is None:
-        redis_client.setex(burst_key, BURST_WINDOW, 1)
-        burst_count = 1
-    else:
-        burst_count = int(burst_count)
-
-    # Calculate reset times
+    # Calculate reset time
     hour_reset = RATE_LIMIT_PERIOD - (int(now.timestamp()) % RATE_LIMIT_PERIOD)
-    burst_reset = BURST_WINDOW - (int(now.timestamp()) % BURST_WINDOW)
-    reset_time = min(hour_reset, burst_reset)
+    reset_time = hour_reset
 
-    # Check if either limit is exceeded
+    # Check if hourly limit is exceeded
     if hour_count >= MAX_NOTIFICATIONS_PER_HOUR:
         return False, MAX_NOTIFICATIONS_PER_HOUR - hour_count, hour_reset, hour_reset
-    if burst_count >= BURST_LIMIT:
-        return False, BURST_LIMIT - burst_count, burst_reset, burst_reset
 
-    # Increment counters
+    # Increment counter
     redis_client.incr(hour_key)
-    redis_client.incr(burst_key)
     
-    remaining = min(
-        MAX_NOTIFICATIONS_PER_HOUR - hour_count - 1,
-        BURST_LIMIT - burst_count - 1
-    )
+    remaining = MAX_NOTIFICATIONS_PER_HOUR - hour_count - 1
     
     return True, remaining, reset_time, 0
 
@@ -121,7 +104,8 @@ def send_app_notification_to_user(
     app_secret = request.headers.get('X-App-Secret')
     if not app_secret:
         raise HTTPException(status_code=400, detail='X-App-Secret header is required')
-    if app_secret != app.app_secret:
+    
+    if not verify_app_secret(app_secret, app.app_secret):
         raise HTTPException(status_code=403, detail='Invalid app secret')
 
     # Check rate limit
@@ -140,7 +124,7 @@ def send_app_notification_to_user(
             status_code=429,
             headers=headers,
             content={
-                'detail': f'Rate limit exceeded. Maximum {MAX_NOTIFICATIONS_PER_HOUR} notifications per hour and {BURST_LIMIT} notifications per {BURST_WINDOW} seconds.'
+                'detail': f'Rate limit exceeded. Maximum {MAX_NOTIFICATIONS_PER_HOUR} notifications per hour.'
             }
         )
 

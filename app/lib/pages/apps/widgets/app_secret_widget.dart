@@ -22,6 +22,11 @@ class _AppSecretWidgetState extends State<AppSecretWidget> {
   bool _isSecretVisible = false;
   bool _isLoading = false;
 
+  // Helper method to check if the secret is a hashed value
+  bool isHashedSecret() {
+    return widget.app.appSecret != null && widget.app.appSecret!.startsWith('sha256\$');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -37,7 +42,8 @@ class _AppSecretWidgetState extends State<AppSecretWidget> {
         ),
         const SizedBox(height: 8),
         const Text(
-          'This secret is used to authenticate your webhook requests. Keep it secure and never share it.',
+          'This secret is used to authenticate your webhook requests. Keep it secure and never share it. '
+          'It can only be shown once, revoke and generate a new one to see it again.',
           style: TextStyle(
             color: Colors.grey,
             fontSize: 14,
@@ -45,47 +51,51 @@ class _AppSecretWidgetState extends State<AppSecretWidget> {
         ),
         const SizedBox(height: 16),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
-          margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
             color: Colors.grey.shade800,
-            borderRadius: BorderRadius.circular(10.0),
+            borderRadius: BorderRadius.circular(8),
           ),
-          width: double.infinity,
           child: Row(
             children: [
               Expanded(
                 child: Text(
-                  _isSecretVisible ? (widget.app.appSecret ?? 'No secret generated') : '••••••••••••••••',
-                  style: const TextStyle(
-                    color: Colors.white,
+                  widget.app.appSecret == null
+                      ? 'No secret available'
+                      : _isSecretVisible && !isHashedSecret()
+                          ? widget.app.appSecret!
+                          : '•' * 20,
+                  style: TextStyle(
+                    color: widget.app.appSecret == null ? Colors.grey : Colors.white,
                     fontFamily: 'monospace',
                   ),
                 ),
               ),
-              IconButton(
-                icon: Icon(
-                  _isSecretVisible ? Icons.visibility_off : Icons.visibility,
-                  color: Colors.grey,
+              if (widget.app.appSecret != null && !isHashedSecret()) ...[
+                IconButton(
+                  icon: Icon(
+                    _isSecretVisible ? Icons.visibility_off : Icons.visibility,
+                    color: Colors.grey,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _isSecretVisible = !_isSecretVisible;
+                    });
+                  },
                 ),
-                onPressed: () {
-                  setState(() {
-                    _isSecretVisible = !_isSecretVisible;
-                  });
-                },
-              ),
-              IconButton(
-                icon: const Icon(
-                  Icons.copy,
-                  color: Colors.grey,
+                IconButton(
+                  icon: const Icon(
+                    Icons.copy,
+                    color: Colors.grey,
+                  ),
+                  onPressed: () {
+                    if (widget.app.appSecret != null) {
+                      Clipboard.setData(ClipboardData(text: widget.app.appSecret!));
+                      AppSnackbar.showSnackbar('Secret copied to clipboard');
+                    }
+                  },
                 ),
-                onPressed: () {
-                  if (widget.app.appSecret != null) {
-                    Clipboard.setData(ClipboardData(text: widget.app.appSecret!));
-                    AppSnackbar.showSnackbar('Secret copied to clipboard');
-                  }
-                },
-              ),
+              ],
             ],
           ),
         ),
