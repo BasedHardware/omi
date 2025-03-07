@@ -19,7 +19,8 @@ class ApiKeysWidget extends StatefulWidget {
 
 class _ApiKeysWidgetState extends State<ApiKeysWidget> {
   bool _isLoading = false;
-  bool _showNewKey = false;
+  bool _isCreatingKey = false;
+  String? _deletingKeyId;
   String? _newKeySecret;
   String? _newKeyId;
   String? _newKeyLabel;
@@ -49,30 +50,65 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
 
   Future<void> _createApiKey() async {
     setState(() {
-      _isLoading = true;
+      _isCreatingKey = true;
     });
 
     try {
       final result = await Provider.of<AddAppProvider>(context, listen: false).createApiKey(widget.appId);
       setState(() {
-        _showNewKey = true;
         _newKeySecret = result['secret'];
         _newKeyId = result['id'];
         _newKeyLabel = result['label'];
         _newKeyCreatedAt = DateTime.parse(result['created_at']);
       });
+
+      // Show the dialog with the new key
+      if (mounted) {
+        _showNewKeyDialog();
+      }
     } catch (e) {
       AppSnackbar.showSnackbarError('Failed to create API key: ${e.toString()}');
     } finally {
       setState(() {
-        _isLoading = false;
+        _isCreatingKey = false;
       });
     }
   }
 
+  void _showNewKeyDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey.shade900,
+        title: const Text('Create a Key', textAlign: TextAlign.center),
+        content: _buildNewKeyContent(),
+        contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+        actions: [
+          Center(
+            child: ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                setState(() {
+                  _newKeySecret = null;
+                });
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.secondary,
+                minimumSize: const Size(120, 40),
+              ),
+              child: const Text('Done', style: TextStyle(color: Colors.white)),
+            ),
+          ),
+        ],
+        actionsPadding: const EdgeInsets.fromLTRB(0, 0, 0, 16),
+      ),
+    );
+  }
+
   Future<void> _deleteApiKey(String keyId) async {
     setState(() {
-      _isLoading = true;
+      _deletingKeyId = keyId;
     });
 
     try {
@@ -82,7 +118,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
       AppSnackbar.showSnackbarError('Failed to revoke API key: ${e.toString()}');
     } finally {
       setState(() {
-        _isLoading = false;
+        _deletingKeyId = null;
       });
     }
   }
@@ -114,17 +150,27 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
                   'API Keys',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
-                if (!_isLoading && !_showNewKey)
-                  ElevatedButton.icon(
-                    onPressed: _createApiKey,
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Create Key'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.secondary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    ),
+                ElevatedButton.icon(
+                  onPressed: _isCreatingKey ? null : _createApiKey,
+                  icon: _isCreatingKey
+                      ? SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Icon(Icons.add, size: 16),
+                  label: Text(_isCreatingKey ? 'Creating...' : 'Create Key'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.secondary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    disabledBackgroundColor: Theme.of(context).colorScheme.secondary.withOpacity(0.7),
+                    disabledForegroundColor: Colors.white.withOpacity(0.7),
                   ),
+                ),
               ],
             ),
           ),
@@ -135,7 +181,6 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
                 child: CircularProgressIndicator(color: Colors.white),
               ),
             ),
-          if (_showNewKey && _newKeySecret != null) _buildNewKeyDisplay(),
           if (provider.apiKeys.isEmpty)
             Padding(
               padding: const EdgeInsets.all(16.0),
@@ -154,91 +199,76 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
     );
   }
 
-  Widget _buildNewKeyDisplay() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.amber.shade700, width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+  Widget _buildNewKeyContent() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Center(
+          child: Text(
+            'Your new key:',
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade800,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(
             children: [
-              const Icon(Icons.warning_amber_rounded, color: Colors.amber),
-              const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  'Save this API key now! You won\'t be able to see it again.',
-                  style: TextStyle(
-                    color: Colors.amber.shade300,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'API Key:',
-            style: Theme.of(context).textTheme.labelMedium,
-          ),
-          const SizedBox(height: 4),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _newKeySecret!,
-                    style: const TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 14,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(
+                      _newKeySecret!,
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 14,
+                      ),
                     ),
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.copy, size: 18),
-                  onPressed: () => _copyToClipboard(_newKeySecret!),
-                  tooltip: 'Copy to clipboard',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Text(
-                'Created: ${DateFormat('MMM d, yyyy HH:mm').format(_newKeyCreatedAt!)}',
-                style: Theme.of(context).textTheme.labelMedium,
+              ),
+              IconButton(
+                icon: const Icon(Icons.copy, size: 18),
+                onPressed: () => _copyToClipboard(_newKeySecret!),
+                tooltip: 'Copy to clipboard',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Center(
-            child: ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  _showNewKey = false;
-                  _newKeySecret = null;
-                });
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.secondary,
+        ),
+        const SizedBox(height: 16),
+        const Row(
+          children: [
+            Expanded(
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: 'Please copy it now and write it down somewhere safe. ',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                    TextSpan(
+                      text: 'You will not be able to see it again.',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              child: const Text('Done', style: TextStyle(color: Colors.white)),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -252,21 +282,38 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
       itemBuilder: (context, index) {
         final key = provider.apiKeys[index];
         return ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          title: Text(
-            key['label'] ?? 'API Key',
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          subtitle: Text(
-            '${DateFormat('MMM d, yyyy HH:mm').format(DateTime.parse(key['created_at']))}',
-            style: Theme.of(context).textTheme.labelMedium,
-          ),
-          trailing: IconButton(
-            icon: const Icon(Icons.delete_outline, color: Colors.red),
-            onPressed: () => _showDeleteConfirmation(key['id']),
-            tooltip: 'Revoke key',
-          ),
-        );
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            title: Text(
+              key['label'] ?? 'API Key',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text(
+              '${DateFormat('MMM d, yyyy HH:mm').format(DateTime.parse(key['created_at']))}',
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
+            trailing: SizedBox(
+              width: 42,
+              height: 42,
+              child: _deletingKeyId == key['id']
+                  ? const Center(
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          color: Colors.red,
+                          strokeWidth: 2,
+                        ),
+                      ),
+                    )
+                  : IconButton(
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: Colors.red,
+                      ),
+                      onPressed: () => _showDeleteConfirmation(key['id']),
+                      tooltip: 'Revoke key',
+                    ),
+            ));
       },
     );
   }
@@ -275,7 +322,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
+        backgroundColor: Colors.grey.shade900,
         title: const Text('Revoke API Key?'),
         content: const Text(
           'This action cannot be undone. Any applications using this key will no longer be able to access the API.',
