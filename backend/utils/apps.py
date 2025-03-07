@@ -2,6 +2,7 @@ import os
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import List
+import hashlib
 
 from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
     get_public_approved_apps_db, get_app_by_id_db, get_app_usage_history_db, set_app_review_in_db, \
@@ -568,3 +569,29 @@ def increment_username(username: str):
         return f"{username}{i}"
     else:
         return username
+
+
+def verify_app_secret(app_secret: str, stored_secret: str) -> bool:
+    """
+    Verify if the provided app secret matches the stored secret.
+    Supports both hashed secrets and legacy plain text secrets.
+    
+    Args:
+        app_secret: The secret provided in the request
+        stored_secret: The secret stored in the app data
+        
+    Returns:
+        bool: True if the secret is valid, False otherwise
+    """
+    if not app_secret or not stored_secret:
+        return False
+        
+    # Check if the stored secret is in the hash format
+    if stored_secret.startswith('sha256$'):
+        # Compare the hash of the provided secret with the stored hash
+        provided_hash = hashlib.sha256(app_secret.encode()).hexdigest()
+        stored_hash = stored_secret.split('$', 1)[1]
+        return provided_hash == stored_hash
+    else:
+        return False
+

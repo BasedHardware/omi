@@ -1,9 +1,10 @@
 import json
 import os
-from datetime import datetime, timezone
-from typing import List
-import requests
 import secrets
+import hashlib
+from datetime import datetime, timezone
+from typing import List, Optional
+import requests
 from ulid import ULID
 from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header
 
@@ -59,7 +60,13 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
         user = get_user_from_uid(uid)
         data['author'] = user['display_name']
         data['email'] = user['email']
-    data['app_secret'] = secrets.token_urlsafe(32)  # Generate a secure random secret
+    
+    # Generate a secure random secret only if the app has proactive_notification capability
+    if 'capabilities' in data and 'proactive_notification' in data['capabilities']:
+        raw_secret = "sk-" + secrets.token_urlsafe(32)
+        data['app_secret'] = f"sha256${hashlib.sha256(raw_secret.encode()).hexdigest()}"
+        data['_temp_raw_secret'] = raw_secret  # Temporary field to return to client, not stored in DB
+    
     if not data.get('is_paid'):
         data['is_paid'] = False
     else:
@@ -104,7 +111,10 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     app = App(**data)
     upsert_app_payment_link(app.id, app.is_paid, app.price, app.payment_plan, app.uid)
 
-    return {'status': 'ok', 'app_id': app.id}
+    # Return the raw secret to the client but don't store it in the response
+    raw_secret = data.pop('_temp_raw_secret', None)
+    
+    return {'status': 'ok', 'app_id': app.id, 'app_secret': raw_secret}
 
 
 @router.post('/v1/personas', tags=['v1'])
@@ -239,7 +249,16 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
     if plugin['approved'] and (plugin['private'] is None or plugin['private'] is False):
         delete_generic_cache('get_public_approved_apps_data')
     delete_app_cache_by_id(app_id)
-    return {'status': 'ok'}
+
+    # Only generate a new secret if the app has proactive_notification capability and no existing secret
+    raw_secret = None
+    if 'capabilities' in data and 'proactive_notification' in data['capabilities']:
+        if not plugin.get('app_secret'):
+            raw_secret = "sk-" + secrets.token_urlsafe(32)
+            data['app_secret'] = f"sha256${hashlib.sha256(raw_secret.encode()).hexdigest()}"
+            update_app_in_db(data)  # Update again with the new secret
+    
+    return {'status': 'ok', 'app_secret': raw_secret}
 
 
 @router.delete('/v1/apps/{app_id}', tags=['v1'])
@@ -719,10 +738,18 @@ def revoke_app_secret(app_id: str, uid: str = Depends(auth.get_current_user_uid)
     if app.uid != uid:
         raise HTTPException(status_code=403, detail='Not authorized to revoke app secret')
     
+    # Check if app has proactive_notification capability
+    if 'proactive_notification' not in app.capabilities:
+        raise HTTPException(status_code=400, detail='App does not have notification capability')
+    
     # Generate new secret
-    app_data['app_secret'] = secrets.token_urlsafe(32)
+    raw_secret = "sk-" + secrets.token_urlsafe(32)
+    app_data['app_secret'] = f"sha256${hashlib.sha256(raw_secret.encode()).hexdigest()}"
     
     # Update app in database
     update_app_in_db(app_data)
     
-    return {'status': 'ok', 'app_secret': app_data['app_secret']}
+    # Clear any cache for this app
+    delete_app_cache_by_id(app_id)
+    
+    return {'status': 'ok', 'app_secret': raw_secret}

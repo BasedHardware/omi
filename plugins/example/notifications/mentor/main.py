@@ -19,9 +19,9 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 # Constants
-ANALYSIS_INTERVAL = 60  # 120 seconds between analyses
-REMINDER_INTERVAL = 60  # remind user 60 seconds after last notification
-REMINDER_CHECK_INTERVAL = 10  # check for reminders every 10 seconds
+ANALYSIS_INTERVAL = 5  # seconds between analyses
+REMINDER_INTERVAL = 10  # remind user 60 seconds after last notification
+REMINDER_CHECK_INTERVAL = 2  # check for reminders every x seconds
 REMINDER_MESSAGE = "Hey! How's it going with my previous suggestion? Have you had a chance to try it out?"
 
 # Create logs directory if it doesn't exist
