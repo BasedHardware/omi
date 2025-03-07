@@ -828,7 +828,7 @@ def create_api_key_for_app(app_id: str, uid: str = Depends(auth.get_current_user
     if app.get('uid') != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to create API keys for this app')
 
-    raw_key, hashed_key, label = generate_api_key()
+    key, hashed_key, label = generate_api_key()
 
     data = {
         'id': str(ULID()),
@@ -841,7 +841,7 @@ def create_api_key_for_app(app_id: str, uid: str = Depends(auth.get_current_user
     # Return both the raw key (for one-time display to user) and the stored data
     return {
         'id': data['id'],
-        'secret': f'sk_{raw_key}',  # with sk_
+        'secret': key,  # with sk_
         'label': label,
         'created_at': data['created_at']
     }

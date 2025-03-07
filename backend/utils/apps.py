@@ -575,10 +575,12 @@ def generate_api_key() -> Tuple[str, str, str]:
     raw_key = secrets.token_hex(16)  # 16 bytes = 32 hex chars
     hashed_key = hashlib.sha256(raw_key.encode()).hexdigest()
     formatted_label = f"sk_{raw_key[:4]}...{raw_key[-4:]}"
-    return raw_key, hashed_key, formatted_label
+    return f'sk_{raw_key}', hashed_key, formatted_label
 
 
 def verify_api_key(app_id: str, api_key: str) -> bool:
+    if api_key.startswith("sk_"):
+        api_key = api_key[3:]
     hashed_key = hashlib.sha256(api_key.encode()).hexdigest()
     stored_key = get_api_key_by_hash_db(app_id, hashed_key)
     return stored_key is not None
