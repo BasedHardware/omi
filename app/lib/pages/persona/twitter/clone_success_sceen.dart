@@ -14,9 +14,11 @@ import '../persona_profile.dart';
 
 class CloneSuccessScreen extends StatefulWidget {
   final String message;
+  final PersonaProfileRouting routing;
   const CloneSuccessScreen({
     super.key,
     required this.message,
+    this.routing = PersonaProfileRouting.no_device,
   });
 
   @override
@@ -36,7 +38,7 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
     } else {
       // Anonymous user, just go to profile
       Posthog().capture(eventName: 'x_connected', properties: {'existing_omi_user': false});
-      Provider.of<PersonaProvider>(context, listen: false).setRouting(PersonaProfileRouting.no_device);
+      Provider.of<PersonaProvider>(context, listen: false).setRouting(widget.routing);
       routeToPage(context, const PersonaProfilePage(), replace: true);
     }
   }

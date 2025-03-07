@@ -255,6 +255,15 @@ export default function HomePage() {
           toast.success('Profile already exists, redirecting...');
           redirectToChat(existingId);
           return;
+        } else {
+          twitterResult = await fetchTwitterProfile(cleanHandle);
+          if (twitterResult) {
+            existingId = await checkExistingProfile(cleanHandle, 'twitter');
+            if (existingId) {
+              redirectToChat(existingId);
+              return;
+            }
+          }
         }
       } 
       // If input is specifically a LinkedIn URL
@@ -553,7 +562,7 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
       if (!profileResponse.ok) return false;
       const profileData: LinkedinProfile = await profileResponse.json();
       if (!profileData || !profileData?.data?.firstName) return false;
-      const formattedAvatarUrl = profileData?.data?.profilePicture || '/omi-avatar.svg';
+      const formattedAvatarUrl = profileData?.data?.profilePicture || 'https://storage.googleapis.com/omi_plugins/dummy_linkedin_image.png';
       const fullName = `${profileData?.data?.firstName || ''} ${profileData?.data?.lastName || ''}`.trim();
       const headline = profileData?.data?.headline || 'No headline available';
       const summary = profileData?.data?.summary || 'No summary available';

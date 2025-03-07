@@ -36,12 +36,11 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
         hardwareRevision: device.hardwareRevision,
         manufacturerName: device.manufacturerName,
       );
-      var (a, b) =
-          await shouldUpdateFirmware(currentFirmware: widget.device!.firmwareRevision);
+      var result = await shouldUpdateFirmware(currentFirmware: widget.device!.firmwareRevision);
       if (mounted) {
         setState(() {
-          shouldUpdate = b;
-          updateMessage = a;
+          shouldUpdate = result.$2;
+          updateMessage = result.$1;
           isLoading = false;
         });
       }
@@ -221,7 +220,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                                           },
                                           child: Text(
                                             otaUpdateSteps.isEmpty ? "Start Update" : "Update",
-                                            style: TextStyle(color: Colors.white, fontSize: 16),
+                                            style: const TextStyle(color: Colors.white, fontSize: 16),
                                           ),
                                         ),
                                       )
