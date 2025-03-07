@@ -174,6 +174,18 @@ def save_structured_vector(uid: str, memory: Memory, update_only: bool = False):
         update_vector_metadata(uid, memory.id, metadata)
 
 
+def _update_personas_async(uid: str):
+    print(f"[PERSONAS] Starting persona updates in background thread for uid={uid}")
+    personas = get_omi_personas_by_uid_db(uid)
+    if personas:
+        threads = []
+        for persona in personas:
+            threads.append(threading.Thread(target=sync_update_persona_prompt, args=(persona,)))
+        
+        [t.start() for t in threads]
+        [t.join() for t in threads]
+
+
 def process_memory(
         uid: str, language_code: str, memory: Union[Memory, CreateMemory, WorkflowCreateMemory],
         force_process: bool = False, is_reprocess: bool = False
@@ -192,16 +204,7 @@ def process_memory(
     if not is_reprocess:
         threading.Thread(target=memory_created_webhook, args=(uid, memory,)).start()
         # Update persona prompts with new memory
-        personas = get_omi_personas_by_uid_db(uid)
-        if personas:
-            threads = []
-            print('updating personas after memory creation')
-            for persona in personas:
-                threads.append(threading.Thread(target=sync_update_persona_prompt, args=(persona,)))
-        
-            [t.start() for t in threads]
-            [t.join() for t in threads]
-
+        threading.Thread(target=_update_personas_async, args=(uid,)).start()
 
     # TODO: trigger external integrations here too
 
