@@ -8,6 +8,7 @@ import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/pages/apps/widgets/app_metadata_widget.dart';
 import 'package:friend_private/pages/apps/widgets/external_trigger_fields_widget.dart';
 import 'package:friend_private/pages/apps/widgets/full_screen_image_viewer.dart';
+import 'package:friend_private/pages/apps/widgets/api_keys_widget.dart';
 import 'package:friend_private/pages/apps/widgets/notification_scopes_chips_widget.dart';
 import 'package:friend_private/pages/apps/widgets/payment_details_widget.dart';
 import 'package:friend_private/pages/payments/payment_method_provider.dart';
@@ -372,6 +373,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                 ),
                               ],
                             ),
+                          
                           const SizedBox(
                             height: 22,
                           ),

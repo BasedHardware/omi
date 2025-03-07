@@ -22,9 +22,7 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
         },
         child: Column(
           children: [
-            const SizedBox(
-              height: 12,
-            ),
+            const SizedBox(height: 18),
             Form(
               key: provider.externalIntegrationKey,
               onChanged: () {
