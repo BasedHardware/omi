@@ -340,7 +340,6 @@ class _AddAppPageState extends State<AddAppPage> {
                                 ),
                               ],
                             ),
-                          const ActionFieldsWidget(),
                           const ExternalTriggerFieldsWidget(),
                           if (provider.isCapabilitySelectedById('proactive_notification'))
                             Column(
