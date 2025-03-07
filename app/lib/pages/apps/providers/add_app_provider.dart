@@ -135,14 +135,14 @@ class AddAppProvider extends ChangeNotifier {
     selectedCapabilities = app.getCapabilitiesFromIds(capabilities);
     if (app.externalIntegration != null) {
       triggerEvent = app.externalIntegration!.triggersOn;
-      webhookUrlController.text = app.externalIntegration!.webhookUrl;
+      webhookUrlController.text = app.externalIntegration!.webhookUrl ?? '';
       setupCompletedController.text = app.externalIntegration!.setupCompletedUrl ?? '';
-      instructionsController.text = app.externalIntegration!.setupInstructionsFilePath;
+      instructionsController.text = app.externalIntegration!.setupInstructionsFilePath ?? '';
       appHomeUrlController.text = app.externalIntegration!.appHomeUrl ?? '';
       if (app.externalIntegration!.authSteps.isNotEmpty) {
         authUrlController.text = app.externalIntegration!.authSteps.first.url;
       }
-      
+
       // Load actions if they exist
       actions = [];
       if (app.externalIntegration!.actions != null) {
@@ -199,22 +199,24 @@ class AddAppProvider extends ChangeNotifier {
     thumbnailIds = [];
     actions.clear();
   }
-  
+
   void addSpecificAction(String actionTypeId) {
     // Check if this action type already exists
     if (!actions.any((action) => action['action'] == actionTypeId)) {
       actions.add({
         'action': actionTypeId,
       });
+      checkValidity();
       notifyListeners();
     }
   }
 
   void removeActionByType(String actionTypeId) {
     actions.removeWhere((action) => action['action'] == actionTypeId);
+    checkValidity();
     notifyListeners();
   }
-    
+
   List<CapacityAction> getActionTypes() {
     for (var capability in capabilities) {
       if (capability.id == 'external_integration') {
@@ -223,11 +225,11 @@ class AddAppProvider extends ChangeNotifier {
         }
       }
     }
-    
+
     // Return empty list if no actions found in capabilities
     return [];
   }
-  
+
   CapacityAction? getActionTypeById(String id) {
     final actionTypes = getActionTypes();
     try {
@@ -341,15 +343,16 @@ class AddAppProvider extends ChangeNotifier {
         bool isValid = false;
         for (var capability in selectedCapabilities) {
           if (capability.id == 'external_integration') {
-            if (triggerEvent == null) {
+            isValid = true;
+            if (triggerEvent == null && actions.isEmpty) {
               isValid = false;
-            } else {
+            } else if (triggerEvent != null) {
               isValid = true;
-            }
-            if (externalIntegrationKey.currentState != null) {
-              isValid = externalIntegrationKey.currentState!.validate();
-            } else {
-              isValid = false;
+              if (externalIntegrationKey.currentState != null) {
+                isValid = externalIntegrationKey.currentState!.validate();
+              } else {
+                isValid = false;
+              }
             }
           }
           if (capability.id == 'chat') {
@@ -440,10 +443,7 @@ class AddAppProvider extends ChangeNotifier {
             AppSnackbar.showSnackbarError('Please enter a webhook URL for your app');
             return false;
           }
-          if (setupCompletedController.text.isEmpty) {
-            AppSnackbar.showSnackbarError('Please enter a setup completed URL for your app');
-            return false;
-          }
+          // Setup completed URL is optional, so we don't validate it here
         }
       }
       if (appCategory == null) {
@@ -491,7 +491,7 @@ class AddAppProvider extends ChangeNotifier {
             'name': 'Setup ${appNameController.text}',
           });
         }
-        
+
         // Add actions if they exist
         if (actions.isNotEmpty) {
           data['external_integration']['actions'] = actions;
@@ -561,7 +561,7 @@ class AddAppProvider extends ChangeNotifier {
             'name': 'Setup ${appNameController.text}',
           });
         }
-        
+
         // Add actions if they exist
         if (actions.isNotEmpty) {
           data['external_integration']['actions'] = actions;
@@ -734,10 +734,9 @@ class AddAppProvider extends ChangeNotifier {
   }
 
   void setTriggerEvent(String? event) {
-    if (event == null) {
-      return;
-    }
+    // Allow setting to null to clear the selection
     triggerEvent = event;
+    checkValidity();
     notifyListeners();
   }
 
