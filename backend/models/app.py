@@ -55,6 +55,13 @@ class ProactiveNotification(BaseModel):
     scopes: Set[str]
 
 
+class ApiKey(BaseModel):
+    id: str
+    hashed: str
+    label: str
+    created_at: Optional[datetime] = None
+
+
 class App(BaseModel):
     id: str
     name: str
@@ -98,6 +105,7 @@ class App(BaseModel):
     thumbnails: Optional[List[str]] = []  # List of thumbnail IDs
     thumbnail_urls: Optional[List[str]] = []  # List of thumbnail URLs
     is_influencer: Optional[bool] = False
+    api_keys: Optional[List[ApiKey]] = []
 
     def get_rating_avg(self) -> Optional[str]:
         return f'{self.rating_avg:.1f}' if self.rating_avg is not None else None
