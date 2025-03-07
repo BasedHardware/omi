@@ -25,7 +25,7 @@ from models.transcript_segment import TranscriptSegment
 from models.trend import TrendEnum, ceo_options, company_options, software_product_options, hardware_product_options, \
     ai_product_options, TrendType
 from utils.memories.facts import get_prompt_facts
-from utils.prompts import extract_facts_prompt, extract_learnings_prompt
+from utils.prompts import extract_facts_prompt, extract_learnings_prompt, extract_facts_text_content_prompt
 
 llm_mini = ChatOpenAI(model='gpt-4o-mini')
 llm_mini_stream = ChatOpenAI(model='gpt-4o-mini', streaming=True)
@@ -1359,6 +1359,32 @@ def new_facts_extractor(
         return []
 
 
+def extract_facts_from_text(
+        uid: str, text: str, text_source: str, user_name: Optional[str] = None, facts_str: Optional[str] = None
+) -> List[Fact]:
+    """Extract facts from external integration text sources like email, posts, messages"""
+    if user_name is None or facts_str is None:
+        user_name, facts_str = get_prompt_facts(uid)
+
+    if not text or len(text) < 25:  # less than 5 words, probably nothing
+        return []
+
+    try:
+        parser = PydanticOutputParser(pydantic_object=Facts)
+        chain = extract_facts_text_content_prompt | llm_mini | parser
+        response: Facts = chain.invoke({
+            'user_name': user_name,
+            'content': text,
+            'text_source': text_source,
+            'facts_str': facts_str,
+            'format_instructions': parser.get_format_instructions(),
+        })
+        return response.facts
+    except Exception as e:
+        print(f'Error extracting facts from {text_source}: {e}')
+        return []
+
+
 class Learnings(BaseModel):
     result: List[str] = Field(
         min_items=0,
@@ -1941,6 +1967,187 @@ def retrieve_metadata_fields_from_transcript(
         'dates': []
     }
     # 'dates': [date.strftime('%Y-%m-%d') for date in result.dates],
+    for date in result.dates:
+        try:
+            date = datetime.strptime(date, '%Y-%m-%d')
+            if date.year > 2025:
+                continue
+            metadata['dates'].append(date.strftime('%Y-%m-%d'))
+        except Exception as e:
+            print(f'Error parsing date: {e}')
+
+    for p in metadata['people']:
+        add_filter_category_item(uid, 'people', p)
+    for t in metadata['topics']:
+        add_filter_category_item(uid, 'topics', t)
+    for e in metadata['entities']:
+        add_filter_category_item(uid, 'entities', e)
+    for d in metadata['dates']:
+        add_filter_category_item(uid, 'dates', d)
+
+    return metadata
+
+
+def retrieve_metadata_from_email(uid: str, created_at: datetime, email_text: str, tz: str) -> ExtractedInformation:
+    """Extract metadata from email content"""
+    prompt = f'''
+    You will be given the content of an email.
+
+    Your task is to extract the most accurate information from the email in the output object indicated below.
+
+    Focus on identifying:
+    1. People mentioned in the email (sender, recipients, and anyone referenced in the content)
+    2. Topics discussed in the email
+    3. Organizations, products, or other entities mentioned
+    4. Any dates or time references
+
+    For context when extracting dates, today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} in UTC.
+    {tz} is the user's timezone, convert it to UTC and respond in UTC.
+    If the email mentions "today", it means the current day.
+    If the email mentions "tomorrow", it means the next day after today.
+    If the email mentions "yesterday", it means the day before today.
+    If the email mentions "next week", it means the next monday.
+    Do not include dates greater than 2025.
+ 
+    Email Content:
+    ```
+    {email_text}
+    ```
+    '''.replace('    ', '')
+
+    return _process_extracted_metadata(uid, prompt)
+
+
+def retrieve_metadata_from_post(uid: str, created_at: datetime, post_text: str, tz: str, source_spec: str = None) -> ExtractedInformation:
+    """Extract metadata from social media post content"""
+    source_context = f"from {source_spec}" if source_spec else "from a social media platform"
+
+    prompt = f'''
+    You will be given the content of a social media post {source_context}.
+
+    Your task is to extract the most accurate information from the post in the output object indicated below.
+
+    Focus on identifying:
+    1. People mentioned in the post (author, tagged individuals, and anyone referenced)
+    2. Topics discussed in the post
+    3. Organizations, products, locations, or other entities mentioned
+    4. Any dates or time references
+
+    For context when extracting dates, today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} in UTC.
+    {tz} is the user's timezone, convert it to UTC and respond in UTC.
+    If the post mentions "today", it means the current day.
+    If the post mentions "tomorrow", it means the next day after today.
+    If the post mentions "yesterday", it means the day before today.
+    If the post mentions "next week", it means the next monday.
+    Do not include dates greater than 2025.
+
+    Post Content:
+    ```
+    {post_text}
+    ```
+    '''.replace('    ', '')
+
+    return _process_extracted_metadata(uid, prompt)
+
+
+def retrieve_metadata_from_message(uid: str, created_at: datetime, message_text: str, tz: str, source_spec: str = None) -> ExtractedInformation:
+    """Extract metadata from messaging app content"""
+    source_context = f"from {source_spec}" if source_spec else "from a messaging application"
+
+    prompt = f'''
+    You will be given the content of a message or conversation {source_context}.
+
+    Your task is to extract the most accurate information from the message in the output object indicated below.
+
+    Focus on identifying:
+    1. People mentioned in the message (sender, recipients, and anyone referenced)
+    2. Topics discussed in the message
+    3. Organizations, products, locations, or other entities mentioned
+    4. Any dates or time references
+
+    For context when extracting dates, today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} in UTC. 
+    {tz} is the user's timezone, convert it to UTC and respond in UTC.
+    If the message mentions "today", it means the current day.
+    If the message mentions "tomorrow", it means the next day after today.
+    If the message mentions "yesterday", it means the day before today.
+    If the message mentions "next week", it means the next monday.
+    Do not include dates greater than 2025.
+
+    Message Content:
+    ```
+    {message_text}
+    ```
+    '''.replace('    ', '')
+
+    return _process_extracted_metadata(uid, prompt)
+
+
+def retrieve_metadata_from_text(uid: str, created_at: datetime, text: str, tz: str, source_spec: str = None) -> ExtractedInformation:
+    """Extract metadata from generic text content"""
+    source_context = f"from {source_spec}" if source_spec else "from a text document"
+
+    prompt = f'''
+    You will be given the content of a text {source_context}.
+
+    Your task is to extract the most accurate information from the text in the output object indicated below.
+
+    Focus on identifying:
+    1. People mentioned in the text (author, recipients, and anyone referenced)
+    2. Topics discussed in the text
+    3. Organizations, products, locations, or other entities mentioned
+    4. Any dates or time references
+
+    For context when extracting dates, today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} in UTC. 
+    {tz} is the user's timezone, convert it to UTC and respond in UTC.
+    If the text mentions "today", it means the current day.
+    If the text mentions "tomorrow", it means the next day after today.
+    If the text mentions "yesterday", it means the day before today.
+    If the text mentions "next week", it means the next monday.
+    Do not include dates greater than 2025.
+
+    Text Content:
+    ```
+    {text}
+    ```
+    '''.replace('    ', '')
+
+    return _process_extracted_metadata(uid, prompt)
+
+
+def _process_extracted_metadata(uid: str, prompt: str) -> dict:
+    """Process the extracted metadata from any source"""
+    try:
+        result: ExtractedInformation = llm_mini.with_structured_output(ExtractedInformation).invoke(prompt)
+    except Exception as e:
+        print(f'Error extracting metadata: {e}')
+        return {'people': [], 'topics': [], 'entities': [], 'dates': []}
+
+    def normalize_filter(value: str) -> str:
+        # Convert to lowercase and strip whitespace
+        value = value.lower().strip()
+
+        # Remove special characters and extra spaces
+        value = re.sub(r'[^\w\s-]', '', value)
+        value = re.sub(r'\s+', ' ', value)
+
+        # Remove common filler words
+        filler_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to'}
+        value = ' '.join(word for word in value.split() if word not in filler_words)
+
+        # Standardize common variations
+        value = value.replace('artificial intelligence', 'ai')
+        value = value.replace('machine learning', 'ml')
+        value = value.replace('natural language processing', 'nlp')
+
+        return value.strip()
+
+    metadata = {
+        'people': [normalize_filter(p) for p in result.people],
+        'topics': [normalize_filter(t) for t in result.topics],
+        'entities': [normalize_filter(e) for e in result.entities],
+        'dates': []
+    }
+
     for date in result.dates:
         try:
             date = datetime.strptime(date, '%Y-%m-%d')
