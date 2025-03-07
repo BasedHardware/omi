@@ -421,7 +421,7 @@ def get_api_key_by_hash_db(app_id: str, hashed_key: str):
 
 def list_api_keys_db(app_id: str):
     """List all API keys for an app (excluding the hashed values)"""
-    api_keys_ref = db.collection('plugins_data').document(app_id).collection('api_keys').stream()
+    api_keys_ref = db.collection('plugins_data').document(app_id).collection('api_keys').order_by('created_at', direction='DESCENDING').stream()
     return [{k: v for k, v in doc.to_dict().items() if k != 'hashed'} for doc in api_keys_ref]
 
 

@@ -841,7 +841,7 @@ def create_api_key_for_app(app_id: str, uid: str = Depends(auth.get_current_user
     # Return both the raw key (for one-time display to user) and the stored data
     return {
         'id': data['id'],
-        'secret': raw_key,
+        'secret': f'sk_{raw_key}',  # with sk_
         'label': label,
         'created_at': data['created_at']
     }

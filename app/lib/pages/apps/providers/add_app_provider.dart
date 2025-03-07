@@ -68,6 +68,10 @@ class AddAppProvider extends ChangeNotifier {
   bool isGenratingDescription = false;
 
   bool allowPaidApps = false;
+  
+  // API Keys
+  List<Map<String, dynamic>> apiKeys = [];
+  bool isLoadingApiKeys = false;
 
   void setAppProvider(AppProvider provider) {
     appProvider = provider;
@@ -777,5 +781,32 @@ class AddAppProvider extends ChangeNotifier {
 
   void setIsGenratingDescription(bool genrating) {
     isGenratingDescription = genrating;
+  }
+  
+  // API Keys methods
+  Future<void> loadApiKeys(String appId) async {
+    isLoadingApiKeys = true;
+    notifyListeners();
+    
+    try {
+      final keys = await listApiKeysServer(appId);
+      apiKeys = List<Map<String, dynamic>>.from(keys);
+    } catch (e) {
+      print('Error loading API keys: $e');
+    } finally {
+      isLoadingApiKeys = false;
+      notifyListeners();
+    }
+  }
+  
+  Future<Map<String, dynamic>> createApiKey(String appId) async {
+    final result = await createApiKeyServer(appId);
+    await loadApiKeys(appId);
+    return result;
+  }
+  
+  Future<void> deleteApiKey(String appId, String keyId) async {
+    await deleteApiKeyServer(appId, keyId);
+    await loadApiKeys(appId);
   }
 }
