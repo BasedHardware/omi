@@ -69,20 +69,23 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
                 raise HTTPException(status_code=422, detail='Price cannot be a negative value')
             if data.get('payment_plan') is None:
                 raise HTTPException(status_code=422, detail='Payment plan is required')
-    if external_integration := data.get('external_integration'):
-        external_integration['webhook_url'] = external_integration['webhook_url'].strip()
-        if external_integration.get('triggers_on') is None:
-            raise HTTPException(status_code=422, detail='Triggers on is required')
-        # check if setup_instructions_file_path is a single url or a just a string of text
-        if external_integration.get('setup_instructions_file_path'):
-            external_integration['setup_instructions_file_path'] = external_integration[
-                'setup_instructions_file_path'].strip()
-            if external_integration['setup_instructions_file_path'].startswith('http'):
-                external_integration['is_instructions_url'] = True
-            else:
-                external_integration['is_instructions_url'] = False
 
-        # Handle actions field
+    if external_integration := data.get('external_integration'):
+        if external_integration.get('triggers_on') is None and \
+                len(external_integration.get('actions', [])) == 0:
+            raise HTTPException(status_code=422, detail='Triggers on or actions is required')
+        # Trigger on
+        if external_integration.get('triggers_on'):
+            external_integration['webhook_url'] = external_integration['webhook_url'].strip()
+            if external_integration.get('setup_instructions_file_path'):
+                external_integration['setup_instructions_file_path'] = external_integration[
+                    'setup_instructions_file_path'].strip()
+                if external_integration['setup_instructions_file_path'].startswith('http'):
+                    external_integration['is_instructions_url'] = True
+                else:
+                    external_integration['is_instructions_url'] = False
+
+        # Acitons
         if actions := external_integration.get('actions'):
             for action in actions:
                 if not action.get('action'):
@@ -115,7 +118,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     return {'status': 'ok', 'app_id': app.id}
 
 
-@router.post('/v1/personas', tags=['v1'])
+@ router.post('/v1/personas', tags=['v1'])
 async def create_persona(persona_data: str = Form(...), file: UploadFile = File(...),
                          uid=Depends(auth.get_current_user_uid)):
     data = json.loads(persona_data)
@@ -153,7 +156,7 @@ async def create_persona(persona_data: str = Form(...), file: UploadFile = File(
     return {'status': 'ok', 'app_id': data['id'], 'username': data['username']}
 
 
-@router.patch('/v1/personas/{persona_id}', tags=['v1'])
+@ router.patch('/v1/personas/{persona_id}', tags=['v1'])
 async def update_persona(persona_id: str, persona_data: str = Form(...), file: UploadFile = File(None),
                          uid=Depends(auth.get_current_user_uid)):
     data = json.loads(persona_data)
@@ -192,7 +195,7 @@ async def update_persona(persona_id: str, persona_data: str = Form(...), file: U
     return {'status': 'ok', 'app_id': persona_id, 'username': data['username']}
 
 
-@router.get('/v1/personas', tags=['v1'])
+@ router.get('/v1/personas', tags=['v1'])
 def get_persona_details(uid: str = Depends(auth.get_current_user_uid)):
     app = get_persona_by_uid(uid)
     print(app)
@@ -207,7 +210,7 @@ def get_persona_details(uid: str = Depends(auth.get_current_user_uid)):
 
     return app
 
-@router.post('/v1/user/persona', tags=['v1'])
+@ router.post('/v1/user/persona', tags=['v1'])
 async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_uid)):
     """Get or create a user persona.
 
@@ -258,20 +261,20 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
     return persona_data
 
 
-@router.get('/v1/apps/check-username', tags=['v1'])
+@ router.get('/v1/apps/check-username', tags=['v1'])
 def check_username(username: str, uid: str = Depends(auth.get_current_user_uid)):
     is_taken = is_username_taken(username)
     return {'is_taken': is_taken}
 
 
-@router.get('/v1/personas/generate-username', tags=['v1'])
+@ router.get('/v1/personas/generate-username', tags=['v1'])
 def generate_username(handle: str, uid: str = Depends(auth.get_current_user_uid)):
     username = handle.replace(' ', '')
     username = increment_username(username)
     return {'username': username}
 
 
-@router.patch('/v1/apps/{app_id}', tags=['v1'])
+@ router.patch('/v1/apps/{app_id}', tags=['v1'])
 def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(None),
                uid=Depends(auth.get_current_user_uid)):
     data = json.loads(app_data)
@@ -314,7 +317,7 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
     return {'status': 'ok'}
 
 
-@router.delete('/v1/apps/{app_id}', tags=['v1'])
+@ router.delete('/v1/apps/{app_id}', tags=['v1'])
 def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     plugin = get_available_app_by_id(app_id, uid)
     if not plugin:
@@ -328,7 +331,7 @@ def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     return {'status': 'ok'}
 
 
-@router.get('/v1/apps/{app_id}', tags=['v1'])
+@ router.get('/v1/apps/{app_id}', tags=['v1'])
 def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id_with_reviews(app_id, uid)
     app = App(**app) if app else None
@@ -357,7 +360,7 @@ def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     return app
 
 
-@router.post('/v1/apps/review', tags=['v1'])
+@ router.post('/v1/apps/review', tags=['v1'])
 def review_app(app_id: str, data: dict, uid: str = Depends(auth.get_current_user_uid)):
     if 'score' not in data:
         raise HTTPException(status_code=422, detail='Score is required')
@@ -385,7 +388,7 @@ def review_app(app_id: str, data: dict, uid: str = Depends(auth.get_current_user
     return {'status': 'ok'}
 
 
-@router.patch('/v1/apps/{app_id}/review', tags=['v1'])
+@ router.patch('/v1/apps/{app_id}/review', tags=['v1'])
 def update_app_review(app_id: str, data: dict, uid: str = Depends(auth.get_current_user_uid)):
     if 'score' not in data:
         raise HTTPException(status_code=422, detail='Score is required')
@@ -416,7 +419,7 @@ def update_app_review(app_id: str, data: dict, uid: str = Depends(auth.get_curre
     return {'status': 'ok'}
 
 
-@router.patch('/v1/apps/{app_id}/review/reply', tags=['v1'])
+@ router.patch('/v1/apps/{app_id}/review/reply', tags=['v1'])
 def reply_to_review(app_id: str, data: dict, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
     app = App(**app) if app else None
@@ -439,7 +442,7 @@ def reply_to_review(app_id: str, data: dict, uid: str = Depends(auth.get_current
     return {'status': 'ok'}
 
 
-@router.get('/v1/apps/{app_id}/reviews', tags=['v1'])
+@ router.get('/v1/apps/{app_id}/reviews', tags=['v1'])
 def app_reviews(app_id: str):
     reviews = get_app_reviews(app_id)
     reviews = [
@@ -448,7 +451,7 @@ def app_reviews(app_id: str):
     return reviews
 
 
-@router.patch('/v1/apps/{app_id}/change-visibility', tags=['v1'])
+@ router.patch('/v1/apps/{app_id}/change-visibility', tags=['v1'])
 def change_app_visibility(app_id: str, private: bool, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
     app = App(**app) if app else None
@@ -461,7 +464,7 @@ def change_app_visibility(app_id: str, private: bool, uid: str = Depends(auth.ge
     return {'status': 'ok'}
 
 
-@router.get('/v1/app/proactive-notification-scopes', tags=['v1'])
+@ router.get('/v1/app/proactive-notification-scopes', tags=['v1'])
 def get_notification_scopes():
     return [
         {'title': 'User Name', 'id': 'user_name'},
@@ -471,7 +474,7 @@ def get_notification_scopes():
     ]
 
 
-@router.get('/v1/app-capabilities', tags=['v1'])
+@ router.get('/v1/app-capabilities', tags=['v1'])
 def get_plugin_capabilities():
     return [
         {'title': 'Chat', 'id': 'chat'},
@@ -493,14 +496,14 @@ def get_plugin_capabilities():
 
 
 # @deprecated
-@router.get('/v1/app/payment-plans', tags=['v1'])
+@ router.get('/v1/app/payment-plans', tags=['v1'])
 def get_payment_plans_v1():
     return [
         {'title': 'Monthly Recurring', 'id': 'monthly_recurring'},
     ]
 
 
-@router.get('/v1/app/plans', tags=['v1'])
+@ router.get('/v1/app/plans', tags=['v1'])
 def get_payment_plans(uid: str = Depends(auth.get_current_user_uid)):
     if not uid or len(uid) == 0 or not is_permit_payment_plan_get(uid):
         return []
@@ -509,7 +512,7 @@ def get_payment_plans(uid: str = Depends(auth.get_current_user_uid)):
     ]
 
 
-@router.post('/v1/app/generate-description', tags=['v1'])
+@ router.post('/v1/app/generate-description', tags=['v1'])
 def generate_description_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
     if data['name'] == '':
         raise HTTPException(status_code=422, detail='App Name is required')
@@ -525,7 +528,7 @@ def generate_description_endpoint(data: dict, uid: str = Depends(auth.get_curren
 # ********************** SOCIAL ************************
 # ******************************************************
 
-@router.get('/v1/personas/twitter/profile', tags=['v1'])
+@ router.get('/v1/personas/twitter/profile', tags=['v1'])
 async def get_twitter_profile_data(handle: str, uid: str = Depends(auth.get_current_user_uid)):
     if handle.startswith('@'):
         handle = handle[1:]
@@ -547,7 +550,7 @@ async def get_twitter_profile_data(handle: str, uid: str = Depends(auth.get_curr
     return res
 
 
-@router.get('/v1/personas/twitter/verify-ownership', tags=['v1'])
+@ router.get('/v1/personas/twitter/verify-ownership', tags=['v1'])
 async def verify_twitter_ownership_tweet(
         username: str,
         handle: str,
@@ -583,7 +586,7 @@ async def verify_twitter_ownership_tweet(
     return res
 
 
-@router.get('/v1/personas/twitter/initial-message', tags=['v1'])
+@ router.get('/v1/personas/twitter/initial-message', tags=['v1'])
 async def get_twitter_initial_message(username: str, uid: str = Depends(auth.get_current_user_uid)):
     persona = get_persona_by_username_db(username)
     if persona:
@@ -592,7 +595,7 @@ async def get_twitter_initial_message(username: str, uid: str = Depends(auth.get
     return {'message': ''}
 
 
-@router.post('/v1/apps/migrate-owner', tags=['v1'])
+@ router.post('/v1/apps/migrate-owner', tags=['v1'])
 async def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid)):
     # Migrate app ownership in the database
     migrate_app_owner_id_db(uid, old_id)
@@ -630,7 +633,7 @@ async def update_omi_persona_connected_accounts(uid: str):
 # **************** ENABLE/DISABLE APPS *****************
 # ******************************************************
 
-@router.post('/v1/apps/enable')
+@ router.post('/v1/apps/enable')
 def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
     app = App(**app) if app else None
@@ -655,7 +658,7 @@ def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_ui
     return {'status': 'ok'}
 
 
-@router.post('/v1/apps/disable')
+@ router.post('/v1/apps/disable')
 def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
     app = App(**app) if app else None
@@ -674,7 +677,7 @@ def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_u
 # ******************* TEAM ENDPOINTS *******************
 # ******************************************************
 
-@router.post('/v1/apps/tester', tags=['v1'])
+@ router.post('/v1/apps/tester', tags=['v1'])
 def add_new_tester(data: dict, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -687,7 +690,7 @@ def add_new_tester(data: dict, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.post('/v1/apps/tester/access', tags=['v1'])
+@ router.post('/v1/apps/tester/access', tags=['v1'])
 def add_app_access_tester(data: dict, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -699,7 +702,7 @@ def add_app_access_tester(data: dict, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.delete('/v1/apps/tester/access', tags=['v1'])
+@ router.delete('/v1/apps/tester/access', tags=['v1'])
 def remove_app_access_tester(data: dict, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -711,14 +714,14 @@ def remove_app_access_tester(data: dict, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.get('/v1/apps/tester/check', tags=['v1'])
+@ router.get('/v1/apps/tester/check', tags=['v1'])
 def check_is_tester(uid: str = Depends(auth.get_current_user_uid)):
     if is_tester(uid):
         return {'is_tester': True}
     return {'is_tester': False}
 
 
-@router.get('/v1/apps/public/unapproved', tags=['v1'])
+@ router.get('/v1/apps/public/unapproved', tags=['v1'])
 def get_unapproved_public_apps(secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -726,7 +729,7 @@ def get_unapproved_public_apps(secret_key: str = Header(...)):
     return apps
 
 
-@router.post('/v1/apps/{app_id}/approve', tags=['v1'])
+@ router.post('/v1/apps/{app_id}/approve', tags=['v1'])
 def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -740,7 +743,7 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.post('/v1/apps/{app_id}/reject', tags=['v1'])
+@ router.post('/v1/apps/{app_id}/reject', tags=['v1'])
 def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -755,8 +758,8 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.delete('/v1/personas/{persona_id}', tags=['v1'])
-@router.post('/v1/app/thumbnails', tags=['v1'])
+@ router.delete('/v1/personas/{persona_id}', tags=['v1'])
+@ router.post('/v1/app/thumbnails', tags=['v1'])
 async def upload_app_thumbnail_endpoint(
         file: UploadFile = File(...),
         uid: str = Depends(auth.get_current_user_uid)
@@ -804,7 +807,7 @@ def delete_persona(persona_id: str, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.get('/v1/personas/{persona_id}', tags=['v1'])
+@ router.get('/v1/personas/{persona_id}', tags=['v1'])
 def get_personas(persona_id: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')

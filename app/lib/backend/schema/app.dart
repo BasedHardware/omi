@@ -99,21 +99,21 @@ class Action {
 }
 
 class ExternalIntegration {
-  String triggersOn;
-  String webhookUrl;
+  String? triggersOn;
+  String? webhookUrl;
   String? setupCompletedUrl;
-  String setupInstructionsFilePath;
-  bool isInstructionsUrl;
-  List<AuthStep> authSteps;
+  String? setupInstructionsFilePath;
+  bool? isInstructionsUrl;
+  List<AuthStep> authSteps = [];
   String? appHomeUrl;
   List<Action>? actions;
 
   ExternalIntegration({
-    required this.triggersOn,
-    required this.webhookUrl,
-    required this.setupCompletedUrl,
-    required this.setupInstructionsFilePath,
-    required this.isInstructionsUrl,
+    this.triggersOn,
+    this.webhookUrl,
+    this.setupCompletedUrl,
+    this.setupInstructionsFilePath,
+    this.isInstructionsUrl,
     this.authSteps = const [],
     this.appHomeUrl,
     this.actions,
@@ -130,9 +130,7 @@ class ExternalIntegration {
       authSteps: json['auth_steps'] == null
           ? []
           : (json['auth_steps'] ?? []).map<AuthStep>((e) => AuthStep.fromJson(e)).toList(),
-      actions: json['actions'] == null
-          ? null
-          : (json['actions'] ?? []).map<Action>((e) => Action.fromJson(e)).toList(),
+      actions: json['actions'] == null ? null : (json['actions'] ?? []).map<Action>((e) => Action.fromJson(e)).toList(),
     );
   }
 
@@ -452,7 +450,7 @@ class AppCapability {
   List<TriggerEvent> triggerEvents = [];
   List<NotificationScope> notificationScopes = [];
   List<CapacityAction> actions = [];
-  
+
   AppCapability({
     required this.title,
     required this.id,
@@ -494,7 +492,7 @@ class CapacityAction {
   String title;
   String id;
   String? docUrl;
-  
+
   CapacityAction({
     required this.title,
     required this.id,

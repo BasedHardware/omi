@@ -182,7 +182,7 @@ def summarize_open_glass(photos: List[MemoryPhoto]) -> Structured:
 
 
 def get_email_structure(text: str, started_at: datetime, language_code: str, tz: str) -> Structured:
-    prompt_text = f'''
+    prompt_text = '''
     You are an expert email analyzer. Your task is to analyze the email content and provide structure and clarity.
     The email language is {language_code}. Use the same language {language_code} for your response.
 
@@ -193,9 +193,8 @@ def get_email_structure(text: str, started_at: datetime, language_code: str, tz:
     For Calendar Events, include a list of events extracted from the email, that the user must have on their calendar. For date context, this email was received on {started_at}. {tz} is the user's timezone, convert it to UTC and respond in UTC.
 
     Email Content: ```{text}```
-    
-    {parser.get_format_instructions()}
-    '''.replace('    ', '').strip()
+
+    {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
     chain = prompt | ChatOpenAI(model='gpt-4o') | parser
@@ -204,6 +203,8 @@ def get_email_structure(text: str, started_at: datetime, language_code: str, tz:
         'language_code': language_code,
         'started_at': started_at.isoformat(),
         'tz': tz,
+        'text': text,
+        'format_instructions': parser.get_format_instructions(),
     })
 
     for event in (response.events or []):
@@ -213,7 +214,7 @@ def get_email_structure(text: str, started_at: datetime, language_code: str, tz:
     return response
 
 def get_post_structure(text: str, started_at: datetime, language_code: str, tz: str, text_source_spec: str = None) -> Structured:
-    prompt_text = f'''
+    prompt_text = '''
     You are an expert social media post analyzer. Your task is to analyze the post content and provide structure and clarity.
     The post language is {language_code}. Use the same language {language_code} for your response.
 
@@ -224,10 +225,9 @@ def get_post_structure(text: str, started_at: datetime, language_code: str, tz: 
     For Calendar Events, include any events mentioned in the post that the user should be aware of. For date context, this post was created on {started_at}. {tz} is the user's timezone, convert it to UTC and respond in UTC.
 
     Post Content: ```{text}```
-    Post Source: {text_source_spec if text_source_spec else 'Social Media'}
-    
-    {parser.get_format_instructions()}
-    '''.replace('    ', '').strip()
+    Post Source: {text_source_spec}
+
+    {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
     chain = prompt | ChatOpenAI(model='gpt-4o') | parser
@@ -236,6 +236,9 @@ def get_post_structure(text: str, started_at: datetime, language_code: str, tz: 
         'language_code': language_code,
         'started_at': started_at.isoformat(),
         'tz': tz,
+        'text': text,
+        'text_source_spec': text_source_spec if text_source_spec else 'Social Media',
+        'format_instructions': parser.get_format_instructions(),
     })
 
     for event in (response.events or []):
@@ -245,7 +248,7 @@ def get_post_structure(text: str, started_at: datetime, language_code: str, tz: 
     return response
 
 def get_message_structure(text: str, started_at: datetime, language_code: str, tz: str, text_source_spec: str = None) -> Structured:
-    prompt_text = f'''
+    prompt_text = '''
     You are an expert message analyzer. Your task is to analyze the message content and provide structure and clarity.
     The message language is {language_code}. Use the same language {language_code} for your response.
 
@@ -256,10 +259,9 @@ def get_message_structure(text: str, started_at: datetime, language_code: str, t
     For Calendar Events, include any events or meetings mentioned in the message. For date context, this message was sent on {started_at}. {tz} is the user's timezone, convert it to UTC and respond in UTC.
 
     Message Content: ```{text}```
-    Message Source: {text_source_spec if text_source_spec else 'Messaging App'}
+    Message Source: {text_source_spec}
     
-    {parser.get_format_instructions()}
-    '''.replace('    ', '').strip()
+    {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
     chain = prompt | ChatOpenAI(model='gpt-4o') | parser
@@ -268,6 +270,9 @@ def get_message_structure(text: str, started_at: datetime, language_code: str, t
         'language_code': language_code,
         'started_at': started_at.isoformat(),
         'tz': tz,
+        'text': text,
+        'text_source_spec': text_source_spec if text_source_spec else 'Messaging App',
+        'format_instructions': parser.get_format_instructions(),
     })
 
     for event in (response.events or []):
@@ -1374,7 +1379,7 @@ def extract_facts_from_text(
         chain = extract_facts_text_content_prompt | llm_mini | parser
         response: Facts = chain.invoke({
             'user_name': user_name,
-            'content': text,
+            'text_content': text,
             'text_source': text_source,
             'facts_str': facts_str,
             'format_instructions': parser.get_format_instructions(),
