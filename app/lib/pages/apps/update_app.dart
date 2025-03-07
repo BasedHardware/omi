@@ -335,7 +335,6 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                               ),
                             ],
                           ),
-                        const ActionFieldsWidget(),
                         const ExternalTriggerFieldsWidget(),
                         if (provider.isCapabilitySelectedById('proactive_notification'))
                           Column(
