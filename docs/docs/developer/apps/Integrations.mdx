@@ -188,6 +188,41 @@ The **auth URL** is optional as well and is utilized by users to setup your app.
 
 The setup instructions can be either a link to instructions or text instructions for users on how to setup your app.
 
+### Webhook Authentication
+
+When your app makes webhook requests to Omi's notification endpoint, you need to authenticate your requests using your app secret:
+
+1. Each app has a unique secret that is generated when the app is created
+2. The secret is displayed in the app details page (only visible to app owners)
+3. You can revoke and generate a new secret at any time
+4. When calling Omi's notification webhook (`/v1/integrations/notification`), include your app's secret in the `X-App-Secret` header
+5. Omi will validate this header matches your app's secret before processing the notification
+
+Example notification webhook request:
+```python
+import requests
+
+def send_notification(user_id, message):
+    headers = {
+        'X-App-Secret': YOUR_APP_SECRET
+    }
+    
+    data = {
+        'uid': user_id,
+        'aid': YOUR_APP_ID,
+        'message': message
+    }
+    
+    response = requests.post(
+        'https://api.omi.ai/v1/integrations/notification',
+        headers=headers,
+        json=data
+    )
+    
+    if response.status_code != 200:
+        raise Exception('Failed to send notification')
+```
+
 ### Setup Instructions Documentation
 
 When writing your setup instructions, consider including:
