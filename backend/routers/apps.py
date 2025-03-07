@@ -10,7 +10,8 @@ from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, H
 from database.apps import change_app_approval_status, get_unapproved_public_apps_db, \
     add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db, \
     get_personas_by_username_db, get_persona_by_id_db, delete_persona_db, get_persona_by_twitter_handle_db, \
-    get_persona_by_username_db, migrate_app_owner_id_db, get_user_persona_by_uid, get_omi_persona_apps_by_uid_db
+    get_persona_by_username_db, migrate_app_owner_id_db, get_user_persona_by_uid, get_omi_persona_apps_by_uid_db, \
+    create_api_key_db, list_api_keys_db, delete_api_key_db
 from database.auth import get_user_from_uid
 from database.notifications import get_token_only
 from database.redis_db import delete_generic_cache, get_specific_user_review, increase_app_installs_count, \
@@ -19,7 +20,7 @@ from utils.apps import get_available_apps, get_available_app_by_id, get_approved
     get_available_app_by_id_with_reviews, set_app_review, get_app_reviews, add_tester, is_tester, \
     add_app_access_for_tester, remove_app_access_for_tester, upsert_app_payment_link, get_is_user_paid_app, \
     is_permit_payment_plan_get, generate_persona_prompt, generate_persona_desc, get_persona_by_uid, \
-    increment_username
+    increment_username, generate_api_key
 
 from utils.llm import generate_description, generate_persona_intro_message
 
@@ -816,3 +817,58 @@ def get_personas(persona_id: str, secret_key: str = Header(...)):
         raise HTTPException(status_code=404, detail='Persona not found')
     print(persona)
     return persona
+
+
+@ router.post('/v1/apps/{app_id}/keys', tags=['v1'])
+def create_api_key_for_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    app = get_available_app_by_id(app_id, uid)
+    if not app:
+        raise HTTPException(status_code=404, detail='App not found')
+
+    if app.get('uid') != uid:
+        raise HTTPException(status_code=403, detail='You are not authorized to create API keys for this app')
+
+    raw_key, hashed_key, label = generate_api_key()
+
+    data = {
+        'id': str(ULID()),
+        'hashed': hashed_key,
+        'label': label,
+        'created_at': datetime.now(timezone.utc)
+    }
+    create_api_key_db(app_id, data)
+
+    # Return both the raw key (for one-time display to user) and the stored data
+    return {
+        'id': data['id'],
+        'secret': raw_key,
+        'label': label,
+        'created_at': data['created_at']
+    }
+
+
+@ router.get('/v1/apps/{app_id}/keys', tags=['v1'])
+def list_api_keys(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    app = get_available_app_by_id(app_id, uid)
+    if not app:
+        raise HTTPException(status_code=404, detail='App not found')
+
+    if app.get('uid') != uid:
+        raise HTTPException(status_code=403, detail='You are not authorized to view API keys for this app')
+
+    keys = list_api_keys_db(app_id)
+    return keys
+
+
+@ router.delete('/v1/apps/{app_id}/keys/{key_id}', tags=['v1'])
+def delete_api_key(app_id: str, key_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    app = get_available_app_by_id(app_id, uid)
+    if not app:
+        raise HTTPException(status_code=404, detail='App not found')
+
+    if app.get('uid') != uid:
+        raise HTTPException(status_code=403, detail='You are not authorized to delete API keys for this app')
+
+    delete_api_key_db(app_id, key_id)
+
+    return {'status': 'ok', 'message': 'API key deleted'}
