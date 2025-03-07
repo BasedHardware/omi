@@ -1,12 +1,13 @@
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Header, HTTPException, Depends
 from fastapi import Request
 
 import database.apps as apps_db
 import utils.apps as apps_utils
+from utils.apps import verify_api_key
 import database.memories as memories_db
 import database.redis_db as redis_db
 import models.integrations as integration_models
@@ -17,14 +18,23 @@ from utils.memories.location import get_google_maps_location
 router = APIRouter()
 
 
-@router.post('/v2/integration/{app_id}/memories', response_model=integration_models.EmptyResponse,
+@router.post('/v2/integrations/{app_id}/user/memories', response_model=integration_models.EmptyResponse,
              tags=['integration', 'memories'])
 async def create_memory_via_integration(
     request: Request,
     app_id: str,
     create_memory: memory_models.ExternalIntegrationCreateMemory,
     uid: str,
+    authorization: Optional[str] = Header(None)
 ):
+    # Verify API key from Authorization header
+    if not authorization or not authorization.startswith('Bearer '):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'")
+
+    api_key = authorization.replace('Bearer ', '')
+    if not verify_api_key(app_id, api_key):
+        raise HTTPException(status_code=403, detail="Invalid API key")
+
     # Verify if the app exists
     app = apps_db.get_app_by_id_db(app_id)
     if not app:
