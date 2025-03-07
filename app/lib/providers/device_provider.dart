@@ -1,20 +1,18 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/env/env.dart';
 import 'package:friend_private/http/api/device.dart';
-import 'package:friend_private/utils/device.dart';
-import 'package:version/version.dart';
-import 'package:package_info_plus/package_info_plus.dart';
+import 'package:friend_private/main.dart';
+import 'package:friend_private/pages/home/firmware_update.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/services/devices.dart';
 import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/device.dart';
+import 'package:friend_private/widgets/confirmation_dialog.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
 class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption {
@@ -33,6 +31,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   bool _havingNewFirmware = false;
   bool get havingNewFirmware => _havingNewFirmware && pairedDevice != null && isConnected;
+
+  // Current and latest firmware versions for UI display
+  String get currentFirmwareVersion => pairedDevice?.firmwareRevision ?? 'Unknown';
+  String _latestFirmwareVersion = '';
+  String get latestFirmwareVersion => _latestFirmwareVersion;
 
   Timer? _disconnectNotificationTimer;
 
@@ -257,9 +260,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     });
   }
 
-  Future<(String, bool)> shouldUpdateFirmware() async {
+  Future<(String, bool, String)> shouldUpdateFirmware() async {
     if (pairedDevice == null || connectedDevice == null) {
-      return ('No paird device is connected', false);
+      return ('No paired device is connected', false, '');
     }
 
     var device = pairedDevice!;
@@ -298,7 +301,22 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     notifyListeners();
 
     // Check firmware updates
-    checkFirmwareUpdates();
+    _checkFirmwareUpdates();
+  }
+
+  void _checkFirmwareUpdates() async {
+    await checkFirmwareUpdates();
+
+    // Show firmware update dialog if needed
+    if (_havingNewFirmware) {
+      // Use a small delay to ensure the UI is ready
+      Future.delayed(const Duration(milliseconds: 500), () {
+        final context = MyApp.navigatorKey.currentContext;
+        if (context != null) {
+          showFirmwareUpdateDialog(context);
+        }
+      });
+    }
   }
 
   Future checkFirmwareUpdates() async {
@@ -308,10 +326,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     while (retryCount < maxRetries) {
       try {
-        var (_, hasUpdate) = await shouldUpdateFirmware();
+        var (message, hasUpdate, version) = await shouldUpdateFirmware();
         _havingNewFirmware = hasUpdate;
+        _latestFirmwareVersion = version.isNotEmpty ? version : message;
         notifyListeners();
-        break; // Success, exit loop
+        return hasUpdate; // Return whether there's an update
       } catch (e) {
         retryCount++;
         debugPrint('Error checking firmware update (attempt $retryCount): $e');
@@ -326,6 +345,49 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         await Future.delayed(retryDelay);
       }
     }
+    return;
+  }
+
+  void showFirmwareUpdateDialog(BuildContext context) {
+    if (!_havingNewFirmware || !SharedPreferencesUtil().showFirmwareUpdateDialog) {
+      return;
+    }
+
+    bool dontShowAgain = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => ConfirmationDialog(
+        title: 'Firmware Update Available',
+        description:
+            'A new firmware update (${_latestFirmwareVersion}) is available for your Omi device. Would you like to update now?',
+        checkboxText: "Don't show me again",
+        checkboxValue: dontShowAgain,
+        onCheckboxChanged: (value) {
+          dontShowAgain = value ?? false;
+        },
+        confirmText: 'Update',
+        cancelText: 'Later',
+        onConfirm: () {
+          if (dontShowAgain) {
+            SharedPreferencesUtil().showFirmwareUpdateDialog = false;
+          }
+          Navigator.of(context).pop();
+          // Navigate to firmware update page
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => FirmwareUpdate(device: pairedDevice),
+            ),
+          );
+        },
+        onCancel: () {
+          if (dontShowAgain) {
+            SharedPreferencesUtil().showFirmwareUpdateDialog = false;
+          }
+          Navigator.of(context).pop();
+        },
+      ),
+    );
   }
 
   Future setIsDeviceV2Connected() async {

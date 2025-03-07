@@ -55,6 +55,9 @@ class CaptureProvider extends ChangeNotifier
 
   get internetStatus => _internetStatus;
 
+  List<ServerMessageEvent> _transcriptionServiceStatuses = [];
+  List<ServerMessageEvent> get transcriptionServiceStatuses => _transcriptionServiceStatuses;
+
   CaptureProvider() {
     _internetStatusListener = PureCore().internetConnection.onStatusChange.listen((InternetStatus status) {
       onInternetSatusChanged(status);
@@ -456,6 +459,7 @@ class CaptureProvider extends ChangeNotifier
 
   @override
   void onClosed() {
+    _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
     debugPrint('[Provider] Socket is closed');
 
@@ -486,6 +490,7 @@ class CaptureProvider extends ChangeNotifier
 
   @override
   void onError(Object err) {
+    _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
     debugPrint('err: $err');
     notifyListeners();
@@ -530,6 +535,26 @@ class CaptureProvider extends ChangeNotifier
       _processConversationCreated(event.conversation, event.messages ?? []);
       return;
     }
+
+    if (event.type == MessageEventType.lastConversation) {
+      if (event.memoryId == null) {
+        debugPrint("Memory ID not received in last_memory event. Content is: $event");
+        return;
+      }
+      _handleLastConvoEvent(event.memoryId!);
+      return;
+    }
+
+    if (event.type == MessageEventType.serviceStatus) {
+      if (event.status == null) {
+        return;
+      }
+
+      _transcriptionServiceStatuses.add(event);
+      _transcriptionServiceStatuses = List.from(_transcriptionServiceStatuses);
+      notifyListeners();
+      return;
+    }
   }
 
   Future<void> forceProcessingCurrentConversation() async {
@@ -557,6 +582,21 @@ class CaptureProvider extends ChangeNotifier
     if (conversation == null) return;
     conversationProvider?.upsertConversation(conversation);
     MixpanelManager().conversationCreated(conversation);
+  }
+
+  Future<void> _handleLastConvoEvent(String memoryId) async {
+    bool conversationExists =
+        conversationProvider?.conversations.any((conversation) => conversation.id == memoryId) ?? false;
+    if (conversationExists) {
+      return;
+    }
+    ServerConversation? conversation = await getConversationById(memoryId);
+    if (conversation != null) {
+      debugPrint("Adding last conversation to conversations: $memoryId");
+      conversationProvider?.upsertConversation(conversation);
+    } else {
+      debugPrint("Failed to fetch last conversation: $memoryId");
+    }
   }
 
   @override

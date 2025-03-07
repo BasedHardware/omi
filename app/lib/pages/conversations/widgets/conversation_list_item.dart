@@ -1,13 +1,17 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:friend_private/pages/conversation_detail/page.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
+import 'package:friend_private/widgets/confirmation_dialog.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
@@ -98,11 +102,49 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   color: Colors.red,
                   child: const Icon(Icons.delete, color: Colors.white),
                 ),
-                onDismissed: (direction) {
+                confirmDismiss: (direction) {
+                  bool showDeleteConfirmation = SharedPreferencesUtil().showConversationDeleteConfirmation;
+                  if (!showDeleteConfirmation) return Future.value(true);
+                  final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                  if (connectivityProvider.isConnected) {
+                    return showDialog(
+                        context: context,
+                        builder: (context) {
+                          return StatefulBuilder(
+                            builder: (context, setState) {
+                              return ConfirmationDialog(
+                                title: "Delete Conversation?",
+                                description:
+                                    "Are you sure you want to delete this conversation? This action cannot be undone.",
+                                checkboxValue: !showDeleteConfirmation,
+                                checkboxText: "Don't ask me again",
+                                onCheckboxChanged: (value) {
+                                  setState(() {
+                                    showDeleteConfirmation = !value;
+                                  });
+                                },
+                                onCancel: () => Navigator.of(context).pop(),
+                                onConfirm: () {
+                                  SharedPreferencesUtil().showConversationDeleteConfirmation = showDeleteConfirmation;
+                                  return Navigator.pop(context, true);
+                                },
+                              );
+                            },
+                          );
+                        });
+                  } else {
+                    return showDialog(
+                      builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context),
+                          'Unable to Delete Conversation', 'Please check your internet connection and try again.',
+                          singleButton: true, okButtonText: 'OK'),
+                      context: context,
+                    );
+                  }
+                },
+                onDismissed: (direction) async {
                   var conversation = widget.conversation;
                   var conversationIdx = widget.conversationIdx;
                   provider.deleteConversationLocally(conversation, conversationIdx, widget.date);
-                  provider.deleteConversationOnServer(conversation.id);
                 },
                 child: Padding(
                   padding: const EdgeInsetsDirectional.all(16),
