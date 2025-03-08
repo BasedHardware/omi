@@ -93,55 +93,18 @@ The request body should be a JSON object with the following structure:
 }
 ```
 
-The API supports two different formats for creating memories:
-
-1. **Text-based format** (shown above): Provide a single text field with the content
-2. **Transcript segments format**: Provide structured conversation segments
-
-For the transcript segments format, use this structure instead:
-
-```json
-{
-  "started_at": "2024-07-21T22:34:43.384323+00:00",
-  "finished_at": "2024-07-21T22:35:43.384323+00:00",
-  "transcript_segments": [
-    {
-      "text": "Segment text",
-      "speaker": "SPEAKER_00",
-      "speakerId": 0,
-      "is_user": false,
-      "start": 10.0,
-      "end": 20.0
-    }
-    // More segments...
-  ],
-  "language": "en",
-  "geolocation": {
-    "latitude": 37.7749,
-    "longitude": -122.4194
-  }
-}
-```
-
 #### Required Fields:
 
-For text-based format:
 - `text`: The full text content of the memory
-
-For transcript segments format:
-- `transcript_segments`: Array of conversation segments with at least one segment
 
 #### Optional Fields:
 
-Common optional fields:
 - `started_at`: When the conversation/event started (ISO 8601 format) - defaults to current time if not provided
 - `finished_at`: When the conversation/event ended (ISO 8601 format) - defaults to started_at + 5 minutes if not provided
 - `language`: Language code (e.g., "en" for English) - defaults to "en" if not provided
 - `geolocation`: Location data for the memory
   - `latitude`: Latitude coordinate
   - `longitude`: Longitude coordinate
-
-Text-based format specific:
 - `text_source`: Source of the text content (options: "audio_transcript", "email", "post", "message", "other_text") - defaults to "audio_transcript"
 - `text_source_spec`: Additional specification about the source (optional)
 
@@ -181,6 +144,8 @@ Common error responses include:
 Here are examples showing different ways to create memories using various text sources:
 
 ### Example 1: Email Memory
+
+#### Python Example
 
 ```python
 import requests
@@ -241,7 +206,25 @@ else:
     print(response.text)
 ```
 
+#### cURL Example
+
+```bash
+curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/memories?uid=user_123" \
+  -H "Authorization: Bearer sk_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "started_at": "2024-07-22T12:00:00.000Z",
+    "finished_at": "2024-07-22T12:05:00.000Z",
+    "language": "en",
+    "text": "From: sarah@example.com\nTo: me@example.com\nSubject: Project Update - Q3 Planning\n\nHi there,\n\nJust following up on our discussion yesterday about the Q3 planning. I'\''ve drafted the initial roadmap and would appreciate your feedback before the team meeting on Friday.\n\nKey points to consider:\n1. Budget allocation for the new marketing campaign\n2. Timeline for the product launch in August\n3. Resource allocation for the customer research initiative\n\nLet me know your thoughts by Thursday EOD if possible.\n\nBest regards,\nSarah Johnson\nProduct Manager",
+    "text_source": "email",
+    "text_source_spec": "work_email"
+  }'
+```
+
 ### Example 2: Social Media Post Memory
+
+#### Python Example
 
 ```python
 import requests
@@ -292,7 +275,29 @@ else:
     print(response.text)
 ```
 
+#### cURL Example
+
+```bash
+curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/memories?uid=user_123" \
+  -H "Authorization: Bearer sk_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "started_at": "2024-07-22T12:00:00.000Z",
+    "finished_at": "2024-07-22T12:05:00.000Z",
+    "language": "en",
+    "text": "Just announced our new AI research paper at #AIConf2024! Our team has developed a novel approach to multimodal learning that improves accuracy by 23% while reducing computational requirements.\n\nThe paper \"Efficient Multimodal Learning in Resource-Constrained Environments\" will be published next month in the Journal of AI Research.\n\nSo proud of everyone who contributed to this breakthrough! #ArtificialIntelligence #MachineLearning #Research",
+    "text_source": "post",
+    "text_source_spec": "twitter",
+    "geolocation": {
+        "latitude": 37.7749,
+        "longitude": -122.4194
+    }
+  }'
+```
+
 ### Example 3: Messaging Conversation Memory
+
+#### Python Example
 
 ```python
 import requests
@@ -347,6 +352,101 @@ if response.status_code == 200:
 else:
     print(f"Error creating memory: {response.status_code}")
     print(response.text)
+```
+
+#### cURL Example
+
+```bash
+curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/memories?uid=user_123" \
+  -H "Authorization: Bearer sk_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "started_at": "2024-07-22T12:00:00.000Z",
+    "finished_at": "2024-07-22T12:05:00.000Z",
+    "language": "en",
+    "text": "Alex: Hey, are we still on for dinner tonight at 7?\n\nMe: Yes! Looking forward to it. Where should we meet?\n\nAlex: How about that new Italian place on Main Street? Heard they have amazing pasta.\n\nMe: Sounds perfect! Should I make a reservation?\n\nAlex: Already did! Under my name for 7:15pm.\n\nMe: Great, see you there! I'\''ll bring that book I was telling you about.\n\nAlex: Awesome, can'\''t wait to check it out. Don'\''t forget we have the team meeting tomorrow at 9am.\n\nMe: Thanks for the reminder! I'\''ll prepare my presentation tonight after dinner.",
+    "text_source": "message",
+    "text_source_spec": "whatsapp"
+  }'
+```
+
+### Example 4: Audio Transcript Memory with Timestamps
+
+#### Python Example
+
+```python
+import requests
+import json
+from datetime import datetime, timezone
+
+# API configuration
+APP_ID = "your_app_id_here"
+API_KEY = "sk_your_api_key_here"
+USER_ID = "user_123"
+API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/memories"
+
+# Audio transcript memory data with timestamps
+audio_memory = {
+    "started_at": datetime.now(timezone.utc).isoformat(),
+    "finished_at": datetime.now(timezone.utc).isoformat(),
+    "language": "en",
+    "text": """[00:00:05 - 00:00:15] Speaker 1: Welcome to our weekly team meeting. Today we'll be discussing the Q3 roadmap and our progress on the current sprint.
+
+[00:00:16 - 00:00:30] Speaker 2: Thanks for the introduction. I'd like to start by sharing that we've completed 85% of our sprint goals for this week. The new user authentication system is now live in production.
+
+[00:00:31 - 00:00:38] Speaker 1: That's excellent progress. Any blockers or challenges the team is facing?
+
+[00:00:39 - 00:00:55] Speaker 3: We're having some issues with the database migration that was scheduled for this weekend. I think we need to allocate more time for testing before we proceed.
+
+[00:00:56 - 00:01:10] Speaker 1: Good point. Let's push the migration to next weekend and use this week for additional testing. Can you coordinate with the QA team?
+
+[00:01:11 - 00:01:15] Speaker 3: Will do. I'll set up a meeting with them tomorrow.
+
+[00:01:16 - 00:01:30] Speaker 2: I also wanted to mention that the customer feedback survey results came in yesterday. Overall satisfaction is up 12% since our last release.
+
+[00:01:31 - 00:01:45] Speaker 1: That's great news! Let's include those metrics in our quarterly report. Before we wrap up, any other items we need to discuss?
+
+[00:01:46 - 00:01:55] Speaker 4: Just a reminder that the company all-hands is next Tuesday at 10 AM. Everyone should plan to attend.
+
+[00:01:56 - 00:02:05] Speaker 1: Thanks for the reminder. Let's adjourn for today and continue discussions in our Slack channel if needed.""",
+    "text_source": "audio_transcript",
+    "text_source_spec": "team_meeting"
+}
+
+# Make the API request
+headers = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json"
+}
+
+response = requests.post(
+    f"{API_URL}?uid={USER_ID}",
+    headers=headers,
+    data=json.dumps(audio_memory)
+)
+
+# Handle the response
+if response.status_code == 200:
+    print("Audio transcript memory created successfully")
+else:
+    print(f"Error creating memory: {response.status_code}")
+    print(response.text)
+```
+
+#### cURL Example
+
+```bash
+curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/memories?uid=user_123" \
+  -H "Authorization: Bearer sk_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "started_at": "2024-07-22T12:00:00.000Z",
+    "finished_at": "2024-07-22T12:30:00.000Z",
+    "language": "en",
+    "text": "[00:00:05 - 00:00:15] Speaker 1: Welcome to our weekly team meeting. Today we'\''ll be discussing the Q3 roadmap and our progress on the current sprint.\n\n[00:00:16 - 00:00:30] Speaker 2: Thanks for the introduction. I'\''d like to start by sharing that we'\''ve completed 85% of our sprint goals for this week. The new user authentication system is now live in production.\n\n[00:00:31 - 00:00:38] Speaker 1: That'\''s excellent progress. Any blockers or challenges the team is facing?\n\n[00:00:39 - 00:00:55] Speaker 3: We'\''re having some issues with the database migration that was scheduled for this weekend. I think we need to allocate more time for testing before we proceed.\n\n[00:00:56 - 00:01:10] Speaker 1: Good point. Let'\''s push the migration to next weekend and use this week for additional testing. Can you coordinate with the QA team?\n\n[00:01:11 - 00:01:15] Speaker 3: Will do. I'\''ll set up a meeting with them tomorrow.\n\n[00:01:16 - 00:01:30] Speaker 2: I also wanted to mention that the customer feedback survey results came in yesterday. Overall satisfaction is up 12% since our last release.\n\n[00:01:31 - 00:01:45] Speaker 1: That'\''s great news! Let'\''s include those metrics in our quarterly report. Before we wrap up, any other items we need to discuss?\n\n[00:01:46 - 00:01:55] Speaker 4: Just a reminder that the company all-hands is next Tuesday at 10 AM. Everyone should plan to attend.\n\n[00:01:56 - 00:02:05] Speaker 1: Thanks for the reminder. Let'\''s adjourn for today and continue discussions in our Slack channel if needed.",
+    "text_source": "audio_transcript",
+    "text_source_spec": "team_meeting"
+  }'
 ```
 
 
