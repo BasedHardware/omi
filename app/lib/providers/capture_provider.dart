@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -910,5 +911,89 @@ class CaptureProvider extends ChangeNotifier
   void _setsdCardReady(bool value) {
     sdCardReady = value;
     notifyListeners();
+  }
+
+  // Add this method for processing phone recordings
+  Future<void> processPhoneRecording(String filePath) async {
+    try {
+      debugPrint('Processing phone recording from: $filePath');
+      // Reset any previous state
+      await _resetStateVariables();
+      
+      // Ensure the transcript service is ready
+      if (!_transcriptServiceReady) {
+        await _initiateWebsocket(force: true);
+      }
+      
+      // Read the audio file
+      final audioFile = File(filePath);
+      if (!await audioFile.exists()) {
+        debugPrint('Audio file does not exist: $filePath');
+        return;
+      }
+      
+      final audioBytes = await audioFile.readAsBytes();
+      
+      // Create a conversation if not already created
+      if (_inProgressConversation == null) {
+        await _createConversation(ConversationSource.phone);
+      }
+      
+      // Process the audio bytes in chunks to simulate streaming
+      const chunkSize = 4096; // Adjust based on your needs
+      for (var i = 0; i < audioBytes.length; i += chunkSize) {
+        final end = (i + chunkSize < audioBytes.length) ? i + chunkSize : audioBytes.length;
+        final chunk = audioBytes.sublist(i, end);
+        
+        // Send the chunk to the websocket
+        _socket?.send(chunk);
+        
+        // Small delay to simulate streaming
+        await Future.delayed(const Duration(milliseconds: 10));
+      }
+      
+      // Wait for transcription to complete
+      await Future.delayed(const Duration(seconds: 2));
+      
+      // Finalize the conversation
+      if (_inProgressConversation != null) {
+        await _finalizeConversation();
+      }
+      
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error processing phone recording: $e');
+    }
+  }
+
+  // Helper method to create a conversation specifically for phone recordings
+  Future<void> _createConversation(ConversationSource source) async {
+    try {
+      final createdConversation = await createConversation(
+        title: 'Voice Recording ${DateTime.now().toString().split('.')[0]}',
+        source: source,
+      );
+      
+      if (createdConversation != null) {
+        _inProgressConversation = createdConversation;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error creating conversation: $e');
+    }
+  }
+
+  // Helper method to finalize the conversation
+  Future<void> _finalizeConversation() async {
+    try {
+      if (_inProgressConversation != null) {
+        await updateConversation(
+          _inProgressConversation!.id,
+          isDraft: false,
+        );
+      }
+    } catch (e) {
+      debugPrint('Error finalizing conversation: $e');
+    }
   }
 }
