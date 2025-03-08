@@ -123,6 +123,7 @@ class MemorySource(str, Enum):
     screenpipe = 'screenpipe'
     workflow = 'workflow'
     sdcard = 'sdcard'
+    external_integration = 'external_integration'
 
 
 class MemoryVisibility(str, Enum):
@@ -173,6 +174,7 @@ class Memory(BaseModel):
     plugins_results: List[PluginResult] = []
 
     external_data: Optional[Dict] = None
+    app_id: Optional[str] = None
 
     discarded: bool = False
     deleted: bool = False
@@ -211,7 +213,7 @@ class Memory(BaseModel):
         return "\n\n---------------------\n\n".join(result).strip()
 
     def get_transcript(self, include_timestamps: bool) -> str:
-        # Warn: missing transcript for workflow source
+        # Warn: missing transcript for workflow source, external integration source
         return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
 
     def as_dict_cleaned_dates(self):
@@ -242,20 +244,26 @@ class CreateMemory(BaseModel):
         return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
 
 
-class WorkflowMemorySource(str, Enum):
+class ExternalIntegrationMemorySource(str, Enum):
     audio = 'audio_transcript'
+    email = 'email'
+    post = 'post'
+    message = 'message'
     other = 'other_text'
 
 
-class WorkflowCreateMemory(BaseModel):
+class ExternalIntegrationCreateMemory(BaseModel):
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     text: str
-    text_source: WorkflowMemorySource = WorkflowMemorySource.audio
+    text_source: ExternalIntegrationMemorySource = ExternalIntegrationMemorySource.audio
+    text_source_spec: Optional[str] = None
     geolocation: Optional[Geolocation] = None
 
     source: MemorySource = MemorySource.workflow
     language: Optional[str] = None
+
+    app_id: Optional[str] = None
 
     def get_transcript(self, include_timestamps: bool) -> str:
         return self.text
