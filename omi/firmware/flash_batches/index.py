@@ -8,8 +8,8 @@ from datetime import datetime
 
 # Constants and configurations
 UF2_FILES = [
-    "Friend/firmware/bootloader/bootloader0.9.0.uf2",
-    "Friend/firmware/firmware1.0.4.uf2"
+    "omi/firmware/bootloader/bootloader0.9.0.uf2",
+    "omi/firmware/firmware1.0.4.uf2"
     # Add more UF2 file paths as needed
 ]
 
