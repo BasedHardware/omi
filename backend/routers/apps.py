@@ -485,7 +485,7 @@ def get_plugin_capabilities():
             {'title': 'Memory Creation', 'id': 'memory_creation'},
             {'title': 'Transcript Processed', 'id': 'transcript_processed'},
         ], 'actions': [
-            {'title': 'Create memories', 'id': 'create_memory', 'doc_url': 'https://docs.omi.me/actions/create-memory'}
+            {'title': 'Create memories', 'id': 'create_memory', 'doc_url': 'https://docs.omi.me/docs/developer/apps/IntegrationActions'}
         ]},
         {'title': 'Notification', 'id': 'proactive_notification', 'scopes': [
             {'title': 'User Name', 'id': 'user_name'},
