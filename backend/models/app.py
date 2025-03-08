@@ -1,5 +1,5 @@
 from datetime import datetime
-from enum import Enum, auto
+from enum import Enum
 from typing import List, Optional, Set
 
 from pydantic import BaseModel

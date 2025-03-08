@@ -98,7 +98,7 @@ class ShowAppOptionsSheet extends StatelessWidget {
               child: Column(
                 children: [
                   ListTile(
-                    title: Text(app.isNotPersona() ? 'Manage App Details & Keys' : 'Update Persona Details'),
+                    title: Text(app.isNotPersona() ? 'Manage App' : 'Update Persona Details'),
                     leading: const Icon(Icons.edit),
                     onTap: () {
                       Navigator.pop(context);

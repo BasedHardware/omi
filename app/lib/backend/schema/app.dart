@@ -621,3 +621,39 @@ class PaymentPlan {
     return jsonList.map((e) => PaymentPlan.fromJson(e)).toList();
   }
 }
+
+class AppApiKey {
+  final String id;
+  final String label;
+  final DateTime createdAt;
+  String? secret; // Only available when first created
+
+  AppApiKey({
+    required this.id,
+    required this.label,
+    required this.createdAt,
+    this.secret,
+  });
+
+  factory AppApiKey.fromJson(Map<String, dynamic> json) {
+    return AppApiKey(
+      id: json['id'],
+      label: json['label'] ?? 'API Key',
+      createdAt: DateTime.parse(json['created_at']).toLocal(),
+      secret: json['secret'],
+    );
+  }
+
+  toJson() {
+    return {
+      'id': id,
+      'label': label,
+      'created_at': createdAt.toUtc().toIso8601String(),
+      if (secret != null) 'secret': secret,
+    };
+  }
+
+  static List<AppApiKey> fromJsonList(List<dynamic> jsonList) {
+    return jsonList.map((e) => AppApiKey.fromJson(e)).toList();
+  }
+}
