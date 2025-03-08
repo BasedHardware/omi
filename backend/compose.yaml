@@ -1,7 +1,0 @@
-services:
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    ports:
-      - 8088:8080
