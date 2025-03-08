@@ -78,23 +78,45 @@ class AuthStep {
   }
 }
 
+class Action {
+  String action;
+
+  Action({
+    required this.action,
+  });
+
+  factory Action.fromJson(Map<String, dynamic> json) {
+    return Action(
+      action: json['action'],
+    );
+  }
+
+  toJson() {
+    return {
+      'action': action,
+    };
+  }
+}
+
 class ExternalIntegration {
-  String triggersOn;
-  String webhookUrl;
+  String? triggersOn;
+  String? webhookUrl;
   String? setupCompletedUrl;
-  String setupInstructionsFilePath;
-  bool isInstructionsUrl;
-  List<AuthStep> authSteps;
+  String? setupInstructionsFilePath;
+  bool? isInstructionsUrl;
+  List<AuthStep> authSteps = [];
   String? appHomeUrl;
+  List<Action>? actions;
 
   ExternalIntegration({
-    required this.triggersOn,
-    required this.webhookUrl,
-    required this.setupCompletedUrl,
-    required this.setupInstructionsFilePath,
-    required this.isInstructionsUrl,
+    this.triggersOn,
+    this.webhookUrl,
+    this.setupCompletedUrl,
+    this.setupInstructionsFilePath,
+    this.isInstructionsUrl,
     this.authSteps = const [],
     this.appHomeUrl,
+    this.actions,
   });
 
   factory ExternalIntegration.fromJson(Map<String, dynamic> json) {
@@ -108,6 +130,7 @@ class ExternalIntegration {
       authSteps: json['auth_steps'] == null
           ? []
           : (json['auth_steps'] ?? []).map<AuthStep>((e) => AuthStep.fromJson(e)).toList(),
+      actions: json['actions'] == null ? null : (json['actions'] ?? []).map<Action>((e) => Action.fromJson(e)).toList(),
     );
   }
 
@@ -131,6 +154,7 @@ class ExternalIntegration {
       'is_instructions_url': isInstructionsUrl,
       'setup_instructions_file_path': setupInstructionsFilePath,
       'auth_steps': authSteps.map((e) => e.toJson()).toList(),
+      'actions': actions?.map((e) => e.toJson()).toList(),
     };
   }
 }
@@ -425,11 +449,14 @@ class AppCapability {
   String id;
   List<TriggerEvent> triggerEvents = [];
   List<NotificationScope> notificationScopes = [];
+  List<CapacityAction> actions = [];
+
   AppCapability({
     required this.title,
     required this.id,
     this.triggerEvents = const [],
     this.notificationScopes = const [],
+    this.actions = const [],
   });
 
   factory AppCapability.fromJson(Map<String, dynamic> json) {
@@ -438,6 +465,7 @@ class AppCapability {
       id: json['id'],
       triggerEvents: TriggerEvent.fromJsonList(json['triggers'] ?? []),
       notificationScopes: NotificationScope.fromJsonList(json['scopes'] ?? []),
+      actions: CapacityAction.fromJsonList(json['actions'] ?? []),
     );
   }
 
@@ -447,6 +475,7 @@ class AppCapability {
       'id': id,
       'triggers': triggerEvents.map((e) => e.toJson()).toList(),
       'scopes': notificationScopes.map((e) => e.toJson()).toList(),
+      'actions': actions.map((e) => e.toJson()).toList(),
     };
   }
 
@@ -456,6 +485,39 @@ class AppCapability {
 
   bool hasTriggers() => triggerEvents.isNotEmpty;
   bool hasScopes() => notificationScopes.isNotEmpty;
+  bool hasActions() => actions.isNotEmpty;
+}
+
+class CapacityAction {
+  String title;
+  String id;
+  String? docUrl;
+
+  CapacityAction({
+    required this.title,
+    required this.id,
+    this.docUrl,
+  });
+
+  factory CapacityAction.fromJson(Map<String, dynamic> json) {
+    return CapacityAction(
+      title: json['title'],
+      id: json['id'],
+      docUrl: json['doc_url'],
+    );
+  }
+
+  toJson() {
+    return {
+      'title': title,
+      'id': id,
+      'doc_url': docUrl,
+    };
+  }
+
+  static List<CapacityAction> fromJsonList(List<dynamic> jsonList) {
+    return jsonList.map((e) => CapacityAction.fromJson(e)).toList();
+  }
 }
 
 class TriggerEvent {
@@ -557,5 +619,41 @@ class PaymentPlan {
 
   static List<PaymentPlan> fromJsonList(List<dynamic> jsonList) {
     return jsonList.map((e) => PaymentPlan.fromJson(e)).toList();
+  }
+}
+
+class AppApiKey {
+  final String id;
+  final String label;
+  final DateTime createdAt;
+  String? secret; // Only available when first created
+
+  AppApiKey({
+    required this.id,
+    required this.label,
+    required this.createdAt,
+    this.secret,
+  });
+
+  factory AppApiKey.fromJson(Map<String, dynamic> json) {
+    return AppApiKey(
+      id: json['id'],
+      label: json['label'] ?? 'API Key',
+      createdAt: DateTime.parse(json['created_at']).toLocal(),
+      secret: json['secret'],
+    );
+  }
+
+  toJson() {
+    return {
+      'id': id,
+      'label': label,
+      'created_at': createdAt.toUtc().toIso8601String(),
+      if (secret != null) 'secret': secret,
+    };
+  }
+
+  static List<AppApiKey> fromJsonList(List<dynamic> jsonList) {
+    return jsonList.map((e) => AppApiKey.fromJson(e)).toList();
   }
 }

@@ -3,7 +3,7 @@ import random
 import threading
 import uuid
 from datetime import timezone
-from typing import Union, Tuple
+from typing import Union, Tuple, List
 
 from fastapi import HTTPException
 
@@ -15,8 +15,9 @@ import database.trends as trends_db
 from database.apps import record_app_usage, get_omi_personas_by_uid_db
 from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
-from models.facts import FactDB
+from models.facts import FactDB, Fact
 from models.memory import *
+from models.memory import ExternalIntegrationCreateMemory, Memory, CreateMemory, MemorySource
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
 from models.notification_message import NotificationMessage
@@ -24,7 +25,8 @@ from utils.apps import get_available_apps, update_persona_prompt, sync_update_pe
 from utils.llm import obtain_emotional_message, retrieve_metadata_fields_from_transcript
 from utils.llm import summarize_open_glass, get_transcript_structure, generate_embedding, \
     get_plugin_result, should_discard_memory, summarize_experience_text, new_facts_extractor, \
-    trends_extractor
+    trends_extractor, get_email_structure, get_post_structure, get_message_structure, extract_facts_from_text, \
+    retrieve_metadata_from_email, retrieve_metadata_from_post, retrieve_metadata_from_message, retrieve_metadata_from_text
 from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
 from utils.retrieval.rag import retrieve_rag_memory_context
@@ -32,22 +34,34 @@ from utils.webhooks import memory_created_webhook
 
 
 def _get_structured(
-        uid: str, language_code: str, memory: Union[Memory, CreateMemory, WorkflowCreateMemory],
+        uid: str, language_code: str, memory: Union[Memory, CreateMemory, ExternalIntegrationCreateMemory],
         force_process: bool = False, retries: int = 1
 ) -> Tuple[Structured, bool]:
     try:
         tz = notification_db.get_user_time_zone(uid)
-        if memory.source == MemorySource.workflow:
-            if memory.text_source == WorkflowMemorySource.audio:
+        if memory.source == MemorySource.workflow or memory.source == MemorySource.external_integration:
+            if memory.text_source == ExternalIntegrationMemorySource.audio:
                 structured = get_transcript_structure(memory.text, memory.started_at, language_code, tz)
                 return structured, False
 
-            if memory.text_source == WorkflowMemorySource.other:
-                structured = summarize_experience_text(memory.text)
+            if memory.text_source == ExternalIntegrationMemorySource.email:
+                structured = get_email_structure(memory.text, memory.started_at, language_code, tz)
                 return structured, False
 
-            # not workflow memory source support
-            raise HTTPException(status_code=400, detail='Invalid workflow memory source')
+            if memory.text_source == ExternalIntegrationMemorySource.post:
+                structured = get_post_structure(memory.text, memory.started_at, language_code, tz, memory.text_source_spec)
+                return structured, False
+
+            if memory.text_source == ExternalIntegrationMemorySource.message:
+                structured = get_message_structure(memory.text, memory.started_at, language_code, tz, memory.text_source_spec)
+                return structured, False
+
+            if memory.text_source == ExternalIntegrationMemorySource.other:
+                structured = summarize_experience_text(memory.text, memory.text_source_spec)
+                return structured, False
+
+            # not supported memory source
+            raise HTTPException(status_code=400, detail=f'Invalid memory source: {memory.text_source}')
 
         # from OpenGlass
         if memory.photos:
@@ -70,7 +84,7 @@ def _get_structured(
         return _get_structured(uid, language_code, memory, force_process, retries + 1)
 
 
-def _get_memory_obj(uid: str, structured: Structured, memory: Union[Memory, CreateMemory, WorkflowCreateMemory]):
+def _get_memory_obj(uid: str, structured: Structured, memory: Union[Memory, CreateMemory, ExternalIntegrationCreateMemory]):
     discarded = structured.title == ''
     if isinstance(memory, CreateMemory):
         memory = Memory(
@@ -84,7 +98,7 @@ def _get_memory_obj(uid: str, structured: Structured, memory: Union[Memory, Crea
         )
         if memory.photos:
             memories_db.store_memory_photos(uid, memory.id, memory.photos)
-    elif isinstance(memory, WorkflowCreateMemory):
+    elif isinstance(memory, ExternalIntegrationCreateMemory):
         create_memory = memory
         memory = Memory(
             id=str(uuid.uuid4()),
@@ -95,6 +109,7 @@ def _get_memory_obj(uid: str, structured: Structured, memory: Union[Memory, Crea
             discarded=discarded,
         )
         memory.external_data = create_memory.dict()
+        memory.app_id = create_memory.app_id
     else:
         memory.structured = structured
         memory.discarded = discarded
@@ -124,20 +139,30 @@ def _trigger_apps(uid: str, memory: Memory, is_reprocess: bool = False):
 def _extract_facts(uid: str, memory: Memory):
     # TODO: maybe instead (once they can edit them) we should not tie it this hard
     facts_db.delete_facts_for_memory(uid, memory.id)
-    new_facts = new_facts_extractor(uid, memory.transcript_segments)
+
+    new_facts: List[Fact] = []
+
+    # Extract facts based on memory source
+    if memory.source == MemorySource.external_integration:
+        text_content = memory.external_data.get('text')
+        if text_content and len(text_content) > 0:
+            text_source = memory.external_data.get('text_source', 'other')
+            new_facts = extract_facts_from_text(uid, text_content, text_source)
+    else:
+        # For regular memories with transcript segments
+        new_facts = new_facts_extractor(uid, memory.transcript_segments)
+
     parsed_facts = []
     for fact in new_facts:
         parsed_facts.append(FactDB.from_fact(fact, uid, memory.id, memory.structured.category))
         print('_extract_facts:', fact.category.value.upper(), '|', fact.content)
+
     if len(parsed_facts) == 0:
+        print(f"No facts extracted for memory {memory.id}")
         return
 
+    print(f"Saving {len(parsed_facts)} facts for memory {memory.id}")
     facts_db.save_facts(uid, [fact.dict() for fact in parsed_facts])
-
-    # send notification
-    # token = notification_db.get_token_only(uid)
-    # if token and len(token) > 0:
-    #    send_new_facts_notification(token, parsed_facts)
 
 def send_new_facts_notification(token: str, facts: [FactDB]):
     facts_str = ", ".join([fact.content for fact in facts])
@@ -161,11 +186,31 @@ def _extract_trends(memory: Memory):
 
 def save_structured_vector(uid: str, memory: Memory, update_only: bool = False):
     vector = generate_embedding(str(memory.structured)) if not update_only else None
-
-    segments = [t.dict() for t in memory.transcript_segments]
     tz = notification_db.get_user_time_zone(uid)
-    metadata = retrieve_metadata_fields_from_transcript(uid, memory.created_at, segments, tz)
+
+    metadata = {}
+
+    # Extract metadata based on memory source
+    if memory.source == MemorySource.external_integration:
+        text_source = memory.external_data.get('text_source')
+        text_content = memory.external_data.get('text')
+        if text_content and len(text_content) > 0 and text_content and len(text_content) > 0:
+            text_source_spec = memory.external_data.get('text_source_spec')
+            if text_source == ExternalIntegrationMemorySource.email.value:
+                metadata = retrieve_metadata_from_email(uid, memory.created_at, text_content, tz)
+            elif text_source == ExternalIntegrationMemorySource.post.value:
+                metadata = retrieve_metadata_from_post(uid, memory.created_at, text_content, tz, text_source_spec)
+            elif text_source == ExternalIntegrationMemorySource.message.value:
+                metadata = retrieve_metadata_from_message(uid, memory.created_at, text_content, tz, text_source_spec)
+            elif text_source == ExternalIntegrationMemorySource.other.value:
+                metadata = retrieve_metadata_from_text(uid, memory.created_at, text_content, tz, text_source_spec)
+    else:
+        # For regular memories with transcript segments
+        segments = [t.dict() for t in memory.transcript_segments]
+        metadata = retrieve_metadata_fields_from_transcript(uid, memory.created_at, segments, tz)
+
     metadata['created_at'] = int(memory.created_at.timestamp())
+
     if not update_only:
         print('save_structured_vector creating vector')
         upsert_vector2(uid, memory, vector, metadata)
@@ -175,7 +220,7 @@ def save_structured_vector(uid: str, memory: Memory, update_only: bool = False):
 
 
 def process_memory(
-        uid: str, language_code: str, memory: Union[Memory, CreateMemory, WorkflowCreateMemory],
+        uid: str, language_code: str, memory: Union[Memory, CreateMemory, ExternalIntegrationCreateMemory],
         force_process: bool = False, is_reprocess: bool = False
 ) -> Memory:
     structured, discarded = _get_structured(uid, language_code, memory, force_process)

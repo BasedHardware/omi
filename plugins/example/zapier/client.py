@@ -1,7 +1,7 @@
 import os
 import requests
 
-from models import WorkflowCreateMemory, Memory
+from models import ExternalIntegrationCreateMemory, Memory
 from .models import ZapierCreateMemory
 
 
@@ -155,7 +155,7 @@ class FriendClient:
         self.workflow_api_key = workflow_api_key
         pass
 
-    def create_memory(self, memory: WorkflowCreateMemory, uid: str):
+    def create_memory(self, memory: ExternalIntegrationCreateMemory, uid: str):
         resp: requests.Response
         err = None
         url = f"{self.base_url}/v1/integrations/workflow/memories?uid={uid}"
