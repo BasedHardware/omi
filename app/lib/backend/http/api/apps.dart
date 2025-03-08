@@ -416,7 +416,7 @@ Future<String> getGenratedDescription(String name, String description) async {
 }
 
 // API Keys
-Future<List<dynamic>> listApiKeysServer(String appId) async {
+Future<List<AppApiKey>> listApiKeysServer(String appId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/apps/$appId/keys',
     headers: {},
@@ -426,7 +426,7 @@ Future<List<dynamic>> listApiKeysServer(String appId) async {
   try {
     if (response == null || response.statusCode != 200) return [];
     log('listApiKeysServer: ${response.body}');
-    return jsonDecode(response.body);
+    return AppApiKey.fromJsonList(jsonDecode(response.body));
   } catch (e, stackTrace) {
     debugPrint(e.toString());
     CrashReporting.reportHandledCrash(e, stackTrace);

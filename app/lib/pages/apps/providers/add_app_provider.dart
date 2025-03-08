@@ -70,7 +70,7 @@ class AddAppProvider extends ChangeNotifier {
   bool allowPaidApps = false;
   
   // API Keys
-  List<Map<String, dynamic>> apiKeys = [];
+  List<AppApiKey> apiKeys = [];
   bool isLoadingApiKeys = false;
 
   void setAppProvider(AppProvider provider) {
@@ -789,8 +789,7 @@ class AddAppProvider extends ChangeNotifier {
     notifyListeners();
     
     try {
-      final keys = await listApiKeysServer(appId);
-      apiKeys = List<Map<String, dynamic>>.from(keys);
+      apiKeys = await listApiKeysServer(appId);
     } catch (e) {
       print('Error loading API keys: $e');
     } finally {
@@ -799,10 +798,10 @@ class AddAppProvider extends ChangeNotifier {
     }
   }
   
-  Future<Map<String, dynamic>> createApiKey(String appId) async {
+  Future<AppApiKey> createApiKey(String appId) async {
     final result = await createApiKeyServer(appId);
     await loadApiKeys(appId);
-    return result;
+    return AppApiKey.fromJson(result);
   }
   
   Future<void> deleteApiKey(String appId, String keyId) async {

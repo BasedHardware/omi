@@ -226,7 +226,7 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                             isDense: true,
                             errorStyle: TextStyle(color: Colors.red.shade100),
                             border: InputBorder.none,
-                            hintText: 'https://your-webhook-url.com/',
+                            hintText: 'http...',
                           ),
                         ),
                       ),
@@ -235,52 +235,47 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                       height: 8,
                     ),
                     Row(
-                      mainAxisSize: MainAxisSize.max,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Padding(
                           padding: const EdgeInsets.only(left: 8.0),
                           child: Text(
-                            'App Home URL (optional)',
+                            'App Home URL',
                             style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                           ),
                         ),
-                        Expanded(
-                          child: Align(
-                            alignment: Alignment.centerRight,
-                            child: IconButton(
-                              alignment: Alignment.centerRight,
-                              icon: const Icon(
-                                Icons.info_outline,
-                                color: Colors.white60,
-                                size: 20,
-                              ),
-                              onPressed: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (context) => AlertDialog(
-                                    backgroundColor: Colors.grey.shade900,
-                                    title: Text(
-                                      'App Home URL',
-                                      style: TextStyle(color: Colors.grey.shade100),
-                                    ),
-                                    content: Text(
-                                      'Omi opens this URL instantly when users launch your app after installation, perfect for authentication or setup instructions.',
-                                      style: TextStyle(color: Colors.grey.shade300),
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(context),
-                                        child: Text(
-                                          'OK',
-                                          style: TextStyle(color: Colors.grey.shade100),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.info_outline,
+                            color: Colors.white60,
+                            size: 20,
                           ),
+                          onPressed: () {
+                            showDialog(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                backgroundColor: Colors.grey.shade900,
+                                title: Text(
+                                  'App Home URL (Optional)',
+                                  style: TextStyle(color: Colors.grey.shade100),
+                                ),
+                                content: Text(
+                                  'Omi opens this URL instantly when users launch your app after installation, perfect for authentication or setup instructions.',
+                                  style: TextStyle(color: Colors.grey.shade300),
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    style: TextButton.styleFrom(
+                                      backgroundColor: Theme.of(context).colorScheme.secondary,
+                                      foregroundColor: Colors.white,
+                                    ),
+                                    child: const Text('OK'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -303,7 +298,7 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                         decoration: const InputDecoration(
                           isDense: true,
                           border: InputBorder.none,
-                          hintText: 'https://your-app-home.com/',
+                          hintText: 'http...',
                         ),
                       ),
                     ),
@@ -384,7 +379,7 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                             decoration: const InputDecoration(
                               isDense: true,
                               border: InputBorder.none,
-                              hintText: 'https://your-auth-url.com/',
+                              hintText: 'http...',
                             ),
                           ),
                         ),
@@ -417,7 +412,7 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                             decoration: const InputDecoration(
                               isDense: true,
                               border: InputBorder.none,
-                              hintText: 'https://your-setup-completed-url.com/',
+                              hintText: 'http...',
                             ),
                           ),
                         ),

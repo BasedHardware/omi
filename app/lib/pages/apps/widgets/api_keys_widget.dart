@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:intl/intl.dart';
@@ -21,10 +22,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
   bool _isLoading = false;
   bool _isCreatingKey = false;
   String? _deletingKeyId;
-  String? _newKeySecret;
-  String? _newKeyId;
-  String? _newKeyLabel;
-  DateTime? _newKeyCreatedAt;
+  AppApiKey? _newKey;
 
   @override
   void initState() {
@@ -56,10 +54,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
     try {
       final result = await Provider.of<AddAppProvider>(context, listen: false).createApiKey(widget.appId);
       setState(() {
-        _newKeySecret = result['secret'];
-        _newKeyId = result['id'];
-        _newKeyLabel = result['label'];
-        _newKeyCreatedAt = DateTime.parse(result['created_at']);
+        _newKey = result;
       });
 
       // Show the dialog with the new key
@@ -90,7 +85,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
               onPressed: () {
                 Navigator.of(context).pop();
                 setState(() {
-                  _newKeySecret = null;
+                  _newKey = null;
                 });
               },
               style: ElevatedButton.styleFrom(
@@ -146,14 +141,53 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'API Keys',
-                  style: Theme.of(context).textTheme.titleMedium,
+                Row(
+                  children: [
+                    Text(
+                      'API Keys',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: Icon(
+                        Icons.info_outline,
+                        size: 20,
+                        color: Colors.grey.shade400,
+                      ),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            backgroundColor: Colors.grey.shade900,
+                            title: const Text('API Keys'),
+                            content: const Text(
+                              'API Keys are used for authentication when your app communicates with the OMI server. They allow your application to create memories and access other OMI services securely.',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(context).pop(),
+                                style: TextButton.styleFrom(
+                                  backgroundColor: Theme.of(context).colorScheme.secondary,
+                                  foregroundColor: Colors.white,
+                                ),
+                                child: const Text(
+                                  'Got it',
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                      tooltip: 'About API Keys',
+                    ),
+                  ],
                 ),
                 ElevatedButton.icon(
                   onPressed: _isCreatingKey ? null : _createApiKey,
                   icon: _isCreatingKey
-                      ? SizedBox(
+                      ? const SizedBox(
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(
@@ -225,7 +259,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: Text(
-                      _newKeySecret!,
+                      _newKey!.secret!,
                       style: const TextStyle(
                         fontFamily: 'monospace',
                         fontSize: 14,
@@ -236,7 +270,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
               ),
               IconButton(
                 icon: const Icon(Icons.copy, size: 18),
-                onPressed: () => _copyToClipboard(_newKeySecret!),
+                onPressed: () => _copyToClipboard(_newKey!.secret!),
                 tooltip: 'Copy to clipboard',
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
@@ -278,23 +312,28 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       itemCount: provider.apiKeys.length,
-      separatorBuilder: (context, index) => Divider(height: 1, color: Theme.of(context).dividerColor),
+      separatorBuilder: (context, index) => SizedBox(height: 12),
       itemBuilder: (context, index) {
         final key = provider.apiKeys[index];
-        return ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.grey.shade800,
+            borderRadius: BorderRadius.circular(10.0),
+          ),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
             title: Text(
-              key['label'] ?? 'API Key',
+              key.label,
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             subtitle: Text(
-              '${DateFormat('MMM d, yyyy HH:mm').format(DateTime.parse(key['created_at']))}',
+              '${DateFormat('MMM d, yyyy HH:mm').format(key.createdAt)}',
               style: Theme.of(context).textTheme.labelMedium,
             ),
             trailing: SizedBox(
               width: 42,
               height: 42,
-              child: _deletingKeyId == key['id']
+              child: _deletingKeyId == key.id
                   ? const Center(
                       child: SizedBox(
                         width: 20,
@@ -310,10 +349,12 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
                         Icons.delete_outline,
                         color: Colors.red,
                       ),
-                      onPressed: () => _showDeleteConfirmation(key['id']),
+                      onPressed: () => _showDeleteConfirmation(key.id),
                       tooltip: 'Revoke key',
                     ),
-            ));
+            ),
+          ),
+        );
       },
     );
   }
