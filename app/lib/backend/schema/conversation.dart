@@ -23,7 +23,7 @@ class CreateConversationResponse {
   }
 }
 
-enum ConversationSource { friend, workflow, openglass, screenpipe, sdcard }
+enum ConversationSource { friend, workflow, openglass, screenpipe, sdcard, phone }
 
 class ConversationExternalData {
   final String text;
@@ -193,6 +193,7 @@ class ServerConversation {
     if (source == ConversationSource.screenpipe) return 'Screenpipe';
     if (source == ConversationSource.openglass) return 'Openglass';
     if (source == ConversationSource.sdcard) return 'SD Card';
+    if (source == ConversationSource.phone) return 'Phone Recording';
     if (discarded) return 'Discarded';
     return structured.category.substring(0, 1).toUpperCase() + structured.category.substring(1);
   }

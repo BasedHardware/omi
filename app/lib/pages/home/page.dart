@@ -40,6 +40,7 @@ import 'package:upgrader/upgrader.dart';
 
 import '../conversations/sync_page.dart';
 import 'widgets/battery_info_widget.dart';
+import 'package:friend_private/pages/capture/voice_recording_page.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final String? navigateToRoute;
@@ -452,6 +453,26 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                             );
                           }
                         },
+                      ),
+                      Positioned(
+                        right: 20,
+                        bottom: 80,
+                        child: FloatingActionButton(
+                          heroTag: 'voice_recording_button',
+                          backgroundColor: Colors.red,
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => const VoiceRecordingPage(),
+                              ),
+                            );
+                          },
+                          child: const Icon(
+                            Icons.mic,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                        ),
                       ),
                     ],
                   ),
