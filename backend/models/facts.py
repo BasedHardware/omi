@@ -79,7 +79,7 @@ class FactDB(Fact):
         return "{:02d}_{:02d}_{:010d}".format(user_manual_added_boost, cat_boost, int(fact.created_at.timestamp()))
 
     @staticmethod
-    def from_fact(fact: Fact, uid: str, memory_id: str, memory_category: CategoryEnum) -> 'FactDB':
+    def from_fact(fact: Fact, uid: str, memory_id: str, memory_category: CategoryEnum, manually_added: bool) -> 'FactDB':
         fact_db = FactDB(
             id=document_id_from_seed(fact.content),
             uid=uid,
@@ -89,6 +89,9 @@ class FactDB(Fact):
             updated_at=datetime.now(timezone.utc),
             memory_id=memory_id,
             memory_category=memory_category,
+            manually_added=manually_added,
+            user_review=True if manually_added else None,
+            reviewed=True if manually_added else False,
         )
         fact_db.scoring = FactDB.calculate_score(fact_db)
         return fact_db

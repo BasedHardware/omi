@@ -49,7 +49,7 @@ def get_facts_from_memories(
         parsed_facts = []
         response += facts
         for fact in facts:
-            parsed_facts.append(FactDB.from_fact(fact, uid, memory['id'], memory['structured']['category']))
+            parsed_facts.append(FactDB.from_fact(fact, uid, memory['id'], memory['structured']['category'],False))
         facts_db.save_facts(uid, [fact.dict() for fact in parsed_facts])
 
     return response
