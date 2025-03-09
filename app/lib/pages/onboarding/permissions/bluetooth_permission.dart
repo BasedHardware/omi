@@ -40,6 +40,14 @@ class _BluetoothPermissionWidgetState extends State<BluetoothPermissionWidget> {
                   }
                 }
               },
+              onPressed: () async {
+                if(!provider.hasBluetoothPermission){
+                  await provider.askForBluetoothPermissions();
+                } 
+                else{
+                  provider.updateBluetoothPermission(false);
+                }
+              }
               title: const Text(
                 'Enable Bluetooth access for Friend\'s full experience.',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
