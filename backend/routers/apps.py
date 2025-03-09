@@ -234,7 +234,7 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
     persona_data = {
         'id': persona_id,
         'name': user.get('display_name', 'My Persona'),
-        'username': increment_username(user.get('display_name', 'MyPersona').replace(' ', '').lower()),
+        'username': increment_username((user.get('display_name') or 'MyPersona').replace(' ', '').lower()),
         'description': f"This is {user.get('display_name', 'my')} personal AI clone.",
         'image': '',  # Empty image as specified in the task
         'uid': uid,
