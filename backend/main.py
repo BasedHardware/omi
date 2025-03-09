@@ -5,7 +5,7 @@ import firebase_admin
 from fastapi import FastAPI
 
 from modal import Image, App, asgi_app, Secret
-from routers import workflow, chat, firmware, plugins, memories, transcribe_v2, notifications, \
+from routers import workflow, chat, firmware, plugins, memories, transcribe, notifications, \
     speech_profile, agents, facts, users, processing_memories, trends, sdcard, sync, apps, custom_auth, payment, \
     integration
 
@@ -19,7 +19,7 @@ else:
     firebase_admin.initialize_app()
 
 app = FastAPI()
-app.include_router(transcribe_v2.router)
+app.include_router(transcribe.router)
 app.include_router(memories.router)
 app.include_router(facts.router)
 app.include_router(chat.router)
