@@ -6,19 +6,19 @@ import websockets
 PusherAPI = os.getenv('HOSTED_PUSHER_API_URL')
 
 async def connect_to_trigger_pusher(uid: str, sample_rate: int = 8000, retries: int = 3):
-    print("connect_to_trigger_pusher")
+    print("connect_to_trigger_pusher", uid)
     for attempt in range(retries):
         try:
             return await _connect_to_trigger_pusher(uid, sample_rate)
         except Exception as error:
-            print(f'An error occurred: {error}')
+            print(f'An error occurred: {error}', uid)
             if attempt == retries - 1:
                 raise
         backoff_delay = calculate_backoff_with_jitter(attempt)
-        print(f"Waiting {backoff_delay:.0f}ms before next retry...")
+        print(f"Waiting {backoff_delay:.0f}ms before next retry...", uid)
         await asyncio.sleep(backoff_delay / 1000)
 
-    raise Exception(f'Could not open socket: All retry attempts failed.')
+    raise Exception(f'Could not open socket: All retry attempts failed.', uid)
 
 async def _connect_to_trigger_pusher(uid: str, sample_rate: int = 8000):
     try:
