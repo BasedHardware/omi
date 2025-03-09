@@ -10,7 +10,8 @@ from utils.llm import condense_tweets, generate_twitter_persona_prompt
 
 rapid_api_host = os.getenv('RAPID_API_HOST')
 rapid_api_key = os.getenv('RAPID_API_KEY')
-rapid_api_timeout = float(os.getenv('RAPID_API_TIMEOUT', 5))
+
+defaultTimeoutSec = 15
 
 async def get_twitter_profile(handle: str) -> Dict[str, Any]:
     url = f"https://{rapid_api_host}/screenname.php?screenname={handle}"
@@ -20,12 +21,10 @@ async def get_twitter_profile(handle: str) -> Dict[str, Any]:
         "X-RapidAPI-Host": rapid_api_host
     }
 
-    async with httpx.AsyncClient(timeout=rapid_api_timeout) as client:
-        response = await client.get(url, headers=headers)
-        response.raise_for_status()
-        data = response.json()
-        return data
-
+    response = httpx.get(url, headers=headers, timeout=defaultTimeoutSec)
+    response.raise_for_status()
+    data = response.json()
+    return data
 
 async def get_twitter_timeline(handle: str) -> Dict[str, Any]:
     print(f"Fetching Twitter timeline for {handle}...")
@@ -36,12 +35,10 @@ async def get_twitter_timeline(handle: str) -> Dict[str, Any]:
         "X-RapidAPI-Host": rapid_api_host
     }
 
-    async with httpx.AsyncClient(timeout=rapid_api_timeout) as client:
-        response = await client.get(url, headers=headers)
-        response.raise_for_status()
-        data = response.json()
-        return data
-
+    response = httpx.get(url, headers=headers, timeout=defaultTimeoutSec)
+    response.raise_for_status()
+    data = response.json()
+    return data
 
 async def verify_latest_tweet(username: str, handle: str) -> Dict[str, Any]:
     print(f"Fetching latest tweet for {handle}, username {username}...")
@@ -52,20 +49,19 @@ async def verify_latest_tweet(username: str, handle: str) -> Dict[str, Any]:
         "X-RapidAPI-Host": rapid_api_host
     }
 
-    async with httpx.AsyncClient(timeout=rapid_api_timeout) as client:
-        response = await client.get(url, headers=headers)
-        response.raise_for_status()
-        data = response.json()
-        # from the timeline, the first tweet is the latest
-        latest_tweet = None
-        timeline = data.get('timeline', [])
-        if len(timeline) > 0:
-            latest_tweet = timeline[0]
-            # check if latest_tweet['text'] contains the word "verifying my clone"
-            if f'Verifying my clone({username})' in latest_tweet['text']:
-                return {"tweet": latest_tweet['text'], 'verified': True}
+    response = httpx.get(url, headers=headers, timeout=defaultTimeoutSec)
+    response.raise_for_status()
+    data = response.json()
+    # from the timeline, the first tweet is the latest
+    latest_tweet = None
+    timeline = data.get('timeline', [])
+    if len(timeline) > 0:
+        latest_tweet = timeline[0]
+        # check if latest_tweet['text'] contains the word "verifying my clone"
+        if f'Verifying my clone({username})' in latest_tweet['text']:
+            return {"tweet": latest_tweet['text'], 'verified': True}
 
-        return {"tweet": latest_tweet['text'], 'verified': False}
+    return {"tweet": latest_tweet['text'], 'verified': False}
 
 
 async def upsert_persona_from_twitter_profile(username: str, handle: str, uid: str) -> Dict[str, Any]:
