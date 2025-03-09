@@ -7,7 +7,7 @@ from enum import Enum
 
 import opuslib
 import webrtcvad
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends
 from fastapi.websockets import WebSocketDisconnect, WebSocket
 from pydub import AudioSegment
 from starlette.websockets import WebSocketState
@@ -17,15 +17,14 @@ import database.users as user_db
 from database import redis_db
 from database.redis_db import get_cached_user_geolocation
 from models.memory import Memory, TranscriptSegment, MemoryStatus, Structured, Geolocation
-from models.message_event import MemoryEvent, MessageEvent, MessageServiceStatusEvent, PingEvent, LastMemoryEvent
+from models.message_event import MemoryEvent, MessageEvent, MessageServiceStatusEvent, LastMemoryEvent
 from utils.apps import is_audio_bytes_app_enabled
 from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory
 from utils.plugins import trigger_external_integrations
 from utils.stt.streaming import *
 from utils.stt.streaming import process_audio_soniox, process_audio_dg, process_audio_speechmatics, send_initial_file_path
-from utils.webhooks import send_audio_bytes_developer_webhook, realtime_transcript_webhook, \
-    get_audio_bytes_webhook_seconds
+from utils.webhooks import get_audio_bytes_webhook_seconds
 from utils.pusher import connect_to_trigger_pusher
 
 from utils.other import endpoints as auth
@@ -64,12 +63,12 @@ def retrieve_in_progress_memory(uid):
     return existing
 
 
-async def _websocket_util(
+async def _listen(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = STTService.soniox
 ):
 
-    print('_websocket_util', uid, language, sample_rate, codec, include_speech_profile)
+    print('_listen', uid, language, sample_rate, codec, include_speech_profile)
 
     if not uid or len(uid) <= 0:
         await websocket.close(code=1008, reason="Bad uid")
@@ -414,7 +413,7 @@ async def _websocket_util(
                         print(f"Pusher transcripts Connection closed: {e}", uid)
                         transcript_ws = None
                         pusher_connected = False
-                        await connect()
+                        await reconnect()
                     except Exception as e:
                         print(f"Pusher transcripts failed: {e}", uid)
 
@@ -446,19 +445,19 @@ async def _websocket_util(
                         print(f"Pusher audio_bytes Connection closed: {e}", uid)
                         audio_bytes_ws = None
                         pusher_connected = False
-                        await connect()
+                        await reconnect()
                     except Exception as e:
                         print(f"Pusher audio_bytes failed: {e}", uid)
 
-        async def connect():
+        async def reconnect():
             nonlocal pusher_connected
             nonlocal pusher_connect_lock
             async with pusher_connect_lock:
                 if pusher_connected:
                     return
-                await _connect()
+                await connect()
 
-        async def _connect():
+        async def connect():
             nonlocal pusher_ws
             nonlocal transcript_ws
             nonlocal audio_bytes_ws
@@ -486,7 +485,6 @@ async def _websocket_util(
     transcript_consume = None
     audio_bytes_send = None
     audio_bytes_consume = None
-
     pusher_connect, pusher_close, \
         transcript_send, transcript_consume, \
         audio_bytes_send, audio_bytes_consume = create_pusher_task_handler()
@@ -662,10 +660,9 @@ async def _websocket_util(
             except Exception as e:
                 print(f"Error closing Pusher: {e}", uid)
 
-# @deprecated("moved to transcribe.py")
 @router.websocket("/v3/listen")
-async def websocket_endpoint(
+async def listen_handler(
         websocket: WebSocket, uid: str = Depends(auth.get_current_user_uid), language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = STTService.soniox
 ):
-    await _websocket_util(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, stt_service)
+    await _listen(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, stt_service)
