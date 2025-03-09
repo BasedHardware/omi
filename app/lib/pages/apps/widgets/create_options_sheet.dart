@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/pages/apps/add_app.dart';
-import 'package:friend_private/pages/persona/add_persona.dart';
-import 'package:friend_private/pages/persona/persona_profile.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:provider/provider.dart';

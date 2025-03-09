@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/chat/page.dart';
@@ -70,7 +70,7 @@ class CloneChatPageState extends State<CloneChatPage> {
                 IconButton(
                   padding: const EdgeInsets.all(8.0),
                   icon: SvgPicture.asset(
-                    'assets/images/ic_persona_profile.svg',
+                    Assets.images.icPersonaProfile.path,
                     width: 28,
                     height: 28,
                   ),
