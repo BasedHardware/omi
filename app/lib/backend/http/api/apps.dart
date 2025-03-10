@@ -7,8 +7,9 @@ import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/env/env.dart';
-import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
+
+import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 
 Future<List<App>> retrieveApps() async {
