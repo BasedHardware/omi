@@ -12,7 +12,7 @@ Integration apps with actions allow your app to not just receive data from OMI b
 Integration actions are predefined capabilities that your app can perform within the OMI ecosystem. Unlike triggers (which respond to events), actions allow your app to proactively create or modify data in OMI.
 
 Currently supported actions include:
-- **Create Memory**: Generate new memories in the user's OMI account
+- **Create Conversation**: Generate new conversations in the user's OMI account
 - **Create Facts**: Add specific facts to the user's knowledge base
 
 ## Prerequisites
@@ -27,9 +27,9 @@ Before building an integration with actions, you should:
 ### Step 1: Define Your App's Purpose 🎯
 
 Decide what actions your app will perform and when. For example:
-- Will your app create memories based on external events?
+- Will your app create conversations based on external events?
 - Will it respond to user interactions in your own service?
-- Will it run on a schedule to create periodic memories?
+- Will it run on a schedule to create periodic conversations?
 
 ### Step 2: Create Your App in OMI
 
@@ -49,9 +49,9 @@ After creating your app, you'll need to generate API keys to authenticate your r
 3. Click "Create Key"
 4. Copy and securely store the generated key - you won't be able to see it again!
 
-## Implementing the Create Memory Action
+## Implementing the Create Conversation Action
 
-The Create Memory action allows your app to programmatically create new memories in a user's OMI account.
+The Create Conversation action allows your app to programmatically create new conversations in a user's OMI account.
 
 ### API Endpoint
 
@@ -96,14 +96,14 @@ The request body should be a JSON object with the following structure:
 
 #### Required Fields:
 
-- `text`: The full text content of the memory
+- `text`: The full text content of the conversation
 
 #### Optional Fields:
 
 - `started_at`: When the conversation/event started (ISO 8601 format) - defaults to current time if not provided
 - `finished_at`: When the conversation/event ended (ISO 8601 format) - defaults to started_at + 5 minutes if not provided
 - `language`: Language code (e.g., "en" for English) - defaults to "en" if not provided
-- `geolocation`: Location data for the memory
+- `geolocation`: Location data for the conversation
   - `latitude`: Latitude coordinate
   - `longitude`: Longitude coordinate
 - `text_source`: Source of the text content (options: "audio_transcript", "email", "post", "message", "other_text") - defaults to "audio_transcript"
@@ -117,7 +117,7 @@ A successful request will return a 200 OK status with an empty response body:
 {}
 ```
 
-The memory will be created asynchronously in the user's account.
+The conversation will be created asynchronously in the user's account.
 
 ### Error Handling
 
@@ -125,7 +125,7 @@ Common error responses include:
 
 - `400 Bad Request`: Invalid request format
 - `401 Unauthorized`: Missing or invalid Authorization header
-- `403 Forbidden`: Invalid API key, app not enabled for user, or app lacks create_memory capability
+- `403 Forbidden`: Invalid API key, app not enabled for user, or app lacks create_conversation capability
 - `404 Not Found`: App not found
 - `429 Too Many Requests`: Rate limit exceeded
 
@@ -212,9 +212,9 @@ Common error responses include:
 
 Here are examples showing how to create memories and facts using different text sources:
 
-### Creating Memories
+### Creating Conversations
 
-#### Example 1: Audio Transcript Memory
+#### Example 1: Audio Transcript Conversation
 
 ##### Python Example
 
@@ -229,8 +229,8 @@ API_KEY = "sk_your_api_key_here"
 USER_ID = "user_123"
 API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/conversations"
 
-# Audio transcript memory data
-memory_data = {
+# Audio transcript conversation data
+conversation_data = {
     "started_at": datetime.now(timezone.utc).isoformat(),
     "finished_at": datetime.now(timezone.utc).isoformat(),
     "language": "en",
@@ -248,14 +248,14 @@ headers = {
 response = requests.post(
     f"{API_URL}?uid={USER_ID}",
     headers=headers,
-    data=json.dumps(memory_data)
+    data=json.dumps(conversation_data)
 )
 
 # Handle the response
 if response.status_code == 200:
-    print("Memory created successfully")
+    print("Conversation created successfully")
 else:
-    print(f"Error creating memory: {response.status_code}")
+    print(f"Error creating conversation: {response.status_code}")
     print(response.text)
 ```
 
@@ -275,7 +275,7 @@ curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/conversat
   }'
 ```
 
-#### Example 2: Email Memory
+#### Example 2: Email Conversation
 
 ##### Python Example
 
@@ -290,8 +290,8 @@ API_KEY = "sk_your_api_key_here"
 USER_ID = "user_123"
 API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/conversations"
 
-# Email memory data
-memory_data = {
+# Email conversation data
+conversation_data = {
     "started_at": datetime.now(timezone.utc).isoformat(),
     "finished_at": datetime.now(timezone.utc).isoformat(),
     "language": "en",
@@ -309,14 +309,14 @@ headers = {
 response = requests.post(
     f"{API_URL}?uid={USER_ID}",
     headers=headers,
-    data=json.dumps(memory_data)
+    data=json.dumps(conversation_data)
 )
 
 # Handle the response
 if response.status_code == 200:
-    print("Memory created successfully")
+    print("Conversation created successfully")
 else:
-    print(f"Error creating memory: {response.status_code}")
+    print(f"Error creating conversation: {response.status_code}")
     print(response.text)
 ```
 
@@ -336,7 +336,7 @@ curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/conversat
   }'
 ```
 
-#### Example 3: Social Media Post Memory
+#### Example 3: Social Media Post Conversation
 
 ##### Python Example
 
@@ -351,8 +351,8 @@ API_KEY = "sk_your_api_key_here"
 USER_ID = "user_123"
 API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/conversations"
 
-# Social post memory data
-memory_data = {
+# Social post conversation data
+conversation_data = {
     "started_at": datetime.now(timezone.utc).isoformat(),
     "finished_at": datetime.now(timezone.utc).isoformat(),
     "language": "en",
@@ -374,14 +374,14 @@ headers = {
 response = requests.post(
     f"{API_URL}?uid={USER_ID}",
     headers=headers,
-    data=json.dumps(memory_data)
+    data=json.dumps(conversation_data)
 )
 
 # Handle the response
 if response.status_code == 200:
-    print("Memory created successfully")
+    print("Conversation created successfully")
 else:
-    print(f"Error creating memory: {response.status_code}")
+    print(f"Error creating conversation: {response.status_code}")
     print(response.text)
 ```
 
@@ -405,7 +405,7 @@ curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/conversat
   }'
 ```
 
-#### Example 4: Message Memory
+#### Example 4: Message Conversation
 
 ##### Python Example
 
@@ -420,8 +420,8 @@ API_KEY = "sk_your_api_key_here"
 USER_ID = "user_123"
 API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/conversations"
 
-# Message memory data
-memory_data = {
+# Message conversation data
+conversation_data = {
     "started_at": datetime.now(timezone.utc).isoformat(),
     "finished_at": datetime.now(timezone.utc).isoformat(),
     "language": "en",
@@ -439,14 +439,14 @@ headers = {
 response = requests.post(
     f"{API_URL}?uid={USER_ID}",
     headers=headers,
-    data=json.dumps(memory_data)
+    data=json.dumps(conversation_data)
 )
 
 # Handle the response
 if response.status_code == 200:
-    print("Memory created successfully")
+    print("Conversation created successfully")
 else:
-    print(f"Error creating memory: {response.status_code}")
+    print(f"Error creating conversation: {response.status_code}")
     print(response.text)
 ```
 
@@ -632,8 +632,8 @@ curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/facts?uid
 To test your integration:
 
 1. Use a development API key
-2. Create test memories with clearly marked test content
-3. Verify the memories appear in the user's OMI app
+2. Create test conversations with clearly marked test content
+3. Verify the conversations appear in the user's OMI app
 4. Check that the structured data (title, overview, action items) appears correctly
 
 ## Troubleshooting
@@ -643,7 +643,7 @@ Common issues and solutions:
 - **Authentication Errors**: Double-check your API key and ensure it's being sent correctly in the Authorization header
 - **Invalid Request Format**: Validate your JSON against the required schema
 - **App Not Found**: Verify your app ID is correct
-- **Permission Errors**: Ensure your app has the create_memory capability and is enabled for the user
+- **Permission Errors**: Ensure your app has the create_conversation capability and is enabled for the user
 - **Rate Limiting**: If you receive a 429 error, implement exponential backoff in your requests
 - **Missing Required Fields**: Ensure you're providing `text`, `text_source`
 
@@ -652,7 +652,7 @@ Common issues and solutions:
 Before your app can use integration actions, several conditions must be met:
 
 1. **App Configuration**: Your app must be configured with the "External Integration" capability and specifically have the appropriate action enabled:
-   - For creating memories: the "create_conversation" action
+   - For creating conversations: the "create_conversation" action
    - For creating facts: the "create_facts" action
 
 2. **API Key**: You must generate an API key for your app through the app management interface.
@@ -666,7 +666,7 @@ If any of these conditions are not met, the API will return appropriate error re
 ## Future Actions
 
 The OMI team is continuously working to expand the available actions. Future actions may include:
-- Updating existing memories
+- Updating existing conversations
 - Updating existing facts
 - Setting reminders
 - Accessing and updating user preferences
@@ -689,11 +689,11 @@ For more details on the submission process, see the [Submitting Apps](https://do
 
 Here are some inspiring examples of what you can build with integration actions:
 
-1. **Journal Creator**: Automatically create memory entries based on data from a journaling app
-2. **Meeting Summarizer**: Create memories with structured summaries after calendar meetings
-3. **Health Tracker**: Generate memories with health insights based on fitness tracker data
-4. **Social Media Archiver**: Create memories from important social media interactions
-5. **Learning Assistant**: Create structured memories from educational content consumption
+1. **Journal Creator**: Automatically create conversation entries based on data from a journaling app
+2. **Meeting Summarizer**: Create conversations with structured summaries after calendar meetings
+3. **Health Tracker**: Generate conversations with health insights based on fitness tracker data
+4. **Social Media Archiver**: Create conversations from important social media interactions
+5. **Learning Assistant**: Create structured conversations from educational content consumption
 6. **Preference Tracker**: Extract facts about user preferences from emails or messages
 7. **Knowledge Base Builder**: Create facts from educational content or research materials
 8. **Contact Information Manager**: Extract contact details as facts from emails or messages
