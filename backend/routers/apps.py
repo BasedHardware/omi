@@ -1,5 +1,6 @@
 import json
 import os
+import asyncio
 from datetime import datetime, timezone
 from typing import List
 import requests
@@ -55,6 +56,10 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['status'] = 'under-review'
     data['name'] = data['name'].strip()
     data['id'] = str(ULID())
+    if not data.get('author') and not data.get('email'):
+        user = get_user_from_uid(uid)
+        data['author'] = user['display_name']
+        data['email'] = user['email']
     if not data.get('is_paid'):
         data['is_paid'] = False
     else:
