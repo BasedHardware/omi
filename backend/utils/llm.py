@@ -1375,7 +1375,6 @@ def extract_facts_from_text(
         return []
 
     try:
-        from utils.llm import PydanticOutputParser, Facts, extract_facts_text_content_prompt, llm_mini
         parser = PydanticOutputParser(pydantic_object=Facts)
         chain = extract_facts_text_content_prompt | llm_mini | parser
         response: Facts = chain.invoke({
