@@ -106,7 +106,7 @@ The request body should be a JSON object with the following structure:
 - `geolocation`: Location data for the conversation
   - `latitude`: Latitude coordinate
   - `longitude`: Longitude coordinate
-- `text_source`: Source of the text content (options: "audio_transcript", "email", "post", "message", "other_text") - defaults to "audio_transcript"
+- `text_source`: Source of the text content (options: "audio_transcript", "message", "other_text") - defaults to "audio_transcript"
 - `text_source_spec`: Additional specification about the source (optional)
 
 ### Response
@@ -275,7 +275,7 @@ curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/conversat
   }'
 ```
 
-#### Example 2: Email Conversation
+#### Example 2: Other Text Conversation
 
 ##### Python Example
 
@@ -290,14 +290,14 @@ API_KEY = "sk_your_api_key_here"
 USER_ID = "user_123"
 API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/conversations"
 
-# Email conversation data
+# Other text conversation data
 conversation_data = {
     "started_at": datetime.now(timezone.utc).isoformat(),
     "finished_at": datetime.now(timezone.utc).isoformat(),
     "language": "en",
     "text": "From: alex@example.com\nTo: me@example.com\nSubject: Dinner Plans\n\nHi there,\n\nWould you like to grab dinner this Friday at 7pm? I found a new restaurant downtown that has great reviews.\n\nLet me know if you're available!\n\nBest,\nAlex",
-    "text_source": "email",
-    "text_source_spec": "personal_email"
+    "text_source": "other_text",
+    "text_source_spec": "email"
 }
 
 # Make the API request
@@ -331,12 +331,12 @@ curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/conversat
     "finished_at": "2024-03-10T15:05:00.000Z",
     "language": "en",
     "text": "From: alex@example.com\nTo: me@example.com\nSubject: Dinner Plans\n\nHi there,\n\nWould you like to grab dinner this Friday at 7pm? I found a new restaurant downtown that has great reviews.\n\nLet me know if you'\''re available!\n\nBest,\nAlex",
-    "text_source": "email",
-    "text_source_spec": "personal_email"
+    "text_source": "other_text",
+    "text_source_spec": "email"
   }'
 ```
 
-#### Example 3: Social Media Post Conversation
+#### Example 3: Other Text Conversation with Location
 
 ##### Python Example
 
@@ -351,14 +351,14 @@ API_KEY = "sk_your_api_key_here"
 USER_ID = "user_123"
 API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/conversations"
 
-# Social post conversation data
+# Other text conversation data with location
 conversation_data = {
     "started_at": datetime.now(timezone.utc).isoformat(),
     "finished_at": datetime.now(timezone.utc).isoformat(),
     "language": "en",
     "text": "Just finished my first marathon! 26.2 miles in 4 hours and 15 minutes. So proud of this accomplishment after 6 months of training. #running #marathon #personalgoals",
-    "text_source": "post",
-    "text_source_spec": "instagram",
+    "text_source": "other_text",
+    "text_source_spec": "social_post",
     "geolocation": {
         "latitude": 40.7128,
         "longitude": -74.0060
@@ -396,8 +396,8 @@ curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/conversat
     "finished_at": "2024-03-10T15:05:00.000Z",
     "language": "en",
     "text": "Just finished my first marathon! 26.2 miles in 4 hours and 15 minutes. So proud of this accomplishment after 6 months of training. #running #marathon #personalgoals",
-    "text_source": "post",
-    "text_source_spec": "instagram",
+    "text_source": "other_text",
+    "text_source_spec": "social_post",
     "geolocation": {
         "latitude": 40.7128,
         "longitude": -74.0060
