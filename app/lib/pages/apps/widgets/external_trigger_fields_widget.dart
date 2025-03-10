@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
+import 'package:friend_private/pages/apps/widgets/action_fields_widget.dart';
 import 'package:friend_private/utils/other/validators.dart';
 import 'package:provider/provider.dart';
 import 'package:friend_private/widgets/collapsible_section.dart';
@@ -13,15 +14,15 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
       if (!provider.isCapabilitySelectedById('external_integration')) {
         return const SizedBox.shrink();
       }
+
+      // Show trigger event selection first
       return GestureDetector(
         onTap: () {
           FocusScope.of(context).unfocus();
         },
         child: Column(
           children: [
-            const SizedBox(
-              height: 12,
-            ),
+            const SizedBox(height: 18),
             Form(
               key: provider.externalIntegrationKey,
               onChanged: () {
@@ -36,6 +37,11 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    const Padding(
+                      padding: EdgeInsets.only(left: 2.0),
+                      child: ActionFieldsWidget(),
+                    ),
+                    const SizedBox(height: 16),
                     Padding(
                       padding: const EdgeInsets.only(left: 8.0),
                       child: Text(
@@ -79,9 +85,43 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                                           );
                                         },
                                         shrinkWrap: true,
-                                        itemCount: provider.getTriggerEvents().length,
+                                        itemCount: provider.getTriggerEvents().length + 1, // +1 for None option
                                         physics: const NeverScrollableScrollPhysics(),
                                         itemBuilder: (context, index) {
+                                          // Special case for "None" option at the end
+                                          if (index == provider.getTriggerEvents().length) {
+                                            return InkWell(
+                                              onTap: () {
+                                                provider.setTriggerEvent(null);
+                                                Navigator.pop(context);
+                                              },
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                                child: Row(
+                                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                                  children: [
+                                                    const SizedBox(
+                                                      width: 6,
+                                                    ),
+                                                    Text(
+                                                      "None",
+                                                      style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                                                    ),
+                                                    const Spacer(),
+                                                    Checkbox(
+                                                      value: provider.triggerEvent == null,
+                                                      onChanged: (value) {
+                                                        provider.setTriggerEvent(null);
+                                                        Navigator.pop(context);
+                                                      },
+                                                      side: BorderSide(color: Colors.grey.shade300),
+                                                      shape: const CircleBorder(),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            );
+                                          }
                                           return InkWell(
                                             onTap: () {
                                               provider.setTriggerEvent(provider.getTriggerEvents()[index].id);
@@ -154,96 +194,94 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(
-                      height: 16,
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8.0),
-                      child: Text(
-                        'Webhook URL',
-                        style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                    // Only show the rest of the form if a trigger event is selected
+                    if (provider.triggerEvent != null) ...[
+                      const SizedBox(
+                        height: 16,
                       ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
-                      margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade800,
-                        borderRadius: BorderRadius.circular(10.0),
-                      ),
-                      width: double.infinity,
-                      child: TextFormField(
-                        validator: (value) {
-                          if (value == null || !isValidUrl(value)) {
-                            return 'Please enter a valid webhook URL';
-                          }
-                          return null;
-                        },
-                        controller: provider.webhookUrlController,
-                        decoration: InputDecoration(
-                          isDense: true,
-                          errorStyle: TextStyle(color: Colors.red.shade100),
-                          border: InputBorder.none,
-                          hintText: 'https://your-webhook-url.com/',
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8.0),
+                        child: Text(
+                          'Webhook URL',
+                          style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                         ),
                       ),
-                    ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
+                        margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade800,
+                          borderRadius: BorderRadius.circular(10.0),
+                        ),
+                        width: double.infinity,
+                        child: TextFormField(
+                          validator: (value) {
+                            if (provider.triggerEvent != null && (value == null || !isValidUrl(value))) {
+                              return 'Please enter a valid webhook URL';
+                            }
+                            return null;
+                          },
+                          controller: provider.webhookUrlController,
+                          decoration: InputDecoration(
+                            isDense: true,
+                            errorStyle: TextStyle(color: Colors.red.shade100),
+                            border: InputBorder.none,
+                            hintText: 'http...',
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(
                       height: 8,
                     ),
                     Row(
-                      mainAxisSize: MainAxisSize.max,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Padding(
                           padding: const EdgeInsets.only(left: 8.0),
                           child: Text(
-                            'App Home URL (optional)',
+                            'App Home URL',
                             style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                           ),
                         ),
-                        Expanded(
-                          child: Align(
-                            alignment: Alignment.centerRight,
-                            child: IconButton(
-                              alignment: Alignment.centerRight,
-                              icon: const Icon(
-                                Icons.info_outline,
-                                color: Colors.white60,
-                                size: 20,
-                              ),
-                              onPressed: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (context) => AlertDialog(
-                                    backgroundColor: Colors.grey.shade900,
-                                    title: Text(
-                                      'App Home URL',
-                                      style: TextStyle(color: Colors.grey.shade100),
-                                    ),
-                                    content: Text(
-                                      'Omi opens this URL instantly when users launch your app after installation, perfect for authentication or setup instructions.',
-                                      style: TextStyle(color: Colors.grey.shade300),
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(context),
-                                        child: Text(
-                                          'OK',
-                                          style: TextStyle(color: Colors.grey.shade100),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.info_outline,
+                            color: Colors.white60,
+                            size: 20,
                           ),
+                          onPressed: () {
+                            showDialog(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                backgroundColor: Colors.grey.shade900,
+                                title: Text(
+                                  'App Home URL (Optional)',
+                                  style: TextStyle(color: Colors.grey.shade100),
+                                ),
+                                content: Text(
+                                  'Omi opens this URL instantly when users launch your app after installation, perfect for authentication or setup instructions.',
+                                  style: TextStyle(color: Colors.grey.shade300),
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    style: TextButton.styleFrom(
+                                      backgroundColor: Theme.of(context).colorScheme.secondary,
+                                      foregroundColor: Colors.white,
+                                    ),
+                                    child: const Text('OK'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
-                      margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
+                      margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 0, bottom: 6),
                       decoration: BoxDecoration(
                         color: Colors.grey.shade800,
                         borderRadius: BorderRadius.circular(10.0),
@@ -260,18 +298,18 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                         decoration: const InputDecoration(
                           isDense: true,
                           border: InputBorder.none,
-                          hintText: 'https://your-app-home.com/',
+                          hintText: 'http...',
                         ),
                       ),
                     ),
                     const SizedBox(height: 16),
                     CollapsibleSection(
                       title: Container(
-                        padding: const EdgeInsets.only(left: 8, top: 12, bottom: 12),
+                        padding: const EdgeInsets.only(left: 12, top: 12, bottom: 12),
                         child: Row(
                           children: [
                             Text(
-                              'Advanced',
+                              'More',
                               style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                             ),
                           ],
@@ -341,7 +379,7 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                             decoration: const InputDecoration(
                               isDense: true,
                               border: InputBorder.none,
-                              hintText: 'https://your-auth-url.com/',
+                              hintText: 'http...',
                             ),
                           ),
                         ),
@@ -374,7 +412,7 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                             decoration: const InputDecoration(
                               isDense: true,
                               border: InputBorder.none,
-                              hintText: 'https://your-setup-completed-url.com/',
+                              hintText: 'http...',
                             ),
                           ),
                         ),

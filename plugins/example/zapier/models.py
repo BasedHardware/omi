@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Optional
-from models import WorkflowMemorySource, Geolocation
+from models import ExternalIntegrationMemorySource, Geolocation
 
 
 class ZapierSubcribeModel(BaseModel):
@@ -21,7 +21,7 @@ class ZapierCreateMemory(BaseModel):
 
 class ZapierActionCreateMemory(BaseModel):
     text: str
-    source: WorkflowMemorySource # text_source
+    source: ExternalIntegrationMemorySource  # text_source
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     language: Optional[str] = None

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -16,7 +17,6 @@ import 'package:friend_private/pages/conversations/conversations_page.dart';
 import 'package:friend_private/pages/facts/page.dart';
 import 'package:friend_private/pages/home/widgets/chat_apps_dropdown_widget.dart';
 import 'package:friend_private/pages/persona/persona_profile.dart';
-import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/pages/home/widgets/speech_language_sheet.dart';
 import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/providers/app_provider.dart';
@@ -532,7 +532,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               IconButton(
                   padding: const EdgeInsets.all(8.0),
                   icon: SvgPicture.asset(
-                    'assets/images/ic_persona_profile.svg',
+                    Assets.images.icPersonaProfile.path,
                     width: 28,
                     height: 28,
                   ),
