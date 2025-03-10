@@ -45,14 +45,6 @@ def _get_structured(
                 structured = get_transcript_structure(memory.text, memory.started_at, language_code, tz)
                 return structured, False
 
-            if memory.text_source == ExternalIntegrationMemorySource.email:
-                structured = get_email_structure(memory.text, memory.started_at, language_code, tz)
-                return structured, False
-
-            if memory.text_source == ExternalIntegrationMemorySource.post:
-                structured = get_post_structure(memory.text, memory.started_at, language_code, tz, memory.text_source_spec)
-                return structured, False
-
             if memory.text_source == ExternalIntegrationMemorySource.message:
                 structured = get_message_structure(memory.text, memory.started_at, language_code, tz, memory.text_source_spec)
                 return structured, False
@@ -197,11 +189,7 @@ def save_structured_vector(uid: str, memory: Memory, update_only: bool = False):
         text_content = memory.external_data.get('text')
         if text_content and len(text_content) > 0 and text_content and len(text_content) > 0:
             text_source_spec = memory.external_data.get('text_source_spec')
-            if text_source == ExternalIntegrationMemorySource.email.value:
-                metadata = retrieve_metadata_from_email(uid, memory.created_at, text_content, tz)
-            elif text_source == ExternalIntegrationMemorySource.post.value:
-                metadata = retrieve_metadata_from_post(uid, memory.created_at, text_content, tz, text_source_spec)
-            elif text_source == ExternalIntegrationMemorySource.message.value:
+            if text_source == ExternalIntegrationMemorySource.message.value:
                 metadata = retrieve_metadata_from_message(uid, memory.created_at, text_content, tz, text_source_spec)
             elif text_source == ExternalIntegrationMemorySource.other.value:
                 metadata = retrieve_metadata_from_text(uid, memory.created_at, text_content, tz, text_source_spec)
