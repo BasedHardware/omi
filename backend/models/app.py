@@ -89,7 +89,6 @@ class App(BaseModel):
     thumbnails: Optional[List[str]] = []  # List of thumbnail IDs
     thumbnail_urls: Optional[List[str]] = []  # List of thumbnail URLs
     is_influencer: Optional[bool] = False
-    app_secret: Optional[str] = None
 
     def get_rating_avg(self) -> Optional[str]:
         return f'{self.rating_avg:.1f}' if self.rating_avg is not None else None

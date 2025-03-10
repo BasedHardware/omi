@@ -3,7 +3,6 @@ import os
 from datetime import datetime, timezone
 from typing import List
 import requests
-import secrets
 from ulid import ULID
 from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header
 
@@ -55,11 +54,6 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['status'] = 'under-review'
     data['name'] = data['name'].strip()
     data['id'] = str(ULID())
-    if not data.get('author') and not data.get('email'):
-        user = get_user_from_uid(uid)
-        data['author'] = user['display_name']
-        data['email'] = user['email']
-    data['app_secret'] = secrets.token_urlsafe(32)  # Generate a secure random secret
     if not data.get('is_paid'):
         data['is_paid'] = False
     else:
@@ -803,25 +797,3 @@ def get_personas(persona_id: str, secret_key: str = Header(...)):
         raise HTTPException(status_code=404, detail='Persona not found')
     print(persona)
     return persona
-
-
-@router.post('/v1/apps/{app_id}/revoke-secret', tags=['v1'])
-def revoke_app_secret(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    # Get app details
-    app_data = get_available_app_by_id(app_id, uid)
-    if not app_data:
-        raise HTTPException(status_code=404, detail='App not found')
-    
-    app = App(**app_data)
-    
-    # Check if user owns the app
-    if app.uid != uid:
-        raise HTTPException(status_code=403, detail='Not authorized to revoke app secret')
-    
-    # Generate new secret
-    app_data['app_secret'] = secrets.token_urlsafe(32)
-    
-    # Update app in database
-    update_app_in_db(app_data)
-    
-    return {'status': 'ok', 'app_secret': app_data['app_secret']}
