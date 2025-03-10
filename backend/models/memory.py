@@ -246,8 +246,6 @@ class CreateMemory(BaseModel):
 
 class ExternalIntegrationMemorySource(str, Enum):
     audio = 'audio_transcript'
-    email = 'email'
-    post = 'post'
     message = 'message'
     other = 'other_text'
 
