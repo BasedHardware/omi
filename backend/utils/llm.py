@@ -2,7 +2,7 @@ import json
 import re
 import os
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import tiktoken
 from langchain.schema import (
@@ -24,8 +24,11 @@ from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment
 from models.trend import TrendEnum, ceo_options, company_options, software_product_options, hardware_product_options, \
     ai_product_options, TrendType
-from utils.memories.facts import get_prompt_facts
+# Import function directly to avoid circular import
+from database.auth import get_user_name
+from models.facts import Fact
 from utils.prompts import extract_facts_prompt, extract_learnings_prompt, extract_facts_text_content_prompt
+from utils.memories.facts import get_prompt_data
 
 llm_mini = ChatOpenAI(model='gpt-4o-mini')
 llm_mini_stream = ChatOpenAI(model='gpt-4o-mini', streaming=True)
@@ -893,6 +896,11 @@ def qa_rag_stream(uid: str, question: str, context: str, plugin: Optional[Plugin
     return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content
 
 
+def get_prompt_facts(uid: str) -> Tuple[str, str]:
+    """Wrapper for _get_prompt_facts to maintain compatibility"""
+    return _get_prompt_facts(uid)
+
+
 def _get_qa_rag_prompt_v6(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
                           cited: Optional[bool] = False,
                           messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
@@ -1337,7 +1345,7 @@ def new_facts_extractor(
 ) -> List[Fact]:
     # print('new_facts_extractor', uid, 'segments', len(segments), user_name, 'len(facts_str)', len(facts_str))
     if user_name is None or facts_str is None:
-        user_name, facts_str = get_prompt_facts(uid)
+        user_name, facts_str = _get_prompt_facts(uid)
 
     content = TranscriptSegment.segments_as_string(segments, user_name=user_name)
     if not content or len(content) < 25:  # less than 5 words, probably nothing
@@ -1364,30 +1372,13 @@ def new_facts_extractor(
         return []
 
 
-def extract_facts_from_text(
-        uid: str, text: str, text_source: str, user_name: Optional[str] = None, facts_str: Optional[str] = None
-) -> List[Fact]:
-    """Extract facts from external integration text sources like email, posts, messages"""
-    if user_name is None or facts_str is None:
-        user_name, facts_str = get_prompt_facts(uid)
-
-    if not text or len(text) < 25:  # less than 5 words, probably nothing
-        return []
-
-    try:
-        parser = PydanticOutputParser(pydantic_object=Facts)
-        chain = extract_facts_text_content_prompt | llm_mini | parser
-        response: Facts = chain.invoke({
-            'user_name': user_name,
-            'text_content': text,
-            'text_source': text_source,
-            'facts_str': facts_str,
-            'format_instructions': parser.get_format_instructions(),
-        })
-        return response.facts
-    except Exception as e:
-        print(f'Error extracting facts from {text_source}: {e}')
-        return []
+def _get_prompt_facts(uid: str) -> Tuple[str, str]:
+    """Internal version of get_prompt_facts to avoid circular imports"""
+    user_name, user_made_facts, generated_facts = get_prompt_data(uid)
+    facts_str = f'you already know the following facts about {user_name}: \n{Fact.get_facts_as_str(generated_facts)}.'
+    if user_made_facts:
+        facts_str += f'\n\n{user_name} also shared the following about self: \n{Fact.get_facts_as_str(user_made_facts)}'
+    return user_name, facts_str + '\n'
 
 
 class Learnings(BaseModel):
