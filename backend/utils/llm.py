@@ -1340,7 +1340,7 @@ def new_facts_extractor(
 ) -> List[Fact]:
     # print('new_facts_extractor', uid, 'segments', len(segments), user_name, 'len(facts_str)', len(facts_str))
     if user_name is None or facts_str is None:
-        user_name, facts_str = _get_prompt_facts(uid)
+        user_name, facts_str = get_prompt_facts(uid)
 
     content = TranscriptSegment.segments_as_string(segments, user_name=user_name)
     if not content or len(content) < 25:  # less than 5 words, probably nothing
@@ -1365,15 +1365,6 @@ def new_facts_extractor(
     except Exception as e:
         print(f'Error extracting new facts: {e}')
         return []
-
-
-def _get_prompt_facts(uid: str) -> Tuple[str, str]:
-    """Internal version of get_prompt_facts to avoid circular imports"""
-    user_name, user_made_facts, generated_facts = get_prompt_data(uid)
-    facts_str = f'you already know the following facts about {user_name}: \n{Fact.get_facts_as_str(generated_facts)}.'
-    if user_made_facts:
-        facts_str += f'\n\n{user_name} also shared the following about self: \n{Fact.get_facts_as_str(user_made_facts)}'
-    return user_name, facts_str + '\n'
 
 
 class Learnings(BaseModel):
