@@ -28,7 +28,7 @@ from models.trend import TrendEnum, ceo_options, company_options, software_produ
 from database.auth import get_user_name
 from models.facts import Fact
 from utils.prompts import extract_facts_prompt, extract_learnings_prompt, extract_facts_text_content_prompt
-from utils.memories.facts import get_prompt_data
+from utils.memories.facts import get_prompt_facts
 
 llm_mini = ChatOpenAI(model='gpt-4o-mini')
 llm_mini_stream = ChatOpenAI(model='gpt-4o-mini', streaming=True)
@@ -894,11 +894,6 @@ def qa_rag_stream(uid: str, question: str, context: str, plugin: Optional[Plugin
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
     return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content
-
-
-def get_prompt_facts(uid: str) -> Tuple[str, str]:
-    """Wrapper for _get_prompt_facts to maintain compatibility"""
-    return _get_prompt_facts(uid)
 
 
 def _get_qa_rag_prompt_v6(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
