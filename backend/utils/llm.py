@@ -24,11 +24,8 @@ from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment
 from models.trend import TrendEnum, ceo_options, company_options, software_product_options, hardware_product_options, \
     ai_product_options, TrendType
-# Import function directly to avoid circular import
-from database.auth import get_user_name
-from models.facts import Fact
 from utils.prompts import extract_facts_prompt, extract_learnings_prompt, extract_facts_text_content_prompt
-from utils.memories.facts import get_prompt_facts
+from utils.llms.fact import get_prompt_facts
 
 llm_mini = ChatOpenAI(model='gpt-4o-mini')
 llm_mini_stream = ChatOpenAI(model='gpt-4o-mini', streaming=True)
@@ -1364,6 +1361,33 @@ def new_facts_extractor(
         return response.facts
     except Exception as e:
         print(f'Error extracting new facts: {e}')
+        return []
+
+
+def extract_facts_from_text(
+        uid: str, text: str, text_source: str, user_name: Optional[str] = None, facts_str: Optional[str] = None
+) -> List[Fact]:
+    """Extract facts from external integration text sources like email, posts, messages"""
+    if user_name is None or facts_str is None:
+        user_name, facts_str = get_prompt_facts(uid)
+
+    if not text or len(text) < 25:  # less than 5 words, probably nothing
+        return []
+
+    try:
+        from utils.llm import PydanticOutputParser, Facts, extract_facts_text_content_prompt, llm_mini
+        parser = PydanticOutputParser(pydantic_object=Facts)
+        chain = extract_facts_text_content_prompt | llm_mini | parser
+        response: Facts = chain.invoke({
+            'user_name': user_name,
+            'text_content': text,
+            'text_source': text_source,
+            'facts_str': facts_str,
+            'format_instructions': parser.get_format_instructions(),
+        })
+        return response.facts
+    except Exception as e:
+        print(f'Error extracting facts from {text_source}: {e}')
         return []
 
 

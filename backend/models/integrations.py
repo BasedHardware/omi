@@ -19,9 +19,7 @@ class ScreenPipeCreateMemory(BaseModel):
 
 class ExternalIntegrationFactSource(str, Enum):
     email = "email"
-    post = "post"
-    message = "message"
-    audio = "audio"
+    post = "social_post"
     other = "other"
 
 
