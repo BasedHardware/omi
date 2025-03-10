@@ -19,9 +19,9 @@ from utils.memories.facts import process_external_integration_fact
 router = APIRouter()
 
 
-@router.post('/v2/integrations/{app_id}/user/memories', response_model=integration_models.EmptyResponse,
-             tags=['integration', 'memories'])
-async def create_memory_via_integration(
+@router.post('/v2/integrations/{app_id}/user/conversations', response_model=integration_models.EmptyResponse,
+             tags=['integration', 'conversations'])
+async def create_conversation_via_integration(
     request: Request,
     app_id: str,
     create_memory: memory_models.ExternalIntegrationCreateMemory,
@@ -46,9 +46,9 @@ async def create_memory_via_integration(
     if app_id not in enabled_plugins:
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
-    # Check if the app has the capability external_integration > action > create_memory
-    if not apps_utils.app_has_action(app, 'create_memory'):
-        raise HTTPException(status_code=403, detail="App does not have the capability to create memories")
+    # Check if the app has the capability external_integration > action > create_conversation
+    if not apps_utils.app_has_action(app, 'create_conversation'):
+        raise HTTPException(status_code=403, detail="App does not have the capability to create conversations")
 
     # Time
     started_at = create_memory.started_at if create_memory.started_at is not None else datetime.now(timezone.utc)
