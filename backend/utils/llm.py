@@ -2,7 +2,7 @@ import json
 import re
 import os
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import tiktoken
 from langchain.schema import (
@@ -24,8 +24,8 @@ from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment
 from models.trend import TrendEnum, ceo_options, company_options, software_product_options, hardware_product_options, \
     ai_product_options, TrendType
-from utils.memories.facts import get_prompt_facts
 from utils.prompts import extract_facts_prompt, extract_learnings_prompt, extract_facts_text_content_prompt
+from utils.llms.fact import get_prompt_facts
 
 llm_mini = ChatOpenAI(model='gpt-4o-mini')
 llm_mini_stream = ChatOpenAI(model='gpt-4o-mini', streaming=True)

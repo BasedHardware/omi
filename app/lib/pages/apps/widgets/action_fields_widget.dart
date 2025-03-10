@@ -67,8 +67,8 @@ class ActionFieldsWidget extends StatelessWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      actionType.id == 'create_memory'
-                                          ? 'Extend user memories by making a POST request to the OMI System.'
+                                      actionType.id == 'create_conversation'
+                                          ? 'Extend user conversations by making a POST request to the OMI System.'
                                           : 'Enable this action for your app.',
                                       style: TextStyle(
                                         color: Colors.grey.shade400,

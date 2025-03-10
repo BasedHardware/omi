@@ -598,3 +598,14 @@ def app_has_action(app: App, action_name: str) -> bool:
             return True
 
     return False
+def app_has_action(app: dict, action_name: str) -> bool:
+    """Check if an app has a specific action capability."""
+    if not app.get('external_integration'):
+        return False
+    
+    actions = app['external_integration'].get('actions', [])
+    for action in actions:
+        if action.get('action') == action_name:
+            return True
+    
+    return False
