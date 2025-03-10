@@ -11,7 +11,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:friend_private/backend/http/api/notifications.dart';
-import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/home/page.dart';

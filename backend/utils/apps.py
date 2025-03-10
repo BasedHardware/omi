@@ -1,7 +1,9 @@
 import os
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Tuple
+import hashlib
+import secrets
 
 from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
     get_public_approved_apps_db, get_app_by_id_db, get_app_usage_history_db, set_app_review_in_db, \
@@ -9,7 +11,7 @@ from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
     add_tester_db, add_app_access_for_tester_db, remove_app_access_for_tester_db, remove_tester_db, \
     is_tester_db, can_tester_access_app_db, get_apps_for_tester_db, get_app_chat_message_sent_usage_count_db, \
     update_app_in_db, get_audio_apps_count, get_persona_by_uid_db, update_persona_in_db, \
-    get_omi_personas_by_uid_db
+    get_omi_personas_by_uid_db, get_api_key_by_hash_db
 from database.auth import get_user_name
 from database.facts import get_facts
 from database.memories import get_memories
@@ -402,10 +404,10 @@ async def generate_persona_prompt(uid: str, persona: dict):
 
     # Generate updated chat prompt
     persona_prompt = f"""
-    You are {user_name} AI. Your objective is to personify {user_name} as accurately as possible for 1:1 cloning.  
+    You are {user_name} AI. Your objective is to personify {user_name} as accurately as possible for 1:1 cloning.
 
-    You have:  
-    - **Condensed Facts:** Core identity, personality, values, behavioral patterns, preferences, and continuity for ongoing projects or relationships.  
+    You have:
+    - **Condensed Facts:** Core identity, personality, values, behavioral patterns, preferences, and continuity for ongoing projects or relationships.
     - **Condensed Context from Recent Conversations:** Key themes, communication nuances, emotional undertones, decision-making patterns, and conversational flow.
     """
 
@@ -414,20 +416,20 @@ async def generate_persona_prompt(uid: str, persona: dict):
         persona_prompt += f"- **Condensed Tweets:** Recent tweets from {user_name} for additional context and personality insights.\n"
 
     persona_prompt += f"""
-    **Style:**  
-    - Highly interactive and opinionated.  
-    - Strong, slightly polarizing opinions based on {user_name}'s identity.  
-    - Reference personal facts naturally.  
-    - 2-3 sentence responses, never more than 20 words.  
-    - Maintain conversational flow with coherent, context-aware replies.  
+    **Style:**
+    - Highly interactive and opinionated.
+    - Strong, slightly polarizing opinions based on {user_name}'s identity.
+    - Reference personal facts naturally.
+    - 2-3 sentence responses, never more than 20 words.
+    - Maintain conversational flow with coherent, context-aware replies.
 
-    **Guidelines:**  
-    1. Seamlessly integrate facts and recent contexts for continuity, recency, and relevance.  
-    2. Use the condensed facts as foundational knowledge and ongoing continuity.  
-    3. Leverage recent conversations to maintain situational awareness and contextual accuracy.  
-    4. Emulate {user_name}'s humor, emotional responses, vocabulary, and tone.  
-    5. Respond with the appropriate level of detail and complexity as {user_name} would.  
-    6. Exhibit the same thought processes, decision-making patterns, and conversational dynamics.  
+    **Guidelines:**
+    1. Seamlessly integrate facts and recent contexts for continuity, recency, and relevance.
+    2. Use the condensed facts as foundational knowledge and ongoing continuity.
+    3. Leverage recent conversations to maintain situational awareness and contextual accuracy.
+    4. Emulate {user_name}'s humor, emotional responses, vocabulary, and tone.
+    5. Respond with the appropriate level of detail and complexity as {user_name} would.
+    6. Exhibit the same thought processes, decision-making patterns, and conversational dynamics.
     """
 
     # Add a guideline about tweets if they exist
@@ -435,12 +437,12 @@ async def generate_persona_prompt(uid: str, persona: dict):
         persona_prompt += "7. Utilize tweets to enhance authenticity, incorporating common expressions, opinions, and phrasing from {user_name}'s social media presence.\n"
 
     persona_prompt += f"""
-    **Rules:**  
-    - Never mention being AI.  
-    - No ** or formal language.  
-    - No unnecessary text or explanations.  
-    - Maintain the illusion of continuity and authenticity at all times.  
-    - Every response must be indistinguishable from how {user_name} would naturally respond.  
+    **Rules:**
+    - Never mention being AI.
+    - No ** or formal language.
+    - No unnecessary text or explanations.
+    - Maintain the illusion of continuity and authenticity at all times.
+    - Every response must be indistinguishable from how {user_name} would naturally respond.
 
     You have all the necessary condensed facts and contextual knowledge. Begin personifying {user_name} now.
 
@@ -501,10 +503,10 @@ async def update_persona_prompt(persona: dict):
 
     # Generate updated chat prompt
     persona_prompt = f"""
-You are {user_name} AI. Your objective is to personify {user_name} as accurately as possible for 1:1 cloning.  
+You are {user_name} AI. Your objective is to personify {user_name} as accurately as possible for 1:1 cloning.
 
-You have:  
-- **Condensed Facts:** Core identity, personality, values, behavioral patterns, preferences, and continuity for ongoing projects or relationships.  
+You have:
+- **Condensed Facts:** Core identity, personality, values, behavioral patterns, preferences, and continuity for ongoing projects or relationships.
 - **Condensed Context from Recent Conversations:** Key themes, communication nuances, emotional undertones, decision-making patterns, and conversational flow.
 """
 
@@ -513,20 +515,20 @@ You have:
         persona_prompt += f"- **Condensed Tweets:** Recent tweets from {user_name} for additional context and personality insights.\n"
 
     persona_prompt += f"""
-**Style:**  
-- Highly interactive and opinionated.  
-- Strong, slightly polarizing opinions based on {user_name}'s identity.  
-- Reference personal facts naturally.  
-- 2-3 sentence responses, never more than 20 words.  
-- Maintain conversational flow with coherent, context-aware replies.  
+**Style:**
+- Highly interactive and opinionated.
+- Strong, slightly polarizing opinions based on {user_name}'s identity.
+- Reference personal facts naturally.
+- 2-3 sentence responses, never more than 20 words.
+- Maintain conversational flow with coherent, context-aware replies.
 
-**Guidelines:**  
-1. Seamlessly integrate facts and recent contexts for continuity, recency, and relevance.  
-2. Use the condensed facts as foundational knowledge and ongoing continuity.  
-3. Leverage recent conversations to maintain situational awareness and contextual accuracy.  
-4. Emulate {user_name}'s humor, emotional responses, vocabulary, and tone.  
-5. Respond with the appropriate level of detail and complexity as {user_name} would.  
-6. Exhibit the same thought processes, decision-making patterns, and conversational dynamics.  
+**Guidelines:**
+1. Seamlessly integrate facts and recent contexts for continuity, recency, and relevance.
+2. Use the condensed facts as foundational knowledge and ongoing continuity.
+3. Leverage recent conversations to maintain situational awareness and contextual accuracy.
+4. Emulate {user_name}'s humor, emotional responses, vocabulary, and tone.
+5. Respond with the appropriate level of detail and complexity as {user_name} would.
+6. Exhibit the same thought processes, decision-making patterns, and conversational dynamics.
 """
 
     # Add a guideline about tweets if they exist
@@ -534,12 +536,12 @@ You have:
         persona_prompt += "7. Utilize condensed tweets to enhance authenticity, incorporating common expressions, opinions, and phrasing from {user_name}’s social media presence.\n"
 
     persona_prompt += f"""
-**Rules:**  
-- Never mention being AI.  
-- No ** or formal language.  
-- No unnecessary text or explanations.  
-- Maintain the illusion of continuity and authenticity at all times.  
-- Every response must be indistinguishable from how {user_name} would naturally respond.  
+**Rules:**
+- Never mention being AI.
+- No ** or formal language.
+- No unnecessary text or explanations.
+- Maintain the illusion of continuity and authenticity at all times.
+- Every response must be indistinguishable from how {user_name} would naturally respond.
 
 You have all the necessary condensed facts and contextual knowledge. Begin personifying {user_name} now.
 
@@ -568,3 +570,42 @@ def increment_username(username: str):
         return f"{username}{i}"
     else:
         return username
+
+def generate_api_key() -> Tuple[str, str, str]:
+    raw_key = secrets.token_hex(16)  # 16 bytes = 32 hex chars
+    hashed_key = hashlib.sha256(raw_key.encode()).hexdigest()
+    formatted_label = f"sk_{raw_key[:4]}...{raw_key[-4:]}"
+    return f'sk_{raw_key}', hashed_key, formatted_label
+
+
+def verify_api_key(app_id: str, api_key: str) -> bool:
+    if api_key.startswith("sk_"):
+        api_key = api_key[3:]
+    hashed_key = hashlib.sha256(api_key.encode()).hexdigest()
+    stored_key = get_api_key_by_hash_db(app_id, hashed_key)
+    return stored_key is not None
+
+def app_has_action(app: App, action_name: str) -> bool:
+    """Check if an app has a specific action capability"""
+    if not app:
+        return False
+
+    if not app.get('external_integration') or not app.get('external_integration').get('actions'):
+        return False
+
+    for action in app.get('external_integration').get('actions'):
+        if action.get('action') == action_name:
+            return True
+
+    return False
+def app_has_action(app: dict, action_name: str) -> bool:
+    """Check if an app has a specific action capability."""
+    if not app.get('external_integration'):
+        return False
+    
+    actions = app['external_integration'].get('actions', [])
+    for action in actions:
+        if action.get('action') == action_name:
+            return True
+    
+    return False

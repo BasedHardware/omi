@@ -5,6 +5,7 @@ import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/apps/widgets/full_screen_image_viewer.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/pages/apps/widgets/notification_scopes_chips_widget.dart';
+import 'package:friend_private/pages/apps/widgets/api_keys_widget.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
@@ -13,6 +14,7 @@ import 'widgets/capabilities_chips_widget.dart';
 import 'widgets/external_trigger_fields_widget.dart';
 import 'widgets/payment_details_widget.dart';
 import 'widgets/prompt_text_field.dart';
+import 'widgets/action_fields_widget.dart';
 
 class UpdateAppPage extends StatefulWidget {
   final App app;
@@ -42,7 +44,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
           backgroundColor: Theme.of(context).colorScheme.primary,
           extendBody: true,
           appBar: AppBar(
-            title: const Text('Update Your App'),
+            title: const Text('Manage Your App'),
             backgroundColor: Theme.of(context).colorScheme.primary,
           ),
           body: PopScope(
@@ -101,9 +103,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const SizedBox(
-                          height: 18,
-                        ),
+                        const SizedBox(height: 18),
                         AppMetadataWidget(
                           pickImage: () async {
                             await provider.updateImage();
@@ -125,7 +125,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                 paymentPlan: provider.mapPaymentPlanIdToName(provider.selectePaymentPlan),
                               )
                             : const SizedBox.shrink(),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 18),
                         Container(
                           decoration: BoxDecoration(
                             color: Colors.grey.shade900,
@@ -142,7 +142,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                   style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                                 ),
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 18),
                               SizedBox(
                                 height: 180,
                                 child: ListView.builder(
@@ -261,7 +261,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                             ],
                           ),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 18),
                         Container(
                           decoration: BoxDecoration(
                             color: Colors.grey.shade900,
@@ -288,9 +288,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                         if (provider.isCapabilitySelectedById('chat') || provider.isCapabilitySelectedById('memories'))
                           Column(
                             children: [
-                              const SizedBox(
-                                height: 12,
-                              ),
+                              const SizedBox(height: 18),
                               GestureDetector(
                                 onTap: () {
                                   FocusScope.of(context).unfocus();
@@ -338,9 +336,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                         if (provider.isCapabilitySelectedById('proactive_notification'))
                           Column(
                             children: [
-                              const SizedBox(
-                                height: 12,
-                              ),
+                              const SizedBox(height: 18),
                               Container(
                                 decoration: BoxDecoration(
                                   color: Colors.grey.shade900,
@@ -367,8 +363,15 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                               ),
                             ],
                           ),
+                        // API Keys section
+                        Column(
+                          children: [
+                            const SizedBox(height: 18),
+                            ApiKeysWidget(appId: widget.app.id),
+                          ],
+                        ),
                         const SizedBox(
-                          height: 90,
+                          height: 120,
                         ),
                       ],
                     ),

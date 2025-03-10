@@ -1,12 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/pages/conversations/sync_page.dart';
 import 'package:friend_private/pages/sdcard/sdcard_transfer_progress.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/conversation_provider.dart';
-import 'package:friend_private/utils/other/string_utils.dart';
-import 'package:friend_private/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 
 class LocalSyncWidget extends StatefulWidget {

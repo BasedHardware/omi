@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
-import 'package:friend_private/pages/conversations/widgets/local_sync.dart';
 import 'package:friend_private/pages/conversations/widgets/processing_capture.dart';
 import 'package:friend_private/pages/conversations/widgets/search_result_header_widget.dart';
 import 'package:friend_private/pages/conversations/widgets/search_widget.dart';
