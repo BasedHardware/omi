@@ -5,7 +5,7 @@ description: 'Building apps that perform actions in the OMI ecosystem'
 
 # Integration with Actions
 
-Integration apps with actions allow your app to not just receive data from OMI but also perform specific actions within the OMI ecosystem. This guide will walk you through creating apps that can perform actions like creating memories and more.
+Integration apps with actions allow your app to not just receive data from OMI but also perform specific actions within the OMI ecosystem. This guide will walk you through creating apps that can perform actions like creating memories, adding facts, and more.
 
 ## What Are Integration Actions?
 
@@ -13,6 +13,7 @@ Integration actions are predefined capabilities that your app can perform within
 
 Currently supported actions include:
 - **Create Memory**: Generate new memories in the user's OMI account
+- **Create Facts**: Add specific facts to the user's knowledge base
 
 ## Prerequisites
 
@@ -57,7 +58,7 @@ The Create Memory action allows your app to programmatically create new memories
 To create a memory, make a POST request to:
 
 ```
-POST https://api.omi.me/v2/integrations/{app_id}/user/memories?uid={user_id}
+POST https://api.omi.me/v2/integrations/{app_id}/user/conversations?uid={user_id}
 ```
 
 Where:
@@ -128,24 +129,94 @@ Common error responses include:
 - `404 Not Found`: App not found
 - `429 Too Many Requests`: Rate limit exceeded
 
+## Implementing the Create Facts Action
+
+The Create Facts action allows your app to programmatically add facts to a user's knowledge base in OMI.
+
+### API Endpoint
+
+To create facts, make a POST request to:
+
+```
+POST https://api.omi.me/v2/integrations/{app_id}/user/facts?uid={user_id}
+```
+
+Where:
+- `{app_id}` is your app's unique identifier
+- `{user_id}` is the OMI user ID for whom you're creating the facts
+
+### Authentication
+
+Include your API key in the request headers:
+
+```
+Authorization: Bearer sk_your_api_key_here
+```
+
+> **Important**: The API key must be associated with the app specified in the URL path.
+
+### Request Body
+
+The request body should be a JSON object with the following structure:
+
+```json
+{
+  "text": "The text from which facts will be extracted. This could be information about preferences, important dates, or other factual information.",
+  "text_source": "email",
+  "text_source_spec": "newsletter"
+}
+```
+
+#### Required Fields:
+
+- `text`: The text content from which facts will be extracted
+
+#### Optional Fields:
+
+- `text_source`: Source of the text content (options: "email", "social_post", "other") - defaults to "other"
+- `text_source_spec`: Additional specification about the source (optional)
+
+### Response
+
+A successful request will return a 200 OK status with an empty response body:
+
+```json
+{}
+```
+
+The facts will be extracted and saved asynchronously in the user's account.
+
+### Error Handling
+
+Common error responses include:
+
+- `400 Bad Request`: Invalid request format
+- `401 Unauthorized`: Missing or invalid Authorization header
+- `403 Forbidden`: Invalid API key, app not enabled for user, or app lacks create_facts capability
+- `404 Not Found`: App not found
+- `422 Unprocessable Entity`: Text is required and cannot be empty
+- `429 Too Many Requests`: Rate limit exceeded
+
 ## Best Practices
 
-1. **User Consent**: Always ensure you have user consent before creating memories on their behalf
+1. **User Consent**: Always ensure you have user consent before creating memories or facts on their behalf
 2. **Rate Limiting**: Implement rate limiting in your app to avoid hitting API limits
 3. **Error Handling**: Implement robust error handling for API requests
-4. **Data Quality**: Ensure the transcript segments are well-formatted and make sense as a conversation
-5. **Meaningful Content**: Only create memories with meaningful content that provides value to users
-6. **Verify App Enablement**: Check that users have enabled your app before attempting to create memories
+4. **Data Quality**: Ensure the content is well-formatted and contains meaningful information
+5. **Meaningful Content**: Only create memories and facts with meaningful content that provides value to users
+6. **Verify App Enablement**: Check that users have enabled your app before attempting to create content
 7. **Proper Authentication**: Securely store and use your API keys
-8. **Structured Data**: When possible, provide well-structured data to improve the memory quality
+8. **Structured Data**: When possible, provide well-structured data to improve the quality of extracted information
 
 ## Example Implementation
 
-Here are examples showing different ways to create memories using various text sources:
+Here are examples showing how to create memories and facts using different text sources:
 
-### Example 1: Email Memory
+### Creating Memories
 
-#### Python Example
+#### Example 1: Audio Transcript Memory
+
+##### Python Example
 
 ```python
 import requests
@@ -156,34 +227,77 @@ from datetime import datetime, timezone
 APP_ID = "your_app_id_here"
 API_KEY = "sk_your_api_key_here"
 USER_ID = "user_123"
-API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/memories"
+API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/conversations"
+
+# Audio transcript memory data
+memory_data = {
+    "started_at": datetime.now(timezone.utc).isoformat(),
+    "finished_at": datetime.now(timezone.utc).isoformat(),
+    "language": "en",
+    "text": "John: Hi Sarah, how was your weekend?\n\nSarah: It was great! I went hiking at Mount Rainier.\n\nJohn: That sounds amazing. I've been wanting to go there.\n\nSarah: You should definitely check it out. The views are breathtaking.",
+    "text_source": "audio_transcript",
+    "text_source_spec": "phone_call"
+}
+
+# Make the API request
+headers = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json"
+}
+
+response = requests.post(
+    f"{API_URL}?uid={USER_ID}",
+    headers=headers,
+    data=json.dumps(memory_data)
+)
+
+# Handle the response
+if response.status_code == 200:
+    print("Memory created successfully")
+else:
+    print(f"Error creating memory: {response.status_code}")
+    print(response.text)
+```
+
+##### cURL Example
+
+```bash
+curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/conversations?uid=user_123" \
+  -H "Authorization: Bearer sk_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "started_at": "2024-03-10T15:00:00.000Z",
+    "finished_at": "2024-03-10T15:05:00.000Z",
+    "language": "en",
+    "text": "John: Hi Sarah, how was your weekend?\n\nSarah: It was great! I went hiking at Mount Rainier.\n\nJohn: That sounds amazing. I'\''ve been wanting to go there.\n\nSarah: You should definitely check it out. The views are breathtaking.",
+    "text_source": "audio_transcript",
+    "text_source_spec": "phone_call"
+  }'
+```
+
+#### Example 2: Email Memory
+
+##### Python Example
+
+```python
+import requests
+import json
+from datetime import datetime, timezone
+
+# API configuration
+APP_ID = "your_app_id_here"
+API_KEY = "sk_your_api_key_here"
+USER_ID = "user_123"
+API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/conversations"
 
 # Email memory data
-email_memory = {
+memory_data = {
     "started_at": datetime.now(timezone.utc).isoformat(),
     "finished_at": datetime.now(timezone.utc).isoformat(),
     "language": "en",
-    "text": """From: sarah@example.com
-To: me@example.com
-Subject: Project Update - Q3 Planning
-
-Hi there,
-
-Just following up on our discussion yesterday about the Q3 planning. I've drafted the initial roadmap and would appreciate your feedback before the team meeting on Friday.
-
-Key points to consider:
-1. Budget allocation for the new marketing campaign
-2. Timeline for the product launch in August
-3. Resource allocation for the customer research initiative
-
-Let me know your thoughts by Thursday EOD if possible.
-
-Best regards,
-Sarah Johnson
-Product Manager
-""",
+    "text": "From: alex@example.com\nTo: me@example.com\nSubject: Dinner Plans\n\nHi there,\n\nWould you like to grab dinner this Friday at 7pm? I found a new restaurant downtown that has great reviews.\n\nLet me know if you're available!\n\nBest,\nAlex",
     "text_source": "email",
-    "text_source_spec": "work_email"
+    "text_source_spec": "personal_email"
 }
 
 # Make the API request
@@ -195,36 +309,36 @@ headers = {
 response = requests.post(
     f"{API_URL}?uid={USER_ID}",
     headers=headers,
-    data=json.dumps(email_memory)
+    data=json.dumps(memory_data)
 )
 
 # Handle the response
 if response.status_code == 200:
-    print("Email memory created successfully")
+    print("Memory created successfully")
 else:
     print(f"Error creating memory: {response.status_code}")
     print(response.text)
 ```
 
-#### cURL Example
+##### cURL Example
 
 ```bash
-curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/memories?uid=user_123" \
+curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/conversations?uid=user_123" \
   -H "Authorization: Bearer sk_your_api_key_here" \
   -H "Content-Type: application/json" \
   -d '{
-    "started_at": "2024-07-22T12:00:00.000Z",
-    "finished_at": "2024-07-22T12:05:00.000Z",
+    "started_at": "2024-03-10T15:00:00.000Z",
+    "finished_at": "2024-03-10T15:05:00.000Z",
     "language": "en",
-    "text": "From: sarah@example.com\nTo: me@example.com\nSubject: Project Update - Q3 Planning\n\nHi there,\n\nJust following up on our discussion yesterday about the Q3 planning. I'\''ve drafted the initial roadmap and would appreciate your feedback before the team meeting on Friday.\n\nKey points to consider:\n1. Budget allocation for the new marketing campaign\n2. Timeline for the product launch in August\n3. Resource allocation for the customer research initiative\n\nLet me know your thoughts by Thursday EOD if possible.\n\nBest regards,\nSarah Johnson\nProduct Manager",
+    "text": "From: alex@example.com\nTo: me@example.com\nSubject: Dinner Plans\n\nHi there,\n\nWould you like to grab dinner this Friday at 7pm? I found a new restaurant downtown that has great reviews.\n\nLet me know if you'\''re available!\n\nBest,\nAlex",
     "text_source": "email",
-    "text_source_spec": "work_email"
+    "text_source_spec": "personal_email"
   }'
 ```
 
-### Example 2: Social Media Post Memory
+#### Example 3: Social Media Post Memory
 
-#### Python Example
+##### Python Example
 
 ```python
 import requests
@@ -235,23 +349,19 @@ from datetime import datetime, timezone
 APP_ID = "your_app_id_here"
 API_KEY = "sk_your_api_key_here"
 USER_ID = "user_123"
-API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/memories"
+API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/conversations"
 
-# Social media post memory data
-post_memory = {
+# Social post memory data
+memory_data = {
     "started_at": datetime.now(timezone.utc).isoformat(),
     "finished_at": datetime.now(timezone.utc).isoformat(),
     "language": "en",
-    "text": """Just announced our new AI research paper at #AIConf2024! Our team has developed a novel approach to multimodal learning that improves accuracy by 23% while reducing computational requirements. 
-
-The paper "Efficient Multimodal Learning in Resource-Constrained Environments" will be published next month in the Journal of AI Research.
-
-So proud of everyone who contributed to this breakthrough! #ArtificialIntelligence #MachineLearning #Research""",
+    "text": "Just finished my first marathon! 26.2 miles in 4 hours and 15 minutes. So proud of this accomplishment after 6 months of training. #running #marathon #personalgoals",
     "text_source": "post",
-    "text_source_spec": "twitter",
+    "text_source_spec": "instagram",
     "geolocation": {
-        "latitude": 37.7749,
-        "longitude": -122.4194
+        "latitude": 40.7128,
+        "longitude": -74.0060
     }
 }
 
@@ -264,40 +374,40 @@ headers = {
 response = requests.post(
     f"{API_URL}?uid={USER_ID}",
     headers=headers,
-    data=json.dumps(post_memory)
+    data=json.dumps(memory_data)
 )
 
 # Handle the response
 if response.status_code == 200:
-    print("Social post memory created successfully")
+    print("Memory created successfully")
 else:
     print(f"Error creating memory: {response.status_code}")
     print(response.text)
 ```
 
-#### cURL Example
+##### cURL Example
 
 ```bash
-curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/memories?uid=user_123" \
+curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/conversations?uid=user_123" \
   -H "Authorization: Bearer sk_your_api_key_here" \
   -H "Content-Type: application/json" \
   -d '{
-    "started_at": "2024-07-22T12:00:00.000Z",
-    "finished_at": "2024-07-22T12:05:00.000Z",
+    "started_at": "2024-03-10T15:00:00.000Z",
+    "finished_at": "2024-03-10T15:05:00.000Z",
     "language": "en",
-    "text": "Just announced our new AI research paper at #AIConf2024! Our team has developed a novel approach to multimodal learning that improves accuracy by 23% while reducing computational requirements.\n\nThe paper \"Efficient Multimodal Learning in Resource-Constrained Environments\" will be published next month in the Journal of AI Research.\n\nSo proud of everyone who contributed to this breakthrough! #ArtificialIntelligence #MachineLearning #Research",
+    "text": "Just finished my first marathon! 26.2 miles in 4 hours and 15 minutes. So proud of this accomplishment after 6 months of training. #running #marathon #personalgoals",
     "text_source": "post",
-    "text_source_spec": "twitter",
+    "text_source_spec": "instagram",
     "geolocation": {
-        "latitude": 37.7749,
-        "longitude": -122.4194
+        "latitude": 40.7128,
+        "longitude": -74.0060
     }
   }'
 ```
 
-### Example 3: Messaging Conversation Memory
+#### Example 4: Message Memory
 
-#### Python Example
+##### Python Example
 
 ```python
 import requests
@@ -308,30 +418,16 @@ from datetime import datetime, timezone
 APP_ID = "your_app_id_here"
 API_KEY = "sk_your_api_key_here"
 USER_ID = "user_123"
-API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/memories"
+API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/conversations"
 
 # Message memory data
-message_memory = {
+memory_data = {
     "started_at": datetime.now(timezone.utc).isoformat(),
     "finished_at": datetime.now(timezone.utc).isoformat(),
     "language": "en",
-    "text": """Alex: Hey, are we still on for dinner tonight at 7?
-
-Me: Yes! Looking forward to it. Where should we meet?
-
-Alex: How about that new Italian place on Main Street? Heard they have amazing pasta.
-
-Me: Sounds perfect! Should I make a reservation?
-
-Alex: Already did! Under my name for 7:15pm.
-
-Me: Great, see you there! I'll bring that book I was telling you about.
-
-Alex: Awesome, can't wait to check it out. Don't forget we have the team meeting tomorrow at 9am.
-
-Me: Thanks for the reminder! I'll prepare my presentation tonight after dinner.""",
+    "text": "Mom: Don't forget to pick up milk on your way home\n\nMe: Will do. Need anything else?\n\nMom: Maybe some bread too if the store has the whole grain kind\n\nMe: Got it. I'll be home around 6pm",
     "text_source": "message",
-    "text_source_spec": "whatsapp"
+    "text_source_spec": "sms"
 }
 
 # Make the API request
@@ -343,74 +439,54 @@ headers = {
 response = requests.post(
     f"{API_URL}?uid={USER_ID}",
     headers=headers,
-    data=json.dumps(message_memory)
+    data=json.dumps(memory_data)
 )
 
 # Handle the response
 if response.status_code == 200:
-    print("Message memory created successfully")
+    print("Memory created successfully")
 else:
     print(f"Error creating memory: {response.status_code}")
     print(response.text)
 ```
 
-#### cURL Example
+##### cURL Example
 
 ```bash
-curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/memories?uid=user_123" \
+curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/conversations?uid=user_123" \
   -H "Authorization: Bearer sk_your_api_key_here" \
   -H "Content-Type: application/json" \
   -d '{
-    "started_at": "2024-07-22T12:00:00.000Z",
-    "finished_at": "2024-07-22T12:05:00.000Z",
+    "started_at": "2024-03-10T15:00:00.000Z",
+    "finished_at": "2024-03-10T15:05:00.000Z",
     "language": "en",
-    "text": "Alex: Hey, are we still on for dinner tonight at 7?\n\nMe: Yes! Looking forward to it. Where should we meet?\n\nAlex: How about that new Italian place on Main Street? Heard they have amazing pasta.\n\nMe: Sounds perfect! Should I make a reservation?\n\nAlex: Already did! Under my name for 7:15pm.\n\nMe: Great, see you there! I'\''ll bring that book I was telling you about.\n\nAlex: Awesome, can'\''t wait to check it out. Don'\''t forget we have the team meeting tomorrow at 9am.\n\nMe: Thanks for the reminder! I'\''ll prepare my presentation tonight after dinner.",
+    "text": "Mom: Don'\''t forget to pick up milk on your way home\n\nMe: Will do. Need anything else?\n\nMom: Maybe some bread too if the store has the whole grain kind\n\nMe: Got it. I'\''ll be home around 6pm",
     "text_source": "message",
-    "text_source_spec": "whatsapp"
+    "text_source_spec": "sms"
   }'
 ```
 
-### Example 4: Audio Transcript Memory with Timestamps
+### Creating Facts
 
-#### Python Example
+#### Example: Creating Facts from Different Sources
+
+##### Python Example - Email Facts
 
 ```python
 import requests
 import json
-from datetime import datetime, timezone
 
 # API configuration
 APP_ID = "your_app_id_here"
 API_KEY = "sk_your_api_key_here"
 USER_ID = "user_123"
-API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/memories"
+API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/facts"
 
-# Audio transcript memory data with timestamps
-audio_memory = {
-    "started_at": datetime.now(timezone.utc).isoformat(),
-    "finished_at": datetime.now(timezone.utc).isoformat(),
-    "language": "en",
-    "text": """[00:00:05 - 00:00:15] Speaker 1: Welcome to our weekly team meeting. Today we'll be discussing the Q3 roadmap and our progress on the current sprint.
-
-[00:00:16 - 00:00:30] Speaker 2: Thanks for the introduction. I'd like to start by sharing that we've completed 85% of our sprint goals for this week. The new user authentication system is now live in production.
-
-[00:00:31 - 00:00:38] Speaker 1: That's excellent progress. Any blockers or challenges the team is facing?
-
-[00:00:39 - 00:00:55] Speaker 3: We're having some issues with the database migration that was scheduled for this weekend. I think we need to allocate more time for testing before we proceed.
-
-[00:00:56 - 00:01:10] Speaker 1: Good point. Let's push the migration to next weekend and use this week for additional testing. Can you coordinate with the QA team?
-
-[00:01:11 - 00:01:15] Speaker 3: Will do. I'll set up a meeting with them tomorrow.
-
-[00:01:16 - 00:01:30] Speaker 2: I also wanted to mention that the customer feedback survey results came in yesterday. Overall satisfaction is up 12% since our last release.
-
-[00:01:31 - 00:01:45] Speaker 1: That's great news! Let's include those metrics in our quarterly report. Before we wrap up, any other items we need to discuss?
-
-[00:01:46 - 00:01:55] Speaker 4: Just a reminder that the company all-hands is next Tuesday at 10 AM. Everyone should plan to attend.
-
-[00:01:56 - 00:02:05] Speaker 1: Thanks for the reminder. Let's adjourn for today and continue discussions in our Slack channel if needed.""",
-    "text_source": "audio_transcript",
-    "text_source_spec": "team_meeting"
+# Facts data from email
+facts_data = {
+    "text": "Your flight to Paris has been confirmed for May 15th, 2024. Departure: JFK at 9:30 PM. Arrival: CDG at 11:00 AM local time. Confirmation code: ABC123. Your hotel reservation at Hotel de Paris is confirmed for May 16-20, 2024.",
+    "text_source": "email",
+    "text_source_spec": "travel_confirmation"
 }
 
 # Make the API request
@@ -422,30 +498,131 @@ headers = {
 response = requests.post(
     f"{API_URL}?uid={USER_ID}",
     headers=headers,
-    data=json.dumps(audio_memory)
+    data=json.dumps(facts_data)
 )
 
 # Handle the response
 if response.status_code == 200:
-    print("Audio transcript memory created successfully")
+    print("Facts created successfully")
 else:
-    print(f"Error creating memory: {response.status_code}")
+    print(f"Error creating facts: {response.status_code}")
     print(response.text)
 ```
 
-#### cURL Example
+##### cURL Example - Email Facts
 
 ```bash
-curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/memories?uid=user_123" \
+curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/facts?uid=user_123" \
   -H "Authorization: Bearer sk_your_api_key_here" \
   -H "Content-Type: application/json" \
   -d '{
-    "started_at": "2024-07-22T12:00:00.000Z",
-    "finished_at": "2024-07-22T12:30:00.000Z",
-    "language": "en",
-    "text": "[00:00:05 - 00:00:15] Speaker 1: Welcome to our weekly team meeting. Today we'\''ll be discussing the Q3 roadmap and our progress on the current sprint.\n\n[00:00:16 - 00:00:30] Speaker 2: Thanks for the introduction. I'\''d like to start by sharing that we'\''ve completed 85% of our sprint goals for this week. The new user authentication system is now live in production.\n\n[00:00:31 - 00:00:38] Speaker 1: That'\''s excellent progress. Any blockers or challenges the team is facing?\n\n[00:00:39 - 00:00:55] Speaker 3: We'\''re having some issues with the database migration that was scheduled for this weekend. I think we need to allocate more time for testing before we proceed.\n\n[00:00:56 - 00:01:10] Speaker 1: Good point. Let'\''s push the migration to next weekend and use this week for additional testing. Can you coordinate with the QA team?\n\n[00:01:11 - 00:01:15] Speaker 3: Will do. I'\''ll set up a meeting with them tomorrow.\n\n[00:01:16 - 00:01:30] Speaker 2: I also wanted to mention that the customer feedback survey results came in yesterday. Overall satisfaction is up 12% since our last release.\n\n[00:01:31 - 00:01:45] Speaker 1: That'\''s great news! Let'\''s include those metrics in our quarterly report. Before we wrap up, any other items we need to discuss?\n\n[00:01:46 - 00:01:55] Speaker 4: Just a reminder that the company all-hands is next Tuesday at 10 AM. Everyone should plan to attend.\n\n[00:01:56 - 00:02:05] Speaker 1: Thanks for the reminder. Let'\''s adjourn for today and continue discussions in our Slack channel if needed.",
-    "text_source": "audio_transcript",
-    "text_source_spec": "team_meeting"
+    "text": "Your flight to Paris has been confirmed for May 15th, 2024. Departure: JFK at 9:30 PM. Arrival: CDG at 11:00 AM local time. Confirmation code: ABC123. Your hotel reservation at Hotel de Paris is confirmed for May 16-20, 2024.",
+    "text_source": "email",
+    "text_source_spec": "travel_confirmation"
+  }'
+```
+
+##### Python Example - Social Post Facts
+
+```python
+import requests
+import json
+
+# API configuration
+APP_ID = "your_app_id_here"
+API_KEY = "sk_your_api_key_here"
+USER_ID = "user_123"
+API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/facts"
+
+# Facts data from social post
+facts_data = {
+    "text": "I'm excited to announce that I've accepted a new position as Senior Software Engineer at TechCorp starting next month! Looking forward to this new chapter in my career. #newjob #softwareengineering #career",
+    "text_source": "social_post",
+    "text_source_spec": "linkedin"
+}
+
+# Make the API request
+headers = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json"
+}
+
+response = requests.post(
+    f"{API_URL}?uid={USER_ID}",
+    headers=headers,
+    data=json.dumps(facts_data)
+)
+
+# Handle the response
+if response.status_code == 200:
+    print("Facts created successfully")
+else:
+    print(f"Error creating facts: {response.status_code}")
+    print(response.text)
+```
+
+##### cURL Example - Social Post Facts
+
+```bash
+curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/facts?uid=user_123" \
+  -H "Authorization: Bearer sk_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "I'\''m excited to announce that I'\''ve accepted a new position as Senior Software Engineer at TechCorp starting next month! Looking forward to this new chapter in my career. #newjob #softwareengineering #career",
+    "text_source": "social_post",
+    "text_source_spec": "linkedin"
+  }'
+```
+
+##### Python Example - Other Facts
+
+```python
+import requests
+import json
+
+# API configuration
+APP_ID = "your_app_id_here"
+API_KEY = "sk_your_api_key_here"
+USER_ID = "user_123"
+API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/facts"
+
+# Facts data from other source
+facts_data = {
+    "text": "Dr. Smith's contact information: Phone: (555) 123-4567, Email: dr.smith@hospital.org. Next appointment scheduled for April 3rd at 2:30 PM. Remember to bring your insurance card and list of current medications.",
+    "text_source": "other",
+    "text_source_spec": "health_app"
+}
+
+# Make the API request
+headers = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json"
+}
+
+response = requests.post(
+    f"{API_URL}?uid={USER_ID}",
+    headers=headers,
+    data=json.dumps(facts_data)
+)
+
+# Handle the response
+if response.status_code == 200:
+    print("Facts created successfully")
+else:
+    print(f"Error creating facts: {response.status_code}")
+    print(response.text)
+```
+
+##### cURL Example - Other Facts
+
+```bash
+curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/facts?uid=user_123" \
+  -H "Authorization: Bearer sk_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Dr. Smith'\''s contact information: Phone: (555) 123-4567, Email: dr.smith@hospital.org. Next appointment scheduled for April 3rd at 2:30 PM. Remember to bring your insurance card and list of current medications.",
+    "text_source": "other",
+    "text_source_spec": "health_app"
   }'
 ```
 
@@ -470,11 +647,13 @@ Common issues and solutions:
 - **Rate Limiting**: If you receive a 429 error, implement exponential backoff in your requests
 - **Missing Required Fields**: Ensure you're providing `text`, `text_source`
 
-## Prerequisites for Using the Create Memory Action
+## Prerequisites for Using Integration Actions
 
-Before your app can create memories, several conditions must be met:
+Before your app can use integration actions, several conditions must be met:
 
-1. **App Configuration**: Your app must be configured with the "External Integration" capability and specifically have the "create_memory" action enabled.
+1. **App Configuration**: Your app must be configured with the "External Integration" capability and specifically have the appropriate action enabled:
+   - For creating memories: the "create_conversation" action
+   - For creating facts: the "create_facts" action
 
 2. **API Key**: You must generate an API key for your app through the app management interface.
 
@@ -488,7 +667,7 @@ If any of these conditions are not met, the API will return appropriate error re
 
 The OMI team is continuously working to expand the available actions. Future actions may include:
 - Updating existing memories
-- Creating and managing user facts
+- Updating existing facts
 - Setting reminders
 - Accessing and updating user preferences
 - And more!
@@ -515,5 +694,8 @@ Here are some inspiring examples of what you can build with integration actions:
 3. **Health Tracker**: Generate memories with health insights based on fitness tracker data
 4. **Social Media Archiver**: Create memories from important social media interactions
 5. **Learning Assistant**: Create structured memories from educational content consumption
+6. **Preference Tracker**: Extract facts about user preferences from emails or messages
+7. **Knowledge Base Builder**: Create facts from educational content or research materials
+8. **Contact Information Manager**: Extract contact details as facts from emails or messages
 
 We can't wait to see what you build with OMI integration actions!
