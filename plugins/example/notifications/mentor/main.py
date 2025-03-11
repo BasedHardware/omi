@@ -12,7 +12,8 @@ import requests
 from dotenv import load_dotenv
 
 # API configuration
-API_KEY = "sk-eU7AxTBWPtKt4fBkPRAJFi4-P5nwEoMDmrHbZ_28vAk"
+APP_ID = "01JFFC690S2B89MJYPPM5TTM1Q"
+API_KEY = "sk_dab4c83dd1b3c996482de27cd54f5c84"
 
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent.parent / '.env'
@@ -63,16 +64,8 @@ class MessageBuffer:
         self.min_words_after_silence = 5  # minimum words needed after silence
         self.last_notification_times = defaultdict(dict)  # Track last notification time per message per session
         self.last_reminder_times = defaultdict(dict)  # Track last reminder time per message per session
-        self.app_ids = {}  # Track app ID for each session
         logger.debug(f"MessageBuffer initialized with cleanup_interval={self.cleanup_interval}, silence_threshold={self.silence_threshold}")
 
-    def set_app_id(self, session_id, aid):
-        with self.lock:
-            self.app_ids[session_id] = aid
-
-    def get_app_id(self, session_id):
-        with self.lock:
-            return self.app_ids.get(session_id)
 
     def get_buffer(self, session_id):
         logger.debug(f"Getting buffer for session_id: {session_id}")
@@ -122,8 +115,6 @@ class MessageBuffer:
                     del self.last_notification_times[session_id]
                 if session_id in self.last_reminder_times:
                     del self.last_reminder_times[session_id]
-                if session_id in self.app_ids:
-                    del self.app_ids[session_id]
             self.last_cleanup = current_time
             logger.info(f"Cleanup complete. Removed {len(expired_sessions)} sessions. Active sessions: {len(self.buffers)}")
 
@@ -148,7 +139,6 @@ class MessageBuffer:
                     logger.info(f"Session {session_id}, Message {message_id}:")
                     logger.info(f"  - Time since last notification: {time_since_notification:.1f}s (threshold: {REMINDER_INTERVAL}s)")
                     logger.info(f"  - Time since last reminder: {time_since_reminder:.1f}s (threshold: {REMINDER_INTERVAL}s)")
-                    logger.info(f"  - App ID: {self.app_ids.get(session_id)}")
                     
                     if time_since_notification >= REMINDER_INTERVAL and last_reminder == 0:  # Only if no reminder sent yet
                         logger.info(f"  -> Adding message {message_id} from session {session_id} to reminder list")
@@ -182,12 +172,7 @@ def send_reminder_notification(session_id, message_id):
         logger.error("API_BASE_URL environment variable not set")
         return
 
-    aid = message_buffer.get_app_id(session_id)
-    if not aid:
-        logger.error(f"No app ID found for session {session_id}")
-        return
-
-    notification_url = f"{api_base_url.rstrip('/')}/v2/integrations/{aid}/notification"
+    notification_url = f"{api_base_url.rstrip('/')}/v2/integrations/{APP_ID}/notification"
     
     try:
         # Use Bearer token authentication
@@ -200,7 +185,7 @@ def send_reminder_notification(session_id, message_id):
             "message": REMINDER_MESSAGE
         }
         
-        logger.info(f"Sending reminder notification to {notification_url} for session {session_id}, message {message_id} with aid {aid}")
+        logger.info(f"Sending reminder notification to {notification_url} for session {session_id}, message {message_id} with aid {APP_ID}")
         response = requests.post(notification_url, headers=headers, params=params)
         if response.status_code == 200:
             logger.info(f"Successfully sent reminder notification for session {session_id}, message {message_id}")
@@ -333,7 +318,6 @@ def webhook():
             data = request.json
             session_id = data.get('session_id')
             segments = data.get('segments', [])
-            aid = data.get('aid')  # Get app ID from request
             message_id = data.get('message_id')  # Get message ID from request
             
             # Generate message_id if not provided
@@ -341,14 +325,11 @@ def webhook():
                 message_id = f"{session_id}_{int(time.time())}"
                 logger.info(f"Generated message_id: {message_id}")
             
-            logger.info(f"Processing webhook for session_id: {session_id}, message_id: {message_id}, segments count: {len(segments)}, aid: {aid}")
+            logger.info(f"Processing webhook for session_id: {session_id}, message_id: {message_id}, segments count: {len(segments)}, aid: {APP_ID}")
             
             if not session_id:
                 logger.error("No session_id provided in request")
                 return jsonify({"message": "No session_id provided"}), 400
-
-            if aid:  # Save app ID if provided
-                message_buffer.set_app_id(session_id, aid)
 
             current_time = time.time()
             buffer_data = message_buffer.get_buffer(session_id)
