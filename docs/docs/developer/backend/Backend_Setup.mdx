@@ -54,6 +54,15 @@ Before you start, make sure you have the following:
        gcloud auth application-default login --project <project-id>
        ```
     - This process generates an `application_default_credentials.json` file in the `~/.config/gcloud` directory. This file is used for automatic authentication with Google Cloud services in Python.
+    - Copy the credentials file to your backend directory and rename it:
+       ```bash
+       # For macOS/Linux:
+       cp ~/.config/gcloud/application_default_credentials.json ./google-credentials.json
+
+       # For Windows:
+       copy %APPDATA%\gcloud\application_default_credentials.json google-credentials.json
+       ```
+
 
 ## II. Backend Setup 🛠️
 
@@ -214,6 +223,9 @@ Here's a detailed explanation of each environment variable you need to define in
 - **`BUCKET_SPEECH_PROFILES`:**  The name of the Google Cloud Storage bucket where user speech profiles are stored
 - **`BUCKET_BACKUPS`:** The name of the Google Cloud Storage bucket used for backups (if applicable)
 - **`GOOGLE_APPLICATION_CREDENTIALS`:**  The path to your [Google Cloud service account credentials file](https://console.cloud.google.com/iam-admin/serviceaccounts) (`google-credentials.json`). This is generated in step 3 of **I. Setting Up Google Cloud & Firebase**
+  - By default, the backend expects to find a file named `google-credentials.json` in the same directory where the application is running
+  - If you've followed Option 1 in step 3 of the Google Cloud setup, this will be already set correctly
+  - If you prefer to use the default location of the credentials, set this to the full path of your `application_default_credentials.json` file (e.g., `~/.config/gcloud/application_default_credentials.json` on macOS/Linux or `%APPDATA%\gcloud\application_default_credentials.json` on Windows)
 - **`PINECONE_API_KEY`:** Your [Pinecone API key](https://app.pinecone.io/organizations/-/projects/-/api-keys), used for vector database operations. Storing Memory Embeddings: Each memory is converted into a numerical representation (embedding). Pinecone efficiently stores these embeddings and allows Omi to quickly find the most relevant memories related to a user's query
 - **`PINECONE_INDEX_NAME`:** The name of your Pinecone index where memory embeddings are stored
 - **`REDIS_DB_HOST`:** The host address of your Redis instance
