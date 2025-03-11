@@ -1,7 +1,7 @@
 # Setup
 1. Install the google-cloud-sdk `brew install google-cloud-sdk` or if you use nix envdir, it should be installed for you
 
-2. You will need to have your own Google Cloud Project (please refer to the App Docs on how to setup Firebase). If you did setup Firebase for the App, then you'll already have a Project in Google Cloud.
+2. You will need to have your own Google Cloud Project (please refer to the [App Docs]([url](https://docs.omi.me/docs/developer/AppSetup#7-setup-firebase)) on how to setup Firebase). If you did setup Firebase for the App, then you'll already have a Project in Google Cloud.
  Make sure you have the `Cloud Resource Manager` and `Firebase Management API` permissions at the minimum in the [Google Cloud API Console](https://console.cloud.google.com/apis/dashboard)
 3. Run the following commands one by one
 	```
