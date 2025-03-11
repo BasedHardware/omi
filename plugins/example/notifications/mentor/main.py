@@ -11,6 +11,9 @@ import json
 import requests
 from dotenv import load_dotenv
 
+# API configuration
+API_KEY = "sk-eU7AxTBWPtKt4fBkPRAJFi4-P5nwEoMDmrHbZ_28vAk"
+
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent.parent / '.env'
 load_dotenv(env_path)
@@ -173,14 +176,10 @@ def send_reminder_notification(session_id, message_id):
     """Send a reminder notification to the main app"""
     logger.info(f"Attempting to send reminder for session {session_id}, message {message_id}")
     
-    api_base_url = os.getenv('API_BASE_URL')
-    app_secret = os.getenv('APP_SECRET')  # Get app secret from environment variable
+    api_base_url = os.getenv('API_BASE_URL')  # Get API key from environment variable
     
     if not api_base_url:
         logger.error("API_BASE_URL environment variable not set")
-        return
-    if not app_secret:
-        logger.error("APP_SECRET environment variable not set")
         return
 
     aid = message_buffer.get_app_id(session_id)
@@ -188,23 +187,21 @@ def send_reminder_notification(session_id, message_id):
         logger.error(f"No app ID found for session {session_id}")
         return
 
-    notification_url = f"{api_base_url.rstrip('/')}/v1/integrations/notification"
+    notification_url = f"{api_base_url.rstrip('/')}/v2/integrations/{aid}/notification"
     
     try:
-        payload = {
-            "uid": session_id,
-            "aid": aid,
-            "message": REMINDER_MESSAGE,
-            "message_id": message_id  # Include message_id in the payload
+        # Use Bearer token authentication
+        headers = {
+            'Authorization': f'Bearer {API_KEY}'
         }
         
-        # Add X-App-Secret header for authentication
-        headers = {
-            'X-App-Secret': app_secret
+        params = {
+            "uid": session_id,
+            "message": REMINDER_MESSAGE
         }
         
         logger.info(f"Sending reminder notification to {notification_url} for session {session_id}, message {message_id} with aid {aid}")
-        response = requests.post(notification_url, json=payload, headers=headers)
+        response = requests.post(notification_url, headers=headers, params=params)
         if response.status_code == 200:
             logger.info(f"Successfully sent reminder notification for session {session_id}, message {message_id}")
         else:
