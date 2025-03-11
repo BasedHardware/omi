@@ -1,6 +1,6 @@
-# Friend Simulator
+# Omi Simulator
 
-Simulator of BasedHardware Friend device.
+Simulator of BasedHardware Omi device.
 
 This is an early version, code needs cleaning, proper error handling, ...
 
