@@ -3,18 +3,12 @@
 SET(APPLE FALSE)
 cmake_minimum_required(VERSION 3.20.0)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
-set(NRFXLIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/modules/nrfxlib)
-zephyr_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/modules/nrfxlib)
-
 
 project(nrf52840_nordic)
 enable_language(C ASM)
 
 set(CMAKE_SYSTEM_PROCESSOR cortex-m4)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16")
-
-link_directories(${NRFXLIB_DIR}/lib)
-
 
 target_sources(app PRIVATE
     src/main.c
