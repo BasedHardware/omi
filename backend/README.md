@@ -86,13 +86,12 @@ If you prefer to run the backend using Docker, follow these steps:
 
 5. Copy your Google Cloud application default credentials file to the backend directory:
    ```bash
-
-   cp ~/.config/gcloud/application_default_credentials.json ./google-credentials.json/
+   cp ~/.config/gcloud/application_default_credentials.json ./google-credentials.json
    ```
 
 6. Make sure your Google Cloud application default credentials file exists:
    ```bash
-cp ~/.config/gcloud/application_default_credentials.json ./google-credentials.json
+   cp ~/.config/gcloud/application_default_credentials.json ./google-credentials.json
    ```
 
 7. Build the Docker image:
