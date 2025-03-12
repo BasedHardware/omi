@@ -49,3 +49,39 @@
 17. Now try running the `uvicorn main:app --reload --env-file .env` command again.
 18. Assign the url given by ngrok in the app's env to `API_BASE_URL`
 19. Now your app should be using your local backend
+
+## Troubleshooting
+
+### Opus Library Issues
+
+If you encounter an error related to the opus library like `Exception: Could not find Opus library. Make sure it is installed.`, follow these steps:
+
+1. Make sure you have installed the opus library at the system level:
+   ```bash
+   # On macOS
+   brew install opus
+
+   # On Ubuntu/Debian
+   sudo apt-get install libopus-dev
+   ```
+
+2. Create a symbolic link to the opus library in your virtual environment:
+   ```bash
+   # On macOS
+   # First, find where the library is installed
+   find /usr -name "libopus.dylib" 2>/dev/null || find /opt -name "libopus.dylib" 2>/dev/null
+
+   # Then create a symbolic link (replace the path with your actual path)
+   mkdir -p venv/lib
+   ln -sf /opt/homebrew/lib/libopus.dylib venv/lib/libopus.dylib
+
+   # Then create a symbolic link (replace the path with your actual path)
+   mkdir -p venv/lib
+   ln -sf /usr/lib/x86_64-linux-gnu/libopus.so venv/lib/libopus.so
+   ```
+
+3. Verify that the opuslib module can now be imported correctly:
+   ```bash
+   source venv/bin/activate
+   python -c "import opuslib; print('opuslib imported successfully')"
+   ```
