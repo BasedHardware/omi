@@ -99,12 +99,39 @@ If you encounter GitHub API rate limit errors, make sure to set the `GITHUB_TOKE
 If you want to use Typesense for search functionality:
 
 1. Sign up for [Typesense Cloud](https://cloud.typesense.org/) or [self-host Typesense](https://typesense.org/docs/guide/install-typesense.html)
-2. Get your Typesense API key, host, and port
-3. Update your `.env` file with the following values:
+
+2. Get your Typesense API key, host, and port:
+
+   **For Typesense Cloud:**
+   - After creating a cluster, go to the "API Keys" section
+   - Use the "Search Only API Key" or "Admin API Key" depending on your needs
+   - For the host, use the hostname shown in the "Cluster Overview" (e.g., `xxx.a1.typesense.net`)
+   - For the port, use `443` for HTTPS connections
+
+   **For Self-hosted Typesense:**
+   - The API key is the one you specified when starting the Typesense server (with `--api-key`)
+   - For the host, use the server's hostname or IP address (e.g., `localhost` or `192.168.1.100`)
+   - For the port, use the port you configured when starting the server (default is `8108`)
+
+3. Update your `.env` file with these values:
    ```
    TYPESENSE_HOST=your-typesense-host
    TYPESENSE_HOST_PORT=your-typesense-port
    TYPESENSE_API_KEY=your-typesense-api-key
+   ```
+
+   Example for Typesense Cloud:
+   ```
+   TYPESENSE_HOST=xyz123.a1.typesense.net
+   TYPESENSE_HOST_PORT=443
+   TYPESENSE_API_KEY=xyzABC123...
+   ```
+
+   Example for self-hosted Typesense:
+   ```
+   TYPESENSE_HOST=localhost
+   TYPESENSE_HOST_PORT=8108
+   TYPESENSE_API_KEY=xyz123...
    ```
 
 If you don't configure Typesense, a mock client will be used for development, which will return empty search results.
