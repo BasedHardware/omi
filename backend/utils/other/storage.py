@@ -9,12 +9,23 @@ from google.cloud.storage import transfer_manager
 
 from database.redis_db import cache_signed_url, get_cached_signed_url
 
+# Get project ID from google-credentials.json
+project_id = None
+try:
+    with open('google-credentials.json', 'r') as f:
+        credentials = json.load(f)
+        # Try to get project_id, if not available use quota_project_id
+        project_id = credentials.get('project_id') or credentials.get('quota_project_id')
+        print(f"Using Google Cloud project ID for storage: {project_id}")
+except Exception as e:
+    print(f"Error reading google-credentials.json: {e}")
+
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
     credentials = service_account.Credentials.from_service_account_info(service_account_info)
-    storage_client = storage.Client(credentials=credentials)
+    storage_client = storage.Client(credentials=credentials, project=project_id)
 else:
-    storage_client = storage.Client()
+    storage_client = storage.Client(project=project_id)
 
 speech_profiles_bucket = os.getenv('BUCKET_SPEECH_PROFILES')
 postprocessing_audio_bucket = os.getenv('BUCKET_POSTPROCESSING')
@@ -280,4 +291,3 @@ def upload_multi_chat_files(files_name: List[str], uid: str):
             files.append(f'https://storage.googleapis.com/{chat_files_bucket}/{uid}/name')
             dictFiles[name] = f'https://storage.googleapis.com/{chat_files_bucket}/{uid}/{name}'
     return dictFiles
-
