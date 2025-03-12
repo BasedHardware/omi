@@ -9,7 +9,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from google.cloud.firestore_v1.async_client import AsyncClient
 
 import utils.other.hume as hume
-from models.memory import MemoryPhoto, PostProcessingStatus, PostProcessingModel
+from models.memory import MemoryPhoto, PostProcessingStatus, PostProcessingModel, MemoryStatus
 from models.transcript_segment import TranscriptSegment
 from ._client import db
 
@@ -344,4 +344,13 @@ def get_closest_memory_to_timestamps(
     print('get_closest_memory_to_timestamps closest_memory:', closest_memory['id'])
     return closest_memory
 
-# get_closest_memory_to_timestamps('yOnlnL4a3CYHe6Zlfotrngz9T3w2', 1728236993, 1728237005)
+def get_last_completed_memory(uid: str) -> Optional[dict]:
+    query = (
+        db.collection('users').document(uid).collection('memories')
+        .where(filter=FieldFilter('deleted', '==', False))
+        .where(filter=FieldFilter('status', '==', MemoryStatus.completed))
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+        .limit(1)
+    )
+    memories = [doc.to_dict() for doc in query.stream()]
+    return memories[0] if memories else None

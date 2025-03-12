@@ -2,7 +2,7 @@ import json
 import re
 import os
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import tiktoken
 from langchain.schema import (
@@ -24,8 +24,8 @@ from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment
 from models.trend import TrendEnum, ceo_options, company_options, software_product_options, hardware_product_options, \
     ai_product_options, TrendType
-from utils.memories.facts import get_prompt_facts
-from utils.prompts import extract_facts_prompt, extract_learnings_prompt
+from utils.prompts import extract_facts_prompt, extract_learnings_prompt, extract_facts_text_content_prompt
+from utils.llms.fact import get_prompt_facts
 
 llm_mini = ChatOpenAI(model='gpt-4o-mini')
 llm_mini_stream = ChatOpenAI(model='gpt-4o-mini', streaming=True)
@@ -104,21 +104,20 @@ def should_discard_memory(transcript: str) -> bool:
 
 
 def get_transcript_structure(transcript: str, started_at: datetime, language_code: str, tz: str) -> Structured:
-    prompt = ChatPromptTemplate.from_messages([(
-        'system',
-        '''You are an expert conversation analyzer. Your task is to analyze the conversation and provide structure and clarity to the recording transcription of a conversation.
-        The conversation language is {language_code}. Use the same language {language_code} for your response.
+    prompt_text = '''You are an expert conversation analyzer. Your task is to analyze the conversation and provide structure and clarity to the recording transcription of a conversation.
+    The conversation language is {language_code}. Use the same language {language_code} for your response.
 
-        For the title, use the main topic of the conversation.
-        For the overview, condense the conversation into a summary with the main topics discussed, make sure to capture the key points and important details from the conversation.
-        For the action items, include a list of commitments, specific tasks or actionable steps from the conversation that the user is planning to do or has to do on that specific day or in future. Remember the speaker is busy so this has to be very efficient and concise, otherwise they might miss some critical tasks. Specify which speaker is responsible for each action item.
-        For the category, classify the conversation into one of the available categories.
-        For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on {started_at}. {tz} is the user's timezone, convert it to UTC and respond in UTC.
+    For the title, use the main topic of the conversation.
+    For the overview, condense the conversation into a summary with the main topics discussed, make sure to capture the key points and important details from the conversation.
+    For the action items, include a list of commitments, specific tasks or actionable steps from the conversation that the user is planning to do or has to do on that specific day or in future. Remember the speaker is busy so this has to be very efficient and concise, otherwise they might miss some critical tasks. Specify which speaker is responsible for each action item.
+    For the category, classify the conversation into one of the available categories.
+    For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on {started_at}. {tz} is the user's timezone, convert it to UTC and respond in UTC.
 
-        Transcript: ```{transcript}```
+    Transcript: ```{transcript}```
 
-        {format_instructions}'''.replace('    ', '').strip()
-    )])
+    {format_instructions}'''.replace('    ', '').strip()
+
+    prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
     chain = prompt | ChatOpenAI(model='gpt-4o') | parser
 
     response = chain.invoke({
@@ -182,12 +181,114 @@ def summarize_open_glass(photos: List[MemoryPhoto]) -> Structured:
 # **************************************************
 
 
-def summarize_experience_text(text: str) -> Structured:
-    prompt = f'''The user sent a text of their own experiences or thoughts, and wants to create a memory from it.
+def get_email_structure(text: str, started_at: datetime, language_code: str, tz: str) -> Structured:
+    prompt_text = '''
+    You are an expert email analyzer. Your task is to analyze the email content and provide structure and clarity.
+    The email language is {language_code}. Use the same language {language_code} for your response.
 
+    For the title, use the subject of the email or the main topic.
+    For the overview, condense the email into a summary with the main topics discussed, make sure to capture the key points and important details.
+    For the action items, include a list of commitments, specific tasks or actionable steps from the email that the user needs to do.
+    For the category, classify the email into one of the available categories.
+    For Calendar Events, include a list of events extracted from the email, that the user must have on their calendar. For date context, this email was received on {started_at}. {tz} is the user's timezone, convert it to UTC and respond in UTC.
+
+    Email Content: ```{text}```
+
+    {format_instructions}'''.replace('    ', '').strip()
+
+    prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
+    chain = prompt | ChatOpenAI(model='gpt-4o') | parser
+
+    response = chain.invoke({
+        'language_code': language_code,
+        'started_at': started_at.isoformat(),
+        'tz': tz,
+        'text': text,
+        'format_instructions': parser.get_format_instructions(),
+    })
+
+    for event in (response.events or []):
+        if event.duration > 180:
+            event.duration = 180
+        event.created = False
+    return response
+
+def get_post_structure(text: str, started_at: datetime, language_code: str, tz: str, text_source_spec: str = None) -> Structured:
+    prompt_text = '''
+    You are an expert social media post analyzer. Your task is to analyze the post content and provide structure and clarity.
+    The post language is {language_code}. Use the same language {language_code} for your response.
+
+    For the title, create a concise title that captures the essence of the post.
+    For the overview, summarize the post with the main topics discussed, make sure to capture the key points and important details.
+    For the action items, include any actionable steps or tasks mentioned in the post.
+    For the category, classify the post into one of the available categories.
+    For Calendar Events, include any events mentioned in the post that the user should be aware of. For date context, this post was created on {started_at}. {tz} is the user's timezone, convert it to UTC and respond in UTC.
+
+    Post Content: ```{text}```
+    Post Source: {text_source_spec}
+
+    {format_instructions}'''.replace('    ', '').strip()
+
+    prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
+    chain = prompt | ChatOpenAI(model='gpt-4o') | parser
+
+    response = chain.invoke({
+        'language_code': language_code,
+        'started_at': started_at.isoformat(),
+        'tz': tz,
+        'text': text,
+        'text_source_spec': text_source_spec if text_source_spec else 'Social Media',
+        'format_instructions': parser.get_format_instructions(),
+    })
+
+    for event in (response.events or []):
+        if event.duration > 180:
+            event.duration = 180
+        event.created = False
+    return response
+
+def get_message_structure(text: str, started_at: datetime, language_code: str, tz: str, text_source_spec: str = None) -> Structured:
+    prompt_text = '''
+    You are an expert message analyzer. Your task is to analyze the message content and provide structure and clarity.
+    The message language is {language_code}. Use the same language {language_code} for your response.
+
+    For the title, create a concise title that captures the main topic of the message.
+    For the overview, summarize the message with the main points discussed, make sure to capture the key information and important details.
+    For the action items, include any tasks or actions that need to be taken based on the message.
+    For the category, classify the message into one of the available categories.
+    For Calendar Events, include any events or meetings mentioned in the message. For date context, this message was sent on {started_at}. {tz} is the user's timezone, convert it to UTC and respond in UTC.
+
+    Message Content: ```{text}```
+    Message Source: {text_source_spec}
+    
+    {format_instructions}'''.replace('    ', '').strip()
+
+    prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
+    chain = prompt | ChatOpenAI(model='gpt-4o') | parser
+
+    response = chain.invoke({
+        'language_code': language_code,
+        'started_at': started_at.isoformat(),
+        'tz': tz,
+        'text': text,
+        'text_source_spec': text_source_spec if text_source_spec else 'Messaging App',
+        'format_instructions': parser.get_format_instructions(),
+    })
+
+    for event in (response.events or []):
+        if event.duration > 180:
+            event.duration = 180
+        event.created = False
+    return response
+
+def summarize_experience_text(text: str, text_source_spec: str = None) -> Structured:
+    source_context = f"Source: {text_source_spec}" if text_source_spec else "their own experiences or thoughts"
+    prompt = f'''The user sent a text of {source_context}, and wants to create a memory from it.
       For the title, use the main topic of the experience or thought.
       For the overview, condense the descriptions into a brief summary with the main topics discussed, make sure to capture the key points and important details.
       For the category, classify the scenes into one of the available categories.
+      For the action items, include any tasks or actions that need to be taken based on the content.
+      For Calendar Events, include any events or meetings mentioned in the content.
 
       Text: ```{text}```
       '''.replace('    ', '').strip()
@@ -1263,6 +1364,32 @@ def new_facts_extractor(
         return []
 
 
+def extract_facts_from_text(
+        uid: str, text: str, text_source: str, user_name: Optional[str] = None, facts_str: Optional[str] = None
+) -> List[Fact]:
+    """Extract facts from external integration text sources like email, posts, messages"""
+    if user_name is None or facts_str is None:
+        user_name, facts_str = get_prompt_facts(uid)
+
+    if not text or len(text) < 25:  # less than 5 words, probably nothing
+        return []
+
+    try:
+        parser = PydanticOutputParser(pydantic_object=Facts)
+        chain = extract_facts_text_content_prompt | llm_mini | parser
+        response: Facts = chain.invoke({
+            'user_name': user_name,
+            'text_content': text,
+            'text_source': text_source,
+            'facts_str': facts_str,
+            'format_instructions': parser.get_format_instructions(),
+        })
+        return response.facts
+    except Exception as e:
+        print(f'Error extracting facts from {text_source}: {e}')
+        return []
+
+
 class Learnings(BaseModel):
     result: List[str] = Field(
         min_items=0,
@@ -1845,6 +1972,187 @@ def retrieve_metadata_fields_from_transcript(
         'dates': []
     }
     # 'dates': [date.strftime('%Y-%m-%d') for date in result.dates],
+    for date in result.dates:
+        try:
+            date = datetime.strptime(date, '%Y-%m-%d')
+            if date.year > 2025:
+                continue
+            metadata['dates'].append(date.strftime('%Y-%m-%d'))
+        except Exception as e:
+            print(f'Error parsing date: {e}')
+
+    for p in metadata['people']:
+        add_filter_category_item(uid, 'people', p)
+    for t in metadata['topics']:
+        add_filter_category_item(uid, 'topics', t)
+    for e in metadata['entities']:
+        add_filter_category_item(uid, 'entities', e)
+    for d in metadata['dates']:
+        add_filter_category_item(uid, 'dates', d)
+
+    return metadata
+
+
+def retrieve_metadata_from_email(uid: str, created_at: datetime, email_text: str, tz: str) -> ExtractedInformation:
+    """Extract metadata from email content"""
+    prompt = f'''
+    You will be given the content of an email.
+
+    Your task is to extract the most accurate information from the email in the output object indicated below.
+
+    Focus on identifying:
+    1. People mentioned in the email (sender, recipients, and anyone referenced in the content)
+    2. Topics discussed in the email
+    3. Organizations, products, or other entities mentioned
+    4. Any dates or time references
+
+    For context when extracting dates, today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} in UTC.
+    {tz} is the user's timezone, convert it to UTC and respond in UTC.
+    If the email mentions "today", it means the current day.
+    If the email mentions "tomorrow", it means the next day after today.
+    If the email mentions "yesterday", it means the day before today.
+    If the email mentions "next week", it means the next monday.
+    Do not include dates greater than 2025.
+ 
+    Email Content:
+    ```
+    {email_text}
+    ```
+    '''.replace('    ', '')
+
+    return _process_extracted_metadata(uid, prompt)
+
+
+def retrieve_metadata_from_post(uid: str, created_at: datetime, post_text: str, tz: str, source_spec: str = None) -> ExtractedInformation:
+    """Extract metadata from social media post content"""
+    source_context = f"from {source_spec}" if source_spec else "from a social media platform"
+
+    prompt = f'''
+    You will be given the content of a social media post {source_context}.
+
+    Your task is to extract the most accurate information from the post in the output object indicated below.
+
+    Focus on identifying:
+    1. People mentioned in the post (author, tagged individuals, and anyone referenced)
+    2. Topics discussed in the post
+    3. Organizations, products, locations, or other entities mentioned
+    4. Any dates or time references
+
+    For context when extracting dates, today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} in UTC.
+    {tz} is the user's timezone, convert it to UTC and respond in UTC.
+    If the post mentions "today", it means the current day.
+    If the post mentions "tomorrow", it means the next day after today.
+    If the post mentions "yesterday", it means the day before today.
+    If the post mentions "next week", it means the next monday.
+    Do not include dates greater than 2025.
+
+    Post Content:
+    ```
+    {post_text}
+    ```
+    '''.replace('    ', '')
+
+    return _process_extracted_metadata(uid, prompt)
+
+
+def retrieve_metadata_from_message(uid: str, created_at: datetime, message_text: str, tz: str, source_spec: str = None) -> ExtractedInformation:
+    """Extract metadata from messaging app content"""
+    source_context = f"from {source_spec}" if source_spec else "from a messaging application"
+
+    prompt = f'''
+    You will be given the content of a message or conversation {source_context}.
+
+    Your task is to extract the most accurate information from the message in the output object indicated below.
+
+    Focus on identifying:
+    1. People mentioned in the message (sender, recipients, and anyone referenced)
+    2. Topics discussed in the message
+    3. Organizations, products, locations, or other entities mentioned
+    4. Any dates or time references
+
+    For context when extracting dates, today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} in UTC. 
+    {tz} is the user's timezone, convert it to UTC and respond in UTC.
+    If the message mentions "today", it means the current day.
+    If the message mentions "tomorrow", it means the next day after today.
+    If the message mentions "yesterday", it means the day before today.
+    If the message mentions "next week", it means the next monday.
+    Do not include dates greater than 2025.
+
+    Message Content:
+    ```
+    {message_text}
+    ```
+    '''.replace('    ', '')
+
+    return _process_extracted_metadata(uid, prompt)
+
+
+def retrieve_metadata_from_text(uid: str, created_at: datetime, text: str, tz: str, source_spec: str = None) -> ExtractedInformation:
+    """Extract metadata from generic text content"""
+    source_context = f"from {source_spec}" if source_spec else "from a text document"
+
+    prompt = f'''
+    You will be given the content of a text {source_context}.
+
+    Your task is to extract the most accurate information from the text in the output object indicated below.
+
+    Focus on identifying:
+    1. People mentioned in the text (author, recipients, and anyone referenced)
+    2. Topics discussed in the text
+    3. Organizations, products, locations, or other entities mentioned
+    4. Any dates or time references
+
+    For context when extracting dates, today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} in UTC. 
+    {tz} is the user's timezone, convert it to UTC and respond in UTC.
+    If the text mentions "today", it means the current day.
+    If the text mentions "tomorrow", it means the next day after today.
+    If the text mentions "yesterday", it means the day before today.
+    If the text mentions "next week", it means the next monday.
+    Do not include dates greater than 2025.
+
+    Text Content:
+    ```
+    {text}
+    ```
+    '''.replace('    ', '')
+
+    return _process_extracted_metadata(uid, prompt)
+
+
+def _process_extracted_metadata(uid: str, prompt: str) -> dict:
+    """Process the extracted metadata from any source"""
+    try:
+        result: ExtractedInformation = llm_mini.with_structured_output(ExtractedInformation).invoke(prompt)
+    except Exception as e:
+        print(f'Error extracting metadata: {e}')
+        return {'people': [], 'topics': [], 'entities': [], 'dates': []}
+
+    def normalize_filter(value: str) -> str:
+        # Convert to lowercase and strip whitespace
+        value = value.lower().strip()
+
+        # Remove special characters and extra spaces
+        value = re.sub(r'[^\w\s-]', '', value)
+        value = re.sub(r'\s+', ' ', value)
+
+        # Remove common filler words
+        filler_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to'}
+        value = ' '.join(word for word in value.split() if word not in filler_words)
+
+        # Standardize common variations
+        value = value.replace('artificial intelligence', 'ai')
+        value = value.replace('machine learning', 'ml')
+        value = value.replace('natural language processing', 'nlp')
+
+        return value.strip()
+
+    metadata = {
+        'people': [normalize_filter(p) for p in result.people],
+        'topics': [normalize_filter(t) for t in result.topics],
+        'entities': [normalize_filter(e) for e in result.entities],
+        'dates': []
+    }
+
     for date in result.dates:
         try:
             date = datetime.strptime(date, '%Y-%m-%d')

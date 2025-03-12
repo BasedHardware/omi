@@ -415,6 +415,65 @@ Future<String> getGenratedDescription(String name, String description) async {
   }
 }
 
+// API Keys
+Future<List<AppApiKey>> listApiKeysServer(String appId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/apps/$appId/keys',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return [];
+    log('listApiKeysServer: ${response.body}');
+    return AppApiKey.fromJsonList(jsonDecode(response.body));
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return [];
+  }
+}
+
+Future<Map<String, dynamic>> createApiKeyServer(String appId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/apps/$appId/keys',
+    headers: {},
+    body: '',
+    method: 'POST',
+  );
+  try {
+    if (response == null || response.statusCode != 200) {
+      throw Exception('Failed to create API key');
+    }
+    log('createApiKeyServer: ${response.body}');
+    return jsonDecode(response.body);
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    throw Exception('Failed to create API key: ${e.toString()}');
+  }
+}
+
+Future<bool> deleteApiKeyServer(String appId, String keyId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/apps/$appId/keys/$keyId',
+    headers: {},
+    body: '',
+    method: 'DELETE',
+  );
+  try {
+    if (response == null || response.statusCode != 200) {
+      throw Exception('Failed to delete API key');
+    }
+    log('deleteApiKeyServer: ${response.body}');
+    return true;
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    throw Exception('Failed to delete API key: ${e.toString()}');
+  }
+}
+
 Future<Map> createPersonaApp(File file, Map<String, dynamic> personaData) async {
   var request = http.MultipartRequest(
     'POST',

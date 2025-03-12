@@ -17,7 +17,7 @@ Before starting, make sure you have the following installed:
 * [CocoaPods](https://cocoapods.org/) (for iOS dependencies)
 * [NDK 26.3.11579264](https://developer.android.com/ndk/downloads) or above (to build Opus for ARM Devices)
 
-### Build the app automatically
+## Build the app automatically
 
 #### Video Walkthrough
 
@@ -35,6 +35,9 @@ cd app
 ```
 
 **2. Build the app for iOS:**
+
+Before running next command, make sure you have a team-developer account in apple with notifications/sign-in enabled. Otherwise, you'll need to set up the app manually
+(see below)
 ```
 bash setup.sh ios
 ```
@@ -52,7 +55,7 @@ Open the app in Xcode (open folder `app/ios`) or Android Studio (open folder `ap
 
 Alternatively, run ```flutter run --flavor dev``` in terminal
 
-### Build the app manually:
+## Build the app manually:
 
 Setup manually is useful if you want to build the app to use your own backend. 
 

@@ -27,6 +27,7 @@ class AddAppProvider extends ChangeNotifier {
   TextEditingController conversationPromptController = TextEditingController();
 
   String? appCategory;
+  List<Map<String, dynamic>> actions = [];
 
 // Trigger Event
   String? triggerEvent;
@@ -67,6 +68,10 @@ class AddAppProvider extends ChangeNotifier {
   bool isGenratingDescription = false;
 
   bool allowPaidApps = false;
+  
+  // API Keys
+  List<AppApiKey> apiKeys = [];
+  bool isLoadingApiKeys = false;
 
   void setAppProvider(AppProvider provider) {
     appProvider = provider;
@@ -134,12 +139,22 @@ class AddAppProvider extends ChangeNotifier {
     selectedCapabilities = app.getCapabilitiesFromIds(capabilities);
     if (app.externalIntegration != null) {
       triggerEvent = app.externalIntegration!.triggersOn;
-      webhookUrlController.text = app.externalIntegration!.webhookUrl;
+      webhookUrlController.text = app.externalIntegration!.webhookUrl ?? '';
       setupCompletedController.text = app.externalIntegration!.setupCompletedUrl ?? '';
-      instructionsController.text = app.externalIntegration!.setupInstructionsFilePath;
+      instructionsController.text = app.externalIntegration!.setupInstructionsFilePath ?? '';
       appHomeUrlController.text = app.externalIntegration!.appHomeUrl ?? '';
       if (app.externalIntegration!.authSteps.isNotEmpty) {
         authUrlController.text = app.externalIntegration!.authSteps.first.url;
+      }
+
+      // Load actions if they exist
+      actions = [];
+      if (app.externalIntegration!.actions != null) {
+        for (var action in app.externalIntegration!.actions!) {
+          actions.add({
+            'action': action.action,
+          });
+        }
       }
     }
     if (app.chatPrompt != null) {
@@ -186,6 +201,46 @@ class AddAppProvider extends ChangeNotifier {
     selectedCapabilities.clear();
     thumbnailUrls = [];
     thumbnailIds = [];
+    actions.clear();
+  }
+
+  void addSpecificAction(String actionTypeId) {
+    // Check if this action type already exists
+    if (!actions.any((action) => action['action'] == actionTypeId)) {
+      actions.add({
+        'action': actionTypeId,
+      });
+      checkValidity();
+      notifyListeners();
+    }
+  }
+
+  void removeActionByType(String actionTypeId) {
+    actions.removeWhere((action) => action['action'] == actionTypeId);
+    checkValidity();
+    notifyListeners();
+  }
+
+  List<CapacityAction> getActionTypes() {
+    for (var capability in capabilities) {
+      if (capability.id == 'external_integration') {
+        if (capability.actions.isNotEmpty) {
+          return capability.actions;
+        }
+      }
+    }
+
+    // Return empty list if no actions found in capabilities
+    return [];
+  }
+
+  CapacityAction? getActionTypeById(String id) {
+    final actionTypes = getActionTypes();
+    try {
+      return actionTypes.firstWhere((element) => element.id == id);
+    } catch (e) {
+      return null;
+    }
   }
 
   void setPaymentPlan(String? plan) {
@@ -292,15 +347,16 @@ class AddAppProvider extends ChangeNotifier {
         bool isValid = false;
         for (var capability in selectedCapabilities) {
           if (capability.id == 'external_integration') {
-            if (triggerEvent == null) {
+            isValid = true;
+            if (triggerEvent == null && actions.isEmpty) {
               isValid = false;
-            } else {
+            } else if (triggerEvent != null) {
               isValid = true;
-            }
-            if (externalIntegrationKey.currentState != null) {
-              isValid = externalIntegrationKey.currentState!.validate();
-            } else {
-              isValid = false;
+              if (externalIntegrationKey.currentState != null) {
+                isValid = externalIntegrationKey.currentState!.validate();
+              } else {
+                isValid = false;
+              }
             }
           }
           if (capability.id == 'chat') {
@@ -391,10 +447,7 @@ class AddAppProvider extends ChangeNotifier {
             AppSnackbar.showSnackbarError('Please enter a webhook URL for your app');
             return false;
           }
-          if (setupCompletedController.text.isEmpty) {
-            AppSnackbar.showSnackbarError('Please enter a setup completed URL for your app');
-            return false;
-          }
+          // Setup completed URL is optional, so we don't validate it here
         }
       }
       if (appCategory == null) {
@@ -441,6 +494,11 @@ class AddAppProvider extends ChangeNotifier {
             'url': authUrlController.text,
             'name': 'Setup ${appNameController.text}',
           });
+        }
+
+        // Add actions if they exist
+        if (actions.isNotEmpty) {
+          data['external_integration']['actions'] = actions;
         }
       }
       if (capability.id == 'chat') {
@@ -506,6 +564,11 @@ class AddAppProvider extends ChangeNotifier {
             'url': authUrlController.text,
             'name': 'Setup ${appNameController.text}',
           });
+        }
+
+        // Add actions if they exist
+        if (actions.isNotEmpty) {
+          data['external_integration']['actions'] = actions;
         }
       }
       if (capability.id == 'chat') {
@@ -675,10 +738,9 @@ class AddAppProvider extends ChangeNotifier {
   }
 
   void setTriggerEvent(String? event) {
-    if (event == null) {
-      return;
-    }
+    // Allow setting to null to clear the selection
     triggerEvent = event;
+    checkValidity();
     notifyListeners();
   }
 
@@ -719,5 +781,31 @@ class AddAppProvider extends ChangeNotifier {
 
   void setIsGenratingDescription(bool genrating) {
     isGenratingDescription = genrating;
+  }
+  
+  // API Keys methods
+  Future<void> loadApiKeys(String appId) async {
+    isLoadingApiKeys = true;
+    notifyListeners();
+    
+    try {
+      apiKeys = await listApiKeysServer(appId);
+    } catch (e) {
+      print('Error loading API keys: $e');
+    } finally {
+      isLoadingApiKeys = false;
+      notifyListeners();
+    }
+  }
+  
+  Future<AppApiKey> createApiKey(String appId) async {
+    final result = await createApiKeyServer(appId);
+    await loadApiKeys(appId);
+    return AppApiKey.fromJson(result);
+  }
+  
+  Future<void> deleteApiKey(String appId, String keyId) async {
+    await deleteApiKeyServer(appId, keyId);
+    await loadApiKeys(appId);
   }
 }
