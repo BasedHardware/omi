@@ -33,7 +33,7 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
    Do not use the tilde (~) in the path as it may not be properly expanded.
 
 5. Install Python (use brew if on mac) (or with nix env it will be done for you)
-6. Install `pip` (if it doesn’t exist)
+6. Install `pip` (if it doesn't exist)
 7. Install `git `and `ffmpeg` (use brew if on mac) (again nix env installs this for you)
 8. Move to the backend directory (`cd backend`)
 9. Run the command `cat .env.template > .env`
@@ -55,13 +55,72 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
 	ssl._create_default_https_context = ssl._create_unverified_context
 	```
 17. Now try running the `uvicorn main:app --reload --env-file .env` command again.
-18. Assign the url given by ngrok in the app’s env to `API_BASE_URL`
+18. Assign the url given by ngrok in the app's env to `API_BASE_URL`
 19. Now your app should be using your local backend
 
 20. If you used a virtual environment, when you're done, deactivate it by running:
     ```bash
     deactivate
     ```
+
+## Docker Setup
+
+If you prefer to run the backend using Docker, follow these steps:
+
+1. Make sure you have Docker installed on your system:
+   - Mac: Install Docker Desktop
+   - Windows: Install Docker Desktop
+   - Linux: Follow the [official Docker installation guide](https://docs.docker.com/engine/install/)
+
+2. Set up your Google Cloud credentials as described in steps 1-3 above.
+
+3. Create a `.env` file in the backend directory by copying the template:
+   ```bash
+   cat .env.template > .env
+   ```
+
+4. Update the `.env` file with your API keys and credentials. For the Google credentials, set:
+   ```
+   GOOGLE_APPLICATION_CREDENTIALS=google-credentials.json
+   ```
+
+5. Copy your Google Cloud application default credentials file to the backend directory:
+   ```bash
+
+   cp ~/.config/gcloud/application_default_credentials.json ./google-credentials.json/
+   ```
+
+6. Make sure your Google Cloud application default credentials file exists:
+   ```bash
+cp ~/.config/gcloud/application_default_credentials.json ./google-credentials.json
+   ```
+
+7. Build the Docker image:
+   ```bash
+   docker build -t omi-backend .
+   ```
+
+8. Run the container using Docker Compose:
+   ```bash
+   docker compose up -d
+   ```
+
+9. To view logs:
+   ```bash
+   docker compose logs -f
+   ```
+
+10. To stop the container:
+    ```bash
+    docker compose down
+    ```
+
+11. Set up ngrok as described in steps 13-14 above, but point it to port 8080 instead:
+    ```bash
+    ngrok http --domain=example.ngrok-free.app 8080
+    ```
+
+12. Assign the URL given by ngrok in the app's env to `API_BASE_URL`
 
 ## Additional Resources
 

@@ -1,0 +1,13 @@
+services:
+  backend:
+    image: omi-backend
+    container_name: omi-backend
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/application_default_credentials.json
+    volumes:
+      - ~/.config/gcloud/application_default_credentials.json:/app/credentials/application_default_credentials.json
+    restart: unless-stopped
