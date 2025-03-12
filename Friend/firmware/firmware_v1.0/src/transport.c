@@ -35,6 +35,21 @@ uint16_t current_package_index = 0;
 // Internal
 //
 
+static const char *phy2str(uint8_t phy)
+{
+	switch (phy) {
+	case 0: return "No packets";
+	case BT_GAP_LE_PHY_1M:
+		return "LE 1M";
+	case BT_GAP_LE_PHY_2M:
+		return "LE 2M";
+	case BT_GAP_LE_PHY_CODED:
+		return "LE Coded";
+	default:
+		return "Unknown";
+	}
+}
+
 struct k_mutex write_sdcard_mutex;
 
 static ssize_t audio_data_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);

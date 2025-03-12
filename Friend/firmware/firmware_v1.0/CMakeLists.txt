@@ -1,9 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
-set(BOARD seeed_xiao_nrf52840_sense)
+# set(BOARD seeed_xiao_nrf52840_sense)
+SET(APPLE FALSE)
 cmake_minimum_required(VERSION 3.20.0)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
+set(NRFXLIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/modules/nrfxlib)
+zephyr_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/modules/nrfxlib)
+
+
 project(nrf52840_nordic)
 enable_language(C ASM)
+
+set(CMAKE_SYSTEM_PROCESSOR cortex-m4)
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16")
+
+link_directories(${NRFXLIB_DIR}/lib)
+
 
 target_sources(app PRIVATE
     src/main.c
@@ -19,6 +30,8 @@ target_sources(app PRIVATE
     src/usb.c
 	# src/nfc.c future release
 )
+
+target_link_libraries(app PRIVATE zephyr)
 
 target_sources_ifdef(CONFIG_OMI_CODEC_OPUS app PRIVATE
     src/lib/opus-1.2.1/A2NLSF.c
@@ -168,4 +181,3 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAVE_CONFIG_H")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAVE_ALLOCA_H")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsingle-precision-constant") # A lot of constants are written as doubles
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAVE_LRINT -DHAVE_LRINTF")
-
