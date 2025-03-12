@@ -47,6 +47,28 @@ The Omi App is a Flutter-based mobile application that serves as the companion a
 
 The app uses Firebase for authentication, storage, and other services. It supports multiple environments (development and production) with separate Firebase configurations.
 
+### Developer Overview of Firebase Structure
+
+The project uses a multi-environment Firebase configuration system with the following structure:
+
+1. **Environment-Based Configuration**:
+   - Development environment (`dev`)
+   - Production environment (`prod`)
+
+2. **Configuration Files by Platform**:
+   - **iOS**: GoogleService-Info.plist files
+   - **Android**: google-services.json files
+   - **Dart**: firebase_options_dev.dart and firebase_options_prod.dart
+
+3. **File Organization**:
+   - iOS config files are in `app/ios/Config/[Dev|Prod]/`
+   - Android config files are in `app/android/app/src/[dev|prod]/`
+   - Dart config files are in `app/lib/`
+
+4. **Runtime Selection**:
+   - The app selects the appropriate configuration based on the environment (F.env)
+   - The build system selects the appropriate platform files based on the build flavor
+
 ### Setup Instructions
 
 1. **Create Firebase Projects**:
@@ -61,6 +83,26 @@ The app uses Firebase for authentication, storage, and other services. It suppor
 3. **Configure Firebase Options**:
    - The app includes Firebase configuration files in `app/lib/firebase_options_dev.dart` and `app/lib/firebase_options_prod.dart`
    - These files contain the default Firebase options for each environment
+
+### Configuration File Consistency
+
+Firebase requires consistent configuration across multiple files:
+
+1. **Platform-Specific Files**:
+   - iOS: `GoogleService-Info.plist` in `app/ios/Config/[Dev|Prod]/`
+   - Android: `google-services.json` in `app/android/app/src/[dev|prod]/`
+
+2. **Dart Configuration Files**:
+   - `firebase_options_dev.dart` and `firebase_options_prod.dart` in `app/lib/`
+
+All three types of files must contain identical values for Firebase to work correctly. When updating Firebase configuration:
+
+1. Download new configuration files from the Firebase Console
+2. Place them in the appropriate directories
+3. Update the Dart configuration files to match
+4. Verify that key values are consistent across all files
+
+The build system will automatically select the correct configuration file based on the build flavor.
 
 ### Using Custom Firebase Parameters
 
