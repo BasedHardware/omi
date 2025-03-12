@@ -39,13 +39,23 @@ def get_github_docs_content(repo="BasedHardware/omi", path="docs/docs"):
     if cached := get_generic_cache(f'get_github_docs_content_{repo}_{path}'):
         return cached
     docs_content = {}
-    headers = {"Authorization": f"token {os.getenv('GITHUB_TOKEN')}"}
+
+    # Set up headers with GitHub token if available
+    headers = {}
+    github_token = os.getenv('GITHUB_TOKEN')
+    if github_token:
+        headers["Authorization"] = f"token {github_token}"
+    else:
+        print("WARNING: GITHUB_TOKEN not set. Using unauthenticated GitHub API requests with lower rate limits.")
 
     def get_contents(path):
         url = f"https://api.github.com/repos/{repo}/contents/{path}"
         response = requests.get(url, headers=headers)
 
         if response.status_code != 200:
+            if response.status_code == 403 and not github_token:
+                print(f"GitHub API rate limit exceeded. Set GITHUB_TOKEN in .env file to increase rate limits.")
+                return
             print(f"Failed to fetch contents for {path}: {response.status_code}")
             return
 
