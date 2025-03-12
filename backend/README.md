@@ -165,3 +165,48 @@ If you encounter an error like `HTTP Error 401: Unauthorized` or `HTTP Error 404
    ```
 
 The application is configured to fall back to a mock implementation if the model fails to load, but this will limit voice activity detection functionality.
+
+### PyOgg Import Issues
+
+If you encounter an error like `NameError: name 'c_int_p' is not defined` when starting the server, it's due to an issue with the PyOgg library. The application has been updated to handle this error gracefully with a fallback mechanism, but Opus codec functionality will be limited.
+
+To fix the PyOgg library directly:
+
+1. Open the PyOgg opus.py file:
+   ```bash
+   # Find the file location
+   find venv -name opus.py
+   ```
+
+2. Edit the file to add the missing POINTER import and replace c_int_p with POINTER(c_int):
+   ```python
+   # Add this import at the top with other ctypes imports
+   from ctypes import POINTER
+
+   # Then replace all instances of c_int_p with POINTER(c_int)
+   ```
+
+3. Alternatively, you can use the following Python script to fix it automatically:
+   ```python
+   file_path = 'venv/lib/python3.10/site-packages/pyogg/opus.py'  # Adjust path as needed
+
+   with open(file_path, 'r') as f:
+       content = f.read()
+
+   # Add the missing import
+   if 'from ctypes import POINTER' not in content:
+       import re
+       content = re.sub(
+           r'from ctypes import.*?(?=\n)',
+           r'\g<0>, POINTER',
+           content,
+           count=1,
+           flags=re.DOTALL
+       )
+
+   # Replace c_int_p with POINTER(c_int)
+   content = content.replace('c_int_p', 'POINTER(c_int)')
+
+   with open(file_path, 'w') as f:
+       f.write(content)
+   ```

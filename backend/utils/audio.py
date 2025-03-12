@@ -1,7 +1,29 @@
 import wave
-
+import logging
 from pydub import AudioSegment
-from pyogg import OpusDecoder
+
+# Try to import PyOgg, and if it fails, create a mock implementation
+try:
+    from pyogg import OpusDecoder
+    PYOGG_AVAILABLE = True
+except (ImportError, NameError) as e:
+    logging.warning(f"PyOgg import failed: {e}. Opus codec will not be available.")
+    PYOGG_AVAILABLE = False
+
+    # Mock OpusDecoder class
+    class OpusDecoder:
+        def __init__(self):
+            logging.warning("Using mock OpusDecoder. Opus codec functionality is limited.")
+
+        def set_channels(self, channels):
+            pass
+
+        def set_sampling_frequency(self, freq):
+            pass
+
+        def decode(self, packet):
+            # Return empty bytes as we can't actually decode
+            return b''
 
 
 def merge_wav_files(dest_file_path: str, source_files: [str], silent_seconds: [int]):
@@ -23,6 +45,10 @@ def create_wav_from_bytes(
 ):
     # opus
     if codec == "opus":
+        if not PYOGG_AVAILABLE:
+            logging.error("Cannot process opus codec: PyOgg is not available")
+            raise Exception("Opus codec is not available due to PyOgg import issues")
+
         # Create an Opus decoder
         opus_decoder = OpusDecoder()
         opus_decoder.set_channels(channels)
