@@ -23,7 +23,10 @@ The Friend firmware is built on the Zephyr RTOS and provides functionality for a
 
 ## Building the Firmware
 
-Follow the instructions at https://docs.omi.me/docs/developer/Compile_firmware
+Run `./dockerbuild.sh` to build the firmware via docker
+or follow the instructions at https://docs.omi.me/docs/developer/Compile_firmware
+
+
 
 ## Flashing the Firmware
 
