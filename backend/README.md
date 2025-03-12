@@ -10,7 +10,7 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
    - Nix envdir: It should be pre-installed
 
 2. You will need to have your own Google Cloud Project with Firebase enabled. If you've already set up Firebase for the Omi app, you're good to go. If not, please refer to the [Firebase Setup Guide](https://firebase.google.com/docs/projects/learn-more).
-   - **IMPORTANT:** Make sure you have the [`Cloud Resource Manager API`](https://console.cloud.google.com/apis/library/cloudresourcemanager.googleapis.com) and [`Firebase Management API`](https://console.cloud.google.com/apis/library/firebase.googleapis.com) enabled in the [Google Cloud API Console](https://console.cloud.google.com/apis/dashboard) **before proceeding to the next steps**. Failure to enable these APIs will result in authentication errors.
+   - **IMPORTANT:** Make sure you have the [`Cloud Resource Manager API`](https://console.cloud.google.com/apis/library/cloudresourcemanager.googleapis.com), [`Firebase Management API`](https://console.cloud.google.com/apis/library/firebase.googleapis.com), and [`Cloud Firestore API`](https://console.developers.google.com/apis/api/firestore.googleapis.com/overview) enabled in the [Google Cloud API Console](https://console.cloud.google.com/apis/dashboard) **before proceeding to the next steps**. Failure to enable these APIs will result in authentication errors.
 
 3. Run the following commands one by one to authenticate with Google Cloud:
    ```bash
@@ -49,6 +49,10 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
     - [Deepgram API Key](https://console.deepgram.com/api-keys)
     - Redis credentials from your [Upstash Console](https://console.upstash.com/)
     - Set `ADMIN_KEY` to a temporary value (e.g., `123`) for local development
+    - **IMPORTANT:** For Pinecone vector database:
+      - Make sure to set `PINECONE_INDEX_NAME` to the name of your Pinecone index
+      - If you don't have a Pinecone index yet, [create one in the Pinecone Console](https://app.pinecone.io/)
+      - The index should be created with the appropriate dimension setting (e.g., 1536 for OpenAI embeddings)
 
 12. Install Python dependencies (choose one of the following approaches):
 
