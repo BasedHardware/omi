@@ -2,12 +2,18 @@ import wave
 import logging
 from pydub import AudioSegment
 
+# Import our PyOgg wrapper
+from utils.pyogg_wrapper import get_opus_decoder
+
 # Try to import PyOgg, and if it fails, create a mock implementation
 try:
-    from pyogg import OpusDecoder
+    # Use our wrapper to get a patched OpusDecoder
+    OpusDecoder = get_opus_decoder().__class__
     PYOGG_AVAILABLE = True
-except (ImportError, NameError) as e:
+    print("✅ PyOgg OpusDecoder successfully imported and available for use")
+except (ImportError, AttributeError, TypeError) as e:
     logging.warning(f"PyOgg import failed: {e}. Opus codec will not be available.")
+    print(f"❌ PyOgg import failed: {e}. Opus codec will not be available.")
     PYOGG_AVAILABLE = False
 
     # Mock OpusDecoder class
