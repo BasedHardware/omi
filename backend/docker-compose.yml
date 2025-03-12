@@ -3,7 +3,7 @@ services:
     image: omi-backend
     container_name: omi-backend
     ports:
-      - "8080:8080"
+      - "8000:8000"
     env_file:
       - .env
     restart: unless-stopped

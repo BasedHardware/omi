@@ -114,9 +114,9 @@ If you prefer to run the backend using Docker, follow these steps:
     docker compose down
     ```
 
-11. Set up ngrok as described in steps 13-14 above, but point it to port 8080 instead:
+11. Set up ngrok as described in steps 13-14 above, but point it to port 8000:
     ```bash
-    ngrok http --domain=example.ngrok-free.app 8080
+    ngrok http --domain=example.ngrok-free.app 8000
     ```
 
 12. Assign the URL given by ngrok in the app's env to `API_BASE_URL`
