@@ -1,18 +1,18 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/http/api/device.dart';
-import 'package:friend_private/main.dart';
-import 'package:friend_private/pages/home/firmware_update.dart';
-import 'package:friend_private/providers/capture_provider.dart';
-import 'package:friend_private/services/devices.dart';
-import 'package:friend_private/services/notifications.dart';
-import 'package:friend_private/services/services.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/device.dart';
-import 'package:friend_private/widgets/confirmation_dialog.dart';
+import 'package:omi_app/backend/preferences.dart';
+import 'package:omi_app/backend/schema/bt_device/bt_device.dart';
+import 'package:omi_app/http/api/device.dart';
+import 'package:omi_app/main.dart';
+import 'package:omi_app/pages/home/firmware_update.dart';
+import 'package:omi_app/providers/capture_provider.dart';
+import 'package:omi_app/services/devices.dart';
+import 'package:omi_app/services/notifications.dart';
+import 'package:omi_app/services/services.dart';
+import 'package:omi_app/utils/analytics/mixpanel.dart';
+import 'package:omi_app/utils/device.dart';
+import 'package:omi_app/widgets/confirmation_dialog.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
 class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption {

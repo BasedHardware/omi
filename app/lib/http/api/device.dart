@@ -1,6 +1,6 @@
 import 'dart:convert';
-import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/env/env.dart';
+import 'package:omi_app/backend/http/shared.dart';
+import 'package:omi_app/env/env.dart';
 
 Future<Map> getLatestFirmwareVersion({
   required String deviceModelNumber,

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
-import 'package:friend_private/pages/apps/widgets/action_fields_widget.dart';
-import 'package:friend_private/utils/other/validators.dart';
+import 'package:omi_app/pages/apps/providers/add_app_provider.dart';
+import 'package:omi_app/pages/apps/widgets/action_fields_widget.dart';
+import 'package:omi_app/utils/other/validators.dart';
 import 'package:provider/provider.dart';
-import 'package:friend_private/widgets/collapsible_section.dart';
+import 'package:omi_app/widgets/collapsible_section.dart';
 
 class ExternalTriggerFieldsWidget extends StatelessWidget {
   const ExternalTriggerFieldsWidget({super.key});

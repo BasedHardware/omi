@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/pages/payments/payment_method_provider.dart';
-import 'package:friend_private/pages/payments/stripe_connect_setup.dart';
-import 'package:friend_private/pages/payments/widgets/payment_method_card.dart';
-import 'package:friend_private/pages/payments/paypal_setup_page.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
+import 'package:omi_app/pages/payments/payment_method_provider.dart';
+import 'package:omi_app/pages/payments/stripe_connect_setup.dart';
+import 'package:omi_app/pages/payments/widgets/payment_method_card.dart';
+import 'package:omi_app/pages/payments/paypal_setup_page.dart';
+import 'package:omi_app/utils/analytics/mixpanel.dart';
+import 'package:omi_app/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 

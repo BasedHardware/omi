@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:omi_app/backend/preferences.dart';
+import 'package:omi_app/utils/analytics/mixpanel.dart';
+import 'package:omi_app/widgets/dialog.dart';
 
 class SpeechLanguageSheet extends StatelessWidget {
   final String recordingLanguage;

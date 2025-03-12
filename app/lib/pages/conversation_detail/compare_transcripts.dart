@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/api/conversations.dart';
-import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/widgets/transcript.dart';
+import 'package:omi_app/backend/http/api/conversations.dart';
+import 'package:omi_app/backend/schema/conversation.dart';
+import 'package:omi_app/widgets/transcript.dart';
 
 class CompareTranscriptsPage extends StatefulWidget {
   final ServerConversation conversation;

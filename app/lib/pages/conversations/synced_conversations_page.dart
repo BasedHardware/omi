@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/providers/conversation_provider.dart';
+import 'package:omi_app/backend/schema/conversation.dart';
+import 'package:omi_app/providers/conversation_provider.dart';
 import 'package:provider/provider.dart';
 
 import 'widgets/synced_conversation_list_item.dart';
