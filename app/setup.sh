@@ -9,7 +9,7 @@
 # - Android Studio (for Android)
 # - NDK 26.3.11579264 or above (to build Opus for ARM Devices)
 # - Opus Codec: https://opus-codec.org
-# Usages: 
+# Usages:
 # - $bash setup.sh ios
 # - $bash setup.sh android
 
@@ -47,6 +47,22 @@ function setup_firebase() {
   cp setup/prebuilt/firebase_options.dart lib/firebase_options_prod.dart
   cp setup/prebuilt/google-services.json android/app/src/prod/
   cp setup/prebuilt/GoogleService-Info.plist ios/Config/Prod/
+
+  # Add Firebase configuration to environment files
+  echo "" >> .dev.env
+  echo "# Firebase Configuration - omi-sky project" >> .dev.env
+  echo "FIREBASE_ANDROID_API_KEY=YOUR_ANDROID_API_KEY" >> .dev.env
+  echo "FIREBASE_ANDROID_APP_ID=YOUR_ANDROID_APP_ID" >> .dev.env
+  echo "FIREBASE_IOS_API_KEY=YOUR_IOS_API_KEY" >> .dev.env
+  echo "FIREBASE_IOS_APP_ID=YOUR_IOS_APP_ID" >> .dev.env
+  echo "FIREBASE_MESSAGING_SENDER_ID=YOUR_MESSAGING_SENDER_ID" >> .dev.env
+  echo "FIREBASE_PROJECT_ID=omi-sky" >> .dev.env
+  echo "FIREBASE_STORAGE_BUCKET=omi-sky.appspot.com" >> .dev.env
+  echo "FIREBASE_ANDROID_CLIENT_ID=YOUR_ANDROID_CLIENT_ID" >> .dev.env
+  echo "FIREBASE_IOS_CLIENT_ID=YOUR_IOS_CLIENT_ID" >> .dev.env
+  echo "FIREBASE_IOS_BUNDLE_ID=com.friend-app-with-wearable.ios12.development" >> .dev.env
+
+  echo "Firebase setup complete. Please update the Firebase configuration in .dev.env with your actual values."
 }
 
 ##########################################

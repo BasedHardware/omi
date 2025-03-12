@@ -16,6 +16,7 @@ import 'package:friend_private/env/env.dart';
 import 'package:friend_private/env/prod_env.dart';
 import 'package:friend_private/firebase_options_dev.dart' as dev;
 import 'package:friend_private/firebase_options_prod.dart' as prod;
+import 'package:friend_private/firebase_options_env.dart';
 import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/apps/app_detail/app_detail.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
@@ -58,10 +59,21 @@ Future<bool> _init() async {
   ServiceManager.init();
 
   // Firebase
-  if (F.env == Environment.prod) {
-    await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform, name: 'prod');
-  } else {
-    await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform, name: 'dev');
+  try {
+    // Try to use environment variables first
+    if (F.env == Environment.prod) {
+      await Firebase.initializeApp(options: EnvFirebaseOptions.currentPlatform, name: 'prod');
+    } else {
+      await Firebase.initializeApp(options: EnvFirebaseOptions.currentPlatform, name: 'dev');
+    }
+  } catch (e) {
+    // Fall back to hardcoded options if environment variables are not set
+    print('Warning: Using hardcoded Firebase options. Error: $e');
+    if (F.env == Environment.prod) {
+      await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform, name: 'prod');
+    } else {
+      await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform, name: 'dev');
+    }
   }
 
   await IntercomManager().initIntercom();

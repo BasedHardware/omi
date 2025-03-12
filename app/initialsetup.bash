@@ -29,6 +29,25 @@ cat .env.template > .prod.env
 echo "Please add your API keys to the .env file."
 read -p "Press enter to continue after adding the keys."
 
+# Add Firebase configuration to environment files
+echo "Setting up Firebase environment variables..."
+echo "" >> .dev.env
+echo "# Firebase Configuration" >> .dev.env
+echo "FIREBASE_ANDROID_API_KEY=" >> .dev.env
+echo "FIREBASE_ANDROID_APP_ID=" >> .dev.env
+echo "FIREBASE_IOS_API_KEY=" >> .dev.env
+echo "FIREBASE_IOS_APP_ID=" >> .dev.env
+echo "FIREBASE_MESSAGING_SENDER_ID=" >> .dev.env
+echo "FIREBASE_PROJECT_ID=" >> .dev.env
+echo "FIREBASE_STORAGE_BUCKET=" >> .dev.env
+echo "FIREBASE_ANDROID_CLIENT_ID=" >> .dev.env
+echo "FIREBASE_IOS_CLIENT_ID=" >> .dev.env
+echo "FIREBASE_IOS_BUNDLE_ID=" >> .dev.env
+
+echo "Please update the Firebase configuration in .dev.env with your actual values."
+echo "See FIREBASE_SETUP.md for detailed instructions."
+read -p "Press enter to continue after adding the Firebase configuration."
+
 # Run Build Runner
 echo "Running Build Runner..."
 dart run build_runner build
