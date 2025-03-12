@@ -583,27 +583,28 @@ async def _listen(
                     data = decoder.decode(bytes(data), frame_size=160)
                     # audio_data.extend(data)
 
+                # STT
+                has_speech = True
                 if include_speech_profile and codec != 'opus':  # don't do for opus 1.0.4 for now
                     has_speech = _has_speech(data, sample_rate)
-                    if not has_speech:
-                        continue
 
-                if soniox_socket is not None:
-                    await soniox_socket.send(data)
+                if has_speech:
+                    if soniox_socket is not None:
+                        await soniox_socket.send(data)
 
-                if speechmatics_socket1 is not None:
-                    await speechmatics_socket1.send(data)
+                    if speechmatics_socket1 is not None:
+                        await speechmatics_socket1.send(data)
 
-                if dg_socket1 is not None:
-                    elapsed_seconds = time.time() - timer_start
-                    if elapsed_seconds > speech_profile_duration or not dg_socket2:
-                        dg_socket1.send(data)
-                        if dg_socket2:
-                            print('Killing socket2', uid)
-                            dg_socket2.finish()
-                            dg_socket2 = None
-                    else:
-                        dg_socket2.send(data)
+                    if dg_socket1 is not None:
+                        elapsed_seconds = time.time() - timer_start
+                        if elapsed_seconds > speech_profile_duration or not dg_socket2:
+                            dg_socket1.send(data)
+                            if dg_socket2:
+                                print('Killing socket2', uid)
+                                dg_socket2.finish()
+                                dg_socket2 = None
+                        else:
+                            dg_socket2.send(data)
 
                 # Send to external trigger
                 if audio_bytes_send is not None:
