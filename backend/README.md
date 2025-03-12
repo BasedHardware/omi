@@ -11,6 +11,7 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
 
 2. You will need to have your own Google Cloud Project (please refer to the [App Docs]([url](https://docs.omi.me/docs/developer/AppSetup#7-setup-firebase)) on how to setup Firebase). If you did setup Firebase for the App, then you'll already have a Project in Google Cloud.
  Make sure you have the `Cloud Resource Manager` and `Firebase Management API` permissions at the minimum in the [Google Cloud API Console](https://console.cloud.google.com/apis/dashboard)
+
 3. Run the following commands one by one
 	```
 	gcloud auth login
@@ -18,7 +19,19 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
 	gcloud auth application-default login --project <project-id>
 	```
 	Replace `<project-id>` with your Google Cloud Project ID
-	This should generate the `application_default_credentials.json` file in the `~/.config/gcloud` directory. This file is read automatically by gcloud in Python, so you don’t have to manually add any env for the service account.
+
+	This should generate the `application_default_credentials.json` file in the `~/.config/gcloud` directory.
+
+4. **Important**: In your `.env` file, set the `GOOGLE_APPLICATION_CREDENTIALS` to the absolute path of your credentials file:
+   ```
+   # For macOS/Linux users (replace 'username' with your actual username)
+   GOOGLE_APPLICATION_CREDENTIALS=/Users/username/.config/gcloud/application_default_credentials.json
+
+   # For Windows users (replace 'Username' with your actual username)
+   GOOGLE_APPLICATION_CREDENTIALS=C:\Users\Username\.config\gcloud\application_default_credentials.json
+   ```
+   Do not use the tilde (~) in the path as it may not be properly expanded.
+
 5. Install Python (use brew if on mac) (or with nix env it will be done for you)
 6. Install `pip` (if it doesn’t exist)
 7. Install `git `and `ffmpeg` (use brew if on mac) (again nix env installs this for you)
