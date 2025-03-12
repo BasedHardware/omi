@@ -26,6 +26,10 @@
       - Make sure to set `PINECONE_INDEX_NAME` to the name of your Pinecone index
       - If you don't have a Pinecone index yet, [create one in the Pinecone Console](https://app.pinecone.io/)
       - The index should be created with the appropriate dimension setting (e.g., 1536 for OpenAI embeddings)
+    - **Optional:** For Typesense search functionality:
+      - Set `TYPESENSE_HOST`, `TYPESENSE_HOST_PORT`, and `TYPESENSE_API_KEY` if you want to use Typesense
+      - If not set, a mock client will be used for development
+      - You can [sign up for Typesense Cloud](https://cloud.typesense.org/) or [self-host it](https://typesense.org/docs/guide/install-typesense.html)
     - **Optional but recommended:** Set `GITHUB_TOKEN` to a [GitHub personal access token](https://github.com/settings/tokens)
       - This is used to access GitHub's API for retrieving firmware updates and documentation
       - Without this token, GitHub API requests will have lower rate limits
@@ -85,3 +89,22 @@ If you encounter an error related to the opus library like `Exception: Could not
    source venv/bin/activate
    python -c "import opuslib; print('opuslib imported successfully')"
    ```
+
+### GitHub API Rate Limits
+
+If you encounter GitHub API rate limit errors, make sure to set the `GITHUB_TOKEN` environment variable in your `.env` file. This will increase your rate limits for GitHub API requests.
+
+### Typesense Configuration
+
+If you want to use Typesense for search functionality:
+
+1. Sign up for [Typesense Cloud](https://cloud.typesense.org/) or [self-host Typesense](https://typesense.org/docs/guide/install-typesense.html)
+2. Get your Typesense API key, host, and port
+3. Update your `.env` file with the following values:
+   ```
+   TYPESENSE_HOST=your-typesense-host
+   TYPESENSE_HOST_PORT=your-typesense-port
+   TYPESENSE_API_KEY=your-typesense-api-key
+   ```
+
+If you don't configure Typesense, a mock client will be used for development, which will return empty search results.
