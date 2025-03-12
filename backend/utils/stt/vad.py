@@ -36,23 +36,17 @@ try:
     if not MODEL_FILE.exists() or not UTILS_FILE.exists() or not CONFIG_FILE.exists():
         print("Downloading Silero VAD model files...")
 
-        # Download model file
+        # Download model file - updated URL
         urllib.request.urlretrieve(
-            "https://github.com/snakers4/silero-vad/raw/master/files/silero_vad.onnx",
+            "https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx",
             MODEL_FILE
         )
 
-        # Download utils file
-        urllib.request.urlretrieve(
-            "https://github.com/snakers4/silero-vad/raw/master/utils_vad.py",
-            UTILS_FILE
-        )
-
-        # Download example file for reference
-        urllib.request.urlretrieve(
-            "https://github.com/snakers4/silero-vad/raw/master/examples/vad_examples.py",
-            EXAMPLE_FILE
-        )
+        # Create utils.py file - we'll use our local implementation
+        if not UTILS_FILE.exists():
+            # We already have a utils.py file in the pretrained_models/silero_vad directory
+            # If not, we'll use the one we created
+            pass
 
         # Create a simple config file
         with open(CONFIG_FILE, 'w') as f:

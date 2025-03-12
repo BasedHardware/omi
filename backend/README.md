@@ -138,18 +138,30 @@ If you don't configure Typesense, a mock client will be used for development, wh
 
 ### Silero VAD Model Issues
 
-If you encounter an error like `HTTP Error 401: Unauthorized` when loading the Silero VAD model, it's likely due to GitHub's rate limiting or authentication issues. The application will automatically fall back to a mock implementation, but if you want to use the real model:
+If you encounter an error like `HTTP Error 401: Unauthorized` or `HTTP Error 404: Not Found` when loading the Silero VAD model, there are several solutions:
 
-1. The code has been updated to download the model files directly from GitHub and load them locally using onnxruntime.
+1. **The package is already included in requirements.txt:**
+   The `silero-vad>=5.1.0` package is already included in the project's requirements.txt file, so it should be installed when you run:
+   ```bash
+   pip install -r requirements.txt
+   ```
+   If you need to install it separately or update it:
+   ```bash
+   # Activate your virtual environment (if not already activated)
+   source venv/bin/activate
 
-2. If you still encounter issues, you can manually download the model files:
+   # Install or update the Silero VAD package
+   pip install silero-vad==5.1.2
+   ```
+
+2. **Manual download of model files:**
+   If you prefer to download the model files manually:
    ```bash
    # Create the model directory
    mkdir -p pretrained_models/silero_vad
 
    # Download the model files
-   curl -L https://github.com/snakers4/silero-vad/raw/master/files/silero_vad.onnx -o pretrained_models/silero_vad/model.onnx
-   curl -L https://github.com/snakers4/silero-vad/raw/master/utils_vad.py -o pretrained_models/silero_vad/utils.py
+   curl -L https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx -o pretrained_models/silero_vad/model.onnx
    ```
 
-3. If you need to use a different model or have specific requirements, you can modify the `utils/stt/vad.py` file to use your own implementation.
+The application is configured to fall back to a mock implementation if the model fails to load, but this will limit voice activity detection functionality.
