@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
-import 'package:friend_private/utils/alerts/app_snackbar.dart';
+import 'package:omi_app/backend/schema/app.dart';
+import 'package:omi_app/pages/apps/providers/add_app_provider.dart';
+import 'package:omi_app/utils/alerts/app_snackbar.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 

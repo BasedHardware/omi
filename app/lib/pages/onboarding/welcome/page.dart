@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/providers/onboarding_provider.dart';
-import 'package:friend_private/utils/analytics/intercom.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:omi_app/providers/onboarding_provider.dart';
+import 'package:omi_app/utils/analytics/intercom.dart';
+import 'package:omi_app/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';

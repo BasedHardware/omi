@@ -1,8 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/pages/conversation_detail/conversation_detail_provider.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:omi_app/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi_app/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
 

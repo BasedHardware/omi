@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/message_event.dart';
-import 'package:friend_private/env/env.dart';
+import 'package:omi_app/backend/preferences.dart';
+import 'package:omi_app/backend/schema/message_event.dart';
+import 'package:omi_app/env/env.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:web_socket_channel/io.dart';
 

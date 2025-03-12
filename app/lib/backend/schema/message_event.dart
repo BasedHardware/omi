@@ -1,5 +1,5 @@
-import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/backend/schema/message.dart';
+import 'package:omi_app/backend/schema/conversation.dart';
+import 'package:omi_app/backend/schema/message.dart';
 
 enum MessageEventType {
   // newMemoryCreating('new_memory_creating'),

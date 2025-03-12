@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/widgets/extensions/string.dart';
+import 'package:omi_app/widgets/extensions/string.dart';
 
 class InfoCardWidget extends StatelessWidget {
   final VoidCallback onTap;

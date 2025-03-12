@@ -1,12 +1,12 @@
 import 'dart:convert';
 
 import 'package:collection/collection.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/backend/schema/person.dart';
-import 'package:friend_private/services/wals.dart';
+import 'package:omi_app/backend/schema/app.dart';
+import 'package:omi_app/backend/schema/bt_device/bt_device.dart';
+import 'package:omi_app/backend/schema/conversation.dart';
+import 'package:omi_app/backend/schema/message.dart';
+import 'package:omi_app/backend/schema/person.dart';
+import 'package:omi_app/services/wals.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SharedPreferencesUtil {
@@ -152,7 +152,7 @@ class SharedPreferencesUtil {
   bool get showInstallAppConfirmation => getBool('showInstallAppConfirmation') ?? true;
 
   set showInstallAppConfirmation(bool value) => saveBool('showInstallAppConfirmation', value);
-  
+
   bool get showFirmwareUpdateDialog => getBool('v2/showFirmwareUpdateDialog') ?? true;
 
   set showFirmwareUpdateDialog(bool value) => saveBool('v2/showFirmwareUpdateDialog', value);
@@ -211,7 +211,7 @@ class SharedPreferencesUtil {
       appsList.where((element) => element.enabled && element.worksExternally()).length;
 
   bool get showConversationDeleteConfirmation => getBool('showConversationDeleteConfirmation') ?? true;
-  
+
   set showConversationDeleteConfirmation(bool value) => saveBool("showConversationDeleteConfirmation", value);
 
   List<App> get appsList {

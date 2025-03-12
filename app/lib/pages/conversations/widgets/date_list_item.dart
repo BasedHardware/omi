@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/utils/other/temp.dart';
+import 'package:omi_app/utils/other/temp.dart';
 
 class DateListItem extends StatelessWidget {
   final bool isFirst;

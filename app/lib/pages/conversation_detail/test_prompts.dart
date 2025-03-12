@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/openai.dart';
-import 'package:friend_private/backend/schema/conversation.dart';
+import 'package:omi_app/backend/http/openai.dart';
+import 'package:omi_app/backend/schema/conversation.dart';
 
 class TestPromptsPage extends StatefulWidget {
   final ServerConversation conversation;
