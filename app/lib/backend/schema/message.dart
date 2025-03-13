@@ -116,6 +116,7 @@ class ServerMessage {
 
   String? appId;
   bool fromIntegration;
+  bool isLocal = false; // Added for web compatibility
 
   List<MessageFile> files;
   List filesId;

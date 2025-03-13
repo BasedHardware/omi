@@ -406,7 +406,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                   () => Navigator.pop(context),
                                   () async {
                                     Navigator.pop(context);
-                                    bool ok = await provider.updateApp();
+                                    bool? ok = await provider.updateApp();
                                     if (ok) {
                                       Navigator.pop(context);
                                     }
