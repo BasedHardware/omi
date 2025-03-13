@@ -83,7 +83,12 @@ function setup_firebase_with_service_account() {
 # Setup provisioning profile
 ######################################
 function setup_provisioning_profile() {
-    brew install fastlane
+    # Only install fastlane if it doesn't exist
+    if ! command -v fastlane &> /dev/null; then
+        echo "Installing fastlane..."
+        brew install fastlane
+    fi
+    
     MATCH_PASSWORD=omi fastlane match development --readonly \
         --app_identifier com.friend-app-with-wearable.ios12.development \
         --git_url "git@github.com:BasedHardware/omi-community-certs.git"
