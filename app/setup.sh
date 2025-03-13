@@ -9,7 +9,7 @@
 # - Android Studio (for Android)
 # - NDK 26.3.11579264 or above (to build Opus for ARM Devices)
 # - Opus Codec: https://opus-codec.org
-# Usages: 
+# Usages:
 # - $bash setup.sh ios
 # - $bash setup.sh android
 
@@ -88,10 +88,24 @@ function setup_provisioning_profile() {
         echo "Installing fastlane..."
         brew install fastlane
     fi
-    
-    MATCH_PASSWORD=omi fastlane match development --readonly \
-        --app_identifier com.friend-app-with-wearable.ios12.development \
-        --git_url "git@github.com:BasedHardware/omi-community-certs.git"
+
+    # Check if bundler is installed
+    if ! command -v bundle &> /dev/null; then
+        echo "Installing bundler..."
+        gem install bundler
+    fi
+
+    # Use bundler to run fastlane if Gemfile exists
+    if [ -f "Gemfile" ]; then
+        echo "Using bundler to run fastlane..."
+        MATCH_PASSWORD=omi bundle exec fastlane match development --readonly \
+            --app_identifier com.friend-app-with-wearable.ios12.development \
+            --git_url "git@github.com:BasedHardware/omi-community-certs.git"
+    else
+        MATCH_PASSWORD=omi fastlane match development --readonly \
+            --app_identifier com.friend-app-with-wearable.ios12.development \
+            --git_url "git@github.com:BasedHardware/omi-community-certs.git"
+    fi
 }
 
 
