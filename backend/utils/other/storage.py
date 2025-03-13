@@ -277,7 +277,6 @@ def upload_multi_chat_files(files_name: List[str], uid: str):
         if isinstance(result, Exception):
             print("Failed to upload {} due to exception: {}".format(name, result))
         else:
-            files.append(f'https://storage.googleapis.com/{chat_files_bucket}/{uid}/name')
+            files.append(f'https://storage.googleapis.com/{chat_files_bucket}/{uid}/{name}')
             dictFiles[name] = f'https://storage.googleapis.com/{chat_files_bucket}/{uid}/{name}'
     return dictFiles
-
