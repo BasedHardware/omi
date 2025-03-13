@@ -45,9 +45,12 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
     - [Upstash](https://console.upstash.com/) is recommended - sign up and create a free instance
 
 11. Add the necessary API keys in the `.env` file:
-    - [OpenAI API Key](https://platform.openai.com/settings/organization/api-keys)
-    - [Deepgram API Key](https://console.deepgram.com/api-keys)
-    - Redis credentials from your [Upstash Console](https://console.upstash.com/)
+    - [OpenAI API Key](https://platform.openai.com/settings/organization/api-keys) - For models and embeddings
+    - [OpenRouter API Key](https://openrouter.ai/keys) - For Claude and Gemini models
+    - [Pinecone](https://app.pinecone.io/) - Vector database for embeddings
+    - [Redis from Upstash](https://console.upstash.com/) - For caching
+    - [GitHub Token](https://github.com/settings/tokens) - For firmware updates
+    - [Typesense](https://cloud.typesense.org/) - For search functionality
     - Set `ADMIN_KEY` to a temporary value (e.g., `123`) for local development
     - **IMPORTANT:** For Pinecone vector database:
       - Make sure to set `PINECONE_INDEX_NAME` to the name of your Pinecone index
@@ -107,7 +110,6 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
     ```bash
     deactivate
     ```
-
 ## Additional Resources
 
 - [Full Backend Setup Documentation](https://docs.omi.me/developer/backend/Backend_Setup)
