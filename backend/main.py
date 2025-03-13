@@ -1,5 +1,11 @@
 import json
 import os
+import sys
+import logging
+
+# Initialize PyOgg wrapper before any imports that might use it
+from utils.pyogg_wrapper import install_import_hook
+install_import_hook()
 
 import firebase_admin
 from fastapi import FastAPI

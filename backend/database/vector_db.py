@@ -9,10 +9,45 @@ from pinecone import Pinecone
 from models.memory import Memory
 from utils.llm import embeddings
 
-if os.getenv('PINECONE_API_KEY') is not None:
-    pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY', ''))
-    index = pc.Index(os.getenv('PINECONE_INDEX_NAME', ''))
+# Check if Pinecone is properly configured
+pinecone_api_key = os.getenv('PINECONE_API_KEY')
+pinecone_index_name = os.getenv('PINECONE_INDEX_NAME')
+
+if pinecone_api_key and pinecone_index_name:
+    # Both API key and index name are provided
+    pc = Pinecone(api_key=pinecone_api_key)
+    index = pc.Index(pinecone_index_name)
+    print(f"Connected to Pinecone index: {pinecone_index_name}")
+elif pinecone_api_key:
+    # API key is provided but index name is missing
+    print("WARNING: PINECONE_INDEX_NAME is not set in .env file. Using a mock index for development.")
+    # Create a mock index for development
+    class MockPineconeIndex:
+        def __init__(self):
+            self.vectors = {}
+
+        def upsert(self, vectors, namespace=None):
+            for vector in vectors:
+                self.vectors[vector['id']] = {
+                    'values': vector['values'],
+                    'metadata': vector.get('metadata', {})
+                }
+            return {'upserted_count': len(vectors)}
+
+        def query(self, vector, namespace=None, top_k=10, filter=None, include_metadata=True):
+            # Return empty results for mock implementation
+            return {'matches': []}
+
+        def delete(self, ids, namespace=None):
+            for id in ids:
+                if id in self.vectors:
+                    del self.vectors[id]
+            return {'deleted_count': len(ids)}
+
+    index = MockPineconeIndex()
 else:
+    # No Pinecone configuration
+    print("WARNING: Pinecone is not configured. Vector search functionality will be disabled.")
     index = None
 
 
