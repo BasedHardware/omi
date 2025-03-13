@@ -51,6 +51,17 @@ class ExternalIntegration(BaseModel):
     app_home_url: Optional[str] = None
     actions: Optional[List[Action]] = []
 
+    def store_webhook_for_user(self, uid: str, app_id: str):
+        """Store the webhook URL in a way that can be cleaned up on uninstall"""
+        if self.webhook_url:
+            from database.redis_db import r
+            r.set(f'users:{uid}:app:{app_id}:webhook_url', self.webhook_url)
+
+    def cleanup_webhook_for_user(self, uid: str, app_id: str):
+        """Remove the webhook URL when app is uninstalled"""
+        from database.redis_db import r
+        r.delete(f'users:{uid}:app:{app_id}:webhook_url')
+
 
 class ProactiveNotification(BaseModel):
     scopes: Set[str]

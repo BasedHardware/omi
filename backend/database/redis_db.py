@@ -216,6 +216,13 @@ def enable_app(uid: str, app_id: str):
 def disable_app(uid: str, app_id: str):
     r.srem(f'users:{uid}:enabled_plugins', app_id)
 
+    # Clean up any webhooks associated with this app to prevent continued access
+    # Use an app-specific prefix to identify and clean up related webhooks
+    app_webhook_keys = r.keys(f'users:{uid}:app:{app_id}:*')
+    if app_webhook_keys:
+        for key in app_webhook_keys:
+            r.delete(key)
+
 
 def get_enabled_plugins(uid: str):
     val = r.smembers(f'users:{uid}:enabled_plugins')
