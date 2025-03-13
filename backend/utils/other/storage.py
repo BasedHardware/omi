@@ -268,15 +268,23 @@ def get_app_thumbnail_url(thumbnail_id: str) -> str:
 # **********************************
 # ************* CHAT FILES **************
 # **********************************
-def upload_multi_chat_files(files_name: List[str], uid: str):
+def upload_multi_chat_files(files_name: List[str], uid: str) -> dict:
+    """
+    Upload multiple files to Google Cloud Storage in the chat files bucket.
+
+    Args:
+        files_name: List of file paths to upload
+        uid: User ID to use as part of the storage path
+
+    Returns:
+        dict: A dictionary mapping original filenames to their Google Cloud Storage URLs
+    """
     bucket = storage_client.bucket(chat_files_bucket)
     result = transfer_manager.upload_many_from_filenames(bucket, files_name, source_directory="./", blob_name_prefix=f'{uid}/')
-    files = []
     dictFiles = {}
     for name, result in zip(files_name, result):
         if isinstance(result, Exception):
             print("Failed to upload {} due to exception: {}".format(name, result))
         else:
-            files.append(f'https://storage.googleapis.com/{chat_files_bucket}/{uid}/{name}')
             dictFiles[name] = f'https://storage.googleapis.com/{chat_files_bucket}/{uid}/{name}'
     return dictFiles
