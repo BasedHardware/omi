@@ -9,7 +9,8 @@ The chat self-improvement system consists of the following components:
 1. **Prompt Evaluation**: Evaluates the quality of Omi's responses against competitor AI systems.
 2. **Prompt Improvement**: Generates improved prompts based on evaluation results.
 3. **Prompt Versioning**: Manages different versions of prompts and tracks their performance.
-4. **Continuous Improvement Loop**: Periodically runs the evaluation and improvement process.
+4. **Prompt Improvement Tracking**: Monitors and visualizes the progress of prompt improvements over time.
+5. **Continuous Improvement Loop**: Periodically runs the evaluation and improvement process.
 
 ## Components
 
@@ -30,6 +31,17 @@ Key features:
 - Generates improved prompts using a meta-LLM approach
 - Maintains a versioning system for prompts
 - Provides functions to activate, compare, and rollback prompt versions
+
+### Prompt Improvement Tracking (`utils/prompt_improvement_tracking.py`)
+
+This module tracks and visualizes the progress of prompt improvements over time.
+
+Key features:
+- Generates performance reports for prompt types
+- Calculates performance metrics and improvement statistics
+- Creates visualizations of performance over time
+- Compares Omi's performance with competitors across different criteria
+- Exports reports to JSON for further analysis
 
 ### Database Integration (`database/prompt_improvement.py`)
 
@@ -68,6 +80,30 @@ python scripts/run_prompt_improvement.py --run-once
 
 # Run the improvement cycle continuously with a 24-hour interval
 python scripts/run_prompt_improvement.py --interval 24
+```
+
+## Tracking Prompt Improvements
+
+You can track the progress of prompt improvements using the tracking module:
+
+```bash
+# Generate a performance report for a prompt type
+python -m backend.utils.prompt_improvement_tracking simple_message
+
+# Export a report to JSON
+python -m backend.utils.prompt_improvement_tracking simple_message --report report.json
+
+# Generate performance over time plot
+python -m backend.utils.prompt_improvement_tracking simple_message --plot-time performance.png
+
+# Generate criteria comparison plot
+python -m backend.utils.prompt_improvement_tracking simple_message --plot-criteria criteria.png
+```
+
+You can also use the demo script to see the tracking functionality with sample data:
+
+```bash
+python backend/scripts/demo_prompt_tracking.py
 ```
 
 ## Sample Conversations
