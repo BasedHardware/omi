@@ -79,6 +79,16 @@ function setup_firebase_with_service_account() {
     --yes
 }
 
+######################################
+# Setup provisioning profile
+######################################
+function setup_provisioning_profile() {
+    brew install fastlane
+    fastlane match development --readonly --app_identifier com.friend-app-with-wearable.ios12.development \
+        --git_url "git@github.com:BasedHardware/omi-cm-certs.git"
+}
+
+
 #################
 # Set up App .env
 #################
@@ -121,6 +131,7 @@ case "${1}" in
   ios)
     setup_firebase \
       && setup_app_env \
+      && setup_provisioning_profile \
       && build_ios
     ;;
   android)
