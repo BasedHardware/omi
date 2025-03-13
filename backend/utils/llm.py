@@ -15,19 +15,19 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pydantic import BaseModel, Field, ValidationError
 
-from database.redis_db import add_filter_category_item
-import database.prompt_improvement as prompt_db
-from models.app import App
-from models.chat import Message, MessageSender
-from models.facts import Fact, FactCategory
-from models.memory import Structured, MemoryPhoto, CategoryEnum, Memory
-from models.plugin import Plugin
-from models.transcript_segment import TranscriptSegment
-from models.trend import TrendEnum, ceo_options, company_options, software_product_options, hardware_product_options, \
+from backend.database.redis_db import add_filter_category_item
+import backend.database.prompt_improvement as prompt_db
+from backend.models.app import App
+from backend.models.chat import Message, MessageSender
+from backend.models.facts import Fact, FactCategory
+from backend.models.memory import Structured, MemoryPhoto, CategoryEnum, Memory
+from backend.models.plugin import Plugin
+from backend.models.transcript_segment import TranscriptSegment
+from backend.models.trend import TrendEnum, ceo_options, company_options, software_product_options, hardware_product_options, \
     ai_product_options, TrendType
-from utils.prompts import extract_facts_prompt, extract_learnings_prompt, extract_facts_text_content_prompt
-from utils.llms.fact import get_prompt_facts
-from utils.prompt_improvement import PromptVersion
+from backend.utils.prompts import extract_facts_prompt, extract_learnings_prompt, extract_facts_text_content_prompt
+from backend.utils.llms.fact import get_prompt_facts
+from backend.utils.prompt_improvement import PromptVersion
 
 llm_mini = ChatOpenAI(model='gpt-4o-mini')
 llm_mini_stream = ChatOpenAI(model='gpt-4o-mini', streaming=True)
