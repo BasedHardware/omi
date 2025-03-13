@@ -6,6 +6,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:friend_private/utils/platform_imports.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -69,16 +71,25 @@ Future<bool> _init() async {
   await SharedPreferencesUtil.init();
   await MixpanelManager.init();
 
-  // TODO: thinh, move to app start
-  await ServiceManager.instance().start();
+  // Skip device-specific initialization on web
+  if (!kIsWeb) {
+    await ServiceManager.instance().start();
+  }
 
   bool isAuth = (await getIdToken()) != null;
   if (isAuth) MixpanelManager().identify();
-  initOpus(await opus_flutter.load());
+  
+  if (!kIsWeb) {
+    initOpus(await opus_flutter.load());
+  }
 
   await GrowthbookUtil.init();
   CalendarUtil.init();
-  ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
+  
+  if (!kIsWeb) {
+    ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
+  }
+  
   return isAuth;
 }
 
@@ -358,6 +369,11 @@ class _DeciderWidgetState extends State<DeciderWidget> {
 
   @override
   Widget build(BuildContext context) {
+    // For web platform, always show the DeviceSelectionPage
+    if (kIsWeb) {
+      return const DeviceSelectionPage();
+    }
+    
     return Consumer<AuthenticationProvider>(
       builder: (context, authProvider, child) {
         if (authProvider.isSignedIn()) {
