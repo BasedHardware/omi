@@ -59,7 +59,7 @@ class PrivacyInfoPage extends StatelessWidget {
             _buildBulletPoint('Manual Memories: We track when you add or create manual memories.'),
             _buildBulletPoint(
                 'User Properties: We track user properties such as occupation, usage location, and age range.'),
-            _buildBulletPoint('Memory Re-processing: We track when you re-process a memory.'),
+            _buildBulletPoint('Conversation Re-processing: We track when you re-process a conversation.'),
             _buildBulletPoint(
                 'Backups: We track when backups are enabled or disabled, and when a backups password is set.'),
             _buildBulletPoint('Support: We track when you contact support.'),
