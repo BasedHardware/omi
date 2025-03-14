@@ -8,7 +8,6 @@ from fastapi import Request
 import database.apps as apps_db
 import utils.apps as apps_utils
 from utils.apps import verify_api_key
-import database.memories as memories_db
 import database.redis_db as redis_db
 import models.integrations as integration_models
 import models.memory as memory_models

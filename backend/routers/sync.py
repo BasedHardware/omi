@@ -9,7 +9,7 @@ from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from opuslib import Decoder
 from pydub import AudioSegment
 
-from database.memories import get_closest_memory_to_timestamps, update_memory_segments
+from database.conversations import get_closest_conversation_to_timestamps, update_conversation_segments
 from models.memory import CreateMemory
 from models.transcript_segment import TranscriptSegment
 from utils.memories.process_memory import process_memory
@@ -166,7 +166,7 @@ def process_segment(path: str, uid: str, response: dict):
         return
 
     timestamp = get_timestamp_from_path(path)
-    closest_memory = get_closest_memory_to_timestamps(uid, timestamp, timestamp + transcript_segments[-1].end)
+    closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, timestamp + transcript_segments[-1].end)
 
     if not closest_memory:
         create_memory = CreateMemory(
@@ -205,7 +205,7 @@ def process_segment(path: str, uid: str, response: dict):
 
         # save
         response['updated_memories'].add(closest_memory['id'])
-        update_memory_segments(uid, closest_memory['id'], segments)
+        update_conversation_segments(uid, closest_memory['id'], segments)
 
 
 @router.post("/v1/sync-local-files")

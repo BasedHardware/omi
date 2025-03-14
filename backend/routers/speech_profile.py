@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, UploadFile, Depends, HTTPException
 from pydub import AudioSegment
 
-from database.memories import get_memory
+from database.conversations import get_conversation
 from database.redis_db import remove_user_soniox_speech_profile
 from database.users import get_person
 from models.memory import Memory
@@ -88,7 +88,7 @@ def expand_speech_profile(
     if not memory_recording_path:
         raise HTTPException(status_code=404, detail="Memory recording not found")
 
-    memory = get_memory(uid, memory_id)
+    memory = get_conversation(uid, memory_id)
     if not memory:
         raise HTTPException(status_code=404, detail="Memory not found")
 

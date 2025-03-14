@@ -4,7 +4,7 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from database.memories import get_in_progress_memory, get_memory
+from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import cache_user_geolocation, set_user_webhook_db, get_user_webhook_db, disable_user_webhook_db, \
     enable_user_webhook_db, user_webhook_status_db
 from database.users import *
@@ -183,11 +183,11 @@ def delete_person_endpoint(person_id: str, uid: str = Depends(auth.get_current_u
 @router.delete('/v1/joan/{memory_id}/followup-question', tags=['v1'], status_code=204)
 def delete_person_endpoint(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
     if memory_id == '0':
-        memory = get_in_progress_memory(uid)
+        memory = get_in_progress_conversation(uid)
         if not memory:
             raise HTTPException(status_code=400, detail='No memory in progres')
     else:
-        memory = get_memory(uid, memory_id)
+        memory = get_conversation(uid, memory_id)
     memory = Memory(**memory)
     return {'result': followup_question_prompt(memory.transcript_segments)}
 

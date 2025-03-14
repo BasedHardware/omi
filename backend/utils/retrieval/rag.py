@@ -2,7 +2,7 @@ import threading
 from collections import Counter, defaultdict
 from typing import List, Tuple
 
-from database.memories import get_memories_by_id
+from database.conversations import get_conversations_by_id
 from database.vector_db import query_vectors
 from models.memory import Memory
 from models.transcript_segment import TranscriptSegment
@@ -40,7 +40,7 @@ def retrieve_memories_for_topics(uid: str, topics: List[str], dates_range: List)
         [t.start() for t in threads]
         [t.join() for t in threads]
 
-    return memories_id, get_memories_by_id(uid, memories_id.keys())
+    return memories_id, get_conversations_by_id(uid, memories_id.keys())
 
 
 def get_better_memory_chunk(memory: Memory, topics: List[str], context_data: dict) -> str:
