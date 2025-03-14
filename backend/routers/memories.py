@@ -29,7 +29,7 @@ def process_in_progress_memory(uid: str = Depends(auth.get_current_user_uid)):
     if not memory:
         raise HTTPException(status_code=404, detail="Memory in progress not found")
 
-    redis_db.remove_in_progress_memory_id(uid)
+    redis_db.remove_in_progress_conversation_id(uid)
 
     memory = Memory(**memory)
     conversations_db.update_conversation_status(uid, memory.id, MemoryStatus.processing)
@@ -299,18 +299,18 @@ def set_memory_visibility(
     _get_memory_by_id(uid, memory_id)
     conversations_db.set_conversation_visibility(uid, memory_id, value)
     if value == MemoryVisibility.private:
-        redis_db.remove_memory_to_uid(memory_id)
-        redis_db.remove_public_memory(memory_id)
+        redis_db.remove_conversation_to_uid(memory_id)
+        redis_db.remove_public_conversation(memory_id)
     else:
-        redis_db.store_memory_to_uid(memory_id, uid)
-        redis_db.add_public_memory(memory_id)
+        redis_db.store_conversation_to_uid(memory_id, uid)
+        redis_db.add_public_conversation(memory_id)
 
     return {"status": "Ok"}
 
 
 @router.get("/v1/memories/{memory_id}/shared", response_model=Memory, tags=['memories'])
 def get_shared_memory_by_id(memory_id: str):
-    uid = redis_db.get_memory_uid(memory_id)
+    uid = redis_db.get_conversation_uid(memory_id)
     if not uid:
         raise HTTPException(status_code=404, detail="Memory is private")
 
@@ -327,10 +327,10 @@ def get_shared_memory_by_id(memory_id: str):
 
 @router.get("/v1/public-memories", response_model=List[Memory], tags=['memories'])
 def get_public_memories(offset: int = 0, limit: int = 1000):
-    memories = redis_db.get_public_memories()
+    memories = redis_db.get_public_conversations()
     data = []
 
-    memory_uids = redis_db.get_memory_uids(memories)
+    memory_uids = redis_db.get_conversation_uids(memories)
 
     data = [[uid, memory_id] for memory_id, uid in memory_uids.items() if uid]
     # TODO: sort in some way to have proper pagination

@@ -53,7 +53,7 @@ class STTService(str, Enum):
 
 
 def retrieve_in_progress_conversation(uid):
-    conversation_id = redis_db.get_in_progress_memory_id(uid)
+    conversation_id = redis_db.get_in_progress_conversation_id(uid)
     existing = None
 
     if conversation_id:
@@ -272,7 +272,7 @@ async def _websocket_util(
             conversation.transcript_segments = TranscriptSegment.combine_segments(
                 conversation.transcript_segments, [TranscriptSegment(**segment) for segment in segments]
             )
-            redis_db.set_in_progress_memory_id(uid, conversation.id)
+            redis_db.set_in_progress_conversation_id(uid, conversation.id)
             # current_conversation_id = conversation.id
             return conversation
 
@@ -290,7 +290,7 @@ async def _websocket_util(
         )
         print('_get_in_progress_conversation new', conversation, uid)
         conversations_db.upsert_conversation(uid, conversation_data=conversation.dict())
-        redis_db.set_in_progress_memory_id(uid, conversation.id)
+        redis_db.set_in_progress_conversation_id(uid, conversation.id)
         return conversation
 
     async def create_conversation_on_segment_received_task(finished_at: datetime):
