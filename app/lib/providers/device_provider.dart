@@ -353,27 +353,16 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       return;
     }
 
-    bool dontShowAgain = false;
-
     showDialog(
       context: context,
       builder: (context) => ConfirmationDialog(
         title: 'Firmware Update Available',
         description:
             'A new firmware update (${_latestFirmwareVersion}) is available for your Omi device. Would you like to update now?',
-        checkboxText: "Don't show me again",
-        checkboxValue: dontShowAgain,
-        onCheckboxChanged: (value) {
-          dontShowAgain = value ?? false;
-        },
         confirmText: 'Update',
         cancelText: 'Later',
         onConfirm: () {
-          if (dontShowAgain) {
-            SharedPreferencesUtil().showFirmwareUpdateDialog = false;
-          }
           Navigator.of(context).pop();
-          // Navigate to firmware update page
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (context) => FirmwareUpdate(device: pairedDevice),
@@ -381,9 +370,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
           );
         },
         onCancel: () {
-          if (dontShowAgain) {
-            SharedPreferencesUtil().showFirmwareUpdateDialog = false;
-          }
           Navigator.of(context).pop();
         },
       ),
