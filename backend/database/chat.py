@@ -61,7 +61,7 @@ def get_plugin_messages(uid: str, plugin_id: str, limit: int = 20, offset: int =
     messages = []
     memories_id = set()
 
-    # Fetch messages and collect memory IDs
+    # Fetch messages and collect conversation IDs
     for doc in messages_ref.stream():
         message = doc.to_dict()
 
