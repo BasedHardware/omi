@@ -202,7 +202,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         photos = value;
         await populatePhotosData();
       });
-    } else if (conversation.source == ConversationSource.friend) {
+    } else if (conversation.source == ConversationSource.friend || conversation.source == ConversationSource.omi) {
       // await hasConversationRecording(conversation.id).then((value) {
       //   hasAudioRecording = value;
       // });
