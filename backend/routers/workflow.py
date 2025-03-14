@@ -5,7 +5,7 @@ from typing import Annotated, List
 from fastapi import APIRouter, Header
 from fastapi import Request, HTTPException
 
-import database.memories as memories_db
+import database.conversations as conversations_db
 import models.integrations as integration_models
 import models.memory as memory_models
 from routers.memories import process_memory, trigger_external_integrations
@@ -62,4 +62,4 @@ def get_memory(request: Request, uid: str, api_key: Annotated[str | None, Header
     limit = min(limit, 12)
 
     print('get_memories', uid, limit)
-    return memories_db.get_memories(uid, limit, 0, include_discarded=False)
+    return conversations_db.get_conversations(uid, limit, 0, include_discarded=False)

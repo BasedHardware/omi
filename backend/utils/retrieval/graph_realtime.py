@@ -14,7 +14,7 @@ from utils.other.endpoints import timeit
 
 # os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 
-import database.memories as memories_db
+import database.conversations as conversations_db
 from database.redis_db import get_filter_category_items
 from database.vector_db import query_vectors_by_metadata
 from models.chat import Message
@@ -80,7 +80,7 @@ def query_vectors(state: GraphState):
         entities=state.get('filters', {}).get('entities', []),
         dates=state.get('filters', {}).get('dates', []),
     )
-    memories = memories_db.get_memories_by_id(uid, memories_id)
+    memories = conversations_db.get_conversations_by_id(uid, memories_id)
     return {'memories_found': memories}
 
 
