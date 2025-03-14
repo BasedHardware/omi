@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/auth.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -10,12 +11,14 @@ import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 
 Future<String> getAuthHeader() async {
-  DateTime? expiry = DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
+  DateTime? expiry = DateTime.fromMillisecondsSinceEpoch(
+      SharedPreferencesUtil().tokenExpirationTime);
   bool hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
 
   bool isExpirationDateValid = !(expiry.isBefore(DateTime.now()) ||
       expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
-      (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
+      (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) &&
+          expiry.isAfter(DateTime.now())));
 
   if (!hasAuthToken || !isExpirationDateValid) {
     SharedPreferencesUtil().authToken = await getIdToken() ?? '';
@@ -52,27 +55,32 @@ Future<http.Response?> makeApiCall({
 
     final client = http.Client();
 
-    http.Response? response = await _performRequest(client, url, headers, body, method);
+    http.Response? response =
+        await _performRequest(client, url, headers, body, method);
     if (response.statusCode == 401) {
       Logger.log('Token expired on 1st attempt');
       // Refresh the token
       SharedPreferencesUtil().authToken = await getIdToken() ?? '';
       if (SharedPreferencesUtil().authToken.isNotEmpty) {
         // Update the header with the new token
-        headers['Authorization'] = 'Bearer ${SharedPreferencesUtil().authToken}';
+        headers['Authorization'] =
+            'Bearer ${SharedPreferencesUtil().authToken}';
         // Retry the request with the new token
         response = await _performRequest(client, url, headers, body, method);
         Logger.log('Token refreshed and request retried');
         if (response.statusCode == 401) {
           // Force user to sign in again
           await signOut();
-          Logger.handle(Exception('Authentication failed. Please sign in again.'), StackTrace.current,
+          Logger.handle(
+              Exception('Authentication failed. Please sign in again.'),
+              StackTrace.current,
               message: 'Authentication failed. Please sign in again.');
         }
       } else {
         // Force user to sign in again
         await signOut();
-        Logger.handle(Exception('Authentication failed. Please sign in again.'), StackTrace.current,
+        Logger.handle(Exception('Authentication failed. Please sign in again.'),
+            StackTrace.current,
             message: 'Authentication failed. Please sign in again.');
       }
     }
@@ -80,6 +88,9 @@ Future<http.Response?> makeApiCall({
     return response;
   } catch (e, stackTrace) {
     debugPrint('HTTP request failed: $e, $stackTrace');
+    if (kIsWeb) {
+      return null;
+    }
     CrashReporting.reportHandledCrash(
       e,
       stackTrace,
@@ -135,6 +146,9 @@ dynamic extractContentFromResponse(
     return data['choices'][0]['message']['content'];
   } else {
     debugPrint('Error fetching data: ${response?.statusCode}');
+    if (kIsWeb) {
+      return null;
+    }
     // TODO: handle error, better specially for script migration
     CrashReporting.reportHandledCrash(
       Exception('Error fetching data: ${response?.statusCode}'),
