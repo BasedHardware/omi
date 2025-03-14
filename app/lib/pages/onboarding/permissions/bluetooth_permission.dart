@@ -41,7 +41,7 @@ class _BluetoothPermissionWidgetState extends State<BluetoothPermissionWidget> {
                 }
               },
               title: const Text(
-                'Enable Bluetooth access for Friend\'s full experience.',
+                'Enable Bluetooth access for Omi\'s full experience.',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
               ),
               contentPadding: const EdgeInsets.only(left: 8),
