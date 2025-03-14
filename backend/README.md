@@ -32,6 +32,12 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
    ```
    Do not use the tilde (~) in the path as it may not be properly expanded.
 
+   Also, make sure to set your `GOOGLE_CLOUD_PROJECT` environment variable to your Google Cloud Project ID:
+   ```
+   GOOGLE_CLOUD_PROJECT=your-project-id
+   ```
+   This is required for Firebase authentication to work properly.
+
 5. Install Python (use brew if on mac) (or with nix env it will be done for you)
 6. Install `pip` (if it doesn't exist)
 7. Install `git `and `ffmpeg` (use brew if on mac) (again nix env installs this for you)
