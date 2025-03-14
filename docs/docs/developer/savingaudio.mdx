@@ -16,8 +16,8 @@ This guide will walk you through setting up a Google Cloud Storage (GCS) bucket 
 
 1. **Head to the GCS Console:**
    - Log in to your GCP account and go to the [Google Cloud Storage console](https://console.cloud.google.com/storage/browser).
-2. **Click "CREATE BUCKET":** 
-   -  Hit that button to get started! 
+2. **Click "CREATE BUCKET":**
+   -  Hit that button to get started!
 3. **Let's Set Up Your Bucket:**
    - **Name your bucket:**  Pick a unique name that follows the [naming guidelines](https://cloud.google.com/storage/docs/naming-buckets#requirements). Get creative, but keep it relevant! Example: `friend-audio-files`.
    - **Where should we store your audio?:** Choose a location that makes sense for you. Think about how quickly you need to access your files and your budget. A **Multi-region** is great for extra reliability across a wider area, while a **Region** gives you faster access in a specific spot.
@@ -26,16 +26,16 @@ This guide will walk you through setting up a Google Cloud Storage (GCS) bucket 
      - **Public access prevention:** Keep this **"On"** to make sure your audio stays private. 🤫
      - **Access control:**  Stick with **"Uniform"** for consistent permissions across all your audio files.
    - **Extra protection for your tunes:**
-     - **Soft delete policy:** This is already on by default – it's like a safety net if you accidentally delete something! 
+     - **Soft delete policy:** This is already on by default – it's like a safety net if you accidentally delete something!
      - **Object versioning:** Want to keep track of changes and easily recover older versions? Turn this on!
-     - **Object retention policy:**  If you need to keep audio for a specific amount of time, use this to set rules. 
+     - **Object retention policy:**  If you need to keep audio for a specific amount of time, use this to set rules.
      - **Encryption type:** Google will keep your audio encrypted by default – you don't need to do anything here unless you have special requirements.
 4. **Time to Create:**
    - Double-check everything and click **"CREATE"**.
 5. **Success!**
    - You'll get a message letting you know your bucket is ready to rock. 🤘
 
-## 🔐 Step 2: Create a Service Account 🔐 
+## 🔐 Step 2: Create a Service Account 🔐
 
 Think of this like a special ID card for your app to access the bucket.
 
@@ -82,7 +82,7 @@ This step turns your key file into a special code we can use in the app.
 3. **Run This Command:**
    - Replace `your-key-file.json` with the actual name of your key file:
      ```bash
-     base64 your-key-file.json
+     base64 -i your-key-file.json
      ```
 4. **Copy the Code:**
    - You'll get a long string of text – this is your Base64 encoded key! Copy it.
@@ -114,15 +114,9 @@ You now have two important pieces:
 * **GCP Credentials Base64:** Your special encoded key.
 * **GCP Bucket Name:** The name of your audio bucket.
 
-### 📱Last Step📱
-1. Open the app
-2. Goto Settings
-3. Enable Developer Mode
-4. Select Developer Mode (scroll down)
-5. Enter your GCP Credentails and GCP Bucket Name
-6. SAVE 🚀
+## Using Your Storage with Audio Streaming
 
-Watch the magic and check out those sweet sounds! 🎶
+Now that you have set up your GCP storage, you can use it with Omi's audio streaming feature. For detailed instructions on setting up audio streaming with your newly created storage bucket, please refer to our [Audio Streaming Guide](https://docs.omi.me/docs/developer/apps/audiostreaming).
 
 ## Contributing 🤝
 
