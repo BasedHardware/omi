@@ -92,7 +92,7 @@ class ServerConversation {
 
   final List<AppResponse> appResults;
   final ConversationSource? source;
-  final String? language; // applies to Friend only
+  final String? language; // applies to friend/omi only
 
   final ConversationExternalData? externalIntegration;
 
