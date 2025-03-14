@@ -13,6 +13,7 @@ import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/message_event.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
+import 'package:friend_private/pages/conversation_detail/compare_transcripts.dart';
 import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/services/devices.dart';
@@ -54,6 +55,11 @@ class CaptureProvider extends ChangeNotifier
   InternetStatus? _internetStatus;
 
   get internetStatus => _internetStatus;
+
+  StreamSubscription<String>? _localTranscriptionSubscription;
+  String _lastLocalTranscription = '';
+
+  bool _isRecordingLocal = false;
 
   List<ServerMessageEvent> _transcriptionServiceStatuses = [];
   List<ServerMessageEvent> get transcriptionServiceStatuses => _transcriptionServiceStatuses;
@@ -415,24 +421,50 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  streamRecording() async {
-    await Permission.microphone.request();
+  Future<void> streamRecording() async {
+    if (_isRecordingLocal) {
+      debugPrint("Already recording—ignoring duplicate start.");
+      return;
+    }
+    _isRecordingLocal = true;
 
-    // prepare
+    _localTranscriptionSubscription?.cancel();
+    _localTranscriptionSubscription = null;
+
+    await Permission.microphone.request();
     await changeAudioRecordProfile(BleAudioCodec.pcm16, 16000);
 
-    // record
-    await ServiceManager.instance().mic.start(onByteReceived: (bytes) {
-      if (_socket?.state == SocketServiceState.connected) {
-        _socket?.send(bytes);
-      }
-    }, onRecording: () {
-      updateRecordingState(RecordingState.record);
-    }, onStop: () {
-      updateRecordingState(RecordingState.stop);
-    }, onInitializing: () {
-      updateRecordingState(RecordingState.initialising);
-    });
+    _localTranscriptionSubscription =
+        LocalSpeechTranscriptionService().transcriptionStream.listen((transcription) {
+          debugPrint("CaptureProvider Local transcription: $transcription");
+          _lastLocalTranscription = transcription;
+          notifyListeners();
+        });
+
+    await ServiceManager.instance().mic.start(
+      onByteReceived: (bytes) {
+      debugPrint("asdfasdf Local transcription: $bytes");
+      _lastLocalTranscription = utf8.decode(bytes);
+        // Not used since we rely on transcription events.
+      },
+      onRecording: () {
+        updateRecordingState(RecordingState.record);
+      },
+      onStop: () {
+        updateRecordingState(RecordingState.stop);
+        // On stop, commit the final transcription as a single chunk.
+        if (_lastLocalTranscription.isNotEmpty) {
+          _addLocalTranscription(_lastLocalTranscription);
+        }
+        // Cancel the event subscription.
+        _localTranscriptionSubscription?.cancel();
+        _localTranscriptionSubscription = null;
+        _isRecordingLocal = false;
+      },
+      onInitializing: () {
+        updateRecordingState(RecordingState.initialising);
+      },
+    );
   }
 
   stopStreamRecording() async {
@@ -453,6 +485,29 @@ class CaptureProvider extends ChangeNotifier
     }
     _cleanupCurrentState();
     await _socket?.stop(reason: 'stop stream device recording');
+  }
+
+  void _addLocalTranscription(String transcription) {
+    if (transcription.isEmpty) return;
+
+    double now = DateTime.now().millisecondsSinceEpoch / 1000.0;
+
+    debugPrint("_addLocalTranscription: $transcription");
+
+    final segment = TranscriptSegment(
+      text: transcription,
+      speaker: 'SPEAKER_00',
+      isUser: true,
+      personId: null,
+      start: now,
+      end: now,
+    );
+
+    segments.add(segment);
+    hasTranscripts = true;
+
+    TranscriptSegment.combineSegments(segments, [segment]);
+    notifyListeners();
   }
 
   // Socket handling
