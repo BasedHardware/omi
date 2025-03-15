@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 import database.memories as memories_db
+import database.facts as facts_db
 import database.redis_db as redis_db
 from database.vector_db import delete_vector
 from models.memory import *
@@ -105,6 +106,7 @@ def get_memory_transcripts_by_models(memory_id: str, uid: str = Depends(auth.get
 def delete_memory(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
     print('delete_memory', memory_id, uid)
     memories_db.delete_memory(uid, memory_id)
+    facts_db.delete_facts_for_memory(uid, memory_id)
     delete_vector(memory_id)
     return {"status": "Ok"}
 
