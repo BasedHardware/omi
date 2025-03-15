@@ -93,6 +93,39 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     notifyListeners();
   }
 
+  DateTime? selectedDate;
+  List<ServerConversation> dateFilteredConversations = [];
+  int currentDateSearchPage = 1;
+  int totalDateSearchPages = 1;
+
+  void selectDate(DateTime date) async {
+    selectedDate = date;
+    currentDateSearchPage = 0;
+    await _fetchConversationsByDate();
+    notifyListeners();
+  }
+
+  Future<void> _fetchConversationsByDate() async {
+    if (selectedDate == null) {
+      dateFilteredConversations = [];
+      return;
+    }
+
+    setIsFetchingConversations(true);
+    var (convos, current, total) = await searchConversationsByDateServer(
+      selectedDate!,
+      includeDiscarded: showDiscardedConversations,
+      page: currentDateSearchPage,
+    );
+
+    dateFilteredConversations = convos;
+    currentDateSearchPage = current;
+    totalDateSearchPages = total;
+    groupSearchConvosByDate();
+    setIsFetchingConversations(false);
+    notifyListeners();
+  }
+
   Future<void> searchMoreConversations() async {
     if (totalSearchPages < currentSearchPage + 1) {
       return;
@@ -614,4 +647,5 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     isFetchingConversations = value;
     notifyListeners();
   }
+
 }

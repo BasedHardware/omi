@@ -380,3 +380,27 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
   }
   return (<ServerConversation>[], 0, 0);
 }
+
+Future<(List<ServerConversation>, int, int)> searchConversationsByDateServer(
+  DateTime date, {
+  int? page,
+  int? limit,
+  bool includeDiscarded = true,
+}) async {
+
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/memories/date_search', // Call the new endpoint
+    headers: {},
+    method: 'POST',
+    body: jsonEncode({'date': date,'page': page ?? 1, 'per_page': limit ?? 10, 'include_discarded': includeDiscarded,}),
+  );
+  if (response == null) return (<ServerConversation>[], 0, 0);
+  if (response.statusCode == 200) {
+    List<dynamic> items = (jsonDecode(response.body))['items'];
+    int currentPage = (jsonDecode(response.body))['current_page'];
+    int totalPages = (jsonDecode(response.body))['total_pages'];
+    var convos = items.map<ServerConversation>((item) => ServerConversation.fromJson(item)).toList();
+    return (convos, currentPage, totalPages);
+  }
+  return (<ServerConversation>[], 0, 0);
+}
