@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:app_links/app_links.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -59,9 +60,9 @@ Future<bool> _init() async {
 
   // Firebase
   if (F.env == Environment.prod) {
-    await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform, name: 'prod');
+    await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform);
   } else {
-    await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform, name: 'dev');
+    await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform);
   }
 
   await IntercomManager().initIntercom();
@@ -74,7 +75,9 @@ Future<bool> _init() async {
 
   bool isAuth = (await getIdToken()) != null;
   if (isAuth) MixpanelManager().identify();
-  initOpus(await opus_flutter.load());
+  if (!Platform.isMacOS) {
+    initOpus(await opus_flutter.load());
+  }
 
   await GrowthbookUtil.init();
   CalendarUtil.init();

@@ -161,6 +161,10 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                           child: MaterialButton(
                             padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                             onPressed: () async {
+                              if(Platform.isMacOS){
+                                widget.goNext();
+                                return;
+                              }
                               provider.setLoading(true);
                               if (Platform.isAndroid) {
                                 if (!provider.hasBackgroundPermission) {

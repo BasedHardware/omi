@@ -28,5 +28,57 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Bluetooth permission is required to connect with your Omi.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Bluetooth permission is required to connect with your Omi.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Access most functions for calendar viewing and editing.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Access most functions for calendar viewing and editing.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Access contacts for event attendee editing.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>When creating your memories, we use your location for determining where they were created.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>When creating your memories, we use your location for determining where they were created.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>When creating your memories, we use your location for determining where they were created.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>We need access to your microphone so you can share audio explanations of Bugs you find.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>We need access to your photo library to allow you to upload and share photos through Instabug.</string>
+	<key>PermissionGroupNotification</key>
+	<string>You need to enable notifications to receive your pro-active feedback.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Camera access is required to report issues</string>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>location</string>
+		<string>bluetooth-central</string>
+		<string>fetch</string>
+		<string>processing</string>
+		<string>remote-notification</string>
+	</array>
+	<key>GIDClientID</key>
+	<string>932070916901-3fm1bd0es4r2tm0sr4357nirfcju7gh4.apps.googleusercontent.com</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<!-- TODO Replace this value: -->
+				<!-- Copied from GoogleService-Info.plist key REVERSED_CLIENT_ID -->
+				<string>com.googleusercontent.apps.932070916901-3fm1bd0es4r2tm0sr4357nirfcju7gh4</string>
+			</array>
+		</dict>
+	</array>
+
+ 
 </dict>
 </plist>
