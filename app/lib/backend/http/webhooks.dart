@@ -1,9 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/conversation.dart';
+import 'package:omi_app/backend/http/shared.dart';
+import 'package:omi_app/backend/preferences.dart';
+import 'package:omi_app/backend/schema/conversation.dart';
 
 Future<String> webhookOnConversationCreatedCall(ServerConversation? conversation, {bool returnRawBody = false}) async {
   if (conversation == null) return '';

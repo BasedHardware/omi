@@ -2,10 +2,10 @@ import 'dart:convert';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/backend/schema/geolocation.dart';
-import 'package:friend_private/backend/schema/person.dart';
-import 'package:friend_private/env/env.dart';
+import 'package:omi_app/backend/http/shared.dart';
+import 'package:omi_app/backend/schema/geolocation.dart';
+import 'package:omi_app/backend/schema/person.dart';
+import 'package:omi_app/env/env.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
 Future<bool> updateUserGeolocation({required Geolocation geolocation}) async {

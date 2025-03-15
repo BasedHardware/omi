@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/pages/speech_profile/page.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:omi_app/pages/speech_profile/page.dart';
+import 'package:omi_app/utils/analytics/mixpanel.dart';
 
 class SetupQuestionsPage extends StatefulWidget {
   const SetupQuestionsPage({super.key});

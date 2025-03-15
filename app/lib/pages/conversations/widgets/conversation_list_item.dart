@@ -1,18 +1,18 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/backend/schema/structured.dart';
-import 'package:friend_private/pages/conversation_detail/conversation_detail_provider.dart';
-import 'package:friend_private/pages/conversation_detail/page.dart';
-import 'package:friend_private/providers/connectivity_provider.dart';
-import 'package:friend_private/providers/conversation_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/confirmation_dialog.dart';
-import 'package:friend_private/widgets/dialog.dart';
-import 'package:friend_private/widgets/extensions/string.dart';
+import 'package:omi_app/backend/preferences.dart';
+import 'package:omi_app/backend/schema/conversation.dart';
+import 'package:omi_app/backend/schema/structured.dart';
+import 'package:omi_app/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi_app/pages/conversation_detail/page.dart';
+import 'package:omi_app/providers/connectivity_provider.dart';
+import 'package:omi_app/providers/conversation_provider.dart';
+import 'package:omi_app/utils/analytics/mixpanel.dart';
+import 'package:omi_app/utils/other/temp.dart';
+import 'package:omi_app/widgets/confirmation_dialog.dart';
+import 'package:omi_app/widgets/dialog.dart';
+import 'package:omi_app/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
 class ConversationListItem extends StatefulWidget {

@@ -1,22 +1,22 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/pages/apps/app_detail/app_detail.dart';
-import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
-import 'package:friend_private/pages/apps/widgets/app_metadata_widget.dart';
-import 'package:friend_private/pages/apps/widgets/external_trigger_fields_widget.dart';
-import 'package:friend_private/pages/apps/widgets/full_screen_image_viewer.dart';
-import 'package:friend_private/pages/apps/widgets/api_keys_widget.dart';
-import 'package:friend_private/pages/apps/widgets/notification_scopes_chips_widget.dart';
-import 'package:friend_private/pages/apps/widgets/payment_details_widget.dart';
-import 'package:friend_private/pages/payments/payment_method_provider.dart';
-import 'package:friend_private/pages/payments/payments_page.dart';
-import 'package:friend_private/providers/app_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/confirmation_dialog.dart';
+import 'package:omi_app/backend/preferences.dart';
+import 'package:omi_app/backend/schema/app.dart';
+import 'package:omi_app/pages/apps/app_detail/app_detail.dart';
+import 'package:omi_app/pages/apps/providers/add_app_provider.dart';
+import 'package:omi_app/pages/apps/widgets/app_metadata_widget.dart';
+import 'package:omi_app/pages/apps/widgets/external_trigger_fields_widget.dart';
+import 'package:omi_app/pages/apps/widgets/full_screen_image_viewer.dart';
+import 'package:omi_app/pages/apps/widgets/api_keys_widget.dart';
+import 'package:omi_app/pages/apps/widgets/notification_scopes_chips_widget.dart';
+import 'package:omi_app/pages/apps/widgets/payment_details_widget.dart';
+import 'package:omi_app/pages/payments/payment_method_provider.dart';
+import 'package:omi_app/pages/payments/payments_page.dart';
+import 'package:omi_app/providers/app_provider.dart';
+import 'package:omi_app/utils/analytics/mixpanel.dart';
+import 'package:omi_app/utils/other/temp.dart';
+import 'package:omi_app/widgets/confirmation_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -373,7 +373,6 @@ class _AddAppPageState extends State<AddAppPage> {
                                 ),
                               ],
                             ),
-                          
                           const SizedBox(
                             height: 22,
                           ),

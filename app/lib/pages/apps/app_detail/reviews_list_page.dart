@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/pages/apps/app_detail/widgets/app_owner_review_card.dart';
-import 'package:friend_private/pages/apps/app_detail/widgets/user_review_card.dart';
+import 'package:omi_app/backend/preferences.dart';
+import 'package:omi_app/backend/schema/app.dart';
+import 'package:omi_app/pages/apps/app_detail/widgets/app_owner_review_card.dart';
+import 'package:omi_app/pages/apps/app_detail/widgets/user_review_card.dart';
 
 class ReviewsListPage extends StatefulWidget {
   final App app;

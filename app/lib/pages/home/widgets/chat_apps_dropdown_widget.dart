@@ -1,13 +1,13 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/gen/assets.gen.dart';
-import 'package:friend_private/providers/app_provider.dart';
-import 'package:friend_private/providers/home_provider.dart';
-import 'package:friend_private/providers/message_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:omi_app/backend/schema/app.dart';
+import 'package:omi_app/gen/assets.gen.dart';
+import 'package:omi_app/providers/app_provider.dart';
+import 'package:omi_app/providers/home_provider.dart';
+import 'package:omi_app/providers/message_provider.dart';
+import 'package:omi_app/utils/analytics/mixpanel.dart';
+import 'package:omi_app/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
 enum ChatMode { chat, chat_clone }
@@ -173,9 +173,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
   }
 
   List<PopupMenuItem<String>> _getAppsDropdownItems(BuildContext context, AppProvider provider) {
-    return mode == ChatMode.chat_clone 
-        ? _getCloneChatDropdownItems(provider)
-        : _getChatDropdownItems(provider);
+    return mode == ChatMode.chat_clone ? _getCloneChatDropdownItems(provider) : _getChatDropdownItems(provider);
   }
 
   List<PopupMenuItem<String>> _getCloneChatDropdownItems(AppProvider provider) {

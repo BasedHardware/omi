@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/pages/apps/update_app.dart';
-import 'package:friend_private/pages/persona/persona_provider.dart';
-import 'package:friend_private/providers/home_provider.dart';
+import 'package:omi_app/backend/schema/app.dart';
+import 'package:omi_app/pages/apps/update_app.dart';
+import 'package:omi_app/pages/persona/persona_provider.dart';
+import 'package:omi_app/providers/home_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:friend_private/providers/app_provider.dart';
-import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:omi_app/providers/app_provider.dart';
+import 'package:omi_app/utils/other/temp.dart';
+import 'package:omi_app/widgets/dialog.dart';
 
 class ShowAppOptionsSheet extends StatelessWidget {
   final App app;

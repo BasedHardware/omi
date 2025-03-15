@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/backend/preferences.dart';
+import 'package:omi_app/backend/schema/app.dart';
+import 'package:omi_app/backend/preferences.dart';
 
 class AppHomeWebPage extends StatefulWidget {
   final App app;

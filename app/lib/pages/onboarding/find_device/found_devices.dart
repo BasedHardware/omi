@@ -1,9 +1,9 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/providers/onboarding_provider.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:omi_app/backend/schema/bt_device/bt_device.dart';
+import 'package:omi_app/providers/onboarding_provider.dart';
+import 'package:omi_app/widgets/dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
 

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/pages/settings/webview.dart';
-import 'package:friend_private/utils/analytics/intercom.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
+import 'package:omi_app/pages/settings/webview.dart';
+import 'package:omi_app/utils/analytics/intercom.dart';
+import 'package:omi_app/utils/analytics/mixpanel.dart';
+import 'package:omi_app/utils/other/temp.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class AboutOmiPage extends StatefulWidget {

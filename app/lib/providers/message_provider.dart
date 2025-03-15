@@ -4,15 +4,15 @@ import 'package:collection/collection.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/api/messages.dart';
-import 'package:friend_private/backend/http/api/users.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/providers/app_provider.dart';
-import 'package:friend_private/utils/alerts/app_snackbar.dart';
+import 'package:omi_app/backend/http/api/messages.dart';
+import 'package:omi_app/backend/http/api/users.dart';
+import 'package:omi_app/backend/preferences.dart';
+import 'package:omi_app/backend/schema/app.dart';
+import 'package:omi_app/backend/schema/message.dart';
+import 'package:omi_app/providers/app_provider.dart';
+import 'package:omi_app/utils/alerts/app_snackbar.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:friend_private/utils/file.dart';
+import 'package:omi_app/utils/file.dart';
 import 'package:uuid/uuid.dart';
 
 class MessageProvider extends ChangeNotifier {
