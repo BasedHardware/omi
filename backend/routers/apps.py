@@ -654,6 +654,10 @@ def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_ui
     if app.is_paid and get_is_user_paid_app(app.id, uid) == False:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
 
+    # Store external integration data for cleanup on uninstall
+    if app.works_externally() and app.external_integration:
+        app.external_integration.store_webhook_for_user(uid, app_id)
+
     enable_app(uid, app_id)
     if (app.private is None or not app.private) and (app.uid is None or app.uid != uid) and not is_tester(uid):
         increase_app_installs_count(app_id)
@@ -669,6 +673,27 @@ def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_u
     if app.private is None:
         if app.private and app.uid != uid and not is_tester(uid):
             raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+
+    # Handle external integrations when disabling app
+    if app.works_externally() and app.external_integration:
+        # Clean up webhook URL from Redis
+        app.external_integration.cleanup_webhook_for_user(uid, app_id)
+
+        if app.external_integration.webhook_url:
+            try:
+                # Notify the external service that the app is being uninstalled
+                payload = {"event": "app_uninstalled", "uid": uid, "app_id": app_id}
+                response = requests.post(
+                    app.external_integration.webhook_url,
+                    json=payload,
+                    timeout=5  # Set a timeout to avoid hanging
+                )
+                # Log the response but don't block uninstallation if it fails
+                print(f"External app uninstall notification status: {response.status_code}")
+            except Exception as e:
+                # Log the error but continue with uninstallation
+                print(f"Error notifying external app about uninstallation: {e}")
+
     disable_app(uid, app_id)
     if (app.private is None or not app.private) and (app.uid is None or app.uid != uid) and not is_tester(uid):
         decrease_app_installs_count(app_id)

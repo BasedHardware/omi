@@ -1,0 +1,25 @@
+---
+title: Testing App Lifecycle Events
+description: 'How to test webhook notifications for app lifecycle events like uninstallation'
+---
+
+## App Uninstall Notifications
+
+When a user uninstalls your app, Omi automatically sends a webhook notification to your service with an `app_uninstalled` event. This allows you to:
+
+- Clean up user-specific data on your servers
+- Cancel any active subscriptions or services
+- Update your usage metrics
+- Perform any other necessary cleanup actions
+
+The webhook payload includes:
+
+```json
+{
+  "event": "app_uninstalled",
+  "uid": "user-id",
+  "app_id": "your-app-id"
+}
+```
+
+By properly handling app uninstall notifications, you ensure users' data is properly managed and avoid potential security issues with lingering access after app removal.
