@@ -76,13 +76,13 @@ Future<DeviceType?> getTypeOfBluetoothDevice(BluetoothDevice device) async {
   }
   DeviceType? deviceType;
   await device.discoverServices();
-  if (device.servicesList.where((s) => s.uuid == Guid(friendServiceUuid)).isNotEmpty) {
+  if (device.servicesList.where((s) => s.uuid == Guid(omiServiceUuid)).isNotEmpty) {
     // Check if the device has the image data stream characteristic
     final hasImageStream = device.servicesList
-        .where((s) => s.uuid == Guid.fromString(friendServiceUuid))
+        .where((s) => s.uuid == Guid.fromString(omiServiceUuid))
         .expand((s) => s.characteristics)
         .any((c) => c.uuid.toString().toLowerCase() == imageDataStreamCharacteristicUuid.toLowerCase());
-    deviceType = hasImageStream ? DeviceType.openglass : DeviceType.friend;
+    deviceType = hasImageStream ? DeviceType.openglass : DeviceType.omi;
   } else if (device.servicesList.where((s) => s.uuid == Guid(frameServiceUuid)).isNotEmpty) {
     deviceType = DeviceType.frame;
   }
@@ -93,7 +93,7 @@ Future<DeviceType?> getTypeOfBluetoothDevice(BluetoothDevice device) async {
 }
 
 enum DeviceType {
-  friend,
+  omi,
   openglass,
   frame,
 }
@@ -129,7 +129,7 @@ class BtDevice {
   BtDevice.empty()
       : name = '',
         id = '',
-        type = DeviceType.friend,
+        type = DeviceType.omi,
         rssi = 0,
         _modelNumber = '',
         _firmwareRevision = '',
@@ -205,23 +205,23 @@ class BtDevice {
       }
     }
 
-    if (type == DeviceType.friend) {
-      return await _getDeviceInfoFromFriend(conn);
+    if (type == DeviceType.omi) {
+      return await _getDeviceInfoFromOmi(conn);
     } else if (type == DeviceType.openglass) {
-      return await _getDeviceInfoFromFriend(conn);
+      return await _getDeviceInfoFromOmi(conn);
     } else if (type == DeviceType.frame) {
       return await _getDeviceInfoFromFrame(conn as FrameDeviceConnection);
     } else {
-      return await _getDeviceInfoFromFriend(conn);
+      return await _getDeviceInfoFromOmi(conn);
     }
   }
 
-  Future _getDeviceInfoFromFriend(DeviceConnection conn) async {
-    var modelNumber = 'Friend';
+  Future _getDeviceInfoFromOmi(DeviceConnection conn) async {
+    var modelNumber = 'Omi Device';
     var firmwareRevision = '1.0.2';
     var hardwareRevision = 'Seeed Xiao BLE Sense';
     var manufacturerName = 'Based Hardware';
-    var t = DeviceType.friend;
+    var t = DeviceType.omi;
     try {
       var deviceInformationService = await conn.getService(deviceInformationServiceUuid);
       if (deviceInformationService != null) {
@@ -252,10 +252,9 @@ class BtDevice {
       if (type == DeviceType.openglass) {
         t = DeviceType.openglass;
       } else {
-        final friendService = await conn.getService(friendServiceUuid);
-        if (friendService != null) {
-          var imageCaptureControlCharacteristic =
-              conn.getCharacteristic(friendService, imageDataStreamCharacteristicUuid);
+        final omiService = await conn.getService(omiServiceUuid);
+        if (omiService != null) {
+          var imageCaptureControlCharacteristic = conn.getCharacteristic(omiService, imageDataStreamCharacteristicUuid);
           if (imageCaptureControlCharacteristic != null) {
             t = DeviceType.openglass;
           }
@@ -291,7 +290,7 @@ class BtDevice {
     return BtDevice(
       name: device.platformName,
       id: device.remoteId.str,
-      type: DeviceType.friend,
+      type: DeviceType.omi,
       rssi: rssi,
     );
   }
@@ -299,8 +298,8 @@ class BtDevice {
   // from ScanResult
   static fromScanResult(ScanResult result) {
     DeviceType? deviceType;
-    if (result.advertisementData.serviceUuids.contains(Guid(friendServiceUuid))) {
-      deviceType = DeviceType.friend;
+    if (result.advertisementData.serviceUuids.contains(Guid(omiServiceUuid))) {
+      deviceType = DeviceType.omi;
     } else if (result.advertisementData.serviceUuids.contains(Guid(frameServiceUuid))) {
       deviceType = DeviceType.frame;
     }
@@ -312,7 +311,7 @@ class BtDevice {
     return BtDevice(
       name: result.device.platformName,
       id: result.device.remoteId.str,
-      type: deviceType ?? DeviceType.friend,
+      type: deviceType ?? DeviceType.omi,
       rssi: result.rssi,
     );
   }

@@ -19,7 +19,7 @@ struct ContentView: View {
         // and publish those on the proper characteristic
         
         VStack {
-            Text("Friend simulator")
+            Text("Omi simulator")
             
             Button() {
                 if recording {

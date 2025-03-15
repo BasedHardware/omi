@@ -290,8 +290,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FriendSimulator/Info.plist;
-				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "App needs to expose Friend over BLE";
-				INFOPLIST_KEY_NSBluetoothPeripheralUsageDescription = "App needs to expose Friend over BLE";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "App needs to expose Omi over BLE";
+				INFOPLIST_KEY_NSBluetoothPeripheralUsageDescription = "App needs to expose Omi over BLE";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Need to record sound";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -321,8 +321,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FriendSimulator/Info.plist;
-				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "App needs to expose Friend over BLE";
-				INFOPLIST_KEY_NSBluetoothPeripheralUsageDescription = "App needs to expose Friend over BLE";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "App needs to expose Omi over BLE";
+				INFOPLIST_KEY_NSBluetoothPeripheralUsageDescription = "App needs to expose Omi over BLE";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Need to record sound";
 				LD_RUNPATH_SEARCH_PATHS = (

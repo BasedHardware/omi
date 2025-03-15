@@ -1,6 +1,6 @@
-Mem0 <> Friend Example
+Mem0 <> Omi Example
 
-In this example, you will how to use Mem0 with Friend and create a plugin.
+In this example, you will how to use Mem0 with Omi and create a plugin.
 
 ### router.py
 

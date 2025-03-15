@@ -42,7 +42,7 @@ class _SdCardBannerWidgetState extends State<SdCardBannerWidget> {
         });
       });
 
-      /// Friend V2 SD CARD functionality
+      /// Omi V2 SD CARD functionality
       String totalsdCardSecondsRemainingString = totalRemainingSeconds.toStringAsFixed(2);
       var banner = 'You have $totalsdCardSecondsRemainingString seconds of Storage Remaining. Click here to see';
 

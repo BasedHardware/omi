@@ -83,12 +83,12 @@ class DeviceService implements IDeviceService {
     );
     FlutterBluePlus.cancelWhenScanComplete(discoverSubscription);
 
-    // Only look for devices that implement Friend or Frame main service
+    // Only look for devices that implement Omi or Frame main service
     _status = DeviceServiceStatus.scanning;
     await FlutterBluePlus.adapterState.where((val) => val == BluetoothAdapterState.on).first;
     await FlutterBluePlus.startScan(
       timeout: Duration(seconds: timeout),
-      withServices: [Guid(friendServiceUuid), Guid(frameServiceUuid)],
+      withServices: [Guid(omiServiceUuid), Guid(frameServiceUuid)],
     );
     _status = DeviceServiceStatus.ready;
   }
