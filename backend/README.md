@@ -88,7 +88,7 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
 
 15. Start the backend server:
     ```bash
-    uvicorn main:app --reload --env-file .env
+    python -m uvicorn main:app --reload --env-file .env
     ```
 
 16. Troubleshooting: If you get any error mentioning "no internet connection" while downloading models, add the following lines in the `utils/stt/vad.py` file after the import statements:
