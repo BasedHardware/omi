@@ -44,3 +44,37 @@ The Omi App is a Flutter-based mobile application that serves as the companion a
 ## Need Help?
 
 - 💬 Join our [Discord Community](http://discord.omi.me)
+
+## Troubleshooting
+
+### iOS Setup Issues with Ruby Gems
+
+If you encounter Ruby gem dependency errors during iOS setup (particularly with fastlane), follow these steps:
+
+1. Install Bundler (if not already installed):
+   ```bash
+   sudo gem install bundler
+   ```
+
+2. Create a Gemfile in the app directory with required gems:
+   ```bash
+   cat > Gemfile << EOL
+   source "https://rubygems.org"
+
+   gem "fastlane"
+   gem "cocoapods"
+   gem "nkf"
+   EOL
+   ```
+
+3. Install gems using Bundler:
+   ```bash
+   bundle install
+   ```
+
+4. Run the iOS setup using Bundler:
+   ```bash
+   bundle exec bash setup.sh ios
+   ```
+
+This approach ensures all required Ruby dependencies are properly installed and managed.
