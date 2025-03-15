@@ -17,22 +17,33 @@ class GrowthbookUtil {
   static Future<void> init() async {
     if (Env.growthbookApiKey == null) return;
     print('GrowthbookUtil init');
-    var attr = {
-      'id': SharedPreferencesUtil().uid,
-      'device': PlatformUtils.isWeb ? 'web' : (PlatformUtils.isAndroid ? 'android' : 'ios'),
-    };
-    _gb = await GBSDKBuilderApp(
-      apiKey: Env.growthbookApiKey!,
-      backgroundSync: true,
-      enable: true,
-      attributes: attr,
-      growthBookTrackingCallBack: (gbExperiment, gbExperimentResult) {
-        debugPrint('growthBookTrackingCallBack: $gbExperiment $gbExperimentResult');
-      },
-      hostURL: 'https://cdn.growthbook.io/',
-      qaMode: true,
-    ).initialize();
-    _gb!.setAttributes(attr);
+    
+    // Skip Growthbook initialization on web to avoid FirebaseException issues
+    if (PlatformUtils.isWeb) {
+      debugPrint('Skipping Growthbook initialization on web platform');
+      return;
+    }
+    
+    try {
+      var attr = {
+        'id': SharedPreferencesUtil().uid,
+        'device': PlatformUtils.isWeb ? 'web' : (PlatformUtils.isAndroid ? 'android' : 'ios'),
+      };
+      _gb = await GBSDKBuilderApp(
+        apiKey: Env.growthbookApiKey!,
+        backgroundSync: true,
+        enable: true,
+        attributes: attr,
+        growthBookTrackingCallBack: (gbExperiment, gbExperimentResult) {
+          debugPrint('growthBookTrackingCallBack: $gbExperiment $gbExperimentResult');
+        },
+        hostURL: 'https://cdn.growthbook.io/',
+        qaMode: true,
+      ).initialize();
+      _gb!.setAttributes(attr);
+    } catch (e) {
+      debugPrint('Error initializing Growthbook: $e');
+    }
   }
 
   bool displayOmiFeedback() {

@@ -16,18 +16,23 @@ import 'package:friend_private/env/env.dart';
 import 'package:friend_private/env/prod_env.dart';
 import 'package:friend_private/firebase_options_dev.dart' as dev;
 import 'package:friend_private/firebase_options_prod.dart' as prod;
+import 'package:friend_private/services/web_notification_service.dart';
+import 'package:friend_private/services/web_service_manager.dart';
 import 'package:friend_private/utils/platform_utils.dart';
+import 'package:friend_private/utils/web_init.dart';
 import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/apps/app_detail/app_detail.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:friend_private/pages/onboarding/device_selection.dart';
+import 'package:friend_private/pages/onboarding/web_onboarding.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/pages/persona/persona_profile.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/providers/auth_provider.dart';
+import 'package:friend_private/providers/web_auth_provider.dart';
 import 'package:friend_private/providers/calendar_provider.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
@@ -55,37 +60,84 @@ import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
 Future<bool> _init() async {
-  // Service manager
-  ServiceManager.init();
-
-  // Firebase
-  if (F.env == Environment.prod) {
-    await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform, name: 'prod');
+  // Handle platform-specific initialization
+  if (PlatformUtils.isWeb) {
+    // Use web-specific initialization that avoids dart:isolate
+    debugPrint('Using web-specific initialization');
+    
+    try {
+      // Skip Firebase initialization on web to avoid errors
+      debugPrint('Skipping Firebase initialization on web platform');
+      
+      // Initialize basic services that are web-compatible
+      await SharedPreferencesUtil.init();
+      
+      try {
+        await MixpanelManager.init();
+      } catch (e) {
+        debugPrint('Error initializing MixpanelManager: $e');
+      }
+      
+      try {
+        await GrowthbookUtil.init();
+      } catch (e) {
+        debugPrint('Error initializing GrowthbookUtil: $e');
+      }
+      
+      try {
+        CalendarUtil.init();
+      } catch (e) {
+        debugPrint('Error initializing CalendarUtil: $e');
+      }
+      
+      // Initialize web-specific services
+      try {
+        WebServiceManager.init();
+        await WebNotificationService.instance.initialize();
+        await WebServiceManager.instance().start();
+      } catch (e) {
+        debugPrint('Error initializing web services: $e');
+      }
+      
+      // For web demo, we'll skip authentication and return false
+      // This will direct users to the WebOnboardingPage
+      debugPrint('Web initialization complete, returning auth=false to show onboarding');
+      return false;
+    } catch (e) {
+      debugPrint('Error during web initialization: $e');
+      return false;
+    }
   } else {
-    await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform, name: 'dev');
-  }
+    // Mobile platform initialization
+    ServiceManager.init();
+    
+    // Firebase
+    if (F.env == Environment.prod) {
+      await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform, name: 'prod');
+    } else {
+      await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform, name: 'dev');
+    }
 
-  await IntercomManager().initIntercom();
-  await NotificationService.instance.initialize();
-  await SharedPreferencesUtil.init();
-  await MixpanelManager.init();
+    await IntercomManager().initIntercom();
+    await NotificationService.instance.initialize();
+    
+    await SharedPreferencesUtil.init();
+    await MixpanelManager.init();
 
-  // TODO: thinh, move to app start
-  await ServiceManager.instance().start();
+    await ServiceManager.instance().start();
 
-  bool isAuth = (await getIdToken()) != null;
-  if (isAuth) MixpanelManager().identify();
-  initOpus(await opus_flutter.load());
+    bool isAuth = (await getIdToken()) != null;
+    if (isAuth) MixpanelManager().identify();
+    
+    initOpus(await opus_flutter.load());
 
-  await GrowthbookUtil.init();
-  CalendarUtil.init();
-  
-  // Only initialize Bluetooth on mobile platforms
-  if (!PlatformUtils.isWeb) {
+    await GrowthbookUtil.init();
+    CalendarUtil.init();
+    
     ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
+    
+    return isAuth;
   }
-  
-  return isAuth;
 }
 
 Future<void> initPostHog() async {
@@ -103,11 +155,17 @@ void main() async {
   } else {
     Env.init(DevEnv());
   }
-  FlutterForegroundTask.initCommunicationPort();
+  
+  // Only initialize foreground task on mobile platforms
+  if (!PlatformUtils.isWeb) {
+    FlutterForegroundTask.initCommunicationPort();
+  }
+  
   if (Env.posthogApiKey != null) {
     await initPostHog();
   }
-  // _setupAudioSession();
+  
+  // Initialize based on platform
   bool isAuth = await _init();
   if (Env.instabugApiKey != null) {
     await Instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
@@ -152,15 +210,25 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void initState() {
-    NotificationUtil.initializeNotificationsEventListeners();
-    NotificationUtil.initializeIsolateReceivePort();
+    if (PlatformUtils.isWeb) {
+      // Use web-compatible notification service
+      WebNotificationUtil.initializeNotificationsEventListeners();
+    } else {
+      // Use mobile notification service with isolates
+      NotificationUtil.initializeNotificationsEventListeners();
+      NotificationUtil.initializeIsolateReceivePort();
+    }
     WidgetsBinding.instance.addObserver(this);
     super.initState();
   }
 
   void _deinit() {
     debugPrint("App > _deinit");
-    ServiceManager.instance().deinit();
+    if (PlatformUtils.isWeb) {
+      WebServiceManager.instance().deinit();
+    } else {
+      ServiceManager.instance().deinit();
+    }
   }
 
   @override
@@ -176,7 +244,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     return MultiProvider(
         providers: [
           ListenableProvider(create: (context) => ConnectivityProvider()),
-          ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
+          ChangeNotifierProvider<AuthenticationProvider>(
+              create: (context) => AuthenticationProvider()),
+          ChangeNotifierProvider<WebAuthenticationProvider>(
+              create: (context) => WebAuthenticationProvider()),
           ChangeNotifierProvider(create: (context) => ConversationProvider()),
           ListenableProvider(create: (context) => AppProvider()),
           ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
@@ -305,13 +376,18 @@ class _DeciderWidgetState extends State<DeciderWidget> {
   StreamSubscription<Uri>? _linkSubscription;
 
   Future<void> initDeepLinks() async {
-    _appLinks = AppLinks();
+    if (!PlatformUtils.isWeb) {
+      _appLinks = AppLinks();
 
-    // Handle links
-    _linkSubscription = _appLinks.uriLinkStream.distinct().listen((uri) {
-      debugPrint('onAppLink: $uri');
-      openAppLink(uri);
-    });
+      // Handle links
+      _linkSubscription = _appLinks.uriLinkStream.distinct().listen((uri) {
+        debugPrint('onAppLink: $uri');
+        openAppLink(uri);
+      });
+    } else {
+      // Web platform doesn't use AppLinks
+      debugPrint('Deep links not supported on web platform');
+    }
   }
 
   void openAppLink(Uri uri) async {
@@ -338,10 +414,29 @@ class _DeciderWidgetState extends State<DeciderWidget> {
     initDeepLinks();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (context.read<ConnectivityProvider>().isConnected) {
-        NotificationService.instance.saveNotificationToken();
+        if (PlatformUtils.isWeb) {
+          WebNotificationService.instance.saveNotificationToken();
+        } else {
+          NotificationService.instance.saveNotificationToken();
+        }
       }
 
-      if (context.read<AuthenticationProvider>().isSignedIn()) {
+      if (PlatformUtils.isWeb) {
+        if (context.read<WebAuthenticationProvider>().isSignedIn()) {
+          context.read<HomeProvider>().setupHasSpeakerProfile();
+          try {
+            await IntercomManager.instance.intercom.loginIdentifiedUser(
+              userId: SharedPreferencesUtil().uid,
+            );
+          } catch (e) {
+            debugPrint('Failed to login to Intercom: $e');
+          }
+
+          context.read<MessageProvider>().setMessagesFromCache();
+          context.read<AppProvider>().setAppsFromCache();
+          context.read<MessageProvider>().refreshMessages();
+        }
+      } else if (context.read<AuthenticationProvider>().isSignedIn()) {
         context.read<HomeProvider>().setupHasSpeakerProfile();
         try {
           await IntercomManager.instance.intercom.loginIdentifiedUser(
@@ -364,23 +459,31 @@ class _DeciderWidgetState extends State<DeciderWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AuthenticationProvider>(
-      builder: (context, authProvider, child) {
-        if (authProvider.isSignedIn()) {
-          if (SharedPreferencesUtil().onboardingCompleted) {
-            return const HomePageWrapper();
+    // Use platform-specific onboarding flow
+    if (PlatformUtils.isWeb) {
+      debugPrint('Using web-specific onboarding flow');
+      // For web, always show the WebOnboardingPage to avoid Firebase auth issues
+      return const WebOnboardingPage();
+    } else {
+      // Mobile platform flow
+      return Consumer<AuthenticationProvider>(
+        builder: (context, authProvider, child) {
+          if (authProvider.isSignedIn()) {
+            if (SharedPreferencesUtil().onboardingCompleted) {
+              return const HomePageWrapper();
+            } else {
+              return const OnboardingWrapper();
+            }
+          } else if (SharedPreferencesUtil().hasOmiDevice == false &&
+              SharedPreferencesUtil().hasPersonaCreated &&
+              SharedPreferencesUtil().verifiedPersonaId != null) {
+            return const PersonaProfilePage();
           } else {
-            return const OnboardingWrapper();
+            return const DeviceSelectionPage();
           }
-        } else if (SharedPreferencesUtil().hasOmiDevice == false &&
-            SharedPreferencesUtil().hasPersonaCreated &&
-            SharedPreferencesUtil().verifiedPersonaId != null) {
-          return const PersonaProfilePage();
-        } else {
-          return const DeviceSelectionPage();
-        }
-      },
-    );
+        },
+      );
+    }
   }
 }
 
