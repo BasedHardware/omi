@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Omi Web Demo</title>
+    <style>
+        /* Reset and base styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        }
+        
+        body {
+            background-color: #000;
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* Header styles */
+        header {
+            padding: 16px;
+            border-bottom: 1px solid #333;
+            text-align: center;
+        }
+        
+        /* Page container */
+        .page-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        /* Page styles */
+        .page {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            text-align: center;
+        }
+        
+        .page.active {
+            display: flex;
+        }
+        
+        /* Onboarding page */
+        .logo {
+            font-size: 48px;
+            margin-bottom: 24px;
+        }
+        
+        .title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 16px;
+        }
+        
+        .subtitle {
+            font-size: 16px;
+            color: #aaa;
+            margin-bottom: 40px;
+        }
+        
+        /* Button styles */
+        .btn {
+            background-color: #fff;
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            padding: 16px 32px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            max-width: 400px;
+            margin-bottom: 24px;
+            transition: background-color 0.2s;
+        }
+        
+        .btn:hover {
+            background-color: #eee;
+        }
+        
+        .btn-secondary {
+            background-color: transparent;
+            color: #fff;
+            border: 1px solid #333;
+        }
+        
+        .btn-secondary:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        
+        .btn-accent {
+            background-color: #6a5acd;
+            color: #fff;
+        }
+        
+        .btn-accent:hover {
+            background-color: #5a4abf;
+        }
+        
+        /* Account options */
+        .account-options {
+            margin-top: 16px;
+            margin-bottom: 32px;
+        }
+        
+        .account-label {
+            font-size: 14px;
+            color: #aaa;
+            margin-bottom: 16px;
+        }
+        
+        /* Terms and privacy */
+        .terms {
+            font-size: 12px;
+            color: #aaa;
+            margin-top: 40px;
+        }
+        
+        .terms a {
+            color: #6a5acd;
+            text-decoration: none;
+        }
+        
+        /* Home page */
+        .home-content {
+            width: 100%;
+            max-width: 600px;
+        }
+        
+        .device-icon {
+            font-size: 64px;
+            margin-bottom: 24px;
+        }
+        
+        .description {
+            color: #aaa;
+            margin-bottom: 40px;
+        }
+        
+        /* Dialog */
+        .dialog-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        
+        .dialog {
+            background-color: #333;
+            border-radius: 16px;
+            padding: 24px;
+            width: 90%;
+            max-width: 500px;
+        }
+        
+        .dialog-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 16px;
+        }
+        
+        .dialog-content {
+            margin-bottom: 24px;
+            color: #ccc;
+            line-height: 1.5;
+        }
+        
+        .dialog-actions {
+            display: flex;
+            justify-content: flex-end;
+        }
+        
+        .dialog-btn {
+            background-color: transparent;
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            font-size: 14px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        
+        .dialog-btn:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        
+        /* Bottom navigation */
+        .bottom-nav {
+            display: flex;
+            justify-content: space-around;
+            background-color: #111;
+            padding: 16px 0;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            border-top: 1px solid #333;
+        }
+        
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #777;
+            text-decoration: none;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        
+        .nav-item.active {
+            color: #fff;
+        }
+        
+        .nav-icon {
+            font-size: 24px;
+            margin-bottom: 4px;
+        }
+        
+        /* Tab content */
+        .tab-content {
+            display: none;
+            padding: 24px;
+            text-align: center;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Omi Web Demo</h1>
+    </header>
+    
+    <div class="page-container">
+        <!-- Onboarding Page -->
+        <div id="onboarding-page" class="page active">
+            <div class="logo">📱</div>
+            <h1 class="title">Welcome to Omi</h1>
+            <p class="subtitle">Scale yourself with Omi</p>
+            
+            <button id="get-started-btn" class="btn">Get Started</button>
+            
+            <div class="account-options">
+                <p class="account-label">Already have an account?</p>
+                <button class="btn btn-secondary">
+                    <span>G</span> Sign in with Google
+                </button>
+                <button class="btn btn-secondary">
+                    <span>🍎</span> Sign in with Apple
+                </button>
+            </div>
+            
+            <div class="terms">
+                <p>By continuing, you agree to our</p>
+                <p><a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a></p>
+            </div>
+        </div>
+        
+        <!-- Home Page -->
+        <div id="home-page" class="page">
+            <div class="home-content">
+                <div class="device-icon">📱</div>
+                <h2 class="title">Welcome to Omi Web Demo</h2>
+                <p class="description">This is a web demonstration of the Omi app. Full functionality requires a physical Omi device.</p>
+                
+                <button id="learn-more-btn" class="btn btn-accent">Learn More</button>
+            </div>
+            
+            <!-- Tab Content -->
+            <div id="home-tab" class="tab-content active">
+                <!-- Home tab content is already shown above -->
+            </div>
+            
+            <div id="chat-tab" class="tab-content">
+                <div class="device-icon">💬</div>
+                <h2 class="title">Chat Demo</h2>
+                <p class="description">Chat functionality requires a physical Omi device. This is a demonstration of the user interface only.</p>
+            </div>
+            
+            <div id="settings-tab" class="tab-content">
+                <div class="device-icon">⚙️</div>
+                <h2 class="title">Settings Demo</h2>
+                <p class="description">Settings functionality is limited in the web demo. Full functionality requires the mobile app with a physical Omi device.</p>
+                
+                <button id="reset-demo-btn" class="btn btn-accent">Reset Demo</button>
+            </div>
+            
+            <!-- Bottom Navigation -->
+            <div class="bottom-nav">
+                <div class="nav-item active" data-tab="home-tab">
+                    <div class="nav-icon">🏠</div>
+                    <span>Home</span>
+                </div>
+                <div class="nav-item" data-tab="chat-tab">
+                    <div class="nav-icon">💬</div>
+                    <span>Chat</span>
+                </div>
+                <div class="nav-item" data-tab="settings-tab">
+                    <div class="nav-icon">⚙️</div>
+                    <span>Settings</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Dialog -->
+    <div id="dialog-overlay" class="dialog-overlay">
+        <div class="dialog">
+            <h3 class="dialog-title">Web Demo Limitations</h3>
+            <div class="dialog-content">
+                <p>The web version of Omi provides a demonstration of the user interface but has limited functionality compared to the mobile app with a physical Omi device.</p>
+                <p>Features requiring Bluetooth connectivity are simulated in this web demo.</p>
+            </div>
+            <div class="dialog-actions">
+                <button id="dialog-ok-btn" class="dialog-btn">OK</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Navigation between pages
+        document.getElementById('get-started-btn').addEventListener('click', function() {
+            document.getElementById('onboarding-page').classList.remove('active');
+            document.getElementById('home-page').classList.add('active');
+            console.log('Navigated to home page');
+        });
+        
+        // Tab navigation
+        const navItems = document.querySelectorAll('.nav-item');
+        const tabContents = document.querySelectorAll('.tab-content');
+        
+        navItems.forEach(item => {
+            item.addEventListener('click', function() {
+                // Update active nav item
+                navItems.forEach(navItem => navItem.classList.remove('active'));
+                this.classList.add('active');
+                
+                // Update active tab content
+                const tabId = this.getAttribute('data-tab');
+                tabContents.forEach(tab => tab.classList.remove('active'));
+                document.getElementById(tabId).classList.add('active');
+                
+                console.log('Switched to tab:', tabId);
+            });
+        });
+        
+        // Dialog functionality
+        const dialogOverlay = document.getElementById('dialog-overlay');
+        const dialogOkBtn = document.getElementById('dialog-ok-btn');
+        const learnMoreBtn = document.getElementById('learn-more-btn');
+        
+        learnMoreBtn.addEventListener('click', function() {
+            dialogOverlay.style.display = 'flex';
+            console.log('Opened dialog');
+        });
+        
+        dialogOkBtn.addEventListener('click', function() {
+            dialogOverlay.style.display = 'none';
+            console.log('Closed dialog');
+        });
+        
+        // Reset demo button
+        const resetDemoBtn = document.getElementById('reset-demo-btn');
+        resetDemoBtn.addEventListener('click', function() {
+            document.getElementById('home-page').classList.remove('active');
+            document.getElementById('onboarding-page').classList.add('active');
+            
+            // Reset active tab
+            navItems.forEach(navItem => navItem.classList.remove('active'));
+            navItems[0].classList.add('active');
+            
+            tabContents.forEach(tab => tab.classList.remove('active'));
+            tabContents[0].classList.add('active');
+            
+            console.log('Reset demo');
+        });
+        
+        // Log initialization
+        console.log('Omi Web Demo initialized');
+    </script>
+</body>
+</html>
