@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
+import 'package:friend_private/utils/platform_utils.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -384,7 +385,7 @@ class FriendDeviceConnection extends DeviceConnection {
     // This will cause a crash in OpenGlass devices
     // due to a race with discoverServices() that triggers
     // a bug in the device firmware.
-    if (Platform.isAndroid) await device.requestMtu(512);
+    if (PlatformUtils.isAndroid) await device.requestMtu(512);
 
     return listener;
   }
@@ -518,7 +519,7 @@ class FriendDeviceConnection extends DeviceConnection {
     // This will cause a crash in OpenGlass devices
     // due to a race with discoverServices() that triggers
     // a bug in the device firmware.
-    // if (Platform.isAndroid) await device.requestMtu(512);
+    // if (PlatformUtils.isAndroid) await device.requestMtu(512);
 
     return listener;
   }

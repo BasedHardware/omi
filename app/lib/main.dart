@@ -16,6 +16,7 @@ import 'package:friend_private/env/env.dart';
 import 'package:friend_private/env/prod_env.dart';
 import 'package:friend_private/firebase_options_dev.dart' as dev;
 import 'package:friend_private/firebase_options_prod.dart' as prod;
+import 'package:friend_private/utils/platform_utils.dart';
 import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/apps/app_detail/app_detail.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
@@ -78,7 +79,12 @@ Future<bool> _init() async {
 
   await GrowthbookUtil.init();
   CalendarUtil.init();
-  ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
+  
+  // Only initialize Bluetooth on mobile platforms
+  if (!PlatformUtils.isWeb) {
+    ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
+  }
+  
   return isAuth;
 }
 

@@ -1,8 +1,7 @@
-import 'dart:io';
-
 import 'package:collection/collection.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:friend_private/utils/platform_utils.dart';
 import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/providers/people_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
@@ -40,7 +39,7 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
   }
 
   Widget _showPersonDialogForm(formKey, nameController) {
-    return Platform.isIOS
+    return PlatformUtils.isIOS
         ? Material(
             color: Colors.transparent,
             child: Theme(
@@ -107,7 +106,7 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
       }
     }
 
-    return Platform.isIOS
+    return PlatformUtils.isIOS
         ? [
             CupertinoDialogAction(
               onPressed: () => Navigator.pop(context),
@@ -142,7 +141,7 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
 
     await showDialog(
       context: context,
-      builder: (BuildContext context) => Platform.isIOS
+      builder: (BuildContext context) => PlatformUtils.isIOS
           ? CupertinoAlertDialog(
               title: Text(person == null ? 'Add New Person' : 'Edit Person'),
               content: _showPersonDialogForm(formKey, nameController),

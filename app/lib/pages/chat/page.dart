@@ -1,6 +1,5 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
+import 'package:friend_private/utils/platform_utils.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -184,10 +183,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
                                   double bottomPadding = chatIndex == 0
                                       ? provider.selectedFiles.isNotEmpty
-                                          ? (Platform.isAndroid
+                                          ? (PlatformUtils.isAndroid
                                               ? MediaQuery.sizeOf(context).height * 0.32
                                               : MediaQuery.sizeOf(context).height * 0.3)
-                                          : (Platform.isAndroid
+                                          : (PlatformUtils.isAndroid
                                               ? MediaQuery.sizeOf(context).height * 0.21
                                               : MediaQuery.sizeOf(context).height * 0.19)
                                       : 0;

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
+import 'package:friend_private/utils/platform_utils.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/services/devices.dart';
@@ -82,7 +83,7 @@ abstract class DeviceConnection {
     }
 
     // Mtu
-    if (Platform.isAndroid && bleDevice.mtuNow < 512) {
+    if (PlatformUtils.isAndroid && bleDevice.mtuNow < 512) {
       await bleDevice.requestMtu(512); // This might fix the code 133 error
     }
 

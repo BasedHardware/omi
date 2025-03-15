@@ -1,8 +1,7 @@
-import 'dart:io';
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:friend_private/utils/platform_utils.dart';
 import 'package:friend_private/backend/auth.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
@@ -28,7 +27,7 @@ class _ChangeNameWidgetState extends State<ChangeNameWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (Platform.isIOS) {
+    if (PlatformUtils.isIOS) {
       return CupertinoAlertDialog(
         content: Padding(
           padding: const EdgeInsets.all(8.0),
