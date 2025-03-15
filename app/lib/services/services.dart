@@ -3,8 +3,10 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_sound/flutter_sound.dart';
+import 'package:friend_private/pages/conversation_detail/compare_transcripts.dart';
 import 'package:friend_private/services/devices.dart';
 import 'package:friend_private/services/sockets.dart';
 import 'package:friend_private/services/wals.dart';
@@ -19,9 +21,9 @@ class ServiceManager {
 
   static ServiceManager _create() {
     ServiceManager sm = ServiceManager();
-    sm._mic = MicRecorderBackgroundService(
-      runner: BackgroundService(),
-    );
+    sm._mic = LocalSpeechTranscriptionService(onTranscriptionReceived: (transcription) {
+      debugPrint("ServiceManager Local transcription: $transcription");
+    });
     sm._device = DeviceService();
     sm._socket = SocketServicePool();
     sm._wal = WalService();
@@ -345,5 +347,93 @@ class MicRecorderService implements IMicRecorderService {
     _onByteReceived = null;
     _onStop = null;
     _onRecording = null;
+  }
+}
+
+class LocalSpeechTranscriptionService implements IMicRecorderService {
+  // Singleton instance
+  static final LocalSpeechTranscriptionService _instance =
+      LocalSpeechTranscriptionService._internal();
+
+  factory LocalSpeechTranscriptionService({void Function(String)? onTranscriptionReceived}) {
+    if (onTranscriptionReceived != null) {
+      _instance.onTranscriptionReceived = onTranscriptionReceived;
+    }
+    return _instance;
+  }
+
+  LocalSpeechTranscriptionService._internal() {
+    // Set up a single listener on the native event channel.
+    _eventChannel
+        .receiveBroadcastStream()
+        .map((event) => event as String)
+        .listen((data) {
+      // Add each event to our controller so that anyone subscribing to transcriptionStream gets it.
+      _controller.add(data);
+      // Also notify the callback (if set) by converting the String to bytes.
+      if (_onByteReceived != null) {
+        _onByteReceived!(Uint8List.fromList(data.codeUnits));
+      }
+      // You could also call onTranscriptionReceived here if needed.
+      if (onTranscriptionReceived != null) {
+        onTranscriptionReceived!(data);
+      }
+    });
+  }
+
+  // External callback that might be set when constructing the service.
+  void Function(String)? onTranscriptionReceived;
+
+  final MethodChannel _channel = const MethodChannel('local_speech_channel');
+  final EventChannel _eventChannel = const EventChannel('local_speech_events');
+
+  // Use a broadcast controller so multiple subscribers can listen.
+  final _controller = StreamController<String>.broadcast();
+  Stream<String> get transcriptionStream => _controller.stream;
+
+  StreamSubscription<String>? _subscription;
+  Function(Uint8List)? _onByteReceived;
+  Function()? _onStopCallback;
+
+  @override
+  Future<void> start({
+    required Function(Uint8List bytes) onByteReceived,
+    Function()? onRecording,
+    Function()? onStop,
+    Function()? onInitializing,
+  }) async {
+    if (onInitializing != null) onInitializing();
+    _onByteReceived = onByteReceived;
+    _onStopCallback = onStop;
+    if (onRecording != null) onRecording();
+    await startTranscription(language: 'en-US');
+  }
+
+  Future<void> startTranscription({String language = 'en-US'}) async {
+    try {
+      print("Starting transcription in language: $language");
+      await _channel.invokeMethod('startTranscription', {'language': language});
+    } on PlatformException catch (e) {
+      print("Error starting transcription: ${e.message}");
+    }
+  }
+
+  Future<void> stopTranscription() async {
+    try {
+      await _channel.invokeMethod('stopTranscription');
+    } on PlatformException catch (e) {
+      print("Error stopping transcription: ${e.message}");
+    }
+  }
+
+  @override
+  void stop() {
+    stopTranscription();
+    _subscription?.cancel();
+    _subscription = null;
+    _controller.close();
+    if (_onStopCallback != null) {
+      _onStopCallback!();
+    }
   }
 }
