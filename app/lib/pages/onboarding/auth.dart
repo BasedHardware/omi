@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -38,7 +39,7 @@ class _AuthComponentState extends State<AuthComponent> {
                 ),
               ),
               SizedBox(height: MediaQuery.of(context).textScaleFactor > 1.0 ? 18 : 32),
-              if (Platform.isIOS) ...[
+              if (!kIsWeb && Platform.isIOS) ...[
                 SignInButton.withApple(
                   title: 'Sign in with Apple',
                   onTap: () async {

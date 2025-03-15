@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 //TODO: switch to required named parameters
@@ -29,7 +30,7 @@ getDialog(
           TextButton(
               onPressed: () => onConfirm(), child: Text(okButtonText, style: const TextStyle(color: Colors.white))),
         ];
-  if (Platform.isIOS) {
+  if (!kIsWeb && Platform.isIOS) {
     return CupertinoAlertDialog(title: Text(title), content: Text(content), actions: actions);
   }
   return AlertDialog(title: Text(title), content: Text(content), actions: actions);

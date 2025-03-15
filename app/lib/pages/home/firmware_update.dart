@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/utils/runtime.dart';
 import 'firmware_update_dialog.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/pages/home/firmware_mixin.dart';
@@ -157,7 +158,9 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                                 if (updateMessage == '0')
                                   TextButton(
                                     onPressed: () async {
-                                      await IntercomManager.instance.displayFirmwareUpdateArticle();
+                                      SafeInit.init(() async =>
+                                          await IntercomManager.instance
+                                              .displayFirmwareUpdateArticle());
                                     },
                                     style: TextButton.styleFrom(
                                       minimumSize: Size.zero,
