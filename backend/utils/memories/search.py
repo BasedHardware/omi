@@ -5,15 +5,80 @@ from typing import Dict
 
 import typesense
 
-client = typesense.Client({
-    'nodes': [{
-        'host': os.getenv('TYPESENSE_HOST'),
-        'port': os.getenv('TYPESENSE_HOST_PORT'),
-        'protocol': 'https'
-    }],
-    'api_key': os.getenv('TYPESENSE_API_KEY'),
-    'connection_timeout_seconds': 2
-})
+# Check if Typesense is configured
+typesense_host = os.getenv('TYPESENSE_HOST')
+typesense_port = os.getenv('TYPESENSE_HOST_PORT')
+typesense_api_key = os.getenv('TYPESENSE_API_KEY')
+
+if typesense_host and typesense_port and typesense_api_key:
+    # Typesense is properly configured
+    client = typesense.Client({
+        'nodes': [{
+            'host': typesense_host,
+            'port': typesense_port,
+            'protocol': 'https'
+        }],
+        'api_key': typesense_api_key,
+        'connection_timeout_seconds': 2
+    })
+    print(f"Connected to Typesense at {typesense_host}:{typesense_port}")
+else:
+    # Typesense is not configured, create a mock client
+    print("WARNING: Typesense is not configured. Using a mock client for development.")
+
+    class MockTypesenseClient:
+        def __init__(self):
+            self.collections = {}
+
+        def collections(self):
+            return MockCollections(self.collections)
+
+        def collection(self, name):
+            if name not in self.collections:
+                self.collections[name] = {}
+            return MockCollection(self.collections, name)
+
+    class MockCollections:
+        def __init__(self, collections):
+            self.collections = collections
+
+        def create(self, schema):
+            name = schema.get('name')
+            if name not in self.collections:
+                self.collections[name] = {}
+            return {'name': name}
+
+        def retrieve(self):
+            return [{'name': name} for name in self.collections.keys()]
+
+    class MockCollection:
+        def __init__(self, collections, name):
+            self.collections = collections
+            self.name = name
+
+        def documents(self):
+            return MockDocuments(self.collections, self.name)
+
+        def search(self, search_parameters):
+            return {
+                'found': 0,
+                'hits': [],
+                'page': 1,
+                'request_params': search_parameters
+            }
+
+    class MockDocuments:
+        def __init__(self, collections, collection_name):
+            self.collections = collections
+            self.collection_name = collection_name
+
+        def create(self, document):
+            return {'id': document.get('id')}
+
+        def delete(self, document_id):
+            return {'id': document_id}
+
+    client = MockTypesenseClient()
 
 
 def search_memories(
