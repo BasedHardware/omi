@@ -22,39 +22,44 @@ class _BluetoothPermissionWidgetState extends State<BluetoothPermissionWidget> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            // Text(
-            //   'For a personalized experience, we need permissions to send you notifications and read your location information.',
-            //   style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-            //   textAlign: TextAlign.center,
-            // ),
-            // const SizedBox(height: 80),
-            CheckboxListTile(
-              value: provider.hasBluetoothPermission,
-              onChanged: (s) async {
-                print('s: $s');
-                if (s != null) {
-                  if (s) {
-                    await provider.askForBluetoothPermissions();
-                  } else {
-                    provider.updateBluetoothPermission(false);
-                  }
-                }
-              },
-              onPressed: () async {
-                if(!provider.hasBluetoothPermission){
+            InkWell(
+              onTap: () async {
+                if (!provider.hasBluetoothPermission) {
                   await provider.askForBluetoothPermissions();
-                } 
-                else{
+                } else {
                   provider.updateBluetoothPermission(false);
                 }
-              }
-              title: const Text(
-                'Enable Bluetooth access for Friend\'s full experience.',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: Row(
+                  children: [
+                    // Custom checkbox that's part of the clickable area
+                    Checkbox(
+                      value: provider.hasBluetoothPermission,
+                      onChanged: (s) async {
+                print('s: $s');
+                        if (s != null) {
+                          if (s) {
+                            await provider.askForBluetoothPermissions();
+                          } else {
+                            provider.updateBluetoothPermission(false);
+                          }
+                        }
+                      },
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    const SizedBox(width: 8),
+                    // Text as part of the clickable area
+                    Expanded(
+                      child: Text(
+                        'Enable Bluetooth access for Friend\'s full experience.',
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              contentPadding: const EdgeInsets.only(left: 8),
-              // controlAffinity: ListTileControlAffinity.leading,
-              checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             ),
             const SizedBox(height: 16),
             Row(
