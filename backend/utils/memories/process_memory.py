@@ -8,7 +8,7 @@ from typing import Union, Tuple, List
 from fastapi import HTTPException
 
 import database.facts as facts_db
-import database.memories as memories_db
+import database.conversations as conversations_db
 import database.notifications as notification_db
 import database.tasks as tasks_db
 import database.trends as trends_db
@@ -26,7 +26,8 @@ from utils.llm import obtain_emotional_message, retrieve_metadata_fields_from_tr
     summarize_open_glass, get_transcript_structure, generate_embedding, \
     get_plugin_result, should_discard_memory, summarize_experience_text, new_facts_extractor, \
     trends_extractor, get_email_structure, get_post_structure, get_message_structure, \
-    retrieve_metadata_from_email, retrieve_metadata_from_post, retrieve_metadata_from_message, retrieve_metadata_from_text, \
+    retrieve_metadata_from_email, retrieve_metadata_from_post, retrieve_metadata_from_message, \
+    retrieve_metadata_from_text, \
     extract_facts_from_text
 from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
@@ -46,7 +47,8 @@ def _get_structured(
                 return structured, False
 
             if memory.text_source == ExternalIntegrationMemorySource.message:
-                structured = get_message_structure(memory.text, memory.started_at, language_code, tz, memory.text_source_spec)
+                structured = get_message_structure(memory.text, memory.started_at, language_code, tz,
+                                                   memory.text_source_spec)
                 return structured, False
 
             if memory.text_source == ExternalIntegrationMemorySource.other:
@@ -77,7 +79,8 @@ def _get_structured(
         return _get_structured(uid, language_code, memory, force_process, retries + 1)
 
 
-def _get_memory_obj(uid: str, structured: Structured, memory: Union[Memory, CreateMemory, ExternalIntegrationCreateMemory]):
+def _get_memory_obj(uid: str, structured: Structured,
+                    memory: Union[Memory, CreateMemory, ExternalIntegrationCreateMemory]):
     discarded = structured.title == ''
     if isinstance(memory, CreateMemory):
         memory = Memory(
@@ -90,7 +93,7 @@ def _get_memory_obj(uid: str, structured: Structured, memory: Union[Memory, Crea
             deleted=False,
         )
         if memory.photos:
-            memories_db.store_memory_photos(uid, memory.id, memory.photos)
+            conversations_db.store_conversation_photos(uid, memory.id, memory.photos)
     elif isinstance(memory, ExternalIntegrationCreateMemory):
         create_memory = memory
         memory = Memory(
@@ -157,6 +160,7 @@ def _extract_facts(uid: str, memory: Memory):
     print(f"Saving {len(parsed_facts)} facts for memory {memory.id}")
     facts_db.save_facts(uid, [fact.dict() for fact in parsed_facts])
 
+
 def send_new_facts_notification(token: str, facts: [FactDB]):
     facts_str = ", ".join([fact.content for fact in facts])
     message = f"New facts {facts_str}"
@@ -221,7 +225,7 @@ def process_memory(
         threading.Thread(target=_extract_facts, args=(uid, memory)).start()
 
     memory.status = MemoryStatus.completed
-    memories_db.upsert_memory(uid, memory.dict())
+    conversations_db.upsert_conversation(uid, memory.dict())
 
     if not is_reprocess:
         threading.Thread(target=memory_created_webhook, args=(uid, memory,)).start()
@@ -327,11 +331,11 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
 
     # Save predictions
     if len(callback.predictions) > 0:
-        memories_db.store_model_emotion_predictions_result(task.user_uid, task.memory_id, provider,
-                                                           callback.predictions)
+        conversations_db.store_model_emotion_predictions_result(task.user_uid, task.memory_id, provider,
+                                                                callback.predictions)
 
     # Memory
-    memory_data = memories_db.get_memory(uid, task.memory_id)
+    memory_data = conversations_db.get_conversation(uid, task.memory_id)
     if memory_data is None:
         print(f"Memory is not found. Uid: {uid}. Memory: {task.memory_id}")
         return

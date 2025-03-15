@@ -27,7 +27,7 @@ if os.getenv('PINECONE_API_KEY') is not None:
 else:
     index = None
 
-import database.memories as memories_db
+import database.conversations as conversations_db
 # noinspection PyUnresolvedReferences
 import database.facts as facts_d
 
@@ -48,7 +48,7 @@ def query_vectors(query: str, uid: str, k: int = 1000) -> List[str]:
 
 def get_memories(ignore_cached: bool = False):
     if not os.path.exists('memories.json') or ignore_cached:
-        memories = memories_db.get_memories(uid, limit=1000)
+        memories = conversations_db.get_conversations(uid, limit=1000)
         if ignore_cached:
             return memories
 

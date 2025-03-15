@@ -14,7 +14,7 @@ from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
     get_omi_personas_by_uid_db, get_api_key_by_hash_db
 from database.auth import get_user_name
 from database.facts import get_facts
-from database.memories import get_memories
+from database.conversations import get_conversations
 from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_generic_cache, \
     set_generic_cache, set_app_usage_history_cache, get_app_usage_history_cache, get_app_money_made_cache, \
     set_app_money_made_cache, get_plugins_installs_count, get_plugins_reviews, get_app_cache_by_id, set_app_cache_by_id, \
@@ -388,7 +388,7 @@ async def generate_persona_prompt(uid: str, persona: dict):
     user_name = get_user_name(uid)
 
     # Get and condense recent memories
-    memories = get_memories(uid, limit=100)
+    memories = get_conversations(uid, limit=100)
     conversation_history = Memory.memories_to_string(memories)
     conversation_history = condense_conversations([conversation_history])
 
@@ -486,7 +486,7 @@ async def update_persona_prompt(persona: dict):
     user_name = get_user_name(persona['uid'])
 
     # Get and condense recent memories
-    memories = get_memories(persona['uid'], limit=100)
+    memories = get_conversations(persona['uid'], limit=100)
     conversation_history = Memory.memories_to_string(memories)
     conversation_history = condense_conversations([conversation_history])
 

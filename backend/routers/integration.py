@@ -9,7 +9,6 @@ from fastapi.responses import JSONResponse
 import database.apps as apps_db
 import utils.apps as apps_utils
 from utils.apps import verify_api_key
-import database.memories as memories_db
 import database.redis_db as redis_db
 from database.redis_db import get_enabled_plugins, r as redis_client
 import database.notifications as notification_db

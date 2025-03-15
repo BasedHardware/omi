@@ -23,7 +23,7 @@ from utils.llm import (
     get_proactive_message
 )
 from database.vector_db import query_vectors_by_metadata
-import database.memories as memories_db
+import database.conversations as conversations_db
 
 PROACTIVE_NOTI_LIMIT_SECONDS = 30  # 1 noti / 30s
 
@@ -257,7 +257,7 @@ def _retrieve_contextual_memories(uid: str, user_context):
         entities=filters.get("entities", []),
         dates=filters.get("dates", []),
     )
-    return memories_db.get_memories_by_id(uid, memories_id)
+    return conversations_db.get_conversations_by_id(uid, memories_id)
 
 
 def _hit_proactive_notification_rate_limits(uid: str, plugin: App):

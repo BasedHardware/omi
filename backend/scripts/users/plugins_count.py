@@ -31,7 +31,7 @@ from plotly.subplots import make_subplots
 from models.memory import Memory
 from database.redis_db import get_enabled_plugins, set_plugin_installs_count
 from database._client import get_users_uid
-import database.memories as memories_db
+import database.conversations as conversations_db
 import database.chat as chat_db
 
 
@@ -65,7 +65,7 @@ def count_memory_prompt_plugins_trigger():
     uids = get_users_uid()
 
     def single(uid):
-        memories = memories_db.get_memories(uid, limit=1000)
+        memories = conversations_db.get_conversations(uid, limit=1000)
         print('user', uid, 'memories', len(memories))
         for memory in memories:
             triggered = memory.get('plugins_results', [])

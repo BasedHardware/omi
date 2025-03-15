@@ -68,7 +68,7 @@ class AddAppProvider extends ChangeNotifier {
   bool isGenratingDescription = false;
 
   bool allowPaidApps = false;
-  
+
   // API Keys
   List<AppApiKey> apiKeys = [];
   bool isLoadingApiKeys = false;
@@ -434,7 +434,7 @@ class AddAppProvider extends ChangeNotifier {
         }
         if (capability.title == 'memories') {
           if (conversationPromptController.text.isEmpty) {
-            AppSnackbar.showSnackbarError('Please enter a memory prompt for your app');
+            AppSnackbar.showSnackbarError('Please enter a conversation prompt for your app');
             return false;
           }
         }
@@ -782,12 +782,12 @@ class AddAppProvider extends ChangeNotifier {
   void setIsGenratingDescription(bool genrating) {
     isGenratingDescription = genrating;
   }
-  
+
   // API Keys methods
   Future<void> loadApiKeys(String appId) async {
     isLoadingApiKeys = true;
     notifyListeners();
-    
+
     try {
       apiKeys = await listApiKeysServer(appId);
     } catch (e) {
@@ -797,13 +797,13 @@ class AddAppProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
-  
+
   Future<AppApiKey> createApiKey(String appId) async {
     final result = await createApiKeyServer(appId);
     await loadApiKeys(appId);
     return AppApiKey.fromJson(result);
   }
-  
+
   Future<void> deleteApiKey(String appId, String keyId) async {
     await deleteApiKeyServer(appId, keyId);
     await loadApiKeys(appId);

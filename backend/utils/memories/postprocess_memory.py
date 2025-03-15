@@ -5,7 +5,7 @@ import time
 
 from pydub import AudioSegment
 
-import database.memories as memories_db
+import database.conversations as conversations_db
 from database.users import get_user_store_recording_permission
 from models.memory import *
 from utils.memories.process_memory import process_memory, process_user_emotion
@@ -36,10 +36,10 @@ def postprocess_memory(memory_id: str, file_path: str, uid: str, emotional_feedb
     if aseg.duration_seconds < 10:  # TODO: validate duration more accurately, segment.last.end - segment.first.start - 10
         # TODO: fix app, sometimes audio uploaded is wrong, is too short.
         print('postprocess_memory: Audio duration is too short, seems wrong.')
-        memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.canceled)
+        conversations_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.canceled)
         return 500, "Audio duration is too short, seems wrong."
 
-    memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.in_progress)
+    conversations_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.in_progress)
 
     try:
         print('previous to vad_is_empty (segments duration):', memory.transcript_segments[-1].end)
@@ -79,17 +79,17 @@ def postprocess_memory(memory_id: str, file_path: str, uid: str, emotional_feedb
             _handle_segment_embedding_matching(uid, file_path, fal_segments, aseg)
 
         # Store both models results.
-        memories_db.store_model_segments_result(uid, memory.id, streaming_model, memory.transcript_segments)
-        memories_db.store_model_segments_result(uid, memory.id, 'fal_whisperx', fal_segments)
+        conversations_db.store_model_segments_result(uid, memory.id, streaming_model, memory.transcript_segments)
+        conversations_db.store_model_segments_result(uid, memory.id, 'fal_whisperx', fal_segments)
 
         if not fal_failed:
             memory.transcript_segments = fal_segments
 
-        memories_db.upsert_memory(uid, memory.dict())  # Store transcript segments at least if smth fails later
+        conversations_db.upsert_conversation(uid, memory.dict())  # Store transcript segments at least if smth fails later
         if fal_failed:
             # TODO: FAL fails too much and is fucking expensive. Remove it.
             fail_reason = 'FAL empty segments' if not fal_segments else f'FAL transcript too short ({new_count} vs {count})'
-            memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.failed, fail_reason=fail_reason)
+            conversations_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.failed, fail_reason=fail_reason)
             # memory.postprocessing = MemoryPostProcessing(
             #     status=PostProcessingStatus.failed, model=PostProcessingModel.fal_whisperx)
             # TODO: consider doing process_memory, if any segment still matched to user or people
@@ -103,10 +103,10 @@ def postprocess_memory(memory_id: str, file_path: str, uid: str, emotional_feedb
             asyncio.run(_process_user_emotion(uid, memory.language, memory, [signed_url]))
     except Exception as e:
         print(e)
-        memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.failed, fail_reason=str(e))
+        conversations_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.failed, fail_reason=str(e))
         return 500, str(e)
 
-    memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.completed)
+    conversations_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.completed)
     # result.postprocessing = MemoryPostProcessing(
     #     status=PostProcessingStatus.completed, model=PostProcessingModel.fal_whisperx)
 
@@ -114,7 +114,7 @@ def postprocess_memory(memory_id: str, file_path: str, uid: str, emotional_feedb
 
 
 def _get_memory_by_id(uid: str, memory_id: str) -> dict:
-    memory = memories_db.get_memory(uid, memory_id)
+    memory = conversations_db.get_conversation(uid, memory_id)
     if memory is None or memory.get('deleted', False):
         return None
     return memory

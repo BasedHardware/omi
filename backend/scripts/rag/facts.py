@@ -58,7 +58,7 @@ def get_facts_from_memories(
 def execute_for_user(uid: str):
     facts_db.delete_facts(uid)
     print('execute_for_user', uid, 'deleted facts')
-    memories = memories_db.get_memories(uid, limit=2000)
+    memories = conversations_db.get_conversations(uid, limit=2000)
     print('execute_for_user', uid, 'found memories', len(memories))
     user_name = get_user_name(uid)
     facts = []
