@@ -254,3 +254,7 @@ yarl==1.9.4
 stripe==11.3.0
 typesense==0.21.0
 pycountry==24.6.1
+google-auth==2.23.0
+google-auth-oauthlib==1.2.0
+google-auth-httplib2==0.2.0
+google-api-python-client==2.142.0
