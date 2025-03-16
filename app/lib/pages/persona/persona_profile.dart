@@ -1,22 +1,23 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:friend_private/backend/auth.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/gen/assets.gen.dart';
-import 'package:friend_private/main.dart';
-import 'package:friend_private/pages/chat/clone_chat_page.dart';
-import 'package:friend_private/pages/onboarding/wrapper.dart';
-import 'package:friend_private/pages/persona/persona_provider.dart';
-import 'package:friend_private/providers/app_provider.dart';
-import 'package:friend_private/providers/auth_provider.dart';
-import 'package:friend_private/providers/home_provider.dart';
-import 'package:friend_private/pages/persona/twitter/social_profile.dart';
-import 'package:friend_private/pages/settings/page.dart';
-import 'package:friend_private/providers/capture_provider.dart';
-import 'package:friend_private/providers/message_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
+import 'package:omi/backend/auth.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/main.dart';
+import 'package:omi/pages/chat/clone_chat_page.dart';
+import 'package:omi/pages/onboarding/wrapper.dart';
+import 'package:omi/pages/persona/persona_provider.dart';
+import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/auth_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/pages/persona/twitter/social_profile.dart';
+import 'package:omi/pages/settings/page.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/message_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -114,7 +115,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
               actions: [
                 // Only show settings icon for create_my_clone or home routing
                 Consumer<PersonaProvider>(builder: (context, personaProvider, _) {
-                  if (personaProvider.routing == PersonaProfileRouting.no_device)
+                  if (personaProvider.routing == PersonaProfileRouting.no_device) {
                     return Padding(
                       padding: const EdgeInsets.all(8.0),
                       child: GestureDetector(
@@ -122,14 +123,15 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                           await routeToPage(context, const SettingsPage(mode: SettingsMode.no_device));
                         },
                         child: SvgPicture.asset(
-                          'assets/images/ic_setting_persona.svg',
+                          Assets.images.icSettingPersona.path,
                           width: 44,
                           height: 44,
                         ),
                       ),
                     );
+                  }
                   if (personaProvider.routing == PersonaProfileRouting.create_my_clone ||
-                      personaProvider.routing == PersonaProfileRouting.home)
+                      personaProvider.routing == PersonaProfileRouting.home) {
                     return Padding(
                       padding: const EdgeInsets.all(8.0),
                       child: GestureDetector(
@@ -148,12 +150,13 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                           }
                         },
                         child: SvgPicture.asset(
-                          'assets/images/ic_setting_persona.svg',
+                          Assets.images.icSettingPersona.path,
                           width: 44,
                           height: 44,
                         ),
                       ),
                     );
+                  }
                   return const SizedBox.shrink();
                 }),
               ],
@@ -200,9 +203,33 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                                 )
                                               : persona.image.isEmpty
                                                   ? Image.asset(Assets.images.logoTransparentV2.path)
-                                                  : Image.network(
-                                                      persona.image,
-                                                      fit: BoxFit.cover,
+                                                  : CachedNetworkImage(
+                                                      imageUrl: persona.image,
+                                                      imageBuilder: (context, imageProvider) => Container(
+                                                        width: 48,
+                                                        height: 48,
+                                                        decoration: BoxDecoration(
+                                                          shape: BoxShape.rectangle,
+                                                          borderRadius: BorderRadius.circular(8),
+                                                          image:
+                                                              DecorationImage(image: imageProvider, fit: BoxFit.cover),
+                                                        ),
+                                                      ),
+                                                      placeholder: (context, url) => const SizedBox(
+                                                        width: 48,
+                                                        height: 48,
+                                                        child: CircularProgressIndicator(
+                                                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                                        ),
+                                                      ),
+                                                      errorWidget: (context, url, error) => const SizedBox(
+                                                        width: 48,
+                                                        height: 48,
+                                                        child: Icon(
+                                                          Icons.error,
+                                                          color: Colors.white,
+                                                        ),
+                                                      ),
                                                     ),
                                         ),
                                       ),
@@ -364,7 +391,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                       children: [
                                         Positioned.fill(
                                           child: Image.asset(
-                                            'assets/images/new_background.png',
+                                            Assets.images.newBackground.path,
                                             fit: BoxFit.cover,
                                           ),
                                         ),

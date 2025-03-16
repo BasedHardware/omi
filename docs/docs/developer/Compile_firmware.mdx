@@ -26,16 +26,16 @@ Note that this is not the `latest` version of the NRF Connect toolchain or SDK.
 ### Step 2: Open the Firmware Application
 
 1. Open **nRF Connect Extension** inside VS Code.
-2. Click "Open an existing application" and navigate to the `firmware/firmware_v1.0` folder in the root of this repository.
+2. Click "Open an existing application" and navigate to the `firmware/firmware` folder in the root of this repository.
 
    <img
-     src="../../static/images/install_firmware_screenshot_1.png"
+     src="/images/install_firmware_screenshot_1.png"
      alt="install_firmware_screenshot_1"
      width="75%"
    />
 
    <img
-     src="../../static/images/install_firmware_screenshot_2.png"
+     src="/images/install_firmware_screenshot_2.png"
      alt="install_firmware_screenshot_2"
      width="75%"
    />
@@ -47,34 +47,34 @@ Note that this is not the `latest` version of the NRF Connect toolchain or SDK.
 1.  In the application panel of the extension, click the **Add Build Configuration** icon. Choose a `CMake Preset` that matches your hardware.
 
     <img
-      src="../../static/images/build_configuration.png"
+      src="/images/build_configuration.png"
       alt="Build Configuration"
       width="75%"
     />
 
-Board target shoud be: 
-xiao_ble/nrf52840/sense 
+Board target shoud be:
+xiao_ble/nrf52840/sense
 
 2.  Scroll to the bottom and click "Build Configuration." This will start the nRFConnect SDK building your firmware file.
     A VSCode notification popup will notify you of the progress of your build.
 
-        <img
-          src="../../static/images/build_configuration_button.png"
-          alt="Build Configuration"
-          width="75%"
-        />
+   <img
+     src="/images/build_configuration_button.png"
+     alt="Build Configuration"
+     width="75%"
+   />
 
 ---
 
 ### Step 4: Locate the Compiled Firmware
 
-Once the build succeeds, you will find the `zephyr.uf2` file in the directory corresponding to the CMake preset you chose, for example `firmware/firmware_v1.0/build/build_xiao_ble_sense_devkitv2-adafruit/zephyr/`.
+Once the build succeeds, you will find the `zephyr.uf2` file in the directory corresponding to the CMake preset you chose, for example `firmware/firmware/build/build_xiao_ble_sense_devkitv2-adafruit/zephyr/`.
 
 ---
 
 ### Step 5: Flash the Firmware
 
-Follow the steps as described [here](docs/get_started/Flash_device.mdx) using the generated file
+Follow the steps as described [here](../get_started/Flash_device) using the generated file
 
 ---
 
