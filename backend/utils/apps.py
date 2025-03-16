@@ -1,7 +1,7 @@
 import os
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Any
 import hashlib
 import secrets
 
@@ -25,7 +25,7 @@ from models.app import App, UsageHistoryItem, UsageHistoryType
 from models.memory import Memory
 from utils import stripe
 from utils.llm import condense_conversations, condense_facts, generate_persona_description, condense_tweets
-from utils.social import get_twitter_timeline
+from utils.social import get_twitter_timeline, TwitterProfile, get_twitter_profile
 
 MarketplaceAppReviewUIDs = os.getenv('MARKETPLACE_APP_REVIEWERS').split(',') if os.getenv(
     'MARKETPLACE_APP_REVIEWERS') else []
@@ -396,8 +396,8 @@ async def generate_persona_prompt(uid: str, persona: dict):
     if "twitter" in persona['connected_accounts']:
         print("twitter in connected accounts---------------------------")
         # Get latest tweets
-        tweets = await get_twitter_timeline(persona['twitter']['username'])
-        tweets = [{'tweet': tweet['text'], 'posted_at': tweet['created_at']} for tweet in tweets['timeline']]
+        timeline = await get_twitter_timeline(persona['twitter']['username'])
+        tweets = [{'tweet': tweet.text, 'posted_at': tweet.created_at} for tweet in timeline.timeline]
 
     # Condense facts
     facts_text = condense_facts([fact['content'] for fact in facts if not fact['deleted']], user_name)
@@ -494,8 +494,8 @@ async def update_persona_prompt(persona: dict):
     # Condense tweets
     if "twitter" in persona['connected_accounts'] and 'twitter' in persona:
         # Get latest tweets
-        tweets = await get_twitter_timeline(persona['twitter']['username'])
-        tweets = [tweet['text'] for tweet in tweets['timeline']]
+        timeline = await get_twitter_timeline(persona['twitter']['username'])
+        tweets = [tweet.text for tweet in timeline.timeline]
         condensed_tweets = condense_tweets(tweets, persona['name'])
 
     # Condense facts
@@ -585,27 +585,17 @@ def verify_api_key(app_id: str, api_key: str) -> bool:
     stored_key = get_api_key_by_hash_db(app_id, hashed_key)
     return stored_key is not None
 
-def app_has_action(app: App, action_name: str) -> bool:
-    """Check if an app has a specific action capability"""
-    if not app:
-        return False
-
-    if not app.get('external_integration') or not app.get('external_integration').get('actions'):
-        return False
-
-    for action in app.get('external_integration').get('actions'):
-        if action.get('action') == action_name:
-            return True
-
-    return False
 def app_has_action(app: dict, action_name: str) -> bool:
     """Check if an app has a specific action capability."""
+    if not app or not isinstance(app, dict):
+        return False
+
     if not app.get('external_integration'):
         return False
-    
+
     actions = app['external_integration'].get('actions', [])
     for action in actions:
         if action.get('action') == action_name:
             return True
-    
+
     return False
