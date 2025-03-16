@@ -85,6 +85,8 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
                     external_integration['is_instructions_url'] = True
                 else:
                     external_integration['is_instructions_url'] = False
+        else:
+            external_integration['triggers_on'] = ''
 
         # Acitons
         if actions := external_integration.get('actions'):
