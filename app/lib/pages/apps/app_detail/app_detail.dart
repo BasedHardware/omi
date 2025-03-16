@@ -1,25 +1,25 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:friend_private/pages/apps/app_home_web_page.dart';
+import 'package:omi/pages/apps/app_home_web_page.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/pages/apps/widgets/full_screen_image_viewer.dart';
+import 'package:omi/pages/apps/widgets/full_screen_image_viewer.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
-import 'package:friend_private/backend/http/api/apps.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/pages/apps/app_detail/reviews_list_page.dart';
-import 'package:friend_private/pages/apps/app_detail/widgets/add_review_widget.dart';
-import 'package:friend_private/pages/apps/markdown_viewer.dart';
-import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
-import 'package:friend_private/providers/app_provider.dart';
-import 'package:friend_private/providers/home_provider.dart';
-import 'package:friend_private/providers/message_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/animated_loading_button.dart';
-import 'package:friend_private/widgets/confirmation_dialog.dart';
-import 'package:friend_private/widgets/dialog.dart';
-import 'package:friend_private/widgets/extensions/string.dart';
+import 'package:omi/backend/http/api/apps.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/pages/apps/app_detail/reviews_list_page.dart';
+import 'package:omi/pages/apps/app_detail/widgets/add_review_widget.dart';
+import 'package:omi/pages/apps/markdown_viewer.dart';
+import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/message_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/animated_loading_button.dart';
+import 'package:omi/widgets/confirmation_dialog.dart';
+import 'package:omi/widgets/dialog.dart';
+import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:skeletonizer/skeletonizer.dart';
@@ -613,7 +613,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       onTap: () async {
                         if (app.externalIntegration != null) {
                           if (app.externalIntegration!.setupInstructionsFilePath
-                              ?.contains('raw.githubusercontent.com') == true) {
+                                  ?.contains('raw.githubusercontent.com') ==
+                              true) {
                             await routeToPage(
                               context,
                               MarkdownViewer(title: 'Setup Instructions', markdown: instructionsMarkdown ?? ''),

@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/main.dart';
+import 'package:omi/main.dart';
 
 class AppDialog {
   static _getDialog({
