@@ -82,6 +82,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
   Future askForBluetoothPermissions() async {
     SafeInit.init(() {
+      // Not supported on web.
       FlutterBluePlus.setLogLevel(LogLevel.info, color: true);
     });
     if (kIsWeb || Platform.isIOS) {

@@ -55,27 +55,19 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (SharedPreferencesUtil().notificationsEnabled !=
-          await Permission.notification.isGranted) {
-        SharedPreferencesUtil().notificationsEnabled =
-            await Permission.notification.isGranted;
-        AnalyticsManager().setUserAttribute('Notifications Enabled',
-            SharedPreferencesUtil().notificationsEnabled);
+      if (SharedPreferencesUtil().notificationsEnabled != await Permission.notification.isGranted) {
+        SharedPreferencesUtil().notificationsEnabled = await Permission.notification.isGranted;
+        AnalyticsManager().setUserAttribute('Notifications Enabled', SharedPreferencesUtil().notificationsEnabled);
       }
       if (SharedPreferencesUtil().notificationsEnabled) {
         NotificationService.instance.register();
       }
-      if (SharedPreferencesUtil().locationEnabled !=
-          await Permission.location.isGranted) {
-        SharedPreferencesUtil().locationEnabled =
-            await Permission.location.isGranted;
-        AnalyticsManager().setUserAttribute(
-            'Location Enabled', SharedPreferencesUtil().locationEnabled);
+      if (SharedPreferencesUtil().locationEnabled != await Permission.location.isGranted) {
+        SharedPreferencesUtil().locationEnabled = await Permission.location.isGranted;
+        AnalyticsManager().setUserAttribute('Location Enabled', SharedPreferencesUtil().locationEnabled);
       }
       if (mounted) {
-        context
-            .read<DeviceProvider>()
-            .periodicConnect('coming from HomePageWrapper');
+        context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper');
       }
       if (mounted) {
         await context.read<ConversationProvider>().getInitialConversations();
@@ -102,15 +94,9 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage>
-    with WidgetsBindingObserver, TickerProviderStateMixin {
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver, TickerProviderStateMixin {
   ForegroundUtil foregroundUtil = ForegroundUtil();
-  List<Widget> screens = [
-    Container(),
-    const SizedBox(),
-    const SizedBox(),
-    const SizedBox()
-  ];
+  List<Widget> screens = [Container(), const SizedBox(), const SizedBox(), const SizedBox()];
 
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
   bool scriptsInProgress = false;
@@ -133,8 +119,7 @@ class _HomePageState extends State<HomePage>
       // Reload convos
       if (mounted) {
         debugPrint('Reload convos');
-        Provider.of<ConversationProvider>(context, listen: false)
-            .fetchNewConversations();
+        Provider.of<ConversationProvider>(context, listen: false).fetchNewConversations();
       }
     } else if (state == AppLifecycleState.hidden) {
       event = 'App is hidden';
@@ -157,8 +142,7 @@ class _HomePageState extends State<HomePage>
   void _onReceiveTaskData(dynamic data) async {
     debugPrint('_onReceiveTaskData $data');
     if (data is! Map<String, dynamic>) return;
-    if (!(data.containsKey('latitude') && data.containsKey('longitude')))
-      return;
+    if (!(data.containsKey('latitude') && data.containsKey('longitude'))) return;
     await updateUserGeolocation(
       geolocation: Geolocation(
         latitude: data['latitude'],
@@ -181,8 +165,7 @@ class _HomePageState extends State<HomePage>
     String? detailPageId;
 
     if (widget.navigateToRoute != null && widget.navigateToRoute!.isNotEmpty) {
-      navigateToUri =
-          Uri.tryParse("http://localhost.com${widget.navigateToRoute!}");
+      navigateToUri = Uri.tryParse("http://localhost.com${widget.navigateToRoute!}");
       debugPrint("initState ${navigateToUri?.pathSegments.join("...")}");
       var segments = navigateToUri?.pathSegments ?? [];
       if (segments.isNotEmpty) {
@@ -208,8 +191,7 @@ class _HomePageState extends State<HomePage>
     _controller = PageController(initialPage: homePageIdx);
     context.read<HomeProvider>().selectedIndex = homePageIdx;
     context.read<HomeProvider>().onSelectedIndexChanged = (index) {
-      _controller?.animateToPage(index,
-          duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
+      _controller?.animateToPage(index, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
     };
     WidgetsBinding.instance.addObserver(this);
 
@@ -224,22 +206,17 @@ class _HomePageState extends State<HomePage>
       }
       if (mounted) {
         await Provider.of<CaptureProvider>(context, listen: false)
-            .streamDeviceRecording(
-                device: Provider.of<DeviceProvider>(context, listen: false)
-                    .connectedDevice);
+            .streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
       }
 
       // Navigate
       switch (pageAlias) {
         case "chat":
           if (detailPageId != null && detailPageId.isNotEmpty) {
-            var appId =
-                detailPageId != "omi" ? detailPageId : ''; // omi ~ no select
+            var appId = detailPageId != "omi" ? detailPageId : ''; // omi ~ no select
             if (mounted) {
-              var appProvider =
-                  Provider.of<AppProvider>(context, listen: false);
-              var messageProvider =
-                  Provider.of<MessageProvider>(context, listen: false);
+              var appProvider = Provider.of<AppProvider>(context, listen: false);
+              var messageProvider = Provider.of<MessageProvider>(context, listen: false);
               App? selectedApp;
               if (appId.isNotEmpty) {
                 selectedApp = await appProvider.getAppFromId(appId);
@@ -252,8 +229,7 @@ class _HomePageState extends State<HomePage>
             }
           } else {
             if (mounted) {
-              await Provider.of<MessageProvider>(context, listen: false)
-                  .refreshMessages();
+              await Provider.of<MessageProvider>(context, listen: false).refreshMessages();
             }
           }
           break;
@@ -285,11 +261,9 @@ class _HomePageState extends State<HomePage>
   void _listenToMessagesFromNotification() {
     NotificationService.instance.listenForServerMessages.listen((message) {
       if (mounted) {
-        var selectedApp =
-            Provider.of<AppProvider>(context, listen: false).getSelectedApp();
+        var selectedApp = Provider.of<AppProvider>(context, listen: false).getSelectedApp();
         if (selectedApp == null || message.appId == selectedApp.id) {
-          Provider.of<MessageProvider>(context, listen: false)
-              .addMessage(message);
+          Provider.of<MessageProvider>(context, listen: false).addMessage(message);
         }
         // chatPageKey.currentState?.scrollToBottom();
       }
@@ -300,14 +274,12 @@ class _HomePageState extends State<HomePage>
   Widget build(BuildContext context) {
     return MyUpgradeAlert(
       upgrader: _upgrader,
-      dialogStyle: SafeInit.evaluate<UpgradeDialogStyle>(
-          UpgradeDialogStyle.cupertino, UpgradeDialogStyle.material),
+      dialogStyle: SafeInit.evaluate<UpgradeDialogStyle>(UpgradeDialogStyle.cupertino, UpgradeDialogStyle.material),
       child: Consumer<ConnectivityProvider>(
         builder: (ctx, connectivityProvider, child) {
           bool isConnected = connectivityProvider.isConnected;
           previousConnection ??= true;
-          if (previousConnection != isConnected &&
-              connectivityProvider.isInitialized) {
+          if (previousConnection != isConnected && connectivityProvider.isInitialized) {
             previousConnection = isConnected;
             if (!isConnected) {
               Future.delayed(const Duration(seconds: 2), () {
@@ -318,18 +290,14 @@ class _HomePageState extends State<HomePage>
                         'No internet connection. Please check your connection.',
                         style: TextStyle(color: Colors.white70),
                       ),
-                      backgroundColor:
-                          const Color(0xFF424242), // Dark gray instead of red
-                      leading:
-                          const Icon(Icons.wifi_off, color: Colors.white70),
+                      backgroundColor: const Color(0xFF424242), // Dark gray instead of red
+                      leading: const Icon(Icons.wifi_off, color: Colors.white70),
                       actions: [
                         TextButton(
                           onPressed: () {
-                            ScaffoldMessenger.of(ctx)
-                                .hideCurrentMaterialBanner();
+                            ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
                           },
-                          child: const Text('Dismiss',
-                              style: TextStyle(color: Colors.white70)),
+                          child: const Text('Dismiss', style: TextStyle(color: Colors.white70)),
                         ),
                       ],
                     ),
@@ -346,23 +314,19 @@ class _HomePageState extends State<HomePage>
                         'Internet connection is restored.',
                         style: TextStyle(color: Colors.white),
                       ),
-                      backgroundColor: const Color(
-                          0xFF2E7D32), // Dark green instead of bright green
+                      backgroundColor: const Color(0xFF2E7D32), // Dark green instead of bright green
                       leading: const Icon(Icons.wifi, color: Colors.white),
                       actions: [
                         TextButton(
                           onPressed: () {
                             if (mounted) {
-                              ScaffoldMessenger.of(ctx)
-                                  .hideCurrentMaterialBanner();
+                              ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
                             }
                           },
-                          child: const Text('Dismiss',
-                              style: TextStyle(color: Colors.white)),
+                          child: const Text('Dismiss', style: TextStyle(color: Colors.white)),
                         ),
                       ],
-                      onVisible: () =>
-                          Future.delayed(const Duration(seconds: 3), () {
+                      onVisible: () => Future.delayed(const Duration(seconds: 3), () {
                         if (mounted) {
                           ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
                         }
@@ -373,13 +337,8 @@ class _HomePageState extends State<HomePage>
 
                 WidgetsBinding.instance.addPostFrameCallback((_) async {
                   if (mounted) {
-                    if (ctx
-                        .read<ConversationProvider>()
-                        .conversations
-                        .isEmpty) {
-                      await ctx
-                          .read<ConversationProvider>()
-                          .getInitialConversations();
+                    if (ctx.read<ConversationProvider>().conversations.isEmpty) {
+                      await ctx.read<ConversationProvider>().getInitialConversations();
                     }
                     if (ctx.read<MessageProvider>().messages.isEmpty) {
                       await ctx.read<MessageProvider>().refreshMessages();
@@ -395,9 +354,7 @@ class _HomePageState extends State<HomePage>
           builder: (context, homeProvider, _) {
             return Scaffold(
               backgroundColor: Theme.of(context).colorScheme.primary,
-              appBar: homeProvider.selectedIndex == 3
-                  ? null
-                  : _buildAppBar(context),
+              appBar: homeProvider.selectedIndex == 3 ? null : _buildAppBar(context),
               body: DefaultTabController(
                 length: 3,
                 initialIndex: _controller?.initialPage ?? 0,
@@ -431,12 +388,10 @@ class _HomePageState extends State<HomePage>
                             return Align(
                               alignment: Alignment.bottomCenter,
                               child: Container(
-                                margin:
-                                    const EdgeInsets.fromLTRB(20, 16, 20, 42),
+                                margin: const EdgeInsets.fromLTRB(20, 16, 20, 42),
                                 decoration: const BoxDecoration(
                                   color: Colors.black,
-                                  borderRadius:
-                                      BorderRadius.all(Radius.circular(16)),
+                                  borderRadius: BorderRadius.all(Radius.circular(16)),
                                   border: GradientBoxBorder(
                                     gradient: LinearGradient(colors: [
                                       Color.fromARGB(127, 208, 208, 208),
@@ -449,25 +404,18 @@ class _HomePageState extends State<HomePage>
                                   shape: BoxShape.rectangle,
                                 ),
                                 child: TabBar(
-                                  labelPadding:
-                                      const EdgeInsets.only(top: 4, bottom: 4),
+                                  labelPadding: const EdgeInsets.only(top: 4, bottom: 4),
                                   indicatorPadding: EdgeInsets.zero,
                                   onTap: (index) {
                                     MixpanelManager()
-                                        .bottomNavigationTabClicked([
-                                      'Memories',
-                                      'Chat',
-                                      'Explore'
-                                    ][index]);
+                                        .bottomNavigationTabClicked(['Memories', 'Chat', 'Explore'][index]);
                                     primaryFocus?.unfocus();
                                     if (home.selectedIndex == index) {
                                       return;
                                     }
                                     home.setIndex(index);
                                     _controller?.animateToPage(index,
-                                        duration:
-                                            const Duration(milliseconds: 200),
-                                        curve: Curves.easeInOut);
+                                        duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                   },
                                   indicatorColor: Colors.transparent,
                                   tabs: [
@@ -475,14 +423,8 @@ class _HomePageState extends State<HomePage>
                                       child: Text(
                                         'Home',
                                         style: TextStyle(
-                                          color: home.selectedIndex == 0
-                                              ? Colors.white
-                                              : Colors.grey,
-                                          fontSize:
-                                              MediaQuery.sizeOf(context).width <
-                                                      410
-                                                  ? 13
-                                                  : 15,
+                                          color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
+                                          fontSize: MediaQuery.sizeOf(context).width < 410 ? 13 : 15,
                                         ),
                                       ),
                                     ),
@@ -490,14 +432,8 @@ class _HomePageState extends State<HomePage>
                                       child: Text(
                                         'Chat',
                                         style: TextStyle(
-                                          color: home.selectedIndex == 1
-                                              ? Colors.white
-                                              : Colors.grey,
-                                          fontSize:
-                                              MediaQuery.sizeOf(context).width <
-                                                      410
-                                                  ? 13
-                                                  : 15,
+                                          color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
+                                          fontSize: MediaQuery.sizeOf(context).width < 410 ? 13 : 15,
                                         ),
                                       ),
                                     ),
@@ -505,14 +441,8 @@ class _HomePageState extends State<HomePage>
                                       child: Text(
                                         'Explore',
                                         style: TextStyle(
-                                          color: home.selectedIndex == 2
-                                              ? Colors.white
-                                              : Colors.grey,
-                                          fontSize:
-                                              MediaQuery.sizeOf(context).width <
-                                                      410
-                                                  ? 13
-                                                  : 15,
+                                          color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
+                                          fontSize: MediaQuery.sizeOf(context).width < 410 ? 13 : 15,
                                         ),
                                       ),
                                     ),
@@ -545,8 +475,7 @@ class _HomePageState extends State<HomePage>
           const BatteryInfoWidget(),
           Consumer<HomeProvider>(builder: (context, provider, child) {
             if (provider.selectedIndex == 0) {
-              return Consumer<ConversationProvider>(
-                  builder: (context, convoProvider, child) {
+              return Consumer<ConversationProvider>(builder: (context, convoProvider, child) {
                 if (convoProvider.missingWalsInSeconds >= 120) {
                   return GestureDetector(
                     onTap: () {
@@ -554,8 +483,7 @@ class _HomePageState extends State<HomePage>
                     },
                     child: Container(
                       padding: const EdgeInsets.only(left: 12),
-                      child: const Icon(Icons.download,
-                          color: Colors.white, size: 24),
+                      child: const Icon(Icons.download, color: Colors.white, size: 24),
                     ),
                   );
                 } else {
@@ -574,10 +502,8 @@ class _HomePageState extends State<HomePage>
                 );
               } else if (provider.selectedIndex == 2) {
                 return Padding(
-                  padding: EdgeInsets.only(
-                      right: MediaQuery.sizeOf(context).width * 0.16),
-                  child: const Text('Explore',
-                      style: TextStyle(color: Colors.white, fontSize: 18)),
+                  padding: EdgeInsets.only(right: MediaQuery.sizeOf(context).width * 0.16),
+                  child: const Text('Explore', style: TextStyle(color: Colors.white, fontSize: 18)),
                 );
               } else {
                 return Expanded(
@@ -590,9 +516,7 @@ class _HomePageState extends State<HomePage>
                           provider.setRecordingLanguage(language);
                           // Notify capture provider
                           if (context.mounted) {
-                            context
-                                .read<CaptureProvider>()
-                                .onRecordProfileSettingChanged();
+                            context.read<CaptureProvider>().onRecordProfileSettingChanged();
                           }
                         },
                         availableLanguages: provider.availableLanguages,
@@ -616,13 +540,11 @@ class _HomePageState extends State<HomePage>
                     MixpanelManager().pageOpened('Persona Profile');
 
                     // Set routing in provider
-                    var personaProvider =
-                        Provider.of<PersonaProvider>(context, listen: false);
+                    var personaProvider = Provider.of<PersonaProvider>(context, listen: false);
                     personaProvider.setRouting(PersonaProfileRouting.home);
 
                     // Navigate
-                    var homeProvider =
-                        Provider.of<HomeProvider>(context, listen: false);
+                    var homeProvider = Provider.of<HomeProvider>(context, listen: false);
                     homeProvider.setIndex(3);
                     if (homeProvider.onSelectedIndexChanged != null) {
                       homeProvider.onSelectedIndexChanged!(3);

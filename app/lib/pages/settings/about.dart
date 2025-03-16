@@ -3,7 +3,6 @@ import 'package:friend_private/pages/settings/webview.dart';
 import 'package:friend_private/utils/analytics/intercom.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/utils/runtime.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class AboutOmiPage extends StatefulWidget {
@@ -55,9 +54,7 @@ class _AboutOmiPageState extends State<AboutOmiPage> {
               contentPadding: const EdgeInsets.fromLTRB(4, 0, 24, 0),
               trailing: const Icon(Icons.help_outline_outlined, color: Colors.white, size: 20),
               onTap: () async {
-                SafeInit.init(() async {
-                  await IntercomManager.instance.intercom.displayMessenger();
-                });
+                await IntercomManager.instance.intercom.displayMessenger();
               },
             ),
             ListTile(

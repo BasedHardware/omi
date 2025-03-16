@@ -30,8 +30,8 @@ getDialog(
           TextButton(
               onPressed: () => onConfirm(), child: Text(okButtonText, style: const TextStyle(color: Colors.white))),
         ];
-  if (!kIsWeb && Platform.isIOS) {
-    return CupertinoAlertDialog(title: Text(title), content: Text(content), actions: actions);
+  if (kIsWeb || Platform.isAndroid) {
+    return AlertDialog(title: Text(title), content: Text(content), actions: actions);
   }
-  return AlertDialog(title: Text(title), content: Text(content), actions: actions);
+  return CupertinoAlertDialog(title: Text(title), content: Text(content), actions: actions);
 }

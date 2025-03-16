@@ -9,9 +9,9 @@ class SafeInit {
     function();
   }
 
-  static T evaluate<T>(T iosValue, T androidValue) {
-    if (!kIsWeb) {
-      return androidValue;
+  static T evaluate<T>(T iosValue, T androidValue, [T? webValue]) {
+    if (kIsWeb) {
+      return webValue ?? androidValue;
     }
     return iosValue;
   }

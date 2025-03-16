@@ -41,13 +41,11 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                     },
                     title: const Text(
                       'Let Omi run in the background for better stability.',
-                      style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                     ),
                     contentPadding: const EdgeInsets.only(left: 8),
                     // controlAffinity: ListTileControlAffinity.leading,
-                    checkboxShape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16)),
+                    checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   )
                 : const SizedBox.shrink(),
             CheckboxListTile(
@@ -55,8 +53,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
               onChanged: (s) async {
                 if (s != null) {
                   if (s) {
-                    var (serviceStatus, permissionStatus) =
-                        await provider.askForLocationPermissions();
+                    var (serviceStatus, permissionStatus) = await provider.askForLocationPermissions();
                     if (!serviceStatus) {
                       showDialog(
                         context: context,
@@ -119,8 +116,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
               ),
               contentPadding: const EdgeInsets.only(left: 8),
               // controlAffinity: ListTileControlAffinity.leading,
-              checkboxShape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16)),
+              checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             ),
             CheckboxListTile(
               value: provider.hasNotificationPermission,
@@ -139,8 +135,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
               ),
               contentPadding: const EdgeInsets.only(left: 8),
               // controlAffinity: ListTileControlAffinity.leading,
-              checkboxShape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16)),
+              checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             ),
             const SizedBox(height: 16),
             provider.isLoading
@@ -165,8 +160,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: MaterialButton(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 32, vertical: 16),
+                            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                             onPressed: () async {
                               provider.setLoading(true);
                               if (!kIsWeb && Platform.isAndroid) {
@@ -179,35 +173,20 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                                   if (value.isGranted) {
                                     provider.updateNotificationPermission(true);
                                   }
-                                  if (await Permission
-                                      .location.serviceStatus.isEnabled) {
-                                    await Permission.locationWhenInUse
-                                        .request()
-                                        .then(
+                                  if (await Permission.location.serviceStatus.isEnabled) {
+                                    await Permission.locationWhenInUse.request().then(
                                       (value) async {
                                         if (value.isGranted) {
-                                          await Permission.locationAlways
-                                              .request()
-                                              .then(
+                                          await Permission.locationAlways.request().then(
                                             (value) async {
                                               if (value.isGranted) {
-                                                provider
-                                                    .updateLocationPermission(
-                                                        true);
+                                                provider.updateLocationPermission(true);
                                                 widget.goNext();
                                                 provider.setLoading(false);
                                               } else {
-                                                Future.delayed(
-                                                    const Duration(
-                                                        milliseconds: 2500),
-                                                    () async {
-                                                  if (await Permission
-                                                      .locationAlways
-                                                      .status
-                                                      .isGranted) {
-                                                    provider
-                                                        .updateLocationPermission(
-                                                            true);
+                                                Future.delayed(const Duration(milliseconds: 2500), () async {
+                                                  if (await Permission.locationAlways.status.isGranted) {
+                                                    provider.updateLocationPermission(true);
                                                   }
                                                   widget.goNext();
                                                   provider.setLoading(false);

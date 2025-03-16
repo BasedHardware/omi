@@ -22,8 +22,7 @@ class ConnectedDevice extends StatefulWidget {
 class _ConnectedDeviceState extends State<ConnectedDevice> {
   // TODO: thinh, use connection directly
   Future _bleDisconnectDevice(BtDevice btDevice) async {
-    var connection =
-        await ServiceManager.instance().device.ensureConnection(btDevice.id);
+    var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
     if (connection == null) {
       return Future.value(null);
     }
@@ -44,9 +43,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
       return Scaffold(
         backgroundColor: Theme.of(context).colorScheme.primary,
         appBar: AppBar(
-          title: Text(provider.connectedDevice != null
-              ? 'Connected Device'
-              : 'Paired Device'),
+          title: Text(provider.connectedDevice != null ? 'Connected Device' : 'Paired Device'),
           backgroundColor: Theme.of(context).colorScheme.primary,
           actions: [
             IconButton(
@@ -80,8 +77,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
-                provider.pairedDevice != null &&
-                        provider.pairedDevice?.modelNumber != "Unknown"
+                provider.pairedDevice != null && provider.pairedDevice?.modelNumber != "Unknown"
                     ? Column(
                         children: [
                           Text(
@@ -168,8 +164,8 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               ),
               child: TextButton(
                 onPressed: () async {
-                  await SharedPreferencesUtil().btDeviceSet(BtDevice(
-                      id: '', name: '', type: DeviceType.friend, rssi: 0));
+                  await SharedPreferencesUtil()
+                      .btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.friend, rssi: 0));
                   SharedPreferencesUtil().deviceName = '';
                   if (provider.connectedDevice != null) {
                     await _bleDisconnectDevice(provider.connectedDevice!);
@@ -189,9 +185,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             const SizedBox(height: 8),
             TextButton(
               onPressed: () async {
-                SafeInit.init(() async => await IntercomManager.instance
-                    .displayChargingArticle(
-                        provider.pairedDevice?.name ?? 'DevKit1'));
+                await IntercomManager.instance.displayChargingArticle(provider.pairedDevice?.name ?? 'DevKit1');
               },
               child: const Text(
                 'Issues charging?',

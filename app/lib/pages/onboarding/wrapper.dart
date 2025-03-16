@@ -18,7 +18,6 @@ import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/intercom.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/utils/runtime.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:provider/provider.dart';
 
@@ -29,8 +28,7 @@ class OnboardingWrapper extends StatefulWidget {
   State<OnboardingWrapper> createState() => _OnboardingWrapperState();
 }
 
-class _OnboardingWrapperState extends State<OnboardingWrapper>
-    with TickerProviderStateMixin {
+class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProviderStateMixin {
   TabController? _controller;
   bool hasSpeechProfile = SharedPreferencesUtil().hasSpeakerProfile;
 
@@ -68,8 +66,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper>
 
   // TODO: use connection directly
   Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
-    var connection =
-        await ServiceManager.instance().device.ensureConnection(deviceId);
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
       return BleAudioCodec.pcm8;
     }
@@ -86,10 +83,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper>
           SharedPreferencesUtil().verifiedPersonaId = null;
           MixpanelManager().onboardingStepCompleted('Auth');
           context.read<HomeProvider>().setupHasSpeakerProfile();
-          SafeInit.init(() {
-            IntercomManager.instance.intercom
-                .loginIdentifiedUser(userId: SharedPreferencesUtil().uid);
-          });
+          IntercomManager.instance.intercom.loginIdentifiedUser(userId: SharedPreferencesUtil().uid);
           if (SharedPreferencesUtil().onboardingCompleted) {
             routeToPage(context, const HomePageWrapper(), replace: true);
           } else {
@@ -99,13 +93,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper>
       ),
       NameWidget(goNext: () {
         _goNext();
-        SafeInit.init(() {
-          IntercomManager.instance.updateUser(
-            FirebaseAuth.instance.currentUser!.email,
-            FirebaseAuth.instance.currentUser!.displayName,
-            FirebaseAuth.instance.currentUser!.uid,
-          );
-        });
+        IntercomManager.instance.updateUser(
+          FirebaseAuth.instance.currentUser!.email,
+          FirebaseAuth.instance.currentUser!.displayName,
+          FirebaseAuth.instance.currentUser!.uid,
+        );
         MixpanelManager().onboardingStepCompleted('Name');
       }),
       PermissionsWidget(
@@ -185,8 +177,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper>
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   children: [
-                    DeviceAnimationWidget(
-                        animatedBackground: _controller!.index != -1),
+                    DeviceAnimationWidget(animatedBackground: _controller!.index != -1),
                     // _controller!.index == 6 || _controller!.index == 7
                     //     ? const SizedBox()
                     //     : Center(
@@ -209,28 +200,18 @@ class _OnboardingWrapperState extends State<OnboardingWrapper>
                               _controller!.index == _controller!.length - 1
                                   ? 'Your personal growth journey with AI that listens to your every word.'
                                   : 'Your personal growth journey with AI that listens to your every word.',
-                              style: TextStyle(
-                                  color: Colors.grey.shade300, fontSize: 24),
+                              style: TextStyle(color: Colors.grey.shade300, fontSize: 24),
                               textAlign: TextAlign.center,
                             ),
                           ),
                     SizedBox(
-                      height: (_controller!.index == 5 ||
-                              _controller!.index == 6 ||
-                              _controller!.index == 7)
-                          ? max(
-                              MediaQuery.of(context).size.height - 500 - 10,
-                              maxHeightWithTextScale(
-                                  context, _controller!.index))
-                          : max(
-                              MediaQuery.of(context).size.height - 500 - 30,
-                              maxHeightWithTextScale(
-                                  context, _controller!.index)),
+                      height: (_controller!.index == 5 || _controller!.index == 6 || _controller!.index == 7)
+                          ? max(MediaQuery.of(context).size.height - 500 - 10,
+                              maxHeightWithTextScale(context, _controller!.index))
+                          : max(MediaQuery.of(context).size.height - 500 - 30,
+                              maxHeightWithTextScale(context, _controller!.index)),
                       child: Padding(
-                        padding: EdgeInsets.only(
-                            bottom: MediaQuery.sizeOf(context).height <= 700
-                                ? 10
-                                : 64),
+                        padding: EdgeInsets.only(bottom: MediaQuery.sizeOf(context).height <= 700 ? 10 : 64),
                         child: TabBarView(
                           controller: _controller,
                           physics: const NeverScrollableScrollPhysics(),
@@ -251,8 +232,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper>
                         if (_controller!.index == 2) {
                           _controller!.animateTo(_controller!.index + 1);
                         } else {
-                          routeToPage(context, const HomePageWrapper(),
-                              replace: true);
+                          routeToPage(context, const HomePageWrapper(), replace: true);
                         }
                       },
                       child: Text(
@@ -284,17 +264,14 @@ class _OnboardingWrapperState extends State<OnboardingWrapper>
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: List.generate(
-                      _controller!.length -
-                          1, // Exclude the Auth page from the count
+                      _controller!.length - 1, // Exclude the Auth page from the count
                       (index) {
                         // Calculate the adjusted index
                         int adjustedIndex = index + 1;
                         return Container(
                           margin: const EdgeInsets.symmetric(horizontal: 4.0),
-                          width:
-                              adjustedIndex == _controller!.index ? 12.0 : 8.0,
-                          height:
-                              adjustedIndex == _controller!.index ? 12.0 : 8.0,
+                          width: adjustedIndex == _controller!.index ? 12.0 : 8.0,
+                          height: adjustedIndex == _controller!.index ? 12.0 : 8.0,
                           decoration: BoxDecoration(
                             color: adjustedIndex <= _controller!.index
                                 ? Theme.of(context).colorScheme.secondary

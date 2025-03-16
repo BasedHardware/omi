@@ -9,8 +9,7 @@ String dateTimeFormat(String format, DateTime? dateTime, {String? locale}) {
 }
 
 Future routeToPage(BuildContext context, Widget page, {bool replace = false}) {
-  var route = SafeInit.evaluate(CupertinoPageRoute(builder: (c) => page),
-      MaterialPageRoute(builder: (c) => page));
+  var route = SafeInit.evaluate(CupertinoPageRoute(builder: (c) => page), MaterialPageRoute(builder: (c) => page));
   if (replace) {
     if (context.mounted) {
       return Navigator.of(context).pushAndRemoveUntil(route, (route) => false);

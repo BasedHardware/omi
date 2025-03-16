@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/utils/analytics/intercom.dart';
-import 'package:friend_private/utils/runtime.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -17,8 +16,7 @@ class WelcomePage extends StatefulWidget {
   State<WelcomePage> createState() => _WelcomePageState();
 }
 
-class _WelcomePageState extends State<WelcomePage>
-    with SingleTickerProviderStateMixin {
+class _WelcomePageState extends State<WelcomePage> with SingleTickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
@@ -27,8 +25,7 @@ class _WelcomePageState extends State<WelcomePage>
 
   @override
   void dispose() {
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
-        overlays: SystemUiOverlay.values);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
     super.dispose();
   }
 
@@ -44,8 +41,7 @@ class _WelcomePageState extends State<WelcomePage>
         Consumer<OnboardingProvider>(
           builder: (context, provider, child) {
             return Padding(
-              padding: EdgeInsets.only(
-                  left: screenSize.width * 0.1, right: screenSize.width * 0.1),
+              padding: EdgeInsets.only(left: screenSize.width * 0.1, right: screenSize.width * 0.1),
               child: Container(
                 decoration: BoxDecoration(
                   border: const GradientBoxBorder(
@@ -91,8 +87,7 @@ class _WelcomePageState extends State<WelcomePage>
                     ),
                   ),
                   child: Container(
-                    width: double
-                        .infinity, // Button takes full width of the padding
+                    width: double.infinity, // Button takes full width of the padding
                     height: 45, // Fixed height for the button
                     alignment: Alignment.center,
                     child: const Text(
@@ -121,9 +116,7 @@ class _WelcomePageState extends State<WelcomePage>
             ),
           ),
           onTap: () {
-            SafeInit.init(() {
-              IntercomManager.instance.intercom.displayMessenger();
-            });
+            IntercomManager.instance.intercom.displayMessenger();
           },
         ),
         const SizedBox(height: 10)

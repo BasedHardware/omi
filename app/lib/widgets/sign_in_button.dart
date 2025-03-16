@@ -12,21 +12,14 @@ class SignInButton extends StatelessWidget {
   final EdgeInsets? padding;
   final double iconSpacing;
   const SignInButton(
-      {super.key,
-      required this.title,
-      this.assetPath,
-      required this.onTap,
-      this.padding,
-      required this.iconSpacing});
+      {super.key, required this.title, this.assetPath, required this.onTap, this.padding, required this.iconSpacing});
 
-  factory SignInButton.withGoogle(
-      {required VoidCallback onTap, String? title}) {
+  factory SignInButton.withGoogle({required VoidCallback onTap, String? title}) {
     return SignInButton(
         assetPath: Assets.images.googleLogo.path,
         title: title ?? "Sign in with Google",
         onTap: onTap,
-        padding: SafeInit.evaluate(
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: SafeInit.evaluate(const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
         iconSpacing: SafeInit.evaluate(12, 10));
   }
@@ -46,8 +39,7 @@ class SignInButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding:
-            padding ?? const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: padding ?? const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         alignment: Alignment.center,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(6),
