@@ -8,6 +8,7 @@ import 'package:flutter_sound/flutter_sound.dart';
 import 'package:friend_private/services/devices.dart';
 import 'package:friend_private/services/sockets.dart';
 import 'package:friend_private/services/wals.dart';
+import 'package:record/record.dart';
 
 class ServiceManager {
   late IMicRecorderService _mic;
@@ -270,7 +271,9 @@ class MicRecorderService implements IMicRecorderService {
   RecorderServiceStatus? _status;
 
   late FlutterSoundRecorder _recorder;
+  late AudioRecorder _audioRecorder;
   late StreamController<Uint8List> _controller;
+  StreamSubscription<Uint8List>? _streamSubscription;
 
   Function(Uint8List bytes)? _onByteReceived;
   Function? _onRecording;
@@ -280,6 +283,7 @@ class MicRecorderService implements IMicRecorderService {
 
   MicRecorderService({bool isInBG = false}) {
     _recorder = FlutterSoundRecorder();
+    _audioRecorder = AudioRecorder();
     _isInBG = isInBG;
   }
 
@@ -309,23 +313,34 @@ class MicRecorderService implements IMicRecorderService {
       _onRecording!();
     }
 
-    // new record
-    await _recorder.openRecorder(isBGService: _isInBG);
-    _controller = StreamController<Uint8List>();
+    if(Platform.isMacOS) {
+      const audioRecorderConfig =  RecordConfig(encoder: AudioEncoder.pcm16bits);
+      final stream = await _audioRecorder.startStream(audioRecorderConfig);
+      _streamSubscription = stream.listen((audioBytes) {
+        if (_onByteReceived != null) {
+          _onByteReceived!(audioBytes);
+        }
+      });
+    } else {
+      // new record
+      await _recorder.openRecorder(isBGService: _isInBG);
+      _controller = StreamController<Uint8List>();
 
-    await _recorder.startRecorder(
-      toStream: _controller.sink,
-      codec: Codec.pcm16,
-      numChannels: 1,
-      sampleRate: 16000,
-      bufferSize: 8192,
-    );
-    _controller.stream.listen((buffer) {
-      Uint8List audioBytes = buffer;
-      if (_onByteReceived != null) {
-        _onByteReceived!(audioBytes);
-      }
-    });
+      await _recorder.startRecorder(
+        toStream: _controller.sink,
+        codec: Codec.pcm16,
+        numChannels: 1,
+        sampleRate: 16000,
+        bufferSize: 8192,
+      );
+      
+      _controller.stream.listen((buffer) {
+        Uint8List audioBytes = buffer;
+        if (_onByteReceived != null) {
+          _onByteReceived!(audioBytes);
+        }
+      });
+    }
 
     _status = RecorderServiceStatus.recording;
     return;
@@ -333,8 +348,14 @@ class MicRecorderService implements IMicRecorderService {
 
   @override
   void stop() {
-    _recorder.stopRecorder();
-    _controller.close();
+    if(Platform.isMacOS) {
+      _audioRecorder.stop();
+      _streamSubscription?.cancel();
+    } else {
+      _recorder.stopRecorder();
+      _controller.close();
+    }
+    
 
     // callback
     _status = RecorderServiceStatus.stop;

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
@@ -65,7 +66,9 @@ Future<bool> _init() async {
   }
 
   await IntercomManager().initIntercom();
-  await NotificationService.instance.initialize();
+  if(!kIsWeb) {
+    await NotificationService.instance.initialize();
+   }
   await SharedPreferencesUtil.init();
   await MixpanelManager.init();
 
@@ -97,7 +100,9 @@ void main() async {
   } else {
     Env.init(DevEnv());
   }
-  FlutterForegroundTask.initCommunicationPort();
+  if(!kIsWeb) {
+    FlutterForegroundTask.initCommunicationPort();
+  }
   if (Env.posthogApiKey != null) {
     await initPostHog();
   }
@@ -349,7 +354,9 @@ class _DeciderWidgetState extends State<DeciderWidget> {
         context.read<AppProvider>().setAppsFromCache();
         context.read<MessageProvider>().refreshMessages();
       } else {
-        await IntercomManager.instance.intercom.loginUnidentifiedUser();
+        if(!kIsWeb) {
+          await IntercomManager.instance.intercom.loginUnidentifiedUser();
+        }
       }
       IntercomManager.instance.setUserAttributes();
     });
