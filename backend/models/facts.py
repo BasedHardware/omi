@@ -62,6 +62,7 @@ class FactDB(Fact):
 
     reviewed: bool = False
     user_review: Optional[bool] = None
+    visibility: Optional[str] = 'public'
 
     manually_added: bool = False
     edited: bool = False

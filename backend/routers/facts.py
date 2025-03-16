@@ -1,6 +1,6 @@
 from typing import List
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 import database.facts as facts_db
 from models.facts import FactDB, Fact
@@ -75,4 +75,12 @@ def edit_fact(fact_id: str, value: str, uid: str = Depends(auth.get_current_user
     #     value = value[len(first_word):].strip()
 
     facts_db.edit_fact(uid, fact_id, value)
+    return {'status': 'ok'}
+
+
+@router.patch('/v1/facts/{fact_id}/visibility', tags=['facts'])
+def update_fact_visibility(fact_id: str, value: str, uid: str = Depends(auth.get_current_user_uid)):
+    if value not in ['public', 'private']:
+        raise HTTPException(status_code=400, detail='Invalid visibility value')
+    facts_db.change_fact_visibility(uid, fact_id, value)
     return {'status': 'ok'}

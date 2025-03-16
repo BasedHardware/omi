@@ -20,9 +20,21 @@ Future<bool> createFactServer(String content, FactCategory category) async {
   return response.statusCode == 200;
 }
 
+Future<bool> updateFactVisibilityServer(String factId, String visibility) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/facts/$factId/visibility?value=$visibility',
+    headers: {},
+    method: 'PATCH',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('updateFactVisibility response: ${response.body}');
+  return response.statusCode == 200;
+}
+
 Future<List<Fact>> getFacts({int limit = 100, int offset = 0}) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v2/facts?limit=${limit}&offset=${offset}',
+    url: '${Env.apiBaseUrl}v2/facts?limit=$limit&offset=$offset',
     headers: {},
     method: 'GET',
     body: '',

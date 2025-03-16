@@ -1,5 +1,7 @@
 enum FactCategory { core, lifestyle, hobbies, interests, habits, work, skills, learnings, other }
 
+enum FactVisibility { private, public }
+
 class Fact {
   String id;
   String uid;
@@ -14,6 +16,7 @@ class Fact {
   bool manuallyAdded;
   bool edited;
   bool deleted;
+  FactVisibility visibility;
 
   Fact({
     required this.id,
@@ -29,6 +32,7 @@ class Fact {
     this.manuallyAdded = false,
     this.edited = false,
     this.deleted = false,
+    required this.visibility,
   });
 
   factory Fact.fromJson(Map<String, dynamic> json) {
@@ -49,6 +53,9 @@ class Fact {
       manuallyAdded: json['manually_added'] ?? false,
       edited: json['edited'] ?? false,
       deleted: json['deleted'] ?? false,
+      visibility: json['visibility'] != null
+          ? (FactVisibility.values.asNameMap()[json['visibility']] ?? FactVisibility.public)
+          : FactVisibility.public,
     );
   }
 
@@ -67,6 +74,7 @@ class Fact {
       'manually_added': manuallyAdded,
       'edited': edited,
       'deleted': deleted,
+      'visibility': visibility,
     };
   }
 }

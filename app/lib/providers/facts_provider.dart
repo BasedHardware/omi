@@ -66,7 +66,7 @@ class FactsProvider extends BaseProvider {
     notifyListeners();
   }
 
-  void createFact(String content, FactCategory category) async {
+  void createFact(String content, FactCategory category, [FactVisibility visibility = FactVisibility.public]) async {
     createFactServer(content, category);
     facts.add(Fact(
       id: const Uuid().v4(),
@@ -82,7 +82,16 @@ class FactsProvider extends BaseProvider {
       conversationId: null,
       conversationCategory: null,
       deleted: false,
+      visibility: visibility,
     ));
+    _setCategories();
+  }
+
+  void updateFactVisibility(Fact fact, FactVisibility visibility) async {
+    var idx = facts.indexWhere((f) => f.id == fact.id);
+    updateFactVisibilityServer(fact.id, visibility.name);
+    fact.visibility = visibility;
+    facts[idx] = fact;
     _setCategories();
   }
 
