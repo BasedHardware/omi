@@ -54,7 +54,7 @@ jobs:
 
       - name: Connect to GKE cluster
         run: |
-            sudo apt-get install google-cloud-cli-gke-gcloud-auth-plugin -y
+            sudo apt-get update && sudo apt-get install google-cloud-cli-gke-gcloud-auth-plugin -y
             gcloud container clusters get-credentials ${{ vars.GKE_CLUSTER }} --region ${{ env.REGION }} --project ${{ vars.GCP_PROJECT_ID }}
 
       - name: Deploy VAD to GKE cluster using Helm
