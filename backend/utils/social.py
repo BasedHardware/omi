@@ -33,6 +33,7 @@ class TwitterProfile(BaseModel):
     friends: int  # Following count
     sub_count: int  # Followers count
     id: str
+    status: str = "error"  # Default status for successful profile fetch
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "TwitterProfile":
@@ -45,7 +46,8 @@ class TwitterProfile(BaseModel):
             desc=data.get("desc", ""),
             friends=data.get("friends", 0),
             sub_count=data.get("sub_count", 0),
-            id=data.get("id", "")
+            id=data.get("id", ""),
+            status=data.get("status", "error")
         )
 
 
@@ -81,6 +83,11 @@ async def get_twitter_profile(handle: str) -> TwitterProfile:
             data = response.json()
             if data.get('status') == 'error':
                 raise Exception(f"API returned error status: {data.get('message', 'Unknown error')}")
+
+            # Ensure avatar URL is properly formatted (full size)
+            if 'avatar' in data and data['avatar'] and '_normal' in data['avatar']:
+                data['avatar'] = data['avatar'].replace('_normal', '')
+
             return TwitterProfile.from_dict(data)
         # else
         response.raise_for_status()
