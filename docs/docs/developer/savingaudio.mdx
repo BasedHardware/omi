@@ -19,7 +19,7 @@ This guide will walk you through setting up a Google Cloud Storage (GCS) bucket 
 2. **Click "CREATE BUCKET":**
    -  Hit that button to get started!
 3. **Let's Set Up Your Bucket:**
-   - **Name your bucket:**  Pick a unique name that follows the [naming guidelines](https://cloud.google.com/storage/docs/naming-buckets#requirements). Get creative, but keep it relevant! Example: `friend-audio-files`.
+   - **Name your bucket:**  Pick a unique name that follows the [naming guidelines](https://cloud.google.com/storage/docs/naming-buckets#requirements). Get creative, but keep it relevant! Example: `omi-audio-files`.
    - **Where should we store your audio?:** Choose a location that makes sense for you. Think about how quickly you need to access your files and your budget. A **Multi-region** is great for extra reliability across a wider area, while a **Region** gives you faster access in a specific spot.
    - **Pick a storage class:**  **Standard** is usually the best choice for files you access often. If you have audio you don't need very often, check out the other options (Nearline, Coldline, Archive) to save some 💰.
    - **Control who can access your files:**
@@ -46,8 +46,8 @@ Think of this like a special ID card for your app to access the bucket.
 3. **"CREATE SERVICE ACCOUNT":**
    - Click the button to get started.
 4. **Fill in the Details:**
-   - **Service account name:**  Give it a clear name. Example: `test-service-account-friend-app`.
-   - **Service account description:**  What will this account do? (e.g., "Uploads audio to the friend-audio-files bucket").
+   - **Service account name:**  Give it a clear name. Example: `test-service-account-omi-app`.
+   - **Service account description:**  What will this account do? (e.g., "Uploads audio to the omi-audio-files bucket").
 5. **Give Permissions (Optional):**
    - **Select a role:** Search for and select **"Storage Object User"**. This gives your app permission to work with the audio files in your bucket.
 6. **Grant Users Access (Optional):**
