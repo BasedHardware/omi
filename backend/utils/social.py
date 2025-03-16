@@ -235,4 +235,12 @@ async def add_twitter_to_persona(handle: str, persona_id) -> Dict[str, Any]:
 
     update_app_in_db(persona)
     delete_generic_cache('get_public_approved_apps_data')
+
+    # Get tweets from the Twitter timeline
+    timeline = await get_twitter_timeline(handle)
+
+    # Create facts from the tweets
+    if timeline and timeline.timeline:
+        create_facts_from_twitter_tweets(persona['uid'], persona_id, timeline.timeline)
+
     return persona
