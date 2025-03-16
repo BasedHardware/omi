@@ -1,8 +1,8 @@
-import 'package:friend_private/backend/http/api/facts.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/fact.dart';
-import 'package:friend_private/providers/base_provider.dart';
-import 'package:friend_private/widgets/extensions/string.dart';
+import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/backend/http/api/facts.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/fact.dart';
+import 'package:omi/providers/base_provider.dart';
 import 'package:tuple/tuple.dart';
 import 'package:uuid/uuid.dart';
 

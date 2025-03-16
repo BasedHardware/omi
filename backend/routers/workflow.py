@@ -17,7 +17,7 @@ router = APIRouter()
 @router.post('/v1/integrations/workflow/memories', response_model=integration_models.EmptyResponse,
              tags=['integration', 'workflow', 'memories'])
 def create_memory(request: Request, uid: str, api_key: Annotated[str | None, Header()],
-                  create_memory: memory_models.WorkflowCreateMemory):
+                  create_memory: memory_models.ExternalIntegrationCreateMemory):
     if api_key != os.getenv('WORKFLOW_API_KEY'):
         raise HTTPException(status_code=401, detail="Invalid API Key")
 

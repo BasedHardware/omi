@@ -1,14 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/api/users.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/pages/capture/widgets/widgets.dart';
-import 'package:friend_private/pages/conversation_detail/page.dart';
-import 'package:friend_private/providers/capture_provider.dart';
-import 'package:friend_private/providers/device_provider.dart';
-import 'package:friend_private/widgets/confirmation_dialog.dart';
+import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/capture/widgets/widgets.dart';
+import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:provider/provider.dart';
 
 class ConversationCapturingPage extends StatefulWidget {
@@ -101,7 +101,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
         // }
 
         // Conversation source
-        var conversationSource = ConversationSource.friend;
+        var conversationSource = ConversationSource.omi;
         // var captureProvider = context.read<CaptureProvider>();
         // if (captureProvider.isGlasses) {
         //   memorySource = MemorySource.openglass;
@@ -179,7 +179,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                       const SizedBox(height: 80),
                                       Center(
                                         child: Text(
-                                          conversationSource == ConversationSource.friend ? "No transcript" : "Empty",
+                                          conversationSource == ConversationSource.omi ? "No transcript" : "Empty",
                                         ),
                                       ),
                                     ],
@@ -263,7 +263,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                               "Are you sure you want to stop recording and summarize the conversation now?",
                                           checkboxValue: !showSummarizeConfirmation,
                                           checkboxText: "Don't ask me again",
-                                          updateCheckboxValue: (value) {
+                                          onCheckboxChanged: (value) {
                                             if (value != null) {
                                               setState(() {
                                                 showSummarizeConfirmation = !value;

@@ -1,22 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/http/api/conversations.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/backend/schema/person.dart';
-import 'package:friend_private/pages/home/page.dart';
-import 'package:friend_private/pages/conversation_detail/widgets.dart';
-import 'package:friend_private/pages/settings/people.dart';
-import 'package:friend_private/providers/connectivity_provider.dart';
-import 'package:friend_private/providers/conversation_provider.dart';
-import 'package:friend_private/utils/alerts/app_snackbar.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/expandable_text.dart';
-import 'package:friend_private/widgets/extensions/string.dart';
-import 'package:friend_private/widgets/photos_grid.dart';
-import 'package:friend_private/widgets/transcript.dart';
+import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/person.dart';
+import 'package:omi/pages/home/page.dart';
+import 'package:omi/pages/conversation_detail/widgets.dart';
+import 'package:omi/pages/settings/people.dart';
+import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/expandable_text.dart';
+import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/widgets/photos_grid.dart';
+import 'package:omi/widgets/transcript.dart';
 import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
 
@@ -445,7 +445,7 @@ class TranscriptWidgets extends StatelessWidget {
             provider.conversation.transcriptSegments.isEmpty
                 ? ExpandableTextWidget(
                     text: (provider.conversation.externalIntegration?.text ?? '').decodeString,
-                    maxLines: 10000,
+                    maxLines: 1000,
                     linkColor: Colors.grey.shade300,
                     style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
                     toggleExpand: () {

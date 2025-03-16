@@ -1,7 +1,7 @@
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/fact.dart';
-import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/env/env.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/fact.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/env/env.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 
 class MixpanelManager {
@@ -224,7 +224,7 @@ class MixpanelManager {
 
   void setUserProperties(String whatDoYouDo, String whereDoYouPlanToUseYourFriend, String ageRange) {
     setUserProperty('What the user does', whatDoYouDo);
-    setUserProperty('Using Friend At', whereDoYouPlanToUseYourFriend);
+    setUserProperty('Using Omi At', whereDoYouPlanToUseYourFriend);
     setUserProperty('Age Range', ageRange);
   }
 
