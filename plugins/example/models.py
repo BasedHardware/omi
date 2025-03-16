@@ -140,6 +140,7 @@ class Geolocation(BaseModel):
 
 class MemorySource(str, Enum):
     friend = 'friend'
+    omi = 'omi'
     openglass = 'openglass'
     screenpipe = 'screenpipe'
     workflow = 'workflow'

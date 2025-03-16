@@ -7,18 +7,17 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/providers/base_provider.dart';
-import 'package:friend_private/providers/device_provider.dart';
-import 'package:friend_private/services/devices.dart';
-import 'package:friend_private/services/manager/services_default.dart';
-import 'package:friend_private/services/notifications.dart';
-import 'package:friend_private/utils/alerts/app_snackbar.dart';
-import 'package:friend_private/utils/analytics/analytics_manager.dart';
-import 'package:friend_private/utils/audio/foreground.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/providers/base_provider.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/services/devices.dart';
+import 'package:omi/services/manager/services_default.dart';
+import 'package:omi/services/notifications.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/audio/foreground.dart';
 import 'package:permission_handler/permission_handler.dart';
-
 class OnboardingProvider extends BaseProvider with MessageNotifierMixin implements IDeviceServiceSubsciption {
   DeviceProvider? deviceProvider;
   bool isClicked = false;

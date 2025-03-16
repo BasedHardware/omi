@@ -20,6 +20,10 @@ class MainFlutterWindow: NSWindow {
           let access = await AVCaptureDevice.requestAccess(for: .audio)
           result(access)  // ✅ Return result inside the async task
         }
+      case "configure":
+        Task {
+          let session = await AVCaptureDevice.beginConfiguration();
+        }
       default:
         result(FlutterMethodNotImplemented)
       }
