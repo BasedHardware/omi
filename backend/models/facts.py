@@ -69,6 +69,7 @@ class FactDB(Fact):
     edited: bool = False
     deleted: bool = False
     scoring: Optional[str] = None
+    app_id: Optional[str] = None
 
     @staticmethod
     def calculate_score(fact: 'FactDB') -> 'FactDB':

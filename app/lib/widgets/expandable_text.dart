@@ -36,8 +36,10 @@ class _ExpandableTextWidgetState extends State<ExpandableTextWidget> {
       maxLines: widget.maxLines,
       textDirection: TextDirection.ltr,
     );
-    tp.layout(maxWidth: MediaQuery.of(context).size.width);
+    var width = MediaQuery.of(context).size.width;
+    tp.layout(maxWidth: width);
     final isOverflowing = tp.didExceedMaxLines;
+    final maxChars = tp.getPositionForOffset(Offset(width, 0)).offset * widget.maxLines;
 
     return SelectionArea(
       child: Column(
@@ -65,8 +67,8 @@ class _ExpandableTextWidgetState extends State<ExpandableTextWidget> {
             ),
             data: widget.isExpanded
                 ? widget.text
-                : widget.text.length > 300
-                    ? widget.text.substring(0, 300)
+                : widget.text.length > maxChars
+                    ? widget.text.substring(0, maxChars)
                     : widget.text,
           ),
           // Text(

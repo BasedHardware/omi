@@ -1,9 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/backend/schema/fact.dart';
-import 'package:friend_private/env/env.dart';
+import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/fact.dart';
+import 'package:omi/env/env.dart';
 
 Future<bool> createFactServer(String content, FactCategory category, String visibility) async {
   var response = await makeApiCall(

@@ -26,7 +26,7 @@ class NotificationScopesChipsWidget extends StatelessWidget {
                           showCheckmark: true,
                           backgroundColor: Colors.transparent,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(20),
                           ),
                           onSelected: (bool selected) {
                             provider.addOrRemoveScope(scope);

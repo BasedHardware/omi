@@ -1,11 +1,11 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/providers/app_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/dialog.dart';
-import 'package:friend_private/widgets/extensions/string.dart';
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/providers/app_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/dialog.dart';
+import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
 import 'app_detail/app_detail.dart';
@@ -34,6 +34,10 @@ class AppListItem extends StatelessWidget {
             children: [
               CachedNetworkImage(
                 imageUrl: app.getImageUrl(),
+                httpHeaders: const {
+                  "User-Agent":
+                      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                },
                 imageBuilder: (context, imageProvider) => Container(
                   width: 48,
                   height: 48,
@@ -50,7 +54,14 @@ class AppListItem extends StatelessWidget {
                     valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                   ),
                 ),
-                errorWidget: (context, url, error) => const Icon(Icons.error),
+                errorWidget: (context, url, error) => const SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: Icon(
+                    Icons.error,
+                    color: Colors.white,
+                  ),
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(

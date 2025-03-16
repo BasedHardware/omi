@@ -8,7 +8,7 @@ import 'package:internet_connection_checker_plus/internet_connection_checker_plu
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/status.dart' as socket_channel_status;
 import 'package:web_socket_channel/web_socket_channel.dart';
-import 'package:friend_private/backend/http/shared.dart';
+import 'package:omi/backend/http/shared.dart';
 
 enum PureSocketStatus { notConnected, connecting, connected, disconnected }
 

@@ -13,6 +13,7 @@ const config = {
   favicon: 'images/favicon.ico',
   trailingSlash: false,
 
+  plugins: [require.resolve('docusaurus-lunr-search')],
 
   // Set the production url of your site here
   url: 'https://docs.omi.me',

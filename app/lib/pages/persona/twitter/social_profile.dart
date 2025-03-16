@@ -1,12 +1,12 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/auth.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/gen/assets.gen.dart';
-import 'package:friend_private/pages/onboarding/wrapper.dart';
-import 'package:friend_private/pages/persona/persona_provider.dart';
-import 'package:friend_private/pages/persona/twitter/verify_identity_screen.dart';
-import 'package:friend_private/utils/other/temp.dart';
+import 'package:omi/backend/auth.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/pages/onboarding/wrapper.dart';
+import 'package:omi/pages/persona/persona_provider.dart';
+import 'package:omi/pages/persona/twitter/verify_identity_screen.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 

@@ -1,7 +1,7 @@
 import os
 import requests
 
-from models import WorkflowCreateMemory, Memory
+from models import ExternalIntegrationCreateMemory, Memory
 from .models import ZapierCreateMemory
 
 
@@ -141,9 +141,9 @@ class ZapierClient:
 
 class FriendClient:
     """
-    Implementation of the Friend Core APIs.
+    Implementation of the Omi Core APIs.
 
-    This abstract class provides a Python interface to all Friend Core APIs.
+    This abstract class provides a Python interface to all Omi Core APIs.
     """
 
     def __init__(
@@ -155,7 +155,7 @@ class FriendClient:
         self.workflow_api_key = workflow_api_key
         pass
 
-    def create_memory(self, memory: WorkflowCreateMemory, uid: str):
+    def create_memory(self, memory: ExternalIntegrationCreateMemory, uid: str):
         resp: requests.Response
         err = None
         url = f"{self.base_url}/v1/integrations/workflow/memories?uid={uid}"

@@ -1,12 +1,12 @@
 import 'dart:convert';
 
 import 'package:collection/collection.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/backend/schema/person.dart';
-import 'package:friend_private/services/wals.dart';
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/message.dart';
+import 'package:omi/backend/schema/person.dart';
+import 'package:omi/services/wals.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SharedPreferencesUtil {
@@ -63,7 +63,7 @@ class SharedPreferencesUtil {
 
   BtDevice get btDevice {
     final String device = getString('btDevice') ?? '';
-    if (device.isEmpty) return BtDevice(id: '', name: '', type: DeviceType.friend, rssi: 0);
+    if (device.isEmpty) return BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0);
     return BtDevice.fromJson(jsonDecode(device));
   }
 
@@ -153,6 +153,10 @@ class SharedPreferencesUtil {
 
   set showInstallAppConfirmation(bool value) => saveBool('showInstallAppConfirmation', value);
 
+  bool get showFirmwareUpdateDialog => getBool('v2/showFirmwareUpdateDialog') ?? true;
+
+  set showFirmwareUpdateDialog(bool value) => saveBool('v2/showFirmwareUpdateDialog', value);
+
   String get recordingsLanguage => getString('recordingsLanguage') ?? 'en';
 
   set recordingsLanguage(String value) => saveString('recordingsLanguage', value);
@@ -205,6 +209,10 @@ class SharedPreferencesUtil {
 
   int get enabledAppsIntegrationsCount =>
       appsList.where((element) => element.enabled && element.worksExternally()).length;
+
+  bool get showConversationDeleteConfirmation => getBool('showConversationDeleteConfirmation') ?? true;
+
+  set showConversationDeleteConfirmation(bool value) => saveBool("showConversationDeleteConfirmation", value);
 
   List<App> get appsList {
     final List<String> apps = getStringList('appsList') ?? [];

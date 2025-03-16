@@ -2,10 +2,11 @@ import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/svg.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/gen/assets.gen.dart';
-import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 
@@ -21,7 +22,6 @@ class AppMetadataWidget extends StatelessWidget {
   final String? appPricing;
   final bool allowPaidApps;
   final bool generatingDescription;
-
   const AppMetadataWidget({
     super.key,
     this.imageFile,
@@ -112,6 +112,67 @@ class AppMetadataWidget extends StatelessWidget {
                   const SizedBox(
                     height: 10,
                   ),
+                  // App ID field with copy button
+                  context.watch<AddAppProvider>().updateAppId != null
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(left: 8.0),
+                              child: Text(
+                                'App ID',
+                                style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                              ),
+                            ),
+                            Container(
+                              margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10.0),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade800,
+                                borderRadius: BorderRadius.circular(10.0),
+                              ),
+                              width: double.infinity,
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      context.watch<AddAppProvider>().updateAppId!,
+                                      style: TextStyle(color: Colors.grey.shade500, fontSize: 16),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  GestureDetector(
+                                    onTap: () {
+                                      Clipboard.setData(
+                                          ClipboardData(text: context.read<AddAppProvider>().updateAppId!));
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('App ID copied to clipboard'),
+                                          duration: Duration(seconds: 2),
+                                        ),
+                                      );
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.all(6.0),
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(8.0),
+                                      ),
+                                      child: Icon(
+                                        Icons.copy,
+                                        color: Colors.white,
+                                        size: 20,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(
+                              height: 16,
+                            ),
+                          ],
+                        )
+                      : SizedBox.shrink(),
                   Padding(
                     padding: const EdgeInsets.only(left: 8.0),
                     child: Text(

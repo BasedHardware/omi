@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/providers/conversation_provider.dart';
-import 'package:friend_private/providers/home_provider.dart';
-import 'package:friend_private/utils/other/debouncer.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/utils/other/debouncer.dart';
 import 'package:provider/provider.dart';
 
 class SearchWidget extends StatefulWidget {
