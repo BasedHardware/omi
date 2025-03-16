@@ -53,7 +53,9 @@ jobs:
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
 
       - name: Connect to GKE cluster
-        run: gcloud container clusters get-credentials ${{ vars.GKE_CLUSTER }} --region ${{ env.REGION }} --project ${{ vars.GCP_PROJECT_ID }}
+        run: |
+            sudo apt-get install google-cloud-cli-gke-gcloud-auth-plugin -y
+            gcloud container clusters get-credentials ${{ vars.GKE_CLUSTER }} --region ${{ env.REGION }} --project ${{ vars.GCP_PROJECT_ID }}
 
       - name: Deploy VAD to GKE cluster using Helm
         run: |
