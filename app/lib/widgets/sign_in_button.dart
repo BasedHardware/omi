@@ -1,7 +1,6 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:friend_private/gen/assets.gen.dart';
+import 'package:friend_private/utils/platform_utils.dart';
 
 class SignInButton extends StatelessWidget {
   final String title;
@@ -17,10 +16,10 @@ class SignInButton extends StatelessWidget {
       assetPath: Assets.images.googleLogo.path,
       title: title ?? "Sign in with Google",
       onTap: onTap,
-      padding: Platform.isIOS
+      padding: PlatformUtils.isIOS
           ? const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
           : const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      iconSpacing: Platform.isIOS ? 12 : 10,
+      iconSpacing: PlatformUtils.isIOS ? 12 : 10,
     );
   }
 

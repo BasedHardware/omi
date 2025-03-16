@@ -46,7 +46,7 @@
   <link rel="manifest" href="manifest.json">
   <script>
     // The value below is injected by flutter build, do not touch.
-    var serviceWorkerVersion = null;
+    var serviceWorkerVersion = '{{flutter_service_worker_version}}';
   </script>
   <!-- This script adds the flutter initialization JS code -->
   <script src="flutter.js" defer=""></script>
@@ -147,15 +147,45 @@
   <script>
     window.addEventListener('load', function (ev) {
       // Download main.dart.js
+      _flutter = {
+        loader: {
+          loadEntrypoint: function(options) {
+            var entrypointUrl = options.entrypointUrl;
+            var serviceWorker = options.serviceWorker;
+            var onEntrypointLoaded = options.onEntrypointLoaded;
+            
+            var scriptTag = document.createElement('script');
+            scriptTag.src = entrypointUrl;
+            scriptTag.type = 'application/javascript';
+            document.body.appendChild(scriptTag);
+            
+            if (onEntrypointLoaded) {
+              scriptTag.addEventListener('load', function() {
+                onEntrypointLoaded({
+                  initializeEngine: function() {
+                    return Promise.resolve({
+                      runApp: function() {
+                        return Promise.resolve();
+                      }
+                    });
+                  }
+                });
+              });
+            }
+          }
+        }
+      };
+      
       _flutter.loader.loadEntrypoint({
         entrypointUrl: 'main.dart.js',
         serviceWorker: {
-          serviceWorkerUrl: 'flutter_service_worker.js?v=',
           serviceWorkerVersion: serviceWorkerVersion,
         },
         onEntrypointLoaded: async function(engineInitializer) {
           // Initialize the Flutter engine
-          let appRunner = await engineInitializer.initializeEngine({useColorEmoji: true,});
+          let appRunner = await engineInitializer.initializeEngine({
+            useColorEmoji: true,
+          });
           // Run the app
           await appRunner.runApp();
         }

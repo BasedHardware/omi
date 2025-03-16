@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:friend_private/utils/platform_utils.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -80,13 +81,19 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   Future askForBluetoothPermissions() async {
+    if (PlatformUtils.isWeb) {
+      // Web doesn't support Bluetooth permissions
+      updateBluetoothPermission(true);
+      return;
+    }
+    
     FlutterBluePlus.setLogLevel(LogLevel.info, color: true);
-    if (Platform.isIOS) {
+    if (PlatformUtils.isIOS) {
       PermissionStatus bleStatus = await Permission.bluetooth.request();
       debugPrint('bleStatus: $bleStatus');
       updateBluetoothPermission(bleStatus.isGranted);
     } else {
-      if (Platform.isAndroid) {
+      if (PlatformUtils.isAndroid) {
         if (FlutterBluePlus.adapterStateNow != BluetoothAdapterState.on) {
           try {
             await FlutterBluePlus.turnOn();
@@ -222,6 +229,15 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       // it means the device has been unpaired
       deviceAlreadyUnpaired();
     }
+    
+    // For web platform, skip Bluetooth permission checks
+    if (PlatformUtils.isWeb) {
+      updateBluetoothPermission(true);
+      enableInstructions = true;
+      notifyListeners();
+      return;
+    }
+    
     // check if bluetooth is enabled on both platforms
     if (!hasBluetoothPermission) {
       await askForBluetoothPermissions();

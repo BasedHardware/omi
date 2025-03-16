@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
+import 'package:friend_private/utils/platform_utils.dart';
 import 'package:friend_private/http/api/device.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/home/firmware_update.dart';
@@ -174,6 +175,28 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   Future scanAndConnectToDevice() async {
     updateConnectingStatus(true);
+    
+    // Handle web platform with mock implementation
+    if (PlatformUtils.isWeb) {
+      // Create a mock device for web
+      var mockDevice = BtDevice(
+        id: 'web-mock-device',
+        name: 'Web Mock Device',
+        type: DeviceType.friend,
+        rssi: -50,
+      );
+      setConnectedDevice(mockDevice);
+      setIsDeviceV2Connected();
+      SharedPreferencesUtil().deviceName = mockDevice.name;
+      MixpanelManager().deviceConnected();
+      setIsConnected(true);
+      updateConnectingStatus(false);
+      batteryLevel = 100; // Set mock battery level
+      notifyListeners();
+      return;
+    }
+    
+    // Original implementation for mobile platforms
     if (isConnected) {
       if (connectedDevice == null) {
         connectedDevice = await _getConnectedDevice();
@@ -379,6 +402,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Future setIsDeviceV2Connected() async {
     if (connectedDevice == null) {
       isDeviceV2Connected = false;
+    } else if (PlatformUtils.isWeb) {
+      // For web, always set to true to enable features
+      isDeviceV2Connected = true;
     } else {
       var storageFiles = await _getStorageList(connectedDevice!.id);
       isDeviceV2Connected = storageFiles.isNotEmpty;
