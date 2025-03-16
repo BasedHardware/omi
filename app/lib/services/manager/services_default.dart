@@ -89,7 +89,6 @@ Future onStart(dynamic service) async {
   service.on('recorder.start').listen((event) async {
     recorder = MicRecorderService(isInBG: Platform.isAndroid ? true : false);
     recorder?.start(onByteReceived: (bytes) {
-      print("bytes receieveing");
       Uint8List audioBytes = bytes;
       List<dynamic> audioBytesList = audioBytes.toList();
       service.invoke("recorder.ui.audioBytes", {"state": audioBytesList});
@@ -212,10 +211,8 @@ class BackgroundService {
       onByteReceived(bytes);
     });
     _service.on('recorder.ui.stateUpdate').listen((event) {
-      print(event!['state']);
       if (event!['state'] == 'recording') {
         if (onRecording != null) {
-          print("called on-recording");
           onRecording();
         }
       } else if (event['state'] == 'initializing') {
@@ -316,7 +313,6 @@ class MicRecorderService implements types.IMicRecorderService {
     // new record
     await _recorder.openRecorder(isBGService: _isInBG);
     _controller = StreamController<Uint8List>();
-    print("starting record");
     await _recorder.startRecorder(
       toStream: _controller.sink,
       codec: Codec.pcm16,
@@ -324,9 +320,7 @@ class MicRecorderService implements types.IMicRecorderService {
       sampleRate: 16000,
       bufferSize: 8192,
     );
-    print("started recorder");
     _controller.stream.listen((buffer) {
-      print("bufferree $buffer");
       Uint8List audioBytes = buffer;
       if (_onByteReceived != null) {
         _onByteReceived!(audioBytes);

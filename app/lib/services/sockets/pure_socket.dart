@@ -117,7 +117,9 @@ class PureSocket implements IPureSocket {
 
     var token = await getAuthHeader(false);
     var uri = Uri.parse(url).replace(scheme: "ws", queryParameters: {"token": token});
-    debugPrint("request wss1 ${uri.toString()}");
+    
+    debugPrint("request wss ${uri.toString()}");
+
     _channel = WebSocketChannel.connect(uri, protocols: [token]);
     if (_channel?.ready == null) {
       return false;

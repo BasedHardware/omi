@@ -3,8 +3,6 @@ import 'dart:typed_data';
 
 import 'package:flutter_background_service_platform_interface/flutter_background_service_platform_interface.dart';
 
-// sealed class CommonBackgroundService {}
-
 enum RecorderServiceStatus {
   initialising,
   recording,

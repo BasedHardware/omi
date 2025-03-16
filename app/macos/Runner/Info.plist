@@ -64,7 +64,7 @@
 		<string>remote-notification</string>
 	</array>
 	<key>GIDClientID</key>
-	<string>932070916901-3fm1bd0es4r2tm0sr4357nirfcju7gh4.apps.googleusercontent.com</string>
+	<string>$(GOOGLE_CLIENT_ID)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -74,7 +74,7 @@
 			<array>
 				<!-- TODO Replace this value: -->
 				<!-- Copied from GoogleService-Info.plist key REVERSED_CLIENT_ID -->
-				<string>com.googleusercontent.apps.932070916901-3fm1bd0es4r2tm0sr4357nirfcju7gh4</string>
+				<string>$(GOOGLE_REVERSE_CLIENT_ID)</string>
 			</array>
 		</dict>
 	</array>
