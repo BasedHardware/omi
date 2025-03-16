@@ -141,8 +141,7 @@ backend/scripts/rag/visualizations/
 */pretrained_models/
 /backend/_speech_profiles
 
-backend/google-credentials.json
-backend/google-credentials-dev.json
+backend/google-credentials*.json
 
 startup-script.sh
 /app/lib/firebase_options_dev.dart
