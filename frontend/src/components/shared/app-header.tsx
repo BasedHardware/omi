@@ -110,7 +110,7 @@ export default function AppHeader({
       target: '_blank',
     },
     {
-      href: 'https://www.omi.me/products/friend-dev-kit-2',
+      href: 'https://www.omi.me/products/omi-dev-kit-2',
       label: 'Order Now',
       className: 'text-white hover:text-gray-300',
     },

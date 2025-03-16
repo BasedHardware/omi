@@ -23,7 +23,7 @@ class CreateConversationResponse {
   }
 }
 
-enum ConversationSource { friend, workflow, openglass, screenpipe, sdcard }
+enum ConversationSource { friend, omi, workflow, openglass, screenpipe, sdcard }
 
 class ConversationExternalData {
   final String text;
@@ -92,7 +92,7 @@ class ServerConversation {
 
   final List<AppResponse> appResults;
   final ConversationSource? source;
-  final String? language; // applies to Friend only
+  final String? language; // applies to friend/omi only
 
   final ConversationExternalData? externalIntegration;
 
@@ -138,8 +138,7 @@ class ServerConversation {
           ? ((json['photos'] ?? []) as List<dynamic>).map((photo) => ConversationPhoto.fromJson(photo)).toList()
           : [],
       discarded: json['discarded'] ?? false,
-      source:
-          json['source'] != null ? ConversationSource.values.asNameMap()[json['source']] : ConversationSource.friend,
+      source: json['source'] != null ? ConversationSource.values.asNameMap()[json['source']] : ConversationSource.omi,
       language: json['language'],
       deleted: json['deleted'] ?? false,
       externalIntegration:
