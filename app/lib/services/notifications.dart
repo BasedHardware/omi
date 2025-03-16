@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
 import 'dart:ui';
+import 'package:friend_private/utils/platform_utils.dart';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -132,7 +133,7 @@ class NotificationService {
   }
 
   void saveNotificationToken() async {
-    if (Platform.isIOS) {
+    if (PlatformUtils.isIOS) {
       await _firebaseMessaging.getAPNSToken();
     }
     String? token = await _firebaseMessaging.getToken();
@@ -161,7 +162,7 @@ class NotificationService {
 
   // FIXME: Causes the different behavior on android and iOS
   bool _shouldShowForegroundNotificationOnFCMMessageReceived() {
-    return Platform.isAndroid;
+    return PlatformUtils.isAndroid;
   }
 
   Future<void> listenForMessages() async {

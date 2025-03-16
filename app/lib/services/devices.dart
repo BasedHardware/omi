@@ -6,6 +6,8 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/services/devices/device_connection.dart';
 import 'package:friend_private/services/devices/models.dart';
+import 'package:friend_private/services/devices/web_mock_connection.dart';
+import 'package:friend_private/utils/platform_utils.dart';
 
 abstract class IDeviceService {
   void start();
@@ -188,6 +190,23 @@ class DeviceService implements IDeviceService {
   bool mutex = false;
   @override
   Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false}) async {
+    // Handle web platform with mock implementation
+    if (PlatformUtils.isWeb) {
+      // Create a mock device for web
+      var mockDevice = BtDevice(
+        id: 'web-mock-device',
+        name: 'Web Mock Device',
+        type: DeviceType.friend,
+        rssi: -50,
+      );
+      var connection = WebMockDeviceConnection(mockDevice, null);
+      await connection.connect(onConnectionStateChanged: onDeviceConnectionStateChanged);
+      _connection = connection;
+      _firstConnectedAt ??= DateTime.now();
+      return connection;
+    }
+    
+    // Original implementation for mobile platforms
     while (mutex) {
       await Future.delayed(const Duration(milliseconds: 50));
     }

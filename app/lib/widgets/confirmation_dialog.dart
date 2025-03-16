@@ -1,7 +1,6 @@
-import 'dart:io';
-
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:friend_private/utils/platform_utils.dart';
 
 class ConfirmationDialog extends StatefulWidget {
   final String title;
@@ -53,7 +52,7 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
 
   @override
   Widget build(BuildContext context) {
-    if (Platform.isAndroid) {
+    if (PlatformUtils.isAndroid) {
       return AlertDialog(
         backgroundColor: Colors.grey.shade900,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
