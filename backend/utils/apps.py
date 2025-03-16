@@ -77,14 +77,13 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     all_apps = []
     tester = is_tester(uid)
     if cachedApps := get_generic_cache('get_public_approved_apps_data'):
-        print('get_public_approved_plugins_data from cache----------------------------')
+        print('get_public_approved_plugins_data from cache')
         public_approved_data = cachedApps
-        public_approved_data = get_public_approved_apps_db()
         public_unapproved_data = get_public_unapproved_apps(uid)
         private_data = get_private_apps(uid)
         pass
     else:
-        print('get_public_approved_plugins_data from db----------------------------')
+        print('get_public_approved_plugins_data from db')
         private_data = get_private_apps(uid)
         public_approved_data = get_public_approved_apps_db()
         public_unapproved_data = get_public_unapproved_apps(uid)
