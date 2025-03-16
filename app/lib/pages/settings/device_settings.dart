@@ -1,17 +1,17 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/pages/home/firmware_update.dart';
-import 'package:friend_private/pages/conversations/sync_page.dart';
-import 'package:friend_private/providers/device_provider.dart';
-import 'package:friend_private/providers/onboarding_provider.dart';
-import 'package:friend_private/services/services.dart';
-import 'package:friend_private/utils/analytics/intercom.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/pages/home/firmware_update.dart';
+import 'package:omi/pages/conversations/sync_page.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/services/services.dart';
+import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
 
