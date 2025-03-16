@@ -1,0 +1,5 @@
+apiVersion: v2
+name: backend-secrets
+description: A Helm chart for Backend Secrets
+version: 0.1.0
+appVersion: "v1"
