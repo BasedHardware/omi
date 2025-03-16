@@ -61,7 +61,7 @@ jobs:
 
       - name: Deploy VAD to GKE cluster using Helm
         run: |
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-vad ./vad -f ./vad/${{ vars.ENV }}_omi_vad_values.yaml --set "image.tag=${GITHUB_SHA::7}"
+          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-vad ./backend/charts/vad -f ./backend/charts/vad/${{ vars.ENV }}_omi_vad_values.yaml --set "image.tag=${GITHUB_SHA::7}"
 
       # - name: Create SSH Key
       #   run: |
