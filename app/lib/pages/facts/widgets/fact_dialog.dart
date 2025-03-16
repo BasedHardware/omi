@@ -24,6 +24,7 @@ class FactDialog extends StatefulWidget {
 class _FactDialogState extends State<FactDialog> {
   late TextEditingController contentController;
   late FactCategory selectedCategory;
+  late FactVisibility selectedVisibility;
 
   @override
   void initState() {
@@ -33,6 +34,7 @@ class _FactDialogState extends State<FactDialog> {
       TextPosition(offset: contentController.text.length),
     );
     selectedCategory = widget.fact?.category ?? widget.provider.selectedCategory ?? FactCategory.values.first;
+    selectedVisibility = widget.fact?.visibility ?? FactVisibility.public;
   }
 
   @override
@@ -51,7 +53,7 @@ class _FactDialogState extends State<FactDialog> {
             color: Colors.grey.shade900,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           ),
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+          padding: const EdgeInsets.all(16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -67,64 +69,17 @@ class _FactDialogState extends State<FactDialog> {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  if (widget.fact != null)
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.red, size: 22),
-                      onPressed: () => _showDeleteConfirmation(context),
+                  IconButton(
+                    icon: Icon(
+                      Icons.close,
+                      color: Colors.grey.shade400,
+                      size: 22,
                     ),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
                 ],
               ),
-              if (widget.fact == null || !widget.fact!.manuallyAdded) ...[
-                const SizedBox(height: 16),
-                SizedBox(
-                  height: 34,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: FactCategory.values.length,
-                    separatorBuilder: (context, _) => const SizedBox(width: 8),
-                    itemBuilder: (context, index) {
-                      final category = FactCategory.values[index];
-                      final isSelected = category == selectedCategory;
-                      return GestureDetector(
-                        onTap: () => setState(() => selectedCategory = category),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: isSelected ? Colors.white.withOpacity(0.1) : Colors.grey.shade800,
-                            borderRadius: BorderRadius.circular(17),
-                            border: Border.all(
-                              color: isSelected ? Colors.white : Colors.transparent,
-                              width: 1,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (isSelected) ...[
-                                const Icon(
-                                  Icons.check,
-                                  size: 14,
-                                  color: Colors.white,
-                                ),
-                                const SizedBox(width: 4),
-                              ],
-                              Text(
-                                category.toString().split('.').last,
-                                style: TextStyle(
-                                  color: isSelected ? Colors.white : Colors.white70,
-                                  fontSize: 13,
-                                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               Container(
                 decoration: BoxDecoration(
                   color: Colors.grey.shade800,
@@ -151,7 +106,96 @@ class _FactDialogState extends State<FactDialog> {
                   onSubmitted: (value) => _saveFact(value),
                 ),
               ),
-              const SizedBox(height: 16),
+              if (widget.fact == null || !widget.fact!.manuallyAdded) ...[
+                const SizedBox(height: 20),
+                Text(
+                  'Category',
+                  style: TextStyle(
+                    color: Colors.grey.shade400,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 36,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: FactCategory.values.length,
+                    separatorBuilder: (context, _) => const SizedBox(width: 8),
+                    itemBuilder: (context, index) {
+                      final category = FactCategory.values[index];
+                      final isSelected = category == selectedCategory;
+                      return ChoiceChip(
+                        label: Text(
+                          category.toString().split('.').last,
+                          style: TextStyle(
+                            color: isSelected ? Colors.black : Colors.white70,
+                            fontSize: 13,
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                          ),
+                        ),
+                        selected: isSelected,
+                        showCheckmark: false,
+                        backgroundColor: Colors.grey.shade800,
+                        selectedColor: Colors.white,
+                        onSelected: (bool selected) {
+                          if (selected) {
+                            setState(() => selectedCategory = category);
+                          }
+                        },
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Visibility',
+                  style: TextStyle(
+                    color: Colors.grey.shade400,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: FactVisibility.values.map((visibility) {
+                    final isSelected = visibility == selectedVisibility;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              visibility == FactVisibility.private ? Icons.lock_outline : Icons.public,
+                              size: 16,
+                              color: isSelected ? Colors.black : Colors.white70,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              visibility == FactVisibility.private ? 'Private' : 'Public',
+                              style: TextStyle(
+                                color: isSelected ? Colors.black : Colors.white70,
+                                fontSize: 13,
+                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                              ),
+                            ),
+                          ],
+                        ),
+                        selected: isSelected,
+                        showCheckmark: false,
+                        backgroundColor: Colors.grey.shade800,
+                        selectedColor: Colors.white,
+                        onSelected: (bool selected) {
+                          if (selected) {
+                            setState(() => selectedVisibility = visibility);
+                          }
+                        },
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+              const SizedBox(height: 24),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -189,6 +233,19 @@ class _FactDialogState extends State<FactDialog> {
                   ),
                 ],
               ),
+              const SizedBox(height: 16),
+              if (widget.fact != null)
+                TextButton.icon(
+                  onPressed: () => _showDeleteConfirmation(context),
+                  icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18),
+                  label: const Text(
+                    'Delete Fact',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                ),
             ],
           ),
         ),
@@ -200,9 +257,12 @@ class _FactDialogState extends State<FactDialog> {
     if (value.trim().isNotEmpty) {
       if (widget.fact != null) {
         widget.provider.editFact(widget.fact!, value, selectedCategory);
+        if (widget.fact!.visibility != selectedVisibility) {
+          widget.provider.updateFactVisibility(widget.fact!, selectedVisibility);
+        }
         MixpanelManager().factsPageEditedFact();
       } else {
-        widget.provider.createFact(value, selectedCategory);
+        widget.provider.createFact(value, selectedCategory, selectedVisibility);
         MixpanelManager().factsPageCreatedFact(selectedCategory);
       }
       Navigator.pop(context);
