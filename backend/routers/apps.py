@@ -547,7 +547,8 @@ async def get_twitter_profile_data(handle: str, uid: str = Depends(auth.get_curr
         "desc": profile.desc,
         "friends": profile.friends,
         "sub_count": profile.sub_count,
-        "id": profile.id
+        "id": profile.id,
+        "status": profile.status,
     }
 
     # By user persona first
