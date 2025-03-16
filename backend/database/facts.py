@@ -72,6 +72,13 @@ def review_fact(uid: str, fact_id: str, value: bool):
     fact_ref.update({'reviewed': True, 'user_review': value})
 
 
+def change_fact_visibility(uid: str, fact_id: str, value: str):
+    user_ref = db.collection('users').document(uid)
+    facts_ref = user_ref.collection('facts')
+    fact_ref = facts_ref.document(fact_id)
+    fact_ref.update({'visibility': value})
+
+
 def edit_fact(uid: str, fact_id: str, value: str):
     user_ref = db.collection('users').document(uid)
     facts_ref = user_ref.collection('facts')
