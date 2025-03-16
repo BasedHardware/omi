@@ -70,6 +70,7 @@ def weighted_rating(plugin):
 
 
 def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
+    print('get_available_apps 0', uid)
     private_data = []
     public_approved_data = []
     public_unapproved_data = []
@@ -77,6 +78,7 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     all_apps = []
     tester = is_tester(uid)
     if cachedApps := get_generic_cache('get_public_approved_apps_data'):
+        print('get_available_apps 1', uid)
         print('get_public_approved_plugins_data from cache----------------------------')
         public_approved_data = cachedApps
         public_approved_data = get_public_approved_apps_db()
@@ -84,20 +86,25 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
         private_data = get_private_apps(uid)
         pass
     else:
+        print('get_available_apps 2', uid)
         print('get_public_approved_plugins_data from db----------------------------')
         private_data = get_private_apps(uid)
         public_approved_data = get_public_approved_apps_db()
         public_unapproved_data = get_public_unapproved_apps(uid)
         set_generic_cache('get_public_approved_apps_data', public_approved_data, 60 * 10)  # 10 minutes cached
     if tester:
+        print('get_available_apps 3', uid)
         tester_apps = get_apps_for_tester_db(uid)
+    print('get_available_apps 4', uid)
     user_enabled = set(get_enabled_plugins(uid))
+    print('get_available_apps 5', uid)
     all_apps = private_data + public_approved_data + public_unapproved_data + tester_apps
     apps = []
 
     app_ids = [app['id'] for app in all_apps]
     plugins_install = get_plugins_installs_count(app_ids)
     plugins_review = get_plugins_reviews(app_ids) if include_reviews else {}
+    print('get_available_apps 5', uid)
 
     for app in all_apps:
         app_dict = app
@@ -602,10 +609,10 @@ def app_has_action(app: dict, action_name: str) -> bool:
     """Check if an app has a specific action capability."""
     if not app.get('external_integration'):
         return False
-    
+
     actions = app['external_integration'].get('actions', [])
     for action in actions:
         if action.get('action') == action_name:
             return True
-    
+
     return False
