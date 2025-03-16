@@ -2,7 +2,7 @@ import json
 import os
 import time
 
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, Query
 from fastapi import Request
 from firebase_admin import auth
 from firebase_admin.auth import InvalidIdTokenError
@@ -13,7 +13,10 @@ def get_user(uid: str):
     return user
 
 
-def get_current_user_uid(authorization: str = Header(None)):
+def get_current_user_uid(authorization: str = Header(None), token:str = Query(None)):
+    if token:
+        authorization = f"Bearer {token}"
+
     if authorization and os.getenv('ADMIN_KEY') in authorization:
         return authorization.split(os.getenv('ADMIN_KEY'))[1]
 

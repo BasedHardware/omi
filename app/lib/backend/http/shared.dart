@@ -9,7 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 
-Future<String> getAuthHeader() async {
+Future<String> getAuthHeader([bool? addBearer]) async {
   DateTime? expiry = DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
   bool hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
 
@@ -28,7 +28,7 @@ Future<String> getAuthHeader() async {
       throw Exception('No auth token found');
     }
   }
-  return 'Bearer ${SharedPreferencesUtil().authToken}';
+  return '${addBearer != null && addBearer == true ? 'Bearer ' : ''}${SharedPreferencesUtil().authToken}';
 }
 
 Future<http.Response?> makeApiCall({

@@ -115,15 +115,10 @@ class PureSocket implements IPureSocket {
       return false;
     }
 
-    debugPrint("request wss ${url}");
-    _channel = IOWebSocketChannel.connect(
-      url,
-      headers: {
-        'Authorization': await getAuthHeader(),
-      },
-      pingInterval: const Duration(seconds: 20),
-      connectTimeout: const Duration(seconds: 30),
-    );
+    var token = await getAuthHeader(false);
+    var uri = Uri.parse(url).replace(scheme: "ws", queryParameters: {"token": token});
+    debugPrint("request wss1 ${uri.toString()}");
+    _channel = WebSocketChannel.connect(uri, protocols: [token]);
     if (_channel?.ready == null) {
       return false;
     }
