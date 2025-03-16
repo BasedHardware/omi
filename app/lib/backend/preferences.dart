@@ -63,7 +63,7 @@ class SharedPreferencesUtil {
 
   BtDevice get btDevice {
     final String device = getString('btDevice') ?? '';
-    if (device.isEmpty) return BtDevice(id: '', name: '', type: DeviceType.friend, rssi: 0);
+    if (device.isEmpty) return BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0);
     return BtDevice.fromJson(jsonDecode(device));
   }
 

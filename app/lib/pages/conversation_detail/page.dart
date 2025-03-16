@@ -445,7 +445,7 @@ class TranscriptWidgets extends StatelessWidget {
             provider.conversation.transcriptSegments.isEmpty
                 ? ExpandableTextWidget(
                     text: (provider.conversation.externalIntegration?.text ?? '').decodeString,
-                    maxLines: 10000,
+                    maxLines: 1000,
                     linkColor: Colors.grey.shade300,
                     style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
                     toggleExpand: () {

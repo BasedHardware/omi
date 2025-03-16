@@ -7,7 +7,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:omi_app/backend/schema/bt_device/bt_device.dart';
 import 'package:omi_app/services/devices.dart';
 import 'package:omi_app/services/devices/frame_connection.dart';
-import 'package:omi_app/services/devices/friend_connection.dart';
+import 'package:omi_app/services/devices/omi_connection.dart';
 import 'package:omi_app/services/notifications.dart';
 
 class DeviceConnectionFactory {
@@ -19,10 +19,10 @@ class DeviceConnectionFactory {
       return null;
     }
     switch (device.type!) {
-      case DeviceType.friend:
-        return FriendDeviceConnection(device, bleDevice);
+      case DeviceType.omi:
+        return OmiDeviceConnection(device, bleDevice);
       case DeviceType.openglass:
-        return FriendDeviceConnection(device, bleDevice);
+        return OmiDeviceConnection(device, bleDevice);
       case DeviceType.frame:
         return FrameDeviceConnection(device, bleDevice);
       default:

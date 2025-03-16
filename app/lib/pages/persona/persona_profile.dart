@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:omi_app/backend/auth.dart';
@@ -202,9 +203,33 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                                 )
                                               : persona.image.isEmpty
                                                   ? Image.asset(Assets.images.logoTransparentV2.path)
-                                                  : Image.network(
-                                                      persona.image,
-                                                      fit: BoxFit.cover,
+                                                  : CachedNetworkImage(
+                                                      imageUrl: persona.image,
+                                                      imageBuilder: (context, imageProvider) => Container(
+                                                        width: 48,
+                                                        height: 48,
+                                                        decoration: BoxDecoration(
+                                                          shape: BoxShape.rectangle,
+                                                          borderRadius: BorderRadius.circular(8),
+                                                          image:
+                                                              DecorationImage(image: imageProvider, fit: BoxFit.cover),
+                                                        ),
+                                                      ),
+                                                      placeholder: (context, url) => const SizedBox(
+                                                        width: 48,
+                                                        height: 48,
+                                                        child: CircularProgressIndicator(
+                                                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                                        ),
+                                                      ),
+                                                      errorWidget: (context, url, error) => const SizedBox(
+                                                        width: 48,
+                                                        height: 48,
+                                                        child: Icon(
+                                                          Icons.error,
+                                                          color: Colors.white,
+                                                        ),
+                                                      ),
                                                     ),
                                         ),
                                       ),
