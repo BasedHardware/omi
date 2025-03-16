@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -14,10 +15,11 @@ import 'package:friend_private/backend/schema/message_event.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/providers/conversation_provider.dart';
+import 'package:friend_private/providers/macos/permissions.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/services/devices.dart';
+import 'package:friend_private/services/manager/services_default.dart';
 import 'package:friend_private/services/notifications.dart';
-import 'package:friend_private/services/services.dart';
 import 'package:friend_private/services/sockets/pure_socket.dart';
 import 'package:friend_private/services/sockets/sdcard_socket.dart';
 import 'package:friend_private/services/sockets/transcription_connection.dart';
@@ -416,7 +418,12 @@ class CaptureProvider extends ChangeNotifier
   }
 
   streamRecording() async {
-    await Permission.microphone.request();
+    if (Platform.isMacOS) {
+      Permissions().request();
+      // print(instance.lib);
+    } else {
+      await Permission.microphone.request();
+    }
 
     // prepare
     await changeAudioRecordProfile(BleAudioCodec.pcm16, 16000);

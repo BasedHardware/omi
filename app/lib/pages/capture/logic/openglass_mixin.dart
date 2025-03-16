@@ -5,7 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/openai.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/services/services.dart';
+import 'package:friend_private/services/manager/services_default.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:tuple/tuple.dart';
 

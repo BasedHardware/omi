@@ -14,7 +14,7 @@ import 'package:friend_private/pages/onboarding/speech_profile_widget.dart';
 import 'package:friend_private/pages/onboarding/welcome/page.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
-import 'package:friend_private/services/services.dart';
+import 'package:friend_private/services/manager/services_default.dart';
 import 'package:friend_private/utils/analytics/intercom.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';

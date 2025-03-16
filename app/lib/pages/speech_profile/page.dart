@@ -9,7 +9,7 @@ import 'package:friend_private/pages/settings/people.dart';
 import 'package:friend_private/pages/speech_profile/user_speech_samples.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
-import 'package:friend_private/services/services.dart';
+import 'package:friend_private/services/manager/services_default.dart';
 import 'package:friend_private/utils/analytics/intercom.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/device_widget.dart';

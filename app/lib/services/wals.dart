@@ -8,7 +8,7 @@ import 'package:friend_private/backend/http/api/conversations.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/services/services.dart';
+import 'package:friend_private/services/manager/services_default.dart';
 import 'package:path_provider/path_provider.dart';
 
 const chunkSizeInSeconds = 60;

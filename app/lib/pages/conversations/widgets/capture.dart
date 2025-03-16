@@ -6,7 +6,7 @@ import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
-import 'package:friend_private/services/services.dart';
+import 'package:friend_private/services/manager/services_default.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:provider/provider.dart';
 

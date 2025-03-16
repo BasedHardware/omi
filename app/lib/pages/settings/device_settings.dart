@@ -7,7 +7,7 @@ import 'package:friend_private/pages/home/firmware_update.dart';
 import 'package:friend_private/pages/conversations/sync_page.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
-import 'package:friend_private/services/services.dart';
+import 'package:friend_private/services/manager/services_default.dart';
 import 'package:friend_private/utils/analytics/intercom.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -140,8 +140,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       Navigator.of(context).pop();
                       Navigator.of(context).pop();
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content: Text(
-                            'Your Omi is ${provider.connectedDevice == null ? "unpaired" : "disconnected"}  😔'),
+                        content:
+                            Text('Your Omi is ${provider.connectedDevice == null ? "unpaired" : "disconnected"}  😔'),
                       ));
                       MixpanelManager().disconnectFriendClicked();
                     },

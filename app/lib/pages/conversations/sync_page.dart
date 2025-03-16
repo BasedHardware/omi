@@ -3,7 +3,7 @@ import 'package:flutter/rendering.dart';
 import 'package:friend_private/pages/settings/widgets/appbar_with_banner.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/conversation_provider.dart';
-import 'package:friend_private/services/services.dart';
+import 'package:friend_private/services/manager/services_default.dart';
 import 'package:friend_private/services/wals.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/utils/other/time_utils.dart';

@@ -12,7 +12,7 @@ import 'package:friend_private/backend/schema/message_event.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/services/devices.dart';
-import 'package:friend_private/services/services.dart';
+import 'package:friend_private/services/manager/services_default.dart';
 import 'package:friend_private/services/sockets/transcription_connection.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 

@@ -7,7 +7,7 @@ import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:friend_private/http/api/device.dart';
-import 'package:friend_private/services/services.dart';
+import 'package:friend_private/services/manager/services_default.dart';
 import 'package:friend_private/utils/device.dart';
 import 'package:nordic_dfu/nordic_dfu.dart';
 import 'package:package_info_plus/package_info_plus.dart';
