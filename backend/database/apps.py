@@ -387,3 +387,46 @@ def migrate_app_owner_id_db(new_id: str, old_id: str):
     for app in apps_ref:
         app_ref = db.collection('plugins_data').document(app.id)
         app_ref.update({'uid': new_id})
+
+
+def create_api_key_db(app_id: str, api_key_data: dict):
+    """Create a new API key for an app in the database"""
+    api_key_ref = db.collection('plugins_data').document(app_id).collection('api_keys').document(api_key_data['id'])
+    api_key_ref.set(api_key_data)
+    return api_key_data
+
+
+def get_api_key_by_id_db(app_id: str, key_id: str):
+    """Get an API key by its ID"""
+    api_key_ref = db.collection('plugins_data').document(app_id).collection('api_keys').document(key_id)
+    doc = api_key_ref.get()
+    if doc.exists:
+        return doc.to_dict()
+    return None
+
+
+def get_api_key_by_hash_db(app_id: str, hashed_key: str):
+    """Get an API key by its hash value"""
+    filters = [FieldFilter('hashed', '==', hashed_key)]
+    api_keys_ref = db.collection('plugins_data').document(app_id).collection('api_keys').where(
+        filter=BaseCompositeFilter('AND', filters)).limit(1)
+    docs = api_keys_ref.get()
+    if not docs:
+        return None
+    doc = next(iter(docs), None)
+    if not doc:
+        return None
+    return doc.to_dict()
+
+
+def list_api_keys_db(app_id: str):
+    """List all API keys for an app (excluding the hashed values)"""
+    api_keys_ref = db.collection('plugins_data').document(app_id).collection('api_keys').order_by('created_at', direction='DESCENDING').stream()
+    return [{k: v for k, v in doc.to_dict().items() if k != 'hashed'} for doc in api_keys_ref]
+
+
+def delete_api_key_db(app_id: str, key_id: str):
+    """Delete an API key"""
+    api_key_ref = db.collection('plugins_data').document(app_id).collection('api_keys').document(key_id)
+    api_key_ref.delete()
+    return True
