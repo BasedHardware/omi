@@ -101,7 +101,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
         // }
 
         // Conversation source
-        var conversationSource = ConversationSource.friend;
+        var conversationSource = ConversationSource.omi;
         // var captureProvider = context.read<CaptureProvider>();
         // if (captureProvider.isGlasses) {
         //   memorySource = MemorySource.openglass;
@@ -179,7 +179,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                       const SizedBox(height: 80),
                                       Center(
                                         child: Text(
-                                          conversationSource == ConversationSource.friend ? "No transcript" : "Empty",
+                                          conversationSource == ConversationSource.omi ? "No transcript" : "Empty",
                                         ),
                                       ),
                                     ],

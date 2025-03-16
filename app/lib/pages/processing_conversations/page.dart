@@ -48,7 +48,7 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
       // }
 
       // Conversation source
-      var convoSource = ConversationSource.friend;
+      var convoSource = ConversationSource.omi;
       return PopScope(
         canPop: true,
         child: Scaffold(
