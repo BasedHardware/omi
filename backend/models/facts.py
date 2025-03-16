@@ -34,6 +34,7 @@ CATEGORY_BOOSTS = {FactCategory.core.value: 1,
 class Fact(BaseModel):
     content: str = Field(description="The content of the fact")
     category: FactCategory = Field(description="The category of the fact", default=FactCategory.other)
+    visibility: str = Field(description="The visibility of the fact", default='public')
 
     @staticmethod
     def get_facts_as_str(facts: List):
@@ -93,6 +94,7 @@ class FactDB(Fact):
             manually_added=manually_added,
             user_review=True if manually_added else None,
             reviewed=True if manually_added else False,
+            visibility=fact.visibility,
         )
         fact_db.scoring = FactDB.calculate_score(fact_db)
         return fact_db
