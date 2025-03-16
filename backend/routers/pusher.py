@@ -58,6 +58,7 @@ async def _websocket_util_trigger(
     audio_bytes_webhook_delay_seconds = get_audio_bytes_webhook_seconds(uid)
     audio_bytes_trigger_delay_seconds = 5
     has_audio_apps_enabled = is_audio_bytes_app_enabled(uid)
+    print("has_audio_apps_enabled", has_audio_apps_enabled, uid)
 
     # task
     async def receive_audio_bytes():
@@ -77,8 +78,11 @@ async def _websocket_util_trigger(
                     res = json.loads(bytes(data[4:]).decode("utf-8"))
                     segments = res.get('segments')
                     memory_id = res.get('memory_id')
+                    print("received transcripts", uid)
                     asyncio.run_coroutine_threadsafe(trigger_realtime_integrations(uid, segments, memory_id), loop)
+                    print("received transcripts cp2", uid)
                     asyncio.run_coroutine_threadsafe(realtime_transcript_webhook(uid, segments), loop)
+                    print("received transcripts cp3", uid)
                     continue
 
                 # Audio bytes
