@@ -2,13 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:omi_app/backend/preferences.dart';
-import 'package:omi_app/backend/schema/bt_device/bt_device.dart';
-import 'package:omi_app/backend/schema/message_event.dart';
-import 'package:omi_app/backend/schema/transcript_segment.dart';
-import 'package:omi_app/env/env.dart';
-import 'package:omi_app/services/notifications.dart';
-import 'package:omi_app/services/sockets/pure_socket.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/message_event.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/env/env.dart';
+import 'package:omi/services/notifications.dart';
+import 'package:omi/services/sockets/pure_socket.dart';
 
 abstract interface class ITransctipSegmentSocketServiceListener {
   void onMessageEventReceived(ServerMessageEvent event);

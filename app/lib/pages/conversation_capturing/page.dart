@@ -1,14 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:omi_app/backend/http/api/users.dart';
-import 'package:omi_app/backend/preferences.dart';
-import 'package:omi_app/backend/schema/conversation.dart';
-import 'package:omi_app/pages/capture/widgets/widgets.dart';
-import 'package:omi_app/pages/conversation_detail/page.dart';
-import 'package:omi_app/providers/capture_provider.dart';
-import 'package:omi_app/providers/device_provider.dart';
-import 'package:omi_app/widgets/confirmation_dialog.dart';
+import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/capture/widgets/widgets.dart';
+import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:provider/provider.dart';
 
 class ConversationCapturingPage extends StatefulWidget {

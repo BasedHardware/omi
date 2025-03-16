@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:omi_app/backend/schema/conversation.dart';
-import 'package:omi_app/pages/conversations/widgets/conversation_list_item.dart';
-import 'package:omi_app/pages/conversation_detail/conversation_detail_provider.dart';
-import 'package:omi_app/pages/conversation_detail/page.dart';
-import 'package:omi_app/providers/conversation_provider.dart';
-import 'package:omi_app/providers/speech_profile_provider.dart';
-import 'package:omi_app/utils/analytics/mixpanel.dart';
-import 'package:omi_app/utils/other/temp.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
+import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/speech_profile_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 

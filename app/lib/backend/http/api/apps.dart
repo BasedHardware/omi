@@ -3,10 +3,10 @@ import 'dart:developer';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:omi_app/backend/http/shared.dart';
-import 'package:omi_app/backend/preferences.dart';
-import 'package:omi_app/backend/schema/app.dart';
-import 'package:omi_app/env/env.dart';
+import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/env/env.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
 import 'package:http/http.dart' as http;

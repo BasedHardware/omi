@@ -1,6 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:omi_app/gen/assets.gen.dart';
+import 'package:omi/gen/assets.gen.dart';
 
 class SyncAnimation extends StatefulWidget {
   final double size;

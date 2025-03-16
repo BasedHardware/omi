@@ -1,5 +1,5 @@
-import 'package:omi_app/utils/other/string_utils.dart';
-import 'package:omi_app/widgets/extensions/string.dart';
+import 'package:omi/utils/other/string_utils.dart';
+import 'package:omi/widgets/extensions/string.dart';
 
 class AppReview {
   String uid;

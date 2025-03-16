@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:omi_app/backend/preferences.dart';
-import 'package:omi_app/pages/speech_profile/percentage_bar_progress.dart';
-import 'package:omi_app/providers/capture_provider.dart';
-import 'package:omi_app/providers/speech_profile_provider.dart';
-import 'package:omi_app/widgets/dialog.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/pages/speech_profile/percentage_bar_progress.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/speech_profile_provider.dart';
+import 'package:omi/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 

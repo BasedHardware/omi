@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:omi_app/backend/http/api/conversations.dart';
-import 'package:omi_app/backend/schema/conversation.dart';
-import 'package:omi_app/pages/conversation_detail/conversation_detail_provider.dart';
-import 'package:omi_app/pages/conversation_detail/page.dart';
-import 'package:omi_app/providers/conversation_provider.dart';
-import 'package:omi_app/utils/other/temp.dart';
-import 'package:omi_app/widgets/extensions/string.dart';
+import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
 class SyncedConversationListItem extends StatefulWidget {

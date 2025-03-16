@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:omi_app/providers/capture_provider.dart';
-import 'package:omi_app/providers/device_provider.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 

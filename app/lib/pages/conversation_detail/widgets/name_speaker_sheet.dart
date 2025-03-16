@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:omi_app/backend/http/api/conversations.dart';
-import 'package:omi_app/backend/http/api/users.dart';
-import 'package:omi_app/backend/preferences.dart';
-import 'package:omi_app/backend/schema/person.dart';
-import 'package:omi_app/utils/analytics/mixpanel.dart';
+import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/person.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:provider/provider.dart';
 
 import '../conversation_detail_provider.dart';

@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:omi_app/env/env.dart';
+import 'package:omi/env/env.dart';
 import 'package:map_launcher/map_launcher.dart';
 
 class MapsUtil {

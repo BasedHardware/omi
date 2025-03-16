@@ -1,4 +1,4 @@
-import 'package:omi_app/env/dev_env.dart';
+import 'package:omi/env/dev_env.dart';
 
 abstract class Env {
   static late final EnvFields _instance;

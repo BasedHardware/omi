@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:omi_app/backend/preferences.dart';
-import 'package:omi_app/pages/facts/page.dart';
-import 'package:omi_app/pages/payments/payments_page.dart';
-import 'package:omi_app/pages/settings/change_name_widget.dart';
-import 'package:omi_app/pages/settings/people.dart';
-import 'package:omi_app/pages/settings/privacy.dart';
-import 'package:omi_app/pages/speech_profile/page.dart';
-import 'package:omi_app/utils/analytics/mixpanel.dart';
-import 'package:omi_app/utils/other/temp.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/pages/facts/page.dart';
+import 'package:omi/pages/payments/payments_page.dart';
+import 'package:omi/pages/settings/change_name_widget.dart';
+import 'package:omi/pages/settings/people.dart';
+import 'package:omi/pages/settings/privacy.dart';
+import 'package:omi/pages/speech_profile/page.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/other/temp.dart';
 
 import 'delete_account.dart';
 

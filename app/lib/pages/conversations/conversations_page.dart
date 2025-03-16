@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:omi_app/backend/schema/conversation.dart';
-import 'package:omi_app/pages/capture/widgets/widgets.dart';
-import 'package:omi_app/pages/conversations/widgets/processing_capture.dart';
-import 'package:omi_app/pages/conversations/widgets/search_result_header_widget.dart';
-import 'package:omi_app/pages/conversations/widgets/search_widget.dart';
-import 'package:omi_app/providers/conversation_provider.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/capture/widgets/widgets.dart';
+import 'package:omi/pages/conversations/widgets/processing_capture.dart';
+import 'package:omi/pages/conversations/widgets/search_result_header_widget.dart';
+import 'package:omi/pages/conversations/widgets/search_widget.dart';
+import 'package:omi/providers/conversation_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 

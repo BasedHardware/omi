@@ -1,7 +1,7 @@
-import 'package:omi_app/backend/http/api/facts.dart';
-import 'package:omi_app/backend/preferences.dart';
-import 'package:omi_app/backend/schema/fact.dart';
-import 'package:omi_app/providers/base_provider.dart';
+import 'package:omi/backend/http/api/facts.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/fact.dart';
+import 'package:omi/providers/base_provider.dart';
 import 'package:tuple/tuple.dart';
 import 'package:uuid/uuid.dart';
 

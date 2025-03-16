@@ -1,9 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:omi_app/backend/http/shared.dart';
-import 'package:omi_app/backend/schema/fact.dart';
-import 'package:omi_app/env/env.dart';
+import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/fact.dart';
+import 'package:omi/env/env.dart';
 
 Future<bool> createFact(String content, FactCategory category) async {
   var response = await makeApiCall(

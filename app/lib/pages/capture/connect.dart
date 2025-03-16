@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:omi_app/pages/settings/device_settings.dart';
-import 'package:omi_app/pages/home/page.dart';
-import 'package:omi_app/pages/onboarding/find_device/page.dart';
-import 'package:omi_app/utils/other/temp.dart';
-import 'package:omi_app/widgets/device_widget.dart';
+import 'package:omi/pages/settings/device_settings.dart';
+import 'package:omi/pages/home/page.dart';
+import 'package:omi/pages/onboarding/find_device/page.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/device_widget.dart';
 
 class ConnectDevicePage extends StatefulWidget {
   const ConnectDevicePage({super.key});

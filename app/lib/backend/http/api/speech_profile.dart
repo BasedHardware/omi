@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:omi_app/backend/http/shared.dart';
-import 'package:omi_app/env/env.dart';
+import 'package:omi/backend/http/shared.dart';
+import 'package:omi/env/env.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 

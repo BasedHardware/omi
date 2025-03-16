@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:omi_app/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/conversation.dart';
 
 import 'date_list_item.dart';
 import 'conversation_list_item.dart';

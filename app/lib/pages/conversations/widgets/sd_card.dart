@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:omi_app/pages/conversations/sync_page.dart';
-import 'package:omi_app/providers/capture_provider.dart';
-import 'package:omi_app/utils/other/temp.dart';
+import 'package:omi/pages/conversations/sync_page.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 
 class SdCardBannerWidget extends StatefulWidget {

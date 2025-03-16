@@ -5,9 +5,9 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_sound/flutter_sound.dart';
-import 'package:omi_app/services/devices.dart';
-import 'package:omi_app/services/sockets.dart';
-import 'package:omi_app/services/wals.dart';
+import 'package:omi/services/devices.dart';
+import 'package:omi/services/sockets.dart';
+import 'package:omi/services/wals.dart';
 
 class ServiceManager {
   late IMicRecorderService _mic;

@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:omi_app/backend/schema/bt_device/bt_device.dart';
-import 'package:omi_app/services/devices/device_connection.dart';
-import 'package:omi_app/services/devices/models.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/services/devices/device_connection.dart';
+import 'package:omi/services/devices/models.dart';
 
 abstract class IDeviceService {
   void start();

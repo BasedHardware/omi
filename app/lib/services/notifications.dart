@@ -10,10 +10,10 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
-import 'package:omi_app/backend/http/api/notifications.dart';
-import 'package:omi_app/backend/schema/message.dart';
-import 'package:omi_app/main.dart';
-import 'package:omi_app/pages/home/page.dart';
+import 'package:omi/backend/http/api/notifications.dart';
+import 'package:omi/backend/schema/message.dart';
+import 'package:omi/main.dart';
+import 'package:omi/pages/home/page.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 
 class NotificationService {
