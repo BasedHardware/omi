@@ -128,7 +128,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                   child: TextButton(
                     onPressed: () async {
                       await SharedPreferencesUtil()
-                          .btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.friend, rssi: 0));
+                          .btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
                       SharedPreferencesUtil().deviceName = '';
                       if (provider.connectedDevice != null) {
                         await _bleDisconnectDevice(provider.connectedDevice!);
@@ -140,8 +140,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       Navigator.of(context).pop();
                       Navigator.of(context).pop();
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content: Text(
-                            'Your Omi is ${provider.connectedDevice == null ? "unpaired" : "disconnected"}  😔'),
+                        content:
+                            Text('Your Omi is ${provider.connectedDevice == null ? "unpaired" : "disconnected"}  😔'),
                       ));
                       MixpanelManager().disconnectFriendClicked();
                     },
