@@ -1,5 +1,5 @@
-import 'package:omi_app/backend/http/api/speech_profile.dart';
-import 'package:omi_app/providers/base_provider.dart';
+import 'package:omi/backend/http/api/speech_profile.dart';
+import 'package:omi/providers/base_provider.dart';
 import 'package:just_audio/just_audio.dart';
 
 class UserSpeechSamplesProvider extends BaseProvider {

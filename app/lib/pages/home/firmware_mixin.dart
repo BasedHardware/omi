@@ -3,12 +3,12 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
-import 'package:omi_app/backend/http/shared.dart';
-import 'package:omi_app/backend/schema/bt_device/bt_device.dart';
-import 'package:omi_app/env/env.dart';
-import 'package:omi_app/http/api/device.dart';
-import 'package:omi_app/services/services.dart';
-import 'package:omi_app/utils/device.dart';
+import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/env/env.dart';
+import 'package:omi/http/api/device.dart';
+import 'package:omi/services/services.dart';
+import 'package:omi/utils/device.dart';
 import 'package:nordic_dfu/nordic_dfu.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';

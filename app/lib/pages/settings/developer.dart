@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:omi_app/backend/http/api/conversations.dart';
-import 'package:omi_app/backend/schema/conversation.dart';
-import 'package:omi_app/providers/developer_mode_provider.dart';
-import 'package:omi_app/utils/analytics/mixpanel.dart';
+import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/providers/developer_mode_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';

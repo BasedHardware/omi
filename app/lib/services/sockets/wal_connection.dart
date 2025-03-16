@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:omi_app/backend/preferences.dart';
-import 'package:omi_app/backend/schema/message_event.dart';
-import 'package:omi_app/env/env.dart';
-import 'package:omi_app/services/sockets/pure_socket.dart';
-import 'package:omi_app/services/sockets/transcription_connection.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/message_event.dart';
+import 'package:omi/env/env.dart';
+import 'package:omi/services/sockets/pure_socket.dart';
+import 'package:omi/services/sockets/transcription_connection.dart';
 
 abstract interface class IWalSocketServiceListener {
   void onMessageEventReceived(ServerMessageEvent event);

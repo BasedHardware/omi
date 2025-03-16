@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:omi_app/pages/apps/explore_install_page.dart';
-import 'package:omi_app/pages/apps/providers/add_app_provider.dart';
-import 'package:omi_app/providers/connectivity_provider.dart';
-import 'package:omi_app/providers/app_provider.dart';
+import 'package:omi/pages/apps/explore_install_page.dart';
+import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/providers/app_provider.dart';
 import 'package:provider/provider.dart';
 
 class AppsPage extends StatefulWidget {

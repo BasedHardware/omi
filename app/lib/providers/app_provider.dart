@@ -1,11 +1,11 @@
 import 'package:collection/collection.dart';
-import 'package:omi_app/backend/http/api/apps.dart';
-import 'package:omi_app/backend/preferences.dart';
-import 'package:omi_app/backend/schema/app.dart';
-import 'package:omi_app/providers/base_provider.dart';
-import 'package:omi_app/utils/alerts/app_dialog.dart';
-import 'package:omi_app/utils/alerts/app_snackbar.dart';
-import 'package:omi_app/utils/analytics/mixpanel.dart';
+import 'package:omi/backend/http/api/apps.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/providers/base_provider.dart';
+import 'package:omi/utils/alerts/app_dialog.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 
 class AppProvider extends BaseProvider {
   List<App> apps = [];

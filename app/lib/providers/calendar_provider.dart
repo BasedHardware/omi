@@ -1,9 +1,9 @@
 // import 'package:device_calendar/device_calendar.dart';
 import 'package:flutter/material.dart';
-import 'package:omi_app/backend/preferences.dart';
-import 'package:omi_app/utils/alerts/app_snackbar.dart';
-import 'package:omi_app/utils/analytics/mixpanel.dart';
-import 'package:omi_app/utils/features/calendar.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/features/calendar.dart';
 import 'package:manage_calendar_events/manage_calendar_events.dart';
 import 'package:permission_handler/permission_handler.dart';
 

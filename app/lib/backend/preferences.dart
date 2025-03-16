@@ -1,12 +1,12 @@
 import 'dart:convert';
 
 import 'package:collection/collection.dart';
-import 'package:omi_app/backend/schema/app.dart';
-import 'package:omi_app/backend/schema/bt_device/bt_device.dart';
-import 'package:omi_app/backend/schema/conversation.dart';
-import 'package:omi_app/backend/schema/message.dart';
-import 'package:omi_app/backend/schema/person.dart';
-import 'package:omi_app/services/wals.dart';
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/message.dart';
+import 'package:omi/backend/schema/person.dart';
+import 'package:omi/services/wals.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SharedPreferencesUtil {

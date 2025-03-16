@@ -2,9 +2,9 @@ import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:omi_app/backend/preferences.dart';
-import 'package:omi_app/providers/auth_provider.dart';
-import 'package:omi_app/widgets/sign_in_button.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/providers/auth_provider.dart';
+import 'package:omi/widgets/sign_in_button.dart';
 import 'package:provider/provider.dart';
 
 class AuthComponent extends StatefulWidget {

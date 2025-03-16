@@ -1,7 +1,7 @@
-import 'package:omi_app/backend/preferences.dart';
-import 'package:omi_app/backend/schema/fact.dart';
-import 'package:omi_app/backend/schema/conversation.dart';
-import 'package:omi_app/env/env.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/fact.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/env/env.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 
 class MixpanelManager {

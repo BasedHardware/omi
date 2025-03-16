@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:omi_app/backend/http/api/speech_profile.dart';
-import 'package:omi_app/backend/http/api/users.dart';
-import 'package:omi_app/backend/preferences.dart';
-import 'package:omi_app/utils/analytics/analytics_manager.dart';
+import 'package:omi/backend/http/api/speech_profile.dart';
+import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 
 class HomeProvider extends ChangeNotifier {
   int selectedIndex = 0;

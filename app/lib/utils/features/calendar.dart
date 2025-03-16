@@ -1,5 +1,5 @@
-import 'package:omi_app/backend/preferences.dart';
-import 'package:omi_app/utils/logger.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:manage_calendar_events/manage_calendar_events.dart';
 import 'package:permission_handler/permission_handler.dart';
 

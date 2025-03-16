@@ -1,12 +1,12 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
-import 'package:omi_app/gen/assets.gen.dart';
-import 'package:omi_app/pages/payments/widgets/country_bottom_sheet.dart';
-import 'package:omi_app/utils/alerts/app_snackbar.dart';
-import 'package:omi_app/utils/analytics/mixpanel.dart';
-import 'package:omi_app/utils/other/temp.dart';
-import 'package:omi_app/widgets/animated_loading_button.dart';
+import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/pages/payments/widgets/country_bottom_sheet.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/animated_loading_button.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 

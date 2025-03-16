@@ -1,15 +1,15 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:omi_app/backend/auth.dart';
-import 'package:omi_app/backend/preferences.dart';
-import 'package:omi_app/providers/base_provider.dart';
-import 'package:omi_app/services/notifications.dart';
-import 'package:omi_app/utils/alerts/app_snackbar.dart';
-import 'package:omi_app/utils/analytics/mixpanel.dart';
+import 'package:omi/backend/auth.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/providers/base_provider.dart';
+import 'package:omi/services/notifications.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:omi_app/backend/http/api/apps.dart' as apps_api;
+import 'package:omi/backend/http/api/apps.dart' as apps_api;
 
 class AuthenticationProvider extends BaseProvider {
   final FirebaseAuth _auth = FirebaseAuth.instance;

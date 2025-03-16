@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:omi_app/backend/schema/conversation.dart';
-import 'package:omi_app/pages/capture/widgets/widgets.dart';
-import 'package:omi_app/pages/conversation_detail/page.dart';
-import 'package:omi_app/providers/conversation_provider.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/capture/widgets/widgets.dart';
+import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/providers/conversation_provider.dart';
 import 'package:provider/provider.dart';
 
 class ProcessingConversationPage extends StatefulWidget {

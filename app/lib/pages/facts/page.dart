@@ -3,12 +3,12 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:omi_app/backend/schema/fact.dart';
-import 'package:omi_app/providers/connectivity_provider.dart';
-import 'package:omi_app/providers/facts_provider.dart';
-import 'package:omi_app/utils/analytics/mixpanel.dart';
-import 'package:omi_app/widgets/extensions/functions.dart';
-import 'package:omi_app/widgets/extensions/string.dart';
+import 'package:omi/backend/schema/fact.dart';
+import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/providers/facts_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/widgets/extensions/functions.dart';
+import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
 class FactsPage extends StatelessWidget {

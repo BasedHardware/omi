@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:omi_app/utils/other/temp.dart';
-import 'package:omi_app/widgets/extensions/string.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
 import '../payment_method_provider.dart';

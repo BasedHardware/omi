@@ -1,13 +1,13 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:omi_app/backend/schema/app.dart';
-import 'package:omi_app/gen/assets.gen.dart';
-import 'package:omi_app/providers/app_provider.dart';
-import 'package:omi_app/providers/home_provider.dart';
-import 'package:omi_app/providers/message_provider.dart';
-import 'package:omi_app/utils/analytics/mixpanel.dart';
-import 'package:omi_app/widgets/dialog.dart';
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/message_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
 enum ChatMode { chat, chat_clone }

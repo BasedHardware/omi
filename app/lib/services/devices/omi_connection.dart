@@ -6,13 +6,13 @@ import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:omi_app/backend/schema/bt_device/bt_device.dart';
-import 'package:omi_app/services/devices.dart';
-import 'package:omi_app/services/devices/device_connection.dart';
-import 'package:omi_app/services/devices/errors.dart';
-import 'package:omi_app/services/devices/models.dart';
-import 'package:omi_app/utils/audio/wav_bytes.dart';
-import 'package:omi_app/utils/logger.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/device_connection.dart';
+import 'package:omi/services/devices/errors.dart';
+import 'package:omi/services/devices/models.dart';
+import 'package:omi/utils/audio/wav_bytes.dart';
+import 'package:omi/utils/logger.dart';
 
 class OmiDeviceConnection extends DeviceConnection {
   BluetoothService? _batteryService;

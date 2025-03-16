@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:omi_app/backend/http/api/users.dart';
-import 'package:omi_app/backend/preferences.dart';
-import 'package:omi_app/widgets/dialog.dart';
+import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/widgets/dialog.dart';
 
 class RecordingsStoragePermission extends StatefulWidget {
   const RecordingsStoragePermission({super.key});
