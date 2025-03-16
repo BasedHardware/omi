@@ -5,7 +5,7 @@ import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/schema/fact.dart';
 import 'package:friend_private/env/env.dart';
 
-Future<bool> createFactServer(String content, FactCategory category) async {
+Future<bool> createFactServer(String content, FactCategory category, String visibility) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/facts',
     headers: {},
@@ -13,6 +13,7 @@ Future<bool> createFactServer(String content, FactCategory category) async {
     body: json.encode({
       'content': content,
       'category': category.toString().split('.').last,
+      'visibility': visibility,
     }),
   );
   if (response == null) return false;

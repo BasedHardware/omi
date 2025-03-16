@@ -67,7 +67,7 @@ class FactsProvider extends BaseProvider {
   }
 
   void createFact(String content, FactCategory category, [FactVisibility visibility = FactVisibility.public]) async {
-    createFactServer(content, category);
+    createFactServer(content, category, visibility.name);
     facts.add(Fact(
       id: const Uuid().v4(),
       uid: SharedPreferencesUtil().uid,
