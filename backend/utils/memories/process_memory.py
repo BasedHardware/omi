@@ -21,10 +21,9 @@ from models.memory import ExternalIntegrationCreateMemory, Memory, CreateMemory,
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
 from models.notification_message import NotificationMessage
-from utils.apps import get_available_apps
+from utils.apps import get_available_apps, sync_update_persona_prompt
 from utils.llm import obtain_emotional_message, retrieve_metadata_fields_from_transcript, \
     summarize_open_glass, get_transcript_structure, generate_embedding, \
-
     get_plugin_result, should_discard_memory, summarize_experience_text, new_facts_extractor, \
     trends_extractor, get_email_structure, get_post_structure, get_message_structure, \
     retrieve_metadata_from_email, retrieve_metadata_from_post, retrieve_metadata_from_message, retrieve_metadata_from_text, \
@@ -219,6 +218,7 @@ def _update_personas_async(uid: str):
         
         [t.start() for t in threads]
         [t.join() for t in threads]
+        print(f"[PERSONAS] Finished persona updates in background thread for uid={uid}")
 
 
 def process_memory(
@@ -240,7 +240,9 @@ def process_memory(
         threading.Thread(target=memory_created_webhook, args=(uid, memory,)).start()
         # TODO: Bad code, cause the websocket was drop, need to check it carefully before enabling.
         # Update persona prompts with new memory
+        print("before creating the thread for _update_personas_async")
         threading.Thread(target=_update_personas_async, args=(uid,)).start()
+        print("after calling start for _update_personas_async")
 
     # TODO: trigger external integrations here too
 
