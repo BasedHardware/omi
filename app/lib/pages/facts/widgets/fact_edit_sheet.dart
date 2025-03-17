@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/fact.dart';
-import 'package:friend_private/providers/facts_provider.dart';
-import 'package:friend_private/widgets/extensions/string.dart';
+import 'package:omi/backend/schema/fact.dart';
+import 'package:omi/providers/facts_provider.dart';
+import 'package:omi/widgets/extensions/string.dart';
 
 import 'delete_confirmation.dart';
 

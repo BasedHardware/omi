@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/fact.dart';
+import 'package:omi/backend/schema/fact.dart';
 
 class CategoryChip extends StatelessWidget {
   final FactCategory category;

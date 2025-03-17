@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/fact.dart';
-import 'package:friend_private/providers/facts_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/widgets/extensions/string.dart';
+import 'package:omi/backend/schema/fact.dart';
+import 'package:omi/providers/facts_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/widgets/extensions/string.dart';
 
 class FactItem extends StatelessWidget {
   final Fact fact;
