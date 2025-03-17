@@ -1,19 +1,19 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/pages/capture/widgets/widgets.dart';
-import 'package:friend_private/pages/conversations/widgets/capture.dart';
-import 'package:friend_private/pages/conversation_capturing/page.dart';
-import 'package:friend_private/pages/processing_conversations/page.dart';
-import 'package:friend_private/providers/capture_provider.dart';
-import 'package:friend_private/providers/connectivity_provider.dart';
-import 'package:friend_private/providers/device_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/enums.dart';
-import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/capture/widgets/widgets.dart';
+import 'package:omi/pages/conversations/widgets/capture.dart';
+import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/pages/processing_conversations/page.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
 class ConversationCaptureWidget extends StatefulWidget {

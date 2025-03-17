@@ -22,7 +22,7 @@ export function FeaturedPluginCard({ plugin, hideStats }: FeaturedPluginCardProp
   return (
     <Link
       href={`/apps/${plugin.id}`}
-      className="group relative block overflow-hidden rounded-xl bg-[#1A1F2E]"
+      className="group relative block h-full overflow-hidden rounded-xl bg-[#1A1F2E]"
       data-plugin-card
       data-search-content={`${plugin.name} ${plugin.author} ${plugin.description}`}
       data-categories={plugin.category}
@@ -41,7 +41,7 @@ export function FeaturedPluginCard({ plugin, hideStats }: FeaturedPluginCardProp
       </div>
 
       {/* Content */}
-      <div className="flex flex-col gap-1.5 p-3 sm:gap-2 sm:p-4">
+      <div className="flex h-[9.5rem] flex-col gap-1.5 p-3 sm:h-[10.5rem] sm:gap-2 sm:p-4">
         {/* Title and NEW badge */}
         <div className="flex items-center gap-2">
           <h3 className="line-clamp-1 flex-1 text-base font-medium text-white sm:text-lg">
@@ -59,7 +59,7 @@ export function FeaturedPluginCard({ plugin, hideStats }: FeaturedPluginCardProp
             <div className="flex shrink-0 items-center gap-3 text-xs text-gray-400 sm:gap-4 sm:text-sm">
               <div className="flex items-center">
                 <Star className="mr-1 h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                <span>{plugin.rating_avg?.toFixed(1)}</span>
+                <span>{plugin.rating_avg?.toFixed(1) || '0.0'}</span>
               </div>
               <div className="flex items-center">
                 <Download className="mr-1 h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -70,7 +70,7 @@ export function FeaturedPluginCard({ plugin, hideStats }: FeaturedPluginCardProp
         </div>
 
         {/* Description */}
-        <p className="line-clamp-2 text-xs text-gray-400 sm:text-sm">
+        <p className="mt-auto line-clamp-2 text-xs text-gray-400 sm:text-sm">
           {plugin.description}
         </p>
       </div>

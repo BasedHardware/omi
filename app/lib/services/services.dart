@@ -5,9 +5,9 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_sound/flutter_sound.dart';
-import 'package:friend_private/services/devices.dart';
-import 'package:friend_private/services/sockets.dart';
-import 'package:friend_private/services/wals.dart';
+import 'package:omi/services/devices.dart';
+import 'package:omi/services/sockets.dart';
+import 'package:omi/services/wals.dart';
 import 'package:record/record.dart';
 
 class ServiceManager {

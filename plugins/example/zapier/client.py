@@ -141,9 +141,9 @@ class ZapierClient:
 
 class FriendClient:
     """
-    Implementation of the Friend Core APIs.
+    Implementation of the Omi Core APIs.
 
-    This abstract class provides a Python interface to all Friend Core APIs.
+    This abstract class provides a Python interface to all Omi Core APIs.
     """
 
     def __init__(

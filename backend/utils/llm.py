@@ -330,7 +330,7 @@ def initial_chat_message(uid: str, plugin: Optional[App] = None, prev_messages_s
     user_name, facts_str = get_prompt_facts(uid)
     if plugin is None:
         prompt = f"""
-You are 'Friend', a friendly and helpful assistant who aims to make {user_name}'s life better 10x.
+You are 'Omi', a friendly and helpful assistant who aims to make {user_name}'s life better 10x.
 You know the following about {user_name}: {facts_str}.
 
 {prev_messages_str}
@@ -1371,7 +1371,7 @@ def extract_facts_from_text(
     if user_name is None or facts_str is None:
         user_name, facts_str = get_prompt_facts(uid)
 
-    if not text or len(text) < 25:  # less than 5 words, probably nothing
+    if not text or len(text) == 0:
         return []
 
     try:
