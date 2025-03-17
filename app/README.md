@@ -41,6 +41,115 @@ The Omi App is a Flutter-based mobile application that serves as the companion a
    flutter run --flavor dev
    ```
 
+## Firebase Configuration
+
+### Overview
+
+The app uses Firebase for authentication, storage, and other services. It supports multiple environments (development and production) with separate Firebase configurations.
+
+### Developer Overview of Firebase Structure
+
+The project uses a multi-environment Firebase configuration system with the following structure:
+
+1. **Environment-Based Configuration**:
+   - Development environment (`dev`)
+   - Production environment (`prod`)
+
+2. **Configuration Files by Platform**:
+   - **iOS**: GoogleService-Info.plist files
+   - **Android**: google-services.json files
+   - **Dart**: firebase_options_dev.dart and firebase_options_prod.dart
+
+3. **File Organization**:
+   - iOS config files are in `app/ios/Config/[Dev|Prod]/`
+   - Android config files are in `app/android/app/src/[dev|prod]/`
+   - Dart config files are in `app/lib/`
+
+4. **Runtime Selection**:
+   - The app selects the appropriate configuration based on the environment (F.env)
+   - The build system selects the appropriate platform files based on the build flavor
+
+### Setup Instructions
+
+1. **Create Firebase Projects**:
+   - Create separate Firebase projects for development and production environments at [Firebase Console](https://console.firebase.google.com/)
+   - For each project, add both Android and iOS apps with the appropriate package names/bundle IDs
+
+2. **Download Configuration Files**:
+   - For Android: Download `google-services.json` for each environment
+   - For iOS: Download `GoogleService-Info.plist` for each environment
+   - Place these files in the appropriate directories as specified in the setup script
+
+3. **Configure Firebase Options**:
+   - The app includes Firebase configuration files in `app/lib/firebase_options_dev.dart` and `app/lib/firebase_options_prod.dart`
+   - These files contain the default Firebase options for each environment
+
+### Configuration File Consistency
+
+Firebase requires consistent configuration across multiple files:
+
+1. **Platform-Specific Files**:
+   - iOS: `GoogleService-Info.plist` in `app/ios/Config/[Dev|Prod]/`
+   - Android: `google-services.json` in `app/android/app/src/[dev|prod]/`
+
+2. **Dart Configuration Files**:
+   - `firebase_options_dev.dart` and `firebase_options_prod.dart` in `app/lib/`
+
+All three types of files must contain identical values for Firebase to work correctly. When updating Firebase configuration:
+
+1. Download new configuration files from the Firebase Console
+2. Place them in the appropriate directories
+3. Update the Dart configuration files to match
+4. Verify that key values are consistent across all files
+
+The build system will automatically select the correct configuration file based on the build flavor.
+
+### Using Custom Firebase Parameters
+
+The app supports customizing Firebase parameters without modifying the default configurations:
+
+1. **Development Environment**:
+   ```dart
+   // Example of using custom development Firebase options
+   await Firebase.initializeApp(
+     options: dev.DefaultFirebaseOptions.customAndroid(
+       projectId: 'your-custom-dev-project-id',
+       // Add other custom parameters as needed
+     ),
+     name: 'dev',
+   );
+   ```
+
+2. **Production Environment**:
+   ```dart
+   // Example of using custom production Firebase options
+   await Firebase.initializeApp(
+     options: prod.DefaultFirebaseOptions.customIOS(
+       projectId: 'your-custom-prod-project-id',
+       // Add other custom parameters as needed
+     ),
+     name: 'prod',
+   );
+   ```
+
+3. **Available Parameters**:
+   - `apiKey`: Firebase API key
+   - `appId`: Firebase application ID
+   - `messagingSenderId`: Firebase messaging sender ID
+   - `projectId`: Firebase project ID
+   - `storageBucket`: Firebase storage bucket
+   - `androidClientId`: Android client ID (for iOS configuration)
+   - `iosClientId`: iOS client ID
+   - `iosBundleId`: iOS bundle ID
+
+### Remote Config
+
+To use Firebase Remote Config:
+
+1. Set up Remote Config in the Firebase Console
+2. Define parameters and their default values
+3. Access these values in your app using the Firebase Remote Config API
+
 ## Need Help?
 
 - 💬 Join our [Discord Community](http://discord.omi.me)

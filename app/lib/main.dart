@@ -59,9 +59,29 @@ Future<bool> _init() async {
 
   // Firebase
   if (F.env == Environment.prod) {
+    // Example of using default production Firebase options
     await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform, name: 'prod');
+
+    // Example of using custom production Firebase options (commented out)
+    // await Firebase.initializeApp(
+    //   options: prod.DefaultFirebaseOptions.customAndroid(
+    //     projectId: 'your-custom-prod-project-id',
+    //     // Add other custom parameters as needed
+    //   ),
+    //   name: 'prod',
+    // );
   } else {
+    // Example of using default development Firebase options
     await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform, name: 'dev');
+
+    // Example of using custom development Firebase options (commented out)
+    // await Firebase.initializeApp(
+    //   options: dev.DefaultFirebaseOptions.customIOS(
+    //     projectId: 'your-custom-dev-project-id',
+    //     // Add other custom parameters as needed
+    //   ),
+    //   name: 'dev',
+    // );
   }
 
   await IntercomManager().initIntercom();

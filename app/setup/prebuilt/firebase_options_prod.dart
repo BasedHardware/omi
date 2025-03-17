@@ -4,11 +4,11 @@ import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
 
-/// Default [FirebaseOptions] for use with your Firebase apps.
+/// Production [FirebaseOptions] for use with your Firebase apps.
 ///
 /// Example:
 /// ```dart
-/// import 'firebase_options.dart';
+/// import 'firebase_options_prod.dart';
 /// // ...
 /// await Firebase.initializeApp(
 ///   options: DefaultFirebaseOptions.currentPlatform,
@@ -49,22 +49,24 @@ class DefaultFirebaseOptions {
     }
   }
 
+  // TODO: Replace with actual production Firebase configuration
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyCz33hNRKsSsWT_Kaxi5Q_9uB7EWGn3Dq0',
-    appId: '1:1031333818730:android:de181b5b4681b7a1afb513',
-    messagingSenderId: '1031333818730',
-    projectId: 'based-hardware-dev',
-    storageBucket: 'based-hardware-dev.firebasestorage.app',
+    apiKey: 'YOUR_PRODUCTION_ANDROID_API_KEY',
+    appId: 'YOUR_PRODUCTION_ANDROID_APP_ID',
+    messagingSenderId: 'YOUR_PRODUCTION_MESSAGING_SENDER_ID',
+    projectId: 'YOUR_PRODUCTION_PROJECT_ID',
+    storageBucket: 'YOUR_PRODUCTION_STORAGE_BUCKET',
   );
 
+  // TODO: Replace with actual production Firebase configuration
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyBK-G7KmEoC72mR10gmQyb2NFBbZyDvcqM',
-    appId: '1:1031333818730:ios:3bea63d8e4f41dbfafb513',
-    messagingSenderId: '1031333818730',
-    projectId: 'based-hardware-dev',
-    storageBucket: 'based-hardware-dev.firebasestorage.app',
-    androidClientId: '1031333818730-1cgqp3jc5p8n2rk467pl4t56qc4lnnbr.apps.googleusercontent.com',
-    iosClientId: '1031333818730-dusn243nct6i5rgfpfkj5mchuj1qnmde.apps.googleusercontent.com',
-    iosBundleId: 'com.friend-app-with-wearable.ios12.development',
+    apiKey: 'YOUR_PRODUCTION_IOS_API_KEY',
+    appId: 'YOUR_PRODUCTION_IOS_APP_ID',
+    messagingSenderId: 'YOUR_PRODUCTION_MESSAGING_SENDER_ID',
+    projectId: 'YOUR_PRODUCTION_PROJECT_ID',
+    storageBucket: 'YOUR_PRODUCTION_STORAGE_BUCKET',
+    androidClientId: 'YOUR_PRODUCTION_ANDROID_CLIENT_ID',
+    iosClientId: 'YOUR_PRODUCTION_IOS_CLIENT_ID',
+    iosBundleId: 'YOUR_PRODUCTION_IOS_BUNDLE_ID',
   );
 }
