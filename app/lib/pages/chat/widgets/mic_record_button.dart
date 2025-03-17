@@ -30,7 +30,7 @@ class _ChatMicButtonState extends State<ChatMicButton> {
       widget.textController.clear();
 
       provider.clearTranscripts();
-      provider.segments.clear();
+      
       provider.updateRecordingState(RecordingState.initialising);
 
       await provider.streamRecording();
