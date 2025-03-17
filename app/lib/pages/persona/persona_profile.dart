@@ -607,8 +607,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
             TextButton(
               onPressed: () async {
                 Navigator.of(context).pop();
-                SharedPreferencesUtil().hasOmiDevice = null;
-                SharedPreferencesUtil().verifiedPersonaId = null;
+                await SharedPreferencesUtil().clearUserPreferences();
                 Provider.of<PersonaProvider>(context, listen: false).setRouting(PersonaProfileRouting.no_device);
                 await signOut();
                 Navigator.of(context).pop();
