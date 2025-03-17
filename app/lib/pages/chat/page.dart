@@ -745,15 +745,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     if (!_isListening) {
       bool available = await _speech.initialize();
       if (available) {
-        // Hide the keyboard first if it's showing
         if (MediaQuery.of(context).viewInsets.bottom > 0) {
           FocusScope.of(context).unfocus();
-          // Wait for keyboard to fully close
           await Future.delayed(const Duration(milliseconds: 100));
         }
         
-        // Hide the navigation bar by using a different approach
-        // This prevents the keyboard from briefly appearing
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
             setState(() {
@@ -763,9 +759,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
               _recordingDuration = 0;
               _currentSoundLevel = 0;
             });
-            // Force focus without showing keyboard
             context.read<HomeProvider>().chatFieldFocusNode.requestFocus();
-            // Hide keyboard immediately
             SystemChannels.textInput.invokeMethod('TextInput.hide');
           }
         });
@@ -785,7 +779,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
             },
             onSoundLevelChange: (level) {
               setState(() {
-                // Scale the sound level to be more visible
                 _currentSoundLevel = level * 2;
               });
             },
@@ -796,7 +789,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
           );
         } catch (e) {
           debugPrint('Error starting speech recognition: $e');
-          // Make sure navigation bar is restored even if there's an error
           _forceShowNavigationBar();
           setState(() {
             _isListening = false;
@@ -809,8 +801,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         _speech.stop();
       } finally {
         _recordingTimer?.cancel();
-        
-        // Show the navigation bar when stopping recording
+
         _forceShowNavigationBar();
         
         setState(() {
@@ -827,19 +818,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     }
   }
   
-  // Force showing navigation bar by using multiple approaches
+  //Helper function for showing navBar
   void _forceShowNavigationBar() {
-    // Unfocus the chat field focus node
     final homeProvider = context.read<HomeProvider>();
     homeProvider.chatFieldFocusNode.unfocus();
-    
-    // Force all focus nodes to lose focus
+
     FocusScope.of(context).unfocus();
-    
-    // Delay to ensure changes take effect
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) {
-        // Force update the UI
         setState(() {});
       }
     });
