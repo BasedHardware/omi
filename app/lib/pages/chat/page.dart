@@ -26,6 +26,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'widgets/message_action_menu.dart';
+import 'widgets/mic_record_button.dart';
 
 class ChatPage extends StatefulWidget {
   final bool isPivotBottom;
@@ -522,7 +523,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                     ),
                                   ),
                                 ),
-                                !shouldShowSuffixIcon(provider) && !shouldShowSendButton(provider)
+                                ChatMicButton(
+                                  textController: textController,
+                                  onTextChanged: (text) {
+                                    setShowSendButton();
+                                  },
+                                ),
+                                !shouldShowSuffixIcon(provider) &&
+                                        !shouldShowSendButton(provider)
                                     ? const SizedBox.shrink()
                                     : IconButton(
                                         splashColor: Colors.transparent,
