@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'dart:async';
-import 'dart:math' show sin, Random;
+import 'dart:math' show sin;
 import 'dart:collection' show Queue;
 
 import 'package:flutter/material.dart';
@@ -17,6 +17,7 @@ import 'package:omi/pages/chat/select_text_screen.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/animated_mini_banner.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
+import 'package:omi/pages/chat/widgets/voice_recorder.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -66,11 +67,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   // Keep track of the most recent transcription
   List<TranscriptSegment> _lastTranscriptSegments = [];
 
-  Timer? _recordingTimer;
-  int _recordingDuration = 0;
-
-  double _currentSoundLevel = 0;
-
   @override
   bool get wantKeepAlive => true;
 
@@ -102,61 +98,15 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       }
     });
     
-    // Initialize speech recognition
-    _initializeSpeech();
-    
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       scrollToBottom();
     });
     super.initState();
   }
 
-  void _initializeSpeech() async {
-    bool available = await _speech.initialize(
-      onError: (error) => debugPrint('Speech recognition error: $error'),
-      onStatus: (status) {
-        if (status == 'done') {
-          setState(() {
-            _isListening = false;
-            _isRecording = false;
-            if (_recognizedText.isNotEmpty) {
-              textController.text = _recognizedText;
-              setShowSendButton();
-            }
-          });
-          // Ensure navigation bar is shown again
-          _forceShowNavigationBar();
-        } else if (status == 'notListening') {
-          setState(() {
-            _isListening = false;
-            _isRecording = false;
-          });
-          // Ensure navigation bar is shown again
-          _forceShowNavigationBar();
-        }
-      },
-    );
-    if (!available) {
-      debugPrint('Speech recognition not available');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Speech recognition is not available on this device.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
   @override
   void dispose() {
-    _recordingTimer?.cancel();
     _speech.cancel();
-    // Ensure navigation bar is shown when leaving this page
-    if (_isRecording || _isListening) {
-      _forceShowNavigationBar();
-    }
     textController.dispose();
     scrollController.dispose();
     super.dispose();
@@ -168,68 +118,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         _showSendButton = textController.text.isNotEmpty;
       });
     }
-  }
-
-  String _formatDuration(int seconds) {
-    final minutes = seconds ~/ 60;
-    final remainingSeconds = seconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
-  }
-
-  Widget _buildRecordingOverlay() {
-    if (!_isRecording) return const SizedBox.shrink();
-    
-    return Material(
-      color: Colors.transparent,
-      elevation: 100, // High elevation to ensure it appears above other elements
-      child: Container(
-        width: double.infinity,
-        height: 120,
-        decoration: BoxDecoration(
-          color: Colors.black,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.grey.withOpacity(0.3)),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white),
-                  onPressed: () {
-                    _toggleVoiceRecording();
-                  },
-                ),
-                Text(
-                  _formatDuration(_recordingDuration),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.check, color: Colors.white),
-                  onPressed: () {
-                    _toggleVoiceRecording();
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Container(
-              height: 40,
-              margin: const EdgeInsets.symmetric(horizontal: 20),
-              child: CustomPaint(
-                painter: WaveformPainter(soundLevel: _currentSoundLevel),
-                size: Size.infinite,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   @override
@@ -704,7 +592,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                 ],
               ),
             ),
-            // Render recording overlay at the top level to ensure it's above everything else
             if (_isRecording) 
               Positioned(
                 bottom: 0,
@@ -716,7 +603,28 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                     right: 28, 
                     bottom: widget.isPivotBottom ? 40 : 120
                   ),
-                  child: _buildRecordingOverlay(),
+                  child: VoiceRecorder(
+                    isRecording: _isRecording,
+                    onTextRecognized: (text) {
+                      setState(() {
+                        textController.text = text;
+                        setShowSendButton();
+                      });
+                    },
+                    onRecordingStarted: () {
+                      setState(() {
+                        _isListening = true;
+                        _isRecording = true;
+                      });
+                    },
+                    onRecordingStopped: () {
+                      _forceShowNavigationBar();
+                      setState(() {
+                        _isListening = false;
+                        _isRecording = false;
+                      });
+                    },
+                  ),
                 ),
               ),
           ],
@@ -763,79 +671,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   scrollToBottom() => _moveListToBottom();
 
   Future<void> _toggleVoiceRecording() async {
-    if (!_isListening) {
-      bool available = await _speech.initialize();
-      if (available) {
-        if (MediaQuery.of(context).viewInsets.bottom > 0) {
-          FocusScope.of(context).unfocus();
-          await Future.delayed(const Duration(milliseconds: 100));
-        }
-        
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            setState(() {
-              _isListening = true;
-              _isRecording = true;
-              _recognizedText = '';
-              _recordingDuration = 0;
-              _currentSoundLevel = 0;
-            });
-            // Don't request focus to prevent keyboard from appearing
-            SystemChannels.textInput.invokeMethod('TextInput.hide');
-          }
-        });
-        
-        _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-          setState(() {
-            _recordingDuration++;
-          });
-        });
-        
-        try {
-          _speech.listen(
-            onResult: (result) {
-              setState(() {
-                _recognizedText = result.recognizedWords;
-              });
-            },
-            onSoundLevelChange: (level) {
-              setState(() {
-                _currentSoundLevel = level * 2;
-              });
-            },
-            listenFor: const Duration(minutes: 5),
-            partialResults: true,
-            listenMode: stt.ListenMode.deviceDefault,
-            cancelOnError: false,
-          );
-        } catch (e) {
-          debugPrint('Error starting speech recognition: $e');
-          _forceShowNavigationBar();
-          setState(() {
-            _isListening = false;
-            _isRecording = false;
-          });
-        }
-      }
-    } else {
-      try {
-        _speech.stop();
-      } finally {
-        _recordingTimer?.cancel();
-
-        _forceShowNavigationBar();
-        
-        setState(() {
-          _isListening = false;
-          _isRecording = false;
-          _recordingDuration = 0;
-          _currentSoundLevel = 0;
-          if (_recognizedText.isNotEmpty) {
-            textController.text = _recognizedText;
-            setShowSendButton();
-          }
-        });
-      }
+    setState(() {
+      _isRecording = !_isRecording;
+    });
+    
+    if (!_isRecording) {
+      _forceShowNavigationBar();
     }
   }
   
@@ -851,62 +692,4 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       }
     });
   }
-}
-
-class WaveformPainter extends CustomPainter {
-  final double soundLevel;
-  static final Queue<double> waveHistory = Queue<double>();
-  static const int maxPoints = 50;
-  static final _random = Random();
-  static bool _initialized = false;
-
-  WaveformPainter({this.soundLevel = 0}) {
-    if (!_initialized) {
-      for (int i = 0; i < maxPoints; i++) {
-        waveHistory.add(2.0);
-      }
-      _initialized = true;
-    }
-    
-    if (soundLevel > 0) {
-      waveHistory.removeFirst();
-      waveHistory.addLast(soundLevel.clamp(2.0, 40.0));
-    }
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 2.5
-      ..strokeCap = StrokeCap.round;
-
-    final width = size.width;
-    final height = size.height;
-    final centerY = height / 2;
-    
-    // Draw waveform bars
-    final barWidth = (width / maxPoints).floor();
-    int i = 0;
-    
-    for (final level in waveHistory) {
-      final x = i * barWidth.toDouble();
-      
-      // Add some randomness for natural movement
-      final jitter = _random.nextDouble() * 2.0;
-      final amplitude = (level + jitter).clamp(2.0, height / 2);
-      
-      canvas.drawLine(
-        Offset(x, centerY - amplitude),
-        Offset(x, centerY + amplitude),
-        paint,
-      );
-      
-      i++;
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant WaveformPainter oldDelegate) => 
-    oldDelegate.soundLevel != soundLevel;
 }
