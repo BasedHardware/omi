@@ -759,7 +759,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
               _recordingDuration = 0;
               _currentSoundLevel = 0;
             });
-            context.read<HomeProvider>().chatFieldFocusNode.requestFocus();
+            // Don't request focus to prevent keyboard from appearing
             SystemChannels.textInput.invokeMethod('TextInput.hide');
           }
         });
@@ -840,7 +840,6 @@ class WaveformPainter extends CustomPainter {
   static bool _initialized = false;
 
   WaveformPainter({this.soundLevel = 0}) {
-    // Initialize queue only once
     if (!_initialized) {
       for (int i = 0; i < maxPoints; i++) {
         waveHistory.add(2.0);
@@ -848,7 +847,6 @@ class WaveformPainter extends CustomPainter {
       _initialized = true;
     }
     
-    // Update wave history with new sound level
     if (soundLevel > 0) {
       waveHistory.removeFirst();
       waveHistory.addLast(soundLevel.clamp(2.0, 40.0));
