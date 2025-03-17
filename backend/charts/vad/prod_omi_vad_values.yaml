@@ -89,8 +89,8 @@ resources:
   # resources, such as Minikube. If you do want to specify resources, uncomment the following
   # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
   requests:
-    cpu: 0.5
-    memory: 2Gi
+    cpu: 1
+    memory: 4Gi
     nvidia.com/gpu: 1
   limits:
     cpu: 2
