@@ -615,10 +615,8 @@ async def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid
     # Migrate app ownership in the database
     migrate_app_owner_id_db(uid, old_id)
 
-    # Migrate facts from old user to new user
-    migrate_facts(old_id, uid)
-
-    # Start async task to update persona connected accounts
+    # Start async tasks to migrate facts and update persona connected accounts
+    asyncio.create_task(migrate_facts(old_id, uid))
     asyncio.create_task(update_omi_persona_connected_accounts(uid))
 
     return {"status": "ok", "message": "Migration started"}
