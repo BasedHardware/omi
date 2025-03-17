@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/env/env.dart';
@@ -18,7 +19,7 @@ class IntercomManager {
   }
 
   Future<void> initIntercom() async {
-    if (Env.intercomAppId == null) return;
+    if (Env.intercomAppId == null || Platform.isMacOS) return;
     await intercom.initialize(
       Env.intercomAppId!,
       iosApiKey: Env.intercomIOSApiKey,

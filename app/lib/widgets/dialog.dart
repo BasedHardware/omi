@@ -29,7 +29,7 @@ getDialog(
           TextButton(
               onPressed: () => onConfirm(), child: Text(okButtonText, style: const TextStyle(color: Colors.white))),
         ];
-  if (Platform.isIOS) {
+  if (Platform.isIOS || Platform.isMacOS) {
     return CupertinoAlertDialog(title: Text(title), content: Text(content), actions: actions);
   }
   return AlertDialog(title: Text(title), content: Text(content), actions: actions);

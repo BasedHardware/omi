@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/conversation.dart';
@@ -281,7 +283,7 @@ getPhoneMicRecordingButton(BuildContext context, toggleRecording, RecordingState
         Text(
           state == RecordingState.initialising
               ? 'Initialising Recorder'
-              : (state == RecordingState.record ? 'Stop Recording' : 'Try With Phone Mic'),
+              : (state == RecordingState.record ? 'Stop Recording' : (Platform.isMacOS ? 'Try with System Mic' : 'Try With Phone Mic')),
           style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white, fontWeight: FontWeight.w500),
         ),
         const SizedBox(width: 4),

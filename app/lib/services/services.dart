@@ -12,6 +12,7 @@ import 'package:record/record.dart';
 
 class ServiceManager {
   late IMicRecorderService _mic;
+  late ISystemMicRecorderService _systemMic;
   late IDeviceService _device;
   late ISocketService _socket;
   late IWalService _wal;
@@ -26,6 +27,7 @@ class ServiceManager {
     sm._device = DeviceService();
     sm._socket = SocketServicePool();
     sm._wal = WalService();
+    sm._systemMic = SystemMicRecorderService();
 
     return sm;
   }
@@ -39,6 +41,8 @@ class ServiceManager {
   }
 
   IMicRecorderService get mic => _mic;
+
+  ISystemMicRecorderService get systemMic => _systemMic;
 
   IDeviceService get device => _device;
 
@@ -271,9 +275,7 @@ class MicRecorderService implements IMicRecorderService {
   RecorderServiceStatus? _status;
 
   late FlutterSoundRecorder _recorder;
-  late AudioRecorder _audioRecorder;
   late StreamController<Uint8List> _controller;
-  StreamSubscription<Uint8List>? _streamSubscription;
 
   Function(Uint8List bytes)? _onByteReceived;
   Function? _onRecording;
@@ -283,7 +285,6 @@ class MicRecorderService implements IMicRecorderService {
 
   MicRecorderService({bool isInBG = false}) {
     _recorder = FlutterSoundRecorder();
-    _audioRecorder = AudioRecorder();
     _isInBG = isInBG;
   }
 
@@ -313,15 +314,6 @@ class MicRecorderService implements IMicRecorderService {
       _onRecording!();
     }
 
-    if(Platform.isMacOS) {
-      const audioRecorderConfig =  RecordConfig(encoder: AudioEncoder.pcm16bits);
-      final stream = await _audioRecorder.startStream(audioRecorderConfig);
-      _streamSubscription = stream.listen((audioBytes) {
-        if (_onByteReceived != null) {
-          _onByteReceived!(audioBytes);
-        }
-      });
-    } else {
       // new record
       await _recorder.openRecorder(isBGService: _isInBG);
       _controller = StreamController<Uint8List>();
@@ -340,7 +332,6 @@ class MicRecorderService implements IMicRecorderService {
           _onByteReceived!(audioBytes);
         }
       });
-    }
 
     _status = RecorderServiceStatus.recording;
     return;
@@ -348,15 +339,8 @@ class MicRecorderService implements IMicRecorderService {
 
   @override
   void stop() {
-    if(Platform.isMacOS) {
-      _audioRecorder.stop();
-      _streamSubscription?.cancel();
-    } else {
-      _recorder.stopRecorder();
-      _controller.close();
-    }
-    
-
+    _recorder.stopRecorder();
+    _controller.close();
     // callback
     _status = RecorderServiceStatus.stop;
     if (_onStop != null) {
@@ -367,4 +351,96 @@ class MicRecorderService implements IMicRecorderService {
     _onStop = null;
     _onRecording = null;
   }
+}
+
+
+abstract class ISystemMicRecorderService {
+  Future<void> start({
+    required Function(Uint8List bytes) onByteReceived,
+    Function()? onRecording,
+    Function()? onStop,
+    Function()? onInitializing,
+  });
+  void stop();
+}
+
+final class SystemMicRecorderService implements ISystemMicRecorderService {
+  RecorderServiceStatus? _status;
+
+  late AudioRecorder _recorder;
+  StreamSubscription<Uint8List>? _streamSubscription;
+
+  Function(Uint8List bytes)? _onByteReceived;
+  Function? _onRecording;
+  Function? _onStop;
+
+  bool _isInBG = false;
+
+  SystemMicRecorderService({bool isInBG = false}) {
+    _recorder = AudioRecorder();
+    _isInBG = isInBG;
+  }
+
+  get status => _status;
+
+  @override
+  Future<void> start({
+    required Function(Uint8List bytes) onByteReceived,
+    Function()? onRecording,
+    Function()? onStop,
+    Function()? onInitializing,
+  }) async {
+    if (_status == RecorderServiceStatus.recording) {
+      throw Exception("Recorder is recording, please stop it before start new recording.");
+    }
+    if (_status == RecorderServiceStatus.initialising) {
+      throw Exception("Recorder is initialising");
+    }
+
+    _status = RecorderServiceStatus.initialising;
+
+    // callback
+    _onByteReceived = onByteReceived;
+    _onStop = onStop;
+    _onRecording = onRecording;
+    if (_onRecording != null) {
+      _onRecording!();
+    }
+
+      if(!await _recorder.hasPermission()) return;
+      const audioRecorderConfig =  RecordConfig(
+        encoder: AudioEncoder.pcm16bits,
+        numChannels: 1,
+        sampleRate: 16000,
+      );
+      print(await _recorder.listInputDevices());
+      final stream = await _recorder.startStream(audioRecorderConfig);
+      _streamSubscription = stream.listen((buffer) {
+        Uint8List audioBytes = buffer;
+        print("Getting data ${_recorder.convertBytesToInt16(Uint8List.fromList(audioBytes))}");
+        if (_onByteReceived != null) {
+          _onByteReceived!(audioBytes);
+        }
+      });
+    
+
+    _status = RecorderServiceStatus.recording;
+    return;
+  }
+
+  @override
+  void stop() {
+      _streamSubscription?.cancel();
+      _recorder.dispose();
+    // callback
+    _status = RecorderServiceStatus.stop;
+    if (_onStop != null) {
+      _onStop!();
+    }
+
+    _onByteReceived = null;
+    _onStop = null;
+    _onRecording = null;
+  }
+
 }

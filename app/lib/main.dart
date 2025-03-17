@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:app_links/app_links.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -65,19 +66,21 @@ Future<bool> _init() async {
     await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform, name: 'dev');
   }
 
-  await IntercomManager().initIntercom();
-  if(!kIsWeb) {
-    await NotificationService.instance.initialize();
-   }
+  if(!Platform.isMacOS) {
+    await IntercomManager().initIntercom();
+    await MixpanelManager.init();
+  }
+  await NotificationService.instance.initialize();
   await SharedPreferencesUtil.init();
-  await MixpanelManager.init();
 
   // TODO: thinh, move to app start
   await ServiceManager.instance().start();
 
   bool isAuth = (await getIdToken()) != null;
-  if (isAuth) MixpanelManager().identify();
-  initOpus(await opus_flutter.load());
+  if (isAuth && !Platform.isMacOS) MixpanelManager().identify();
+  if(!Platform.isMacOS) {
+    initOpus(await opus_flutter.load());
+  }
 
   await GrowthbookUtil.init();
   CalendarUtil.init();
@@ -100,15 +103,13 @@ void main() async {
   } else {
     Env.init(DevEnv());
   }
-  if(!kIsWeb) {
-    FlutterForegroundTask.initCommunicationPort();
-  }
+  FlutterForegroundTask.initCommunicationPort();
   if (Env.posthogApiKey != null) {
     await initPostHog();
   }
   // _setupAudioSession();
   bool isAuth = await _init();
-  if (Env.instabugApiKey != null) {
+  if (Env.instabugApiKey != null && !Platform.isMacOS) {
     await Instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
     runZonedGuarded(
       () async {
