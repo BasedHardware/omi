@@ -129,8 +129,14 @@ class ExternalIntegration {
       setupInstructionsFilePath: json['setup_instructions_file_path'],
       authSteps: json['auth_steps'] == null
           ? []
-          : (json['auth_steps'] ?? []).map<AuthStep>((e) => AuthStep.fromJson(e)).toList(),
-      actions: json['actions'] == null ? null : (json['actions'] ?? []).map<Action>((e) => Action.fromJson(e)).toList(),
+          : (json['auth_steps'] ?? [])
+              .map<AuthStep>((e) => AuthStep.fromJson(e))
+              .toList(),
+      actions: json['actions'] == null
+          ? null
+          : (json['actions'] ?? [])
+              .map<Action>((e) => Action.fromJson(e))
+              .toList(),
     );
   }
 
@@ -292,13 +298,17 @@ class App {
       image: json['image'],
       chatPrompt: json['chat_prompt'],
       conversationPrompt: json['memory_prompt'],
-      externalIntegration:
-          json['external_integration'] != null ? ExternalIntegration.fromJson(json['external_integration']) : null,
+      externalIntegration: json['external_integration'] != null
+          ? ExternalIntegration.fromJson(json['external_integration'])
+          : null,
       reviews: AppReview.fromJsonList(json['reviews'] ?? []),
-      userReview: json['user_review'] != null ? AppReview.fromJson(json['user_review']) : null,
+      userReview: json['user_review'] != null
+          ? AppReview.fromJson(json['user_review'])
+          : null,
       ratingAvg: json['rating_avg'],
       ratingCount: json['rating_count'] ?? 0,
-      capabilities: ((json['capabilities'] ?? []) as List).cast<String>().toSet(),
+      capabilities:
+          ((json['capabilities'] ?? []) as List).cast<String>().toSet(),
       deleted: json['deleted'] ?? false,
       enabled: json['enabled'] ?? false,
       installs: json['installs'] ?? 0,
@@ -313,10 +323,13 @@ class App {
       price: json['price'] ?? 0.0,
       isUserPaid: json['is_user_paid'] ?? false,
       paymentLink: json['payment_link'],
-      thumbnailIds: (json['thumbnails'] as List<dynamic>?)?.cast<String>() ?? [],
-      thumbnailUrls: (json['thumbnail_urls'] as List<dynamic>?)?.cast<String>() ?? [],
+      thumbnailIds:
+          (json['thumbnails'] as List<dynamic>?)?.cast<String>() ?? [],
+      thumbnailUrls:
+          (json['thumbnail_urls'] as List<dynamic>?)?.cast<String>() ?? [],
       username: json['username'],
-      connectedAccounts: (json['connected_accounts'] as List<dynamic>?)?.cast<String>() ?? [],
+      connectedAccounts:
+          (json['connected_accounts'] as List<dynamic>?)?.cast<String>() ?? [],
       twitter: json['twitter'],
     );
   }
@@ -361,10 +374,14 @@ class App {
   }
 
   String getCategoryName() {
-    return category.decodeString.split('-').map((e) => e.capitalize()).join(' ');
+    return category.decodeString
+        .split('-')
+        .map((e) => e.capitalize())
+        .join(' ');
   }
 
-  List<AppCapability> getCapabilitiesFromIds(List<AppCapability> allCapabilities) {
+  List<AppCapability> getCapabilitiesFromIds(
+      List<AppCapability> allCapabilities) {
     return allCapabilities.where((e) => capabilities.contains(e.id)).toList();
   }
 
@@ -407,13 +424,17 @@ class App {
     };
   }
 
-  static List<App> fromJsonList(List<dynamic> jsonList) => jsonList.map((e) => App.fromJson(e)).toList();
+  static List<App> fromJsonList(List<dynamic> jsonList) =>
+      jsonList.map((e) => App.fromJson(e)).toList();
 
-  List<NotificationScope> getNotificationScopesFromIds(List<NotificationScope> allScopes) {
+  List<NotificationScope> getNotificationScopesFromIds(
+      List<NotificationScope> allScopes) {
     if (proactiveNotification == null) {
       return [];
     }
-    return allScopes.where((e) => proactiveNotification!.scopes.contains(e.id)).toList();
+    return allScopes
+        .where((e) => proactiveNotification!.scopes.contains(e.id))
+        .toList();
   }
 }
 
@@ -431,6 +452,8 @@ class Category {
       id: json['id'],
     );
   }
+
+  get name => title;
 
   toJson() {
     return {
