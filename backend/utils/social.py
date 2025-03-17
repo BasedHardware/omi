@@ -7,9 +7,8 @@ from pydantic import BaseModel
 from ulid import ULID
 
 from database.apps import update_app_in_db, upsert_app_to_db, get_persona_by_id_db, get_persona_by_username_twitter_handle_db
-from database.facts import create_fact
 from database.redis_db import delete_generic_cache, save_username, is_username_taken
-from utils.llm import condense_tweets, generate_twitter_persona_prompt
+from utils.llm import generate_twitter_persona_prompt
 from utils.memories.facts import process_twitter_facts
 rapid_api_host = os.getenv('RAPID_API_HOST')
 rapid_api_key = os.getenv('RAPID_API_KEY')
