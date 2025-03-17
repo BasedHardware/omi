@@ -74,7 +74,6 @@ You'll need to obtain the following API keys and credentials:
    NEXT_PUBLIC_FIREBASE_VAPID_KEY=your_firebase_vapid_key
 
    # Firebase Admin
-   FIREBASE_PROJECT_ID=your_firebase_project_id
    FIREBASE_CLIENT_EMAIL=firebase_client_email
    FIREBASE_PRIVATE_KEY=your_firebase_admin_private_key
 
