@@ -1,4 +1,5 @@
 import os
+import threading
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import List, Tuple, Dict, Any
@@ -13,7 +14,7 @@ from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
     update_app_in_db, get_audio_apps_count, get_persona_by_uid_db, update_persona_in_db, \
     get_omi_personas_by_uid_db, get_api_key_by_hash_db
 from database.auth import get_user_name
-from database.facts import get_facts
+from database.facts import get_facts, get_user_public_facts
 from database.memories import get_memories
 from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_generic_cache, \
     set_generic_cache, set_app_usage_history_cache, get_app_usage_history_cache, get_app_money_made_cache, \
@@ -466,6 +467,21 @@ def generate_persona_desc(uid: str, persona_name: str):
     return persona_description
 
 
+def update_personas_async(uid: str):
+    print(f"[PERSONAS] Starting persona updates in background thread for uid={uid}")
+    personas = get_omi_personas_by_uid_db(uid)
+    if personas:
+        threads = []
+        for persona in personas:
+            threads.append(threading.Thread(target=sync_update_persona_prompt, args=(persona,)))
+
+        [t.start() for t in threads]
+        [t.join() for t in threads]
+        print(f"[PERSONAS] Finished persona updates in background thread for uid={uid}")
+    else:
+        print(f"[PERSONAS] No personas found for uid={uid}")
+
+
 def sync_update_persona_prompt(persona: dict):
     """Synchronous wrapper for update_persona_prompt"""
     import asyncio
@@ -483,7 +499,7 @@ def sync_update_persona_prompt(persona: dict):
 async def update_persona_prompt(persona: dict):
     """Update a persona's chat prompt with latest facts and memories."""
     # Get latest facts and user info
-    facts = get_facts(persona['uid'], limit=250)
+    facts = get_user_public_facts(persona['uid'], limit=250)
     user_name = get_user_name(persona['uid'])
 
     # Get and condense recent memories
@@ -559,7 +575,7 @@ Use these facts, conversations and tweets to shape your personality. Responses s
 
     persona['persona_prompt'] = persona_prompt
     persona['updated_at'] = datetime.now(timezone.utc)
-    
+
     update_persona_in_db(persona)
     delete_app_cache_by_id(persona['id'])
 
@@ -572,6 +588,7 @@ def increment_username(username: str):
         return f"{username}{i}"
     else:
         return username
+
 
 def generate_api_key() -> Tuple[str, str, str]:
     raw_key = secrets.token_hex(16)  # 16 bytes = 32 hex chars
@@ -586,6 +603,7 @@ def verify_api_key(app_id: str, api_key: str) -> bool:
     hashed_key = hashlib.sha256(api_key.encode()).hexdigest()
     stored_key = get_api_key_by_hash_db(app_id, hashed_key)
     return stored_key is not None
+
 
 def app_has_action(app: dict, action_name: str) -> bool:
     """Check if an app has a specific action capability."""
