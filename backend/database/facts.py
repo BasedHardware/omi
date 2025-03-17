@@ -21,6 +21,27 @@ def get_facts(uid: str, limit: int = 100, offset: int = 0):
     result = [fact for fact in facts if fact['user_review'] is not False]
     return result
 
+
+def get_user_public_facts(uid: str, limit: int = 100, offset: int = 0):
+    print('get_public_facts', limit, offset)
+
+    facts_ref = db.collection('users').document(uid).collection('facts')
+    facts_ref = (
+        facts_ref.order_by('scoring', direction=firestore.Query.DESCENDING)
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+        .where(filter=FieldFilter('deleted', '==', False))
+    )
+
+    facts_ref = facts_ref.limit(limit).offset(offset)
+
+    facts = [doc.to_dict() for doc in facts_ref.stream()]
+
+    # Consider visibility as 'public' if it's missing
+    public_facts = [fact for fact in facts if fact.get('visibility', 'public') == 'public']
+
+    return public_facts
+
+
 def get_non_filtered_facts(uid: str, limit: int = 100, offset: int = 0):
     print('get_non_filtered_facts', uid, limit, offset)
     facts_ref = db.collection('users').document(uid).collection('facts')
