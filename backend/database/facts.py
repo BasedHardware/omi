@@ -101,3 +101,43 @@ def delete_facts_for_memory(uid: str, memory_id: str):
         removed_ids.append(doc.id)
     batch.commit()
     print('delete_facts_for_memory', memory_id, len(removed_ids))
+
+
+def migrate_facts(prev_uid: str, new_uid: str, app_id: str = None):
+    """
+    Migrate facts from one user to another.
+    If app_id is provided, only migrate facts related to that app.
+    """
+    print(f'Migrating facts from {prev_uid} to {new_uid}')
+
+    # Get source facts
+    prev_user_ref = db.collection('users').document(prev_uid)
+    prev_facts_ref = prev_user_ref.collection('facts')
+
+    # Apply app_id filter if provided
+    if app_id:
+        query = prev_facts_ref.where(filter=FieldFilter('app_id', '==', app_id))
+    else:
+        query = prev_facts_ref
+
+    # Get facts to migrate
+    facts_to_migrate = [doc.to_dict() for doc in query.stream()]
+
+    if not facts_to_migrate:
+        print(f'No facts to migrate for user {prev_uid}')
+        return 0
+
+    # Create batch for destination user
+    batch = db.batch()
+    new_user_ref = db.collection('users').document(new_uid)
+    new_facts_ref = new_user_ref.collection('facts')
+
+    # Add facts to batch
+    for fact in facts_to_migrate:
+        fact_ref = new_facts_ref.document(fact['id'])
+        batch.set(fact_ref, fact)
+
+    # Commit batch
+    batch.commit()
+    print(f'Migrated {len(facts_to_migrate)} facts from {prev_uid} to {new_uid}')
+    return len(facts_to_migrate)

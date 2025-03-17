@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:omi/widgets/dialog.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 
 class ConnectivityProvider extends ChangeNotifier {
@@ -22,9 +22,10 @@ class ConnectivityProvider extends ChangeNotifier {
     _previousConnection = result;
     _isInitialized = true;
     notifyListeners();
-    
+
     _internetConnection.onStatusChange.listen((InternetStatus result) {
-      if (_isInitialized) {  // Only handle status changes after initialization
+      if (_isInitialized) {
+        // Only handle status changes after initialization
         _previousConnection = _isConnected;
         isInternetConnected(result);
       }

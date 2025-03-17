@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
-import 'package:friend_private/pages/apps/widgets/app_section_card.dart';
-import 'package:friend_private/pages/apps/widgets/filter_sheet.dart';
-import 'package:friend_private/pages/apps/list_item.dart';
-import 'package:friend_private/providers/app_provider.dart';
-import 'package:friend_private/providers/home_provider.dart';
-import 'package:friend_private/utils/other/debouncer.dart';
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/pages/apps/widgets/app_section_card.dart';
+import 'package:omi/pages/apps/widgets/filter_sheet.dart';
+import 'package:omi/pages/apps/list_item.dart';
+import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/utils/other/debouncer.dart';
 import 'package:provider/provider.dart';
 
 import 'widgets/create_options_sheet.dart';
