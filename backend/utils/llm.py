@@ -1371,7 +1371,7 @@ def extract_facts_from_text(
     if user_name is None or facts_str is None:
         user_name, facts_str = get_prompt_facts(uid)
 
-    if not text or len(text) < 25:  # less than 5 words, probably nothing
+    if not text or len(text) == 0:
         return []
 
     try:
