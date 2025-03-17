@@ -124,11 +124,15 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
               setShowSendButton();
             }
           });
+          // Ensure navigation bar is shown again
+          _forceShowNavigationBar();
         } else if (status == 'notListening') {
           setState(() {
             _isListening = false;
             _isRecording = false;
           });
+          // Ensure navigation bar is shown again
+          _forceShowNavigationBar();
         }
       },
     );
@@ -149,6 +153,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   void dispose() {
     _recordingTimer?.cancel();
     _speech.cancel();
+    // Ensure navigation bar is shown when leaving this page
+    if (_isRecording || _isListening) {
+      _forceShowNavigationBar();
+    }
     textController.dispose();
     scrollController.dispose();
     super.dispose();
@@ -737,15 +745,29 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     if (!_isListening) {
       bool available = await _speech.initialize();
       if (available) {
-        // Hide the navigation bar when starting recording
-        context.read<HomeProvider>().chatFieldFocusNode.requestFocus();
+        // Hide the keyboard first if it's showing
+        if (MediaQuery.of(context).viewInsets.bottom > 0) {
+          FocusScope.of(context).unfocus();
+          // Wait for keyboard to fully close
+          await Future.delayed(const Duration(milliseconds: 100));
+        }
         
-        setState(() {
-          _isListening = true;
-          _isRecording = true;
-          _recognizedText = '';
-          _recordingDuration = 0;
-          _currentSoundLevel = 0;
+        // Hide the navigation bar by using a different approach
+        // This prevents the keyboard from briefly appearing
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {
+              _isListening = true;
+              _isRecording = true;
+              _recognizedText = '';
+              _recordingDuration = 0;
+              _currentSoundLevel = 0;
+            });
+            // Force focus without showing keyboard
+            context.read<HomeProvider>().chatFieldFocusNode.requestFocus();
+            // Hide keyboard immediately
+            SystemChannels.textInput.invokeMethod('TextInput.hide');
+          }
         });
         
         _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -754,42 +776,73 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
           });
         });
         
-        _speech.listen(
-          onResult: (result) {
-            setState(() {
-              _recognizedText = result.recognizedWords;
-            });
-          },
-          onSoundLevelChange: (level) {
-            setState(() {
-              // Scale the sound level to be more visible
-              _currentSoundLevel = level * 2;
-            });
-          },
-          listenFor: const Duration(minutes: 5),
-          partialResults: true,
-          listenMode: stt.ListenMode.deviceDefault,
-          cancelOnError: false,
-        );
+        try {
+          _speech.listen(
+            onResult: (result) {
+              setState(() {
+                _recognizedText = result.recognizedWords;
+              });
+            },
+            onSoundLevelChange: (level) {
+              setState(() {
+                // Scale the sound level to be more visible
+                _currentSoundLevel = level * 2;
+              });
+            },
+            listenFor: const Duration(minutes: 5),
+            partialResults: true,
+            listenMode: stt.ListenMode.deviceDefault,
+            cancelOnError: false,
+          );
+        } catch (e) {
+          debugPrint('Error starting speech recognition: $e');
+          // Make sure navigation bar is restored even if there's an error
+          _forceShowNavigationBar();
+          setState(() {
+            _isListening = false;
+            _isRecording = false;
+          });
+        }
       }
     } else {
-      _speech.stop();
-      _recordingTimer?.cancel();
-      
-      // Show the navigation bar when stopping recording
-      context.read<HomeProvider>().chatFieldFocusNode.unfocus();
-      
-      setState(() {
-        _isListening = false;
-        _isRecording = false;
-        _recordingDuration = 0;
-        _currentSoundLevel = 0;
-        if (_recognizedText.isNotEmpty) {
-          textController.text = _recognizedText;
-          setShowSendButton();
-        }
-      });
+      try {
+        _speech.stop();
+      } finally {
+        _recordingTimer?.cancel();
+        
+        // Show the navigation bar when stopping recording
+        _forceShowNavigationBar();
+        
+        setState(() {
+          _isListening = false;
+          _isRecording = false;
+          _recordingDuration = 0;
+          _currentSoundLevel = 0;
+          if (_recognizedText.isNotEmpty) {
+            textController.text = _recognizedText;
+            setShowSendButton();
+          }
+        });
+      }
     }
+  }
+  
+  // Force showing navigation bar by using multiple approaches
+  void _forceShowNavigationBar() {
+    // Unfocus the chat field focus node
+    final homeProvider = context.read<HomeProvider>();
+    homeProvider.chatFieldFocusNode.unfocus();
+    
+    // Force all focus nodes to lose focus
+    FocusScope.of(context).unfocus();
+    
+    // Delay to ensure changes take effect
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (mounted) {
+        // Force update the UI
+        setState(() {});
+      }
+    });
   }
 }
 
