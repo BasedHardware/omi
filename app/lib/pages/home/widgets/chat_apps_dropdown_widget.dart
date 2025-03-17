@@ -201,6 +201,37 @@ class ChatAppsDropdownWidget extends StatelessWidget {
         height: 1,
         child: Divider(height: 1),
       ),
+      // Add Omi option to the dropdown
+      PopupMenuItem<String>(
+        height: 40,
+        value: 'no_selected',
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _getOmiAvatar(),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Container(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      "Omi",
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
+                    ),
+                    selectedApp == null
+                        ? const SizedBox(
+                            width: 24,
+                            child: Icon(Icons.check, color: Colors.white60, size: 16),
+                          )
+                        : const SizedBox.shrink(),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
       ...provider.apps.where((p) => p.enabled && p.worksWithChat()).map<PopupMenuItem<String>>((App app) {
         return PopupMenuItem<String>(
           height: 40,
