@@ -77,6 +77,7 @@ async def get_twitter_profile(handle: str) -> TwitterProfile:
         "X-RapidAPI-Host": rapid_api_host
     }
 
+
     def fetch_profile():
         response = httpx.get(url, headers=headers, timeout=defaultTimeoutSec)
         if response.status_code == 200:
