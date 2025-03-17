@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/fact.dart';
-import 'package:friend_private/providers/facts_provider.dart';
+import 'package:omi/backend/schema/fact.dart';
+import 'package:omi/providers/facts_provider.dart';
 
 import '../facts_review_page.dart';
 
