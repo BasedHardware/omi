@@ -21,7 +21,7 @@ from models.memory import ExternalIntegrationCreateMemory, Memory, CreateMemory,
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
 from models.notification_message import NotificationMessage
-from utils.apps import get_available_apps
+from utils.apps import get_available_apps, sync_update_persona_prompt
 from utils.llm import obtain_emotional_message, retrieve_metadata_fields_from_transcript, \
     summarize_open_glass, get_transcript_structure, generate_embedding, \
     get_plugin_result, should_discard_memory, summarize_experience_text, new_facts_extractor, \
@@ -208,6 +208,19 @@ def save_structured_vector(uid: str, memory: Memory, update_only: bool = False):
         update_vector_metadata(uid, memory.id, metadata)
 
 
+def _update_personas_async(uid: str):
+    print(f"[PERSONAS] Starting persona updates in background thread for uid={uid}")
+    personas = get_omi_personas_by_uid_db(uid)
+    if personas:
+        threads = []
+        for persona in personas:
+            threads.append(threading.Thread(target=sync_update_persona_prompt, args=(persona,)))
+        
+        [t.start() for t in threads]
+        [t.join() for t in threads]
+        print(f"[PERSONAS] Finished persona updates in background thread for uid={uid}")
+
+
 def process_memory(
         uid: str, language_code: str, memory: Union[Memory, CreateMemory, ExternalIntegrationCreateMemory],
         force_process: bool = False, is_reprocess: bool = False
@@ -227,15 +240,9 @@ def process_memory(
         threading.Thread(target=memory_created_webhook, args=(uid, memory,)).start()
         # TODO: Bad code, cause the websocket was drop, need to check it carefully before enabling.
         # Update persona prompts with new memory
-        # personas = get_omi_personas_by_uid_db(uid)
-        # if personas:
-        #     threads = []
-        #     print('updating personas after memory creation')
-        #     for persona in personas:
-        #         threads.append(threading.Thread(target=sync_update_persona_prompt, args=(persona,)))
-        #
-        #     [t.start() for t in threads]
-        #     [t.join() for t in threads]
+        print("before creating the thread for _update_personas_async")
+        threading.Thread(target=_update_personas_async, args=(uid,)).start()
+        print("after calling start for _update_personas_async")
 
     # TODO: trigger external integrations here too
 

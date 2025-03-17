@@ -380,155 +380,6 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                               )
                             ],
                             const SizedBox(height: 24),
-                            if (!provider.hasOmiConnection)
-                              InkWell(
-                                onTap: () {
-                                  showModalBottomSheet(
-                                    context: context,
-                                    backgroundColor: Colors.transparent,
-                                    isScrollControlled: true,
-                                    builder: (context) => Stack(
-                                      children: [
-                                        Positioned.fill(
-                                          child: Image.asset(
-                                            Assets.images.newBackground.path,
-                                            fit: BoxFit.cover,
-                                          ),
-                                        ),
-                                        Container(
-                                          height: MediaQuery.of(context).size.height * 0.45,
-                                          decoration: const BoxDecoration(
-                                            color: Colors.transparent,
-                                            borderRadius: BorderRadius.only(
-                                              topLeft: Radius.circular(32),
-                                              topRight: Radius.circular(32),
-                                            ),
-                                          ),
-                                          child: Column(
-                                            mainAxisAlignment: MainAxisAlignment.center,
-                                            children: [
-                                              const SizedBox(height: 12),
-                                              Container(
-                                                width: 40,
-                                                height: 4,
-                                                decoration: BoxDecoration(
-                                                  color: Colors.white.withOpacity(0.2),
-                                                  borderRadius: BorderRadius.circular(2),
-                                                ),
-                                              ),
-                                              const Spacer(),
-                                              const SizedBox(height: 24),
-                                              const Text(
-                                                'Get Omi Device',
-                                                style: TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 24,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 8),
-                                              Text(
-                                                'Create a more accurate clone with\nyour personal conversations',
-                                                textAlign: TextAlign.center,
-                                                style: TextStyle(
-                                                  color: Colors.white.withOpacity(0.6),
-                                                  fontSize: 16,
-                                                ),
-                                              ),
-                                              const Spacer(),
-                                              Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 24),
-                                                child: Column(
-                                                  children: [
-                                                    ElevatedButton(
-                                                      onPressed: () async {
-                                                        await Posthog()
-                                                            .capture(eventName: 'i_dont_have_device_clicked');
-                                                        await launchUrl(
-                                                            Uri.parse('https://www.omi.me/?_ref=omi_persona_flow'));
-                                                      },
-                                                      style: ElevatedButton.styleFrom(
-                                                        backgroundColor: Colors.transparent,
-                                                        foregroundColor: Colors.white,
-                                                        minimumSize: const Size(double.infinity, 56),
-                                                        shape: RoundedRectangleBorder(
-                                                          borderRadius: BorderRadius.circular(16),
-                                                          side: BorderSide(
-                                                            color: Colors.white.withOpacity(0.12),
-                                                            width: 4,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      child: const Text(
-                                                        'Get Omi',
-                                                        style: TextStyle(
-                                                          fontSize: 17,
-                                                          fontWeight: FontWeight.w500,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    const SizedBox(height: 16),
-                                                    TextButton(
-                                                      onPressed: () {
-                                                        Navigator.pop(context);
-                                                        routeToPage(context, const OnboardingWrapper());
-                                                      },
-                                                      child: Text(
-                                                        'I have Omi device',
-                                                        style: TextStyle(
-                                                          fontSize: 18,
-                                                          color: Colors.white.withOpacity(0.6),
-                                                          fontWeight: FontWeight.bold,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                              const SizedBox(height: 40),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                },
-                                child: Container(
-                                  margin: const EdgeInsets.symmetric(horizontal: 16),
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.all(20),
-                                  decoration: BoxDecoration(
-                                    image: DecorationImage(
-                                      image: AssetImage(Assets.images.gradientCard.path),
-                                      fit: BoxFit.fill,
-                                      opacity: 0.9,
-                                    ),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.center,
-                                    children: [
-                                      const Text(
-                                        'Clone from device',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Create a clone from\nconversations',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          color: Colors.white.withOpacity(0.6),
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
                             const SizedBox(height: 28),
                             Container(
                               margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -546,24 +397,30 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                       ),
                                     ),
                                   ),
-                                  if (provider.hasOmiConnection) ...[
-                                    GestureDetector(
-                                      onTap: () {
-                                        if (provider.routing == PersonaProfileRouting.no_device) {
-                                          var provider = Provider.of<AuthenticationProvider>(context, listen: false);
-                                          if (provider.user == null || provider.user!.isAnonymous) {
-                                            routeToPage(context, const OnboardingWrapper());
-                                          }
+                                  GestureDetector(
+                                    onTap: () {
+                                      if (provider.routing == PersonaProfileRouting.no_device &&
+                                          provider.hasOmiConnection) {
+                                        var provider = Provider.of<AuthenticationProvider>(context, listen: false);
+                                        if (provider.user == null || provider.user!.isAnonymous) {
+                                          routeToPage(context, const OnboardingWrapper());
                                         }
-                                      },
-                                      child: _buildSocialLink(
-                                        icon: Assets.images.logoTransparent.path,
-                                        text: persona.username ?? 'username',
-                                        isConnected: provider.hasOmiConnection,
-                                      ),
+                                        return;
+                                      }
+
+                                      // else
+                                      if (!provider.hasOmiConnection) {
+                                        _showGetOmiDeviceBottomSheet(context);
+                                      }
+                                    },
+                                    child: _buildSocialLink(
+                                      icon: Assets.images.logoTransparent.path,
+                                      text: provider.hasOmiConnection ? (persona.username ?? 'username') : 'omi',
+                                      isConnected: provider.hasOmiConnection,
+                                      showConnect: !provider.hasOmiConnection,
                                     ),
-                                    const SizedBox(height: 12),
-                                  ],
+                                  ),
+                                  const SizedBox(height: 12),
                                   GestureDetector(
                                     onTap: () {
                                       if (!_isPersonaEditable(provider.routing)) {
@@ -750,8 +607,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
             TextButton(
               onPressed: () async {
                 Navigator.of(context).pop();
-                SharedPreferencesUtil().hasOmiDevice = null;
-                SharedPreferencesUtil().verifiedPersonaId = null;
+                await SharedPreferencesUtil().clearUserPreferences();
                 Provider.of<PersonaProvider>(context, listen: false).setRouting(PersonaProfileRouting.no_device);
                 await signOut();
                 Navigator.of(context).pop();
@@ -762,6 +618,116 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
           ],
         );
       },
+    );
+  }
+
+  void _showGetOmiDeviceBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Stack(
+        children: [
+          Positioned.fill(
+            child: Image.asset(
+              Assets.images.newBackground.path,
+              fit: BoxFit.cover,
+            ),
+          ),
+          Container(
+            height: MediaQuery.of(context).size.height * 0.45,
+            decoration: const BoxDecoration(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(32),
+                topRight: Radius.circular(32),
+              ),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const SizedBox(height: 12),
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const Spacer(),
+                const SizedBox(height: 24),
+                const Text(
+                  'Get Omi Device',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Create a more accurate clone with\nyour personal conversations',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.6),
+                    fontSize: 16,
+                  ),
+                ),
+                const Spacer(),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    children: [
+                      ElevatedButton(
+                        onPressed: () async {
+                          await Posthog().capture(eventName: 'i_dont_have_device_clicked');
+                          await launchUrl(Uri.parse('https://www.omi.me/?_ref=omi_persona_flow'));
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(double.infinity, 56),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            side: BorderSide(
+                              color: Colors.white.withOpacity(0.12),
+                              width: 4,
+                            ),
+                          ),
+                        ),
+                        child: const Text(
+                          'Get Omi',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          routeToPage(context, const OnboardingWrapper());
+                        },
+                        child: Text(
+                          'I have Omi device',
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: Colors.white.withOpacity(0.6),
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 40),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
