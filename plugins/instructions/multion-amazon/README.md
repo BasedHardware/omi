@@ -13,7 +13,7 @@ The MultiOn plugin allows you to automatically add books mentioned in your conve
 3. Click [this link](https://based-hardware--plugins-api.modal.run/multion/uid_input) and enter the USER ID.
    ![Explanation GIF](assets/friend-app.gif)
 
-4. After successful authentication, you will be redirected back to the app. The plugin is now set up and ready to use! Return to the Friend app.
+4. After successful authentication, you will be redirected back to the app. The plugin is now set up and ready to use! Return to the Omi app.
 
 ## How It Works
 
@@ -24,7 +24,7 @@ The MultiOn plugin allows you to automatically add books mentioned in your conve
 ## Troubleshooting
 
 - If books are not being added to your cart, ensure that your MultiOn account is correctly linked and has the necessary permissions.
-- If you encounter any errors, try disconnecting and reconnecting the plugin in your Friend app settings.
+- If you encounter any errors, try disconnecting and reconnecting the plugin in your Omi app settings.
 
 ---
 

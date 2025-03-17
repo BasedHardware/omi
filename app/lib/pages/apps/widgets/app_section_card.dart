@@ -1,10 +1,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/pages/apps/app_detail/app_detail.dart';
-import 'package:friend_private/providers/app_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/pages/apps/app_detail/app_detail.dart';
+import 'package:omi/providers/app_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 
 class AppSectionCard extends StatelessWidget {

@@ -61,6 +61,7 @@ def day_summary_webhook(uid, summary: str):
 
 
 async def realtime_transcript_webhook(uid, segments: List[dict]):
+    print("realtime_transcript_webhook", uid)
     toggled = user_webhook_status_db(uid, WebhookType.realtime_transcript)
     if toggled:
         webhook_url = get_user_webhook_db(uid, WebhookType.realtime_transcript)
@@ -107,6 +108,7 @@ def get_audio_bytes_webhook_seconds(uid: str):
 
 
 async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: bytearray):
+    print("send_audio_bytes_developer_webhook", uid)
     # TODO: add a lock, send shorter segments, validate regex.
     toggled = user_webhook_status_db(uid, WebhookType.audio_bytes)
     if toggled:

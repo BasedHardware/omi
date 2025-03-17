@@ -10,7 +10,8 @@ from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, H
 from database.apps import change_app_approval_status, get_unapproved_public_apps_db, \
     add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db, \
     get_personas_by_username_db, get_persona_by_id_db, delete_persona_db, get_persona_by_twitter_handle_db, \
-    get_persona_by_username_db, migrate_app_owner_id_db, get_user_persona_by_uid, get_omi_persona_apps_by_uid_db
+    get_persona_by_username_db, migrate_app_owner_id_db, get_user_persona_by_uid, get_omi_persona_apps_by_uid_db, \
+    create_api_key_db, list_api_keys_db, delete_api_key_db
 from database.auth import get_user_from_uid
 from database.notifications import get_token_only
 from database.redis_db import delete_generic_cache, get_specific_user_review, increase_app_installs_count, \
@@ -19,15 +20,17 @@ from utils.apps import get_available_apps, get_available_app_by_id, get_approved
     get_available_app_by_id_with_reviews, set_app_review, get_app_reviews, add_tester, is_tester, \
     add_app_access_for_tester, remove_app_access_for_tester, upsert_app_payment_link, get_is_user_paid_app, \
     is_permit_payment_plan_get, generate_persona_prompt, generate_persona_desc, get_persona_by_uid, \
-    increment_username
+    increment_username, generate_api_key
+
+from database.facts import migrate_facts
 
 from utils.llm import generate_description, generate_persona_intro_message
 
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
-from models.app import App
+from models.app import App, ActionType
 from utils.other.storage import upload_plugin_logo, delete_plugin_logo, upload_app_thumbnail, get_app_thumbnail_url
-from utils.social import get_twitter_profile, get_twitter_timeline, verify_latest_tweet, \
+from utils.social import get_twitter_profile, verify_latest_tweet, \
     upsert_persona_from_twitter_profile, add_twitter_to_persona
 
 router = APIRouter()
@@ -69,18 +72,30 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
                 raise HTTPException(status_code=422, detail='Price cannot be a negative value')
             if data.get('payment_plan') is None:
                 raise HTTPException(status_code=422, detail='Payment plan is required')
+
     if external_integration := data.get('external_integration'):
-        external_integration['webhook_url'] = external_integration['webhook_url'].strip()
-        if external_integration.get('triggers_on') is None:
-            raise HTTPException(status_code=422, detail='Triggers on is required')
-        # check if setup_instructions_file_path is a single url or a just a string of text
-        if external_integration.get('setup_instructions_file_path'):
-            external_integration['setup_instructions_file_path'] = external_integration[
-                'setup_instructions_file_path'].strip()
-            if external_integration['setup_instructions_file_path'].startswith('http'):
-                external_integration['is_instructions_url'] = True
-            else:
-                external_integration['is_instructions_url'] = False
+        if external_integration.get('triggers_on') is None and \
+                len(external_integration.get('actions', [])) == 0:
+            raise HTTPException(status_code=422, detail='Triggers on or actions is required')
+        # Trigger on
+        if external_integration.get('triggers_on'):
+            external_integration['webhook_url'] = external_integration['webhook_url'].strip()
+            if external_integration.get('setup_instructions_file_path'):
+                external_integration['setup_instructions_file_path'] = external_integration[
+                    'setup_instructions_file_path'].strip()
+                if external_integration['setup_instructions_file_path'].startswith('http'):
+                    external_integration['is_instructions_url'] = True
+                else:
+                    external_integration['is_instructions_url'] = False
+
+        # Acitons
+        if actions := external_integration.get('actions'):
+            for action in actions:
+                if not action.get('action'):
+                    raise HTTPException(status_code=422, detail='Action field is required for each action')
+                if action.get('action') not in [action_type.value for action_type in ActionType]:
+                    raise HTTPException(status_code=422,
+                                        detail=f'Unsupported action type. Supported types: {", ".join([action_type.value for action_type in ActionType])}')
     os.makedirs(f'_temp/plugins', exist_ok=True)
     file_path = f"_temp/plugins/{file.filename}"
     with open(file_path, 'wb') as f:
@@ -221,7 +236,7 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
     persona_data = {
         'id': persona_id,
         'name': user.get('display_name', 'My Persona'),
-        'username': increment_username(user.get('display_name', 'MyPersona').replace(' ', '').lower()),
+        'username': increment_username((user.get('display_name') or 'MyPersona').replace(' ', '').lower()),
         'description': f"This is {user.get('display_name', 'my')} personal AI clone.",
         'image': '',  # Empty image as specified in the task
         'uid': uid,
@@ -471,6 +486,9 @@ def get_plugin_capabilities():
             {'title': 'Audio Bytes', 'id': 'audio_bytes'},
             {'title': 'Memory Creation', 'id': 'memory_creation'},
             {'title': 'Transcript Processed', 'id': 'transcript_processed'},
+        ], 'actions': [
+            {'title': 'Create conversations', 'id': 'create_conversation', 'doc_url': 'https://docs.omi.me/docs/developer/apps/IntegrationActions'},
+            {'title': 'Create facts', 'id': 'create_facts', 'doc_url': 'https://docs.omi.me/docs/developer/apps/IntegrationActions'}
         ]},
         {'title': 'Notification', 'id': 'proactive_notification', 'scopes': [
             {'title': 'User Name', 'id': 'user_name'},
@@ -518,9 +536,20 @@ def generate_description_endpoint(data: dict, uid: str = Depends(auth.get_curren
 async def get_twitter_profile_data(handle: str, uid: str = Depends(auth.get_current_user_uid)):
     if handle.startswith('@'):
         handle = handle[1:]
-    res = await get_twitter_profile(handle)
-    if res['avatar']:
-        res['avatar'] = res['avatar'].replace('_normal', '')
+    profile = await get_twitter_profile(handle)
+
+    # Convert TwitterProfile to dict for response
+    res = {
+        "name": profile.name,
+        "profile": profile.profile,
+        "rest_id": profile.rest_id,
+        "avatar": profile.avatar,
+        "desc": profile.desc,
+        "friends": profile.friends,
+        "sub_count": profile.sub_count,
+        "id": profile.id,
+        "status": profile.status,
+    }
 
     # By user persona first
     persona = get_user_persona_by_uid(uid)
@@ -586,7 +615,8 @@ async def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid
     # Migrate app ownership in the database
     migrate_app_owner_id_db(uid, old_id)
 
-    # Start async task to update persona connected accounts
+    # Start async tasks to migrate facts and update persona connected accounts
+    asyncio.create_task(migrate_facts(old_id, uid))
     asyncio.create_task(update_omi_persona_connected_accounts(uid))
 
     return {"status": "ok", "message": "Migration started"}
@@ -802,3 +832,58 @@ def get_personas(persona_id: str, secret_key: str = Header(...)):
         raise HTTPException(status_code=404, detail='Persona not found')
     print(persona)
     return persona
+
+
+@router.post('/v1/apps/{app_id}/keys', tags=['v1'])
+def create_api_key_for_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    app = get_available_app_by_id(app_id, uid)
+    if not app:
+        raise HTTPException(status_code=404, detail='App not found')
+
+    if app.get('uid') != uid:
+        raise HTTPException(status_code=403, detail='You are not authorized to create API keys for this app')
+
+    key, hashed_key, label = generate_api_key()
+
+    data = {
+        'id': str(ULID()),
+        'hashed': hashed_key,
+        'label': label,
+        'created_at': datetime.now(timezone.utc)
+    }
+    create_api_key_db(app_id, data)
+
+    # Return both the raw key (for one-time display to user) and the stored data
+    return {
+        'id': data['id'],
+        'secret': key,  # with sk_
+        'label': label,
+        'created_at': data['created_at']
+    }
+
+
+@router.get('/v1/apps/{app_id}/keys', tags=['v1'])
+def list_api_keys(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    app = get_available_app_by_id(app_id, uid)
+    if not app:
+        raise HTTPException(status_code=404, detail='App not found')
+
+    if app.get('uid') != uid:
+        raise HTTPException(status_code=403, detail='You are not authorized to view API keys for this app')
+
+    keys = list_api_keys_db(app_id)
+    return keys
+
+
+@router.delete('/v1/apps/{app_id}/keys/{key_id}', tags=['v1'])
+def delete_api_key(app_id: str, key_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    app = get_available_app_by_id(app_id, uid)
+    if not app:
+        raise HTTPException(status_code=404, detail='App not found')
+
+    if app.get('uid') != uid:
+        raise HTTPException(status_code=403, detail='You are not authorized to delete API keys for this app')
+
+    delete_api_key_db(app_id, key_id)
+
+    return {'status': 'ok', 'message': 'API key deleted'}

@@ -1,25 +1,25 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:friend_private/pages/apps/app_home_web_page.dart';
+import 'package:omi/pages/apps/app_home_web_page.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/pages/apps/widgets/full_screen_image_viewer.dart';
+import 'package:omi/pages/apps/widgets/full_screen_image_viewer.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
-import 'package:friend_private/backend/http/api/apps.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/pages/apps/app_detail/reviews_list_page.dart';
-import 'package:friend_private/pages/apps/app_detail/widgets/add_review_widget.dart';
-import 'package:friend_private/pages/apps/markdown_viewer.dart';
-import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
-import 'package:friend_private/providers/app_provider.dart';
-import 'package:friend_private/providers/home_provider.dart';
-import 'package:friend_private/providers/message_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/animated_loading_button.dart';
-import 'package:friend_private/widgets/confirmation_dialog.dart';
-import 'package:friend_private/widgets/dialog.dart';
-import 'package:friend_private/widgets/extensions/string.dart';
+import 'package:omi/backend/http/api/apps.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/pages/apps/app_detail/reviews_list_page.dart';
+import 'package:omi/pages/apps/app_detail/widgets/add_review_widget.dart';
+import 'package:omi/pages/apps/markdown_viewer.dart';
+import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/message_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/animated_loading_button.dart';
+import 'package:omi/widgets/confirmation_dialog.dart';
+import 'package:omi/widgets/dialog.dart';
+import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:skeletonizer/skeletonizer.dart';
@@ -96,9 +96,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
       context.read<AppProvider>().setIsAppPublicToggled(!app.private);
     });
     if (app.worksExternally()) {
-      if (app.externalIntegration!.setupInstructionsFilePath.isNotEmpty) {
-        if (app.externalIntegration!.setupInstructionsFilePath.contains('raw.githubusercontent.com')) {
-          getAppMarkdown(app.externalIntegration!.setupInstructionsFilePath).then((value) {
+      if (app.externalIntegration!.setupInstructionsFilePath?.isNotEmpty == true) {
+        if (app.externalIntegration!.setupInstructionsFilePath?.contains('raw.githubusercontent.com') == true) {
+          getAppMarkdown(app.externalIntegration!.setupInstructionsFilePath ?? '').then((value) {
             value = value.replaceAll(
               '](assets/',
               '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${app.id}/assets/',
@@ -152,7 +152,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
   @override
   Widget build(BuildContext context) {
     bool isIntegration = app.worksExternally();
-    bool hasSetupInstructions = isIntegration && app.externalIntegration?.setupInstructionsFilePath.isNotEmpty == true;
+    bool hasSetupInstructions = isIntegration && app.externalIntegration?.setupInstructionsFilePath?.isNotEmpty == true;
     bool hasAuthSteps = isIntegration && app.externalIntegration?.authSteps.isNotEmpty == true;
     int stepsCount = app.externalIntegration?.authSteps.length ?? 0;
     return Scaffold(
@@ -294,7 +294,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        app.author,
+                        app.author.decodeString,
                         style: const TextStyle(color: Colors.grey, fontSize: 14),
                       ),
                     ],
@@ -613,17 +613,18 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       onTap: () async {
                         if (app.externalIntegration != null) {
                           if (app.externalIntegration!.setupInstructionsFilePath
-                              .contains('raw.githubusercontent.com')) {
+                                  ?.contains('raw.githubusercontent.com') ==
+                              true) {
                             await routeToPage(
                               context,
                               MarkdownViewer(title: 'Setup Instructions', markdown: instructionsMarkdown ?? ''),
                             );
                           } else {
-                            if (app.externalIntegration!.isInstructionsUrl) {
-                              await launchUrl(Uri.parse(app.externalIntegration!.setupInstructionsFilePath));
+                            if (app.externalIntegration!.isInstructionsUrl == true) {
+                              await launchUrl(Uri.parse(app.externalIntegration!.setupInstructionsFilePath ?? ''));
                             } else {
                               var m = app.externalIntegration!.setupInstructionsFilePath;
-                              routeToPage(context, MarkdownViewer(title: 'Setup Instructions', markdown: m));
+                              routeToPage(context, MarkdownViewer(title: 'Setup Instructions', markdown: m ?? ''));
                             }
                           }
                         }

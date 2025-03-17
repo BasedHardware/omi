@@ -1,7 +1,9 @@
 import os
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Tuple, Dict, Any
+import hashlib
+import secrets
 
 from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
     get_public_approved_apps_db, get_app_by_id_db, get_app_usage_history_db, set_app_review_in_db, \
@@ -9,7 +11,7 @@ from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
     add_tester_db, add_app_access_for_tester_db, remove_app_access_for_tester_db, remove_tester_db, \
     is_tester_db, can_tester_access_app_db, get_apps_for_tester_db, get_app_chat_message_sent_usage_count_db, \
     update_app_in_db, get_audio_apps_count, get_persona_by_uid_db, update_persona_in_db, \
-    get_omi_personas_by_uid_db
+    get_omi_personas_by_uid_db, get_api_key_by_hash_db
 from database.auth import get_user_name
 from database.facts import get_facts
 from database.memories import get_memories
@@ -23,7 +25,7 @@ from models.app import App, UsageHistoryItem, UsageHistoryType
 from models.memory import Memory
 from utils import stripe
 from utils.llm import condense_conversations, condense_facts, generate_persona_description, condense_tweets
-from utils.social import get_twitter_timeline
+from utils.social import get_twitter_timeline, TwitterProfile, get_twitter_profile
 
 MarketplaceAppReviewUIDs = os.getenv('MARKETPLACE_APP_REVIEWERS').split(',') if os.getenv(
     'MARKETPLACE_APP_REVIEWERS') else []
@@ -75,14 +77,13 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     all_apps = []
     tester = is_tester(uid)
     if cachedApps := get_generic_cache('get_public_approved_apps_data'):
-        print('get_public_approved_plugins_data from cache----------------------------')
+        print('get_public_approved_plugins_data from cache')
         public_approved_data = cachedApps
-        public_approved_data = get_public_approved_apps_db()
         public_unapproved_data = get_public_unapproved_apps(uid)
         private_data = get_private_apps(uid)
         pass
     else:
-        print('get_public_approved_plugins_data from db----------------------------')
+        print('get_public_approved_plugins_data from db')
         private_data = get_private_apps(uid)
         public_approved_data = get_public_approved_apps_db()
         public_unapproved_data = get_public_unapproved_apps(uid)
@@ -392,20 +393,20 @@ async def generate_persona_prompt(uid: str, persona: dict):
 
     tweets = None
     if "twitter" in persona['connected_accounts']:
-        print("twitter in connected accounts---------------------------")
+        print("twitter is in connected accounts")
         # Get latest tweets
-        tweets = await get_twitter_timeline(persona['twitter']['username'])
-        tweets = [{'tweet': tweet['text'], 'posted_at': tweet['created_at']} for tweet in tweets['timeline']]
+        timeline = await get_twitter_timeline(persona['twitter']['username'])
+        tweets = [{'tweet': tweet.text, 'posted_at': tweet.created_at} for tweet in timeline.timeline]
 
     # Condense facts
     facts_text = condense_facts([fact['content'] for fact in facts if not fact['deleted']], user_name)
 
     # Generate updated chat prompt
     persona_prompt = f"""
-    You are {user_name} AI. Your objective is to personify {user_name} as accurately as possible for 1:1 cloning.  
+    You are {user_name} AI. Your objective is to personify {user_name} as accurately as possible for 1:1 cloning.
 
-    You have:  
-    - **Condensed Facts:** Core identity, personality, values, behavioral patterns, preferences, and continuity for ongoing projects or relationships.  
+    You have:
+    - **Condensed Facts:** Core identity, personality, values, behavioral patterns, preferences, and continuity for ongoing projects or relationships.
     - **Condensed Context from Recent Conversations:** Key themes, communication nuances, emotional undertones, decision-making patterns, and conversational flow.
     """
 
@@ -414,20 +415,20 @@ async def generate_persona_prompt(uid: str, persona: dict):
         persona_prompt += f"- **Condensed Tweets:** Recent tweets from {user_name} for additional context and personality insights.\n"
 
     persona_prompt += f"""
-    **Style:**  
-    - Highly interactive and opinionated.  
-    - Strong, slightly polarizing opinions based on {user_name}'s identity.  
-    - Reference personal facts naturally.  
-    - 2-3 sentence responses, never more than 20 words.  
-    - Maintain conversational flow with coherent, context-aware replies.  
+    **Style:**
+    - Highly interactive and opinionated.
+    - Strong, slightly polarizing opinions based on {user_name}'s identity.
+    - Reference personal facts naturally.
+    - 2-3 sentence responses, never more than 20 words.
+    - Maintain conversational flow with coherent, context-aware replies.
 
-    **Guidelines:**  
-    1. Seamlessly integrate facts and recent contexts for continuity, recency, and relevance.  
-    2. Use the condensed facts as foundational knowledge and ongoing continuity.  
-    3. Leverage recent conversations to maintain situational awareness and contextual accuracy.  
-    4. Emulate {user_name}'s humor, emotional responses, vocabulary, and tone.  
-    5. Respond with the appropriate level of detail and complexity as {user_name} would.  
-    6. Exhibit the same thought processes, decision-making patterns, and conversational dynamics.  
+    **Guidelines:**
+    1. Seamlessly integrate facts and recent contexts for continuity, recency, and relevance.
+    2. Use the condensed facts as foundational knowledge and ongoing continuity.
+    3. Leverage recent conversations to maintain situational awareness and contextual accuracy.
+    4. Emulate {user_name}'s humor, emotional responses, vocabulary, and tone.
+    5. Respond with the appropriate level of detail and complexity as {user_name} would.
+    6. Exhibit the same thought processes, decision-making patterns, and conversational dynamics.
     """
 
     # Add a guideline about tweets if they exist
@@ -435,12 +436,12 @@ async def generate_persona_prompt(uid: str, persona: dict):
         persona_prompt += "7. Utilize tweets to enhance authenticity, incorporating common expressions, opinions, and phrasing from {user_name}'s social media presence.\n"
 
     persona_prompt += f"""
-    **Rules:**  
-    - Never mention being AI.  
-    - No ** or formal language.  
-    - No unnecessary text or explanations.  
-    - Maintain the illusion of continuity and authenticity at all times.  
-    - Every response must be indistinguishable from how {user_name} would naturally respond.  
+    **Rules:**
+    - Never mention being AI.
+    - No ** or formal language.
+    - No unnecessary text or explanations.
+    - Maintain the illusion of continuity and authenticity at all times.
+    - Every response must be indistinguishable from how {user_name} would naturally respond.
 
     You have all the necessary condensed facts and contextual knowledge. Begin personifying {user_name} now.
 
@@ -472,13 +473,15 @@ def sync_update_persona_prompt(persona: dict):
     asyncio.set_event_loop(loop)
     try:
         return loop.run_until_complete(update_persona_prompt(persona))
+    except Exception as e:
+        print(f"Error in update_persona_prompt for persona {persona.get('id', 'unknown')}: {str(e)}")
+        return None
     finally:
         loop.close()
 
 
 async def update_persona_prompt(persona: dict):
     """Update a persona's chat prompt with latest facts and memories."""
-
     # Get latest facts and user info
     facts = get_facts(persona['uid'], limit=250)
     user_name = get_user_name(persona['uid'])
@@ -492,8 +495,8 @@ async def update_persona_prompt(persona: dict):
     # Condense tweets
     if "twitter" in persona['connected_accounts'] and 'twitter' in persona:
         # Get latest tweets
-        tweets = await get_twitter_timeline(persona['twitter']['username'])
-        tweets = [tweet['text'] for tweet in tweets['timeline']]
+        timeline = await get_twitter_timeline(persona['twitter']['username'])
+        tweets = [tweet.text for tweet in timeline.timeline]
         condensed_tweets = condense_tweets(tweets, persona['name'])
 
     # Condense facts
@@ -501,10 +504,10 @@ async def update_persona_prompt(persona: dict):
 
     # Generate updated chat prompt
     persona_prompt = f"""
-You are {user_name} AI. Your objective is to personify {user_name} as accurately as possible for 1:1 cloning.  
+You are {user_name} AI. Your objective is to personify {user_name} as accurately as possible for 1:1 cloning.
 
-You have:  
-- **Condensed Facts:** Core identity, personality, values, behavioral patterns, preferences, and continuity for ongoing projects or relationships.  
+You have:
+- **Condensed Facts:** Core identity, personality, values, behavioral patterns, preferences, and continuity for ongoing projects or relationships.
 - **Condensed Context from Recent Conversations:** Key themes, communication nuances, emotional undertones, decision-making patterns, and conversational flow.
 """
 
@@ -513,33 +516,33 @@ You have:
         persona_prompt += f"- **Condensed Tweets:** Recent tweets from {user_name} for additional context and personality insights.\n"
 
     persona_prompt += f"""
-**Style:**  
-- Highly interactive and opinionated.  
-- Strong, slightly polarizing opinions based on {user_name}'s identity.  
-- Reference personal facts naturally.  
-- 2-3 sentence responses, never more than 20 words.  
-- Maintain conversational flow with coherent, context-aware replies.  
+**Style:**
+- Highly interactive and opinionated.
+- Strong, slightly polarizing opinions based on {user_name}'s identity.
+- Reference personal facts naturally.
+- 2-3 sentence responses, never more than 20 words.
+- Maintain conversational flow with coherent, context-aware replies.
 
-**Guidelines:**  
-1. Seamlessly integrate facts and recent contexts for continuity, recency, and relevance.  
-2. Use the condensed facts as foundational knowledge and ongoing continuity.  
-3. Leverage recent conversations to maintain situational awareness and contextual accuracy.  
-4. Emulate {user_name}'s humor, emotional responses, vocabulary, and tone.  
-5. Respond with the appropriate level of detail and complexity as {user_name} would.  
-6. Exhibit the same thought processes, decision-making patterns, and conversational dynamics.  
+**Guidelines:**
+1. Seamlessly integrate facts and recent contexts for continuity, recency, and relevance.
+2. Use the condensed facts as foundational knowledge and ongoing continuity.
+3. Leverage recent conversations to maintain situational awareness and contextual accuracy.
+4. Emulate {user_name}'s humor, emotional responses, vocabulary, and tone.
+5. Respond with the appropriate level of detail and complexity as {user_name} would.
+6. Exhibit the same thought processes, decision-making patterns, and conversational dynamics.
 """
 
     # Add a guideline about tweets if they exist
     if condensed_tweets:
-        persona_prompt += "7. Utilize condensed tweets to enhance authenticity, incorporating common expressions, opinions, and phrasing from {user_name}’s social media presence.\n"
+        persona_prompt += "7. Utilize condensed tweets to enhance authenticity, incorporating common expressions, opinions, and phrasing from {user_name}'s social media presence.\n"
 
     persona_prompt += f"""
-**Rules:**  
-- Never mention being AI.  
-- No ** or formal language.  
-- No unnecessary text or explanations.  
-- Maintain the illusion of continuity and authenticity at all times.  
-- Every response must be indistinguishable from how {user_name} would naturally respond.  
+**Rules:**
+- Never mention being AI.
+- No ** or formal language.
+- No unnecessary text or explanations.
+- Maintain the illusion of continuity and authenticity at all times.
+- Every response must be indistinguishable from how {user_name} would naturally respond.
 
 You have all the necessary condensed facts and contextual knowledge. Begin personifying {user_name} now.
 
@@ -556,6 +559,7 @@ Use these facts, conversations and tweets to shape your personality. Responses s
 
     persona['persona_prompt'] = persona_prompt
     persona['updated_at'] = datetime.now(timezone.utc)
+    
     update_persona_in_db(persona)
     delete_app_cache_by_id(persona['id'])
 
@@ -568,3 +572,32 @@ def increment_username(username: str):
         return f"{username}{i}"
     else:
         return username
+
+def generate_api_key() -> Tuple[str, str, str]:
+    raw_key = secrets.token_hex(16)  # 16 bytes = 32 hex chars
+    hashed_key = hashlib.sha256(raw_key.encode()).hexdigest()
+    formatted_label = f"sk_{raw_key[:4]}...{raw_key[-4:]}"
+    return f'sk_{raw_key}', hashed_key, formatted_label
+
+
+def verify_api_key(app_id: str, api_key: str) -> bool:
+    if api_key.startswith("sk_"):
+        api_key = api_key[3:]
+    hashed_key = hashlib.sha256(api_key.encode()).hexdigest()
+    stored_key = get_api_key_by_hash_db(app_id, hashed_key)
+    return stored_key is not None
+
+def app_has_action(app: dict, action_name: str) -> bool:
+    """Check if an app has a specific action capability."""
+    if not app or not isinstance(app, dict):
+        return False
+
+    if not app.get('external_integration'):
+        return False
+
+    actions = app['external_integration'].get('actions', [])
+    for action in actions:
+        if action.get('action') == action_name:
+            return True
+
+    return False

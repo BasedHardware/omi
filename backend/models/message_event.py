@@ -89,3 +89,13 @@ class PingEvent(MessageEvent):
         j["type"] = self.event_type
         del j["event_type"]
         return j
+
+class LastMemoryEvent(MessageEvent):
+    event_type: str = "last_memory"
+    memory_id: str
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        del j["event_type"]
+        return j

@@ -32,18 +32,35 @@ class AuthStep(BaseModel):
     url: str
 
 
+class ActionType(str, Enum):
+    CREATE_MEMORY = "create_conversation"
+    CREATE_FACTS = "create_facts"
+
+
+class Action(BaseModel):
+    action: ActionType
+
+
 class ExternalIntegration(BaseModel):
-    triggers_on: str
-    webhook_url: str
+    triggers_on: Optional[str] = None
+    webhook_url: Optional[str] = None
     setup_completed_url: Optional[str] = None
-    setup_instructions_file_path: str
+    setup_instructions_file_path: Optional[str]
     is_instructions_url: bool = True
     auth_steps: Optional[List[AuthStep]] = []
     app_home_url: Optional[str] = None
+    actions: Optional[List[Action]] = []
 
 
 class ProactiveNotification(BaseModel):
     scopes: Set[str]
+
+
+class ApiKey(BaseModel):
+    id: str
+    hashed: str
+    label: str
+    created_at: Optional[datetime] = None
 
 
 class App(BaseModel):

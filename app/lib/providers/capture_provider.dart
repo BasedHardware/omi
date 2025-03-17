@@ -5,26 +5,26 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/http/api/conversations.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/backend/schema/message_event.dart';
-import 'package:friend_private/backend/schema/structured.dart';
-import 'package:friend_private/backend/schema/transcript_segment.dart';
-import 'package:friend_private/providers/conversation_provider.dart';
-import 'package:friend_private/providers/message_provider.dart';
-import 'package:friend_private/services/devices.dart';
-import 'package:friend_private/services/notifications.dart';
-import 'package:friend_private/services/services.dart';
-import 'package:friend_private/services/sockets/pure_socket.dart';
-import 'package:friend_private/services/sockets/sdcard_socket.dart';
-import 'package:friend_private/services/sockets/transcription_connection.dart';
-import 'package:friend_private/services/wals.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/enums.dart';
-import 'package:friend_private/utils/logger.dart';
+import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/message.dart';
+import 'package:omi/backend/schema/message_event.dart';
+import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/message_provider.dart';
+import 'package:omi/services/devices.dart';
+import 'package:omi/services/notifications.dart';
+import 'package:omi/services/services.dart';
+import 'package:omi/services/sockets/pure_socket.dart';
+import 'package:omi/services/sockets/sdcard_socket.dart';
+import 'package:omi/services/sockets/transcription_connection.dart';
+import 'package:omi/services/wals.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
@@ -536,6 +536,15 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
 
+    if (event.type == MessageEventType.lastConversation) {
+      if (event.memoryId == null) {
+        debugPrint("Memory ID not received in last_memory event. Content is: $event");
+        return;
+      }
+      _handleLastConvoEvent(event.memoryId!);
+      return;
+    }
+
     if (event.type == MessageEventType.serviceStatus) {
       if (event.status == null) {
         return;
@@ -573,6 +582,21 @@ class CaptureProvider extends ChangeNotifier
     if (conversation == null) return;
     conversationProvider?.upsertConversation(conversation);
     MixpanelManager().conversationCreated(conversation);
+  }
+
+  Future<void> _handleLastConvoEvent(String memoryId) async {
+    bool conversationExists =
+        conversationProvider?.conversations.any((conversation) => conversation.id == memoryId) ?? false;
+    if (conversationExists) {
+      return;
+    }
+    ServerConversation? conversation = await getConversationById(memoryId);
+    if (conversation != null) {
+      debugPrint("Adding last conversation to conversations: $memoryId");
+      conversationProvider?.upsertConversation(conversation);
+    } else {
+      debugPrint("Failed to fetch last conversation: $memoryId");
+    }
   }
 
   @override

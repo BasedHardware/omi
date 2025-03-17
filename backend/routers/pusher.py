@@ -29,6 +29,29 @@ async def _websocket_util_trigger(
     websocket_active = True
     websocket_close_code = 1000
 
+    # heart beat
+    async def send_heartbeat():
+        print("pusher send_heartbeat", uid)
+        nonlocal websocket_active
+        nonlocal websocket_close_code
+        try:
+            while websocket_active:
+                if websocket.client_state == WebSocketState.CONNECTED:
+                    await websocket.send_json({"type": "ping"})
+                else:
+                    break
+                await asyncio.sleep(10)
+        except WebSocketDisconnect:
+            print("WebSocket disconnected")
+        except Exception as e:
+            print(f'Heartbeat error: {e}')
+            websocket_close_code = 1011
+        finally:
+            websocket_active = False
+
+    # start heart beat
+    heartbeat_task = asyncio.create_task(send_heartbeat())
+
     loop = asyncio.get_event_loop()
 
     # audio bytes
@@ -50,11 +73,6 @@ async def _websocket_util_trigger(
                 header_type = struct.unpack('<I', data[:4])[0]
 
                 # Transcript
-                if header_type == 100:
-                    segments = json.loads(bytes(data[4:]).decode("utf-8"))
-                    asyncio.run_coroutine_threadsafe(trigger_realtime_integrations(uid, segments, None), loop)
-                    asyncio.run_coroutine_threadsafe(realtime_transcript_webhook(uid, segments), loop)
-                    continue
                 if header_type == 102:
                     res = json.loads(bytes(data[4:]).decode("utf-8"))
                     segments = res.get('segments')
@@ -87,30 +105,8 @@ async def _websocket_util_trigger(
         finally:
             websocket_active = False
 
-    # heart beat
-    async def send_heartbeat():
-        nonlocal websocket_active
-        nonlocal websocket_close_code
-        try:
-            while websocket_active:
-                await asyncio.sleep(20)
-                if websocket.client_state == WebSocketState.CONNECTED:
-                    await websocket.send_json({"type": "ping"})
-                else:
-                    break
-        except WebSocketDisconnect:
-            print("WebSocket disconnected")
-        except Exception as e:
-            print(f'Heartbeat error: {e}')
-            websocket_close_code = 1011
-        finally:
-            websocket_active = False
-
     try:
-        receive_task = asyncio.create_task(
-            receive_audio_bytes()
-        )
-        heartbeat_task = asyncio.create_task(send_heartbeat())
+        receive_task = asyncio.create_task(receive_audio_bytes())
         await asyncio.gather(receive_task, heartbeat_task)
 
     except Exception as e:

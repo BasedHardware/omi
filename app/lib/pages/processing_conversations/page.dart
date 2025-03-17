@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/pages/capture/widgets/widgets.dart';
-import 'package:friend_private/pages/conversation_detail/page.dart';
-import 'package:friend_private/providers/conversation_provider.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/capture/widgets/widgets.dart';
+import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/providers/conversation_provider.dart';
 import 'package:provider/provider.dart';
 
 class ProcessingConversationPage extends StatefulWidget {
@@ -48,7 +48,7 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
       // }
 
       // Conversation source
-      var convoSource = ConversationSource.friend;
+      var convoSource = ConversationSource.omi;
       return PopScope(
         canPop: true,
         child: Scaffold(
