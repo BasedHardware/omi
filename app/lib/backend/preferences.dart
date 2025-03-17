@@ -424,4 +424,39 @@ class SharedPreferencesUtil {
   Future<bool> clear() async {
     return await _preferences?.clear() ?? false;
   }
+
+  /// Clears all user-related preferences when signing out
+  Future<void> clearUserPreferences() async {
+    // Remove authentication related data
+    await remove('authToken');
+    await remove('tokenExpirationTime');
+    await remove('email');
+    await remove('givenName');
+    await remove('familyName');
+
+    // Remove device related data
+    await remove('hasOmiDevice');
+    await remove('verifiedPersonaId');
+
+    // Remove cached data
+    await remove('cachedConversations');
+    await remove('cachedMessages');
+    await remove('cachedPeople');
+    await remove('modifiedConversationDetails');
+
+    // Remove app related data
+    await remove('selectedChatAppId2');
+
+    // Remove Twitter connection data
+    await remove('twitterProfile');
+    await remove('twitterTimeline');
+
+    // Remove calendar data
+    await remove('calendarEnabled');
+    await remove('calendarId');
+    await remove('calendarType2');
+
+    // Keep settings like language, analytics opt-in, etc.
+    // as these are user preferences that should persist across logins
+  }
 }

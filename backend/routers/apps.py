@@ -22,13 +22,15 @@ from utils.apps import get_available_apps, get_available_app_by_id, get_approved
     is_permit_payment_plan_get, generate_persona_prompt, generate_persona_desc, get_persona_by_uid, \
     increment_username, generate_api_key
 
+from database.facts import migrate_facts
+
 from utils.llm import generate_description, generate_persona_intro_message
 
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
 from models.app import App, ActionType
 from utils.other.storage import upload_plugin_logo, delete_plugin_logo, upload_app_thumbnail, get_app_thumbnail_url
-from utils.social import get_twitter_profile, get_twitter_timeline, verify_latest_tweet, \
+from utils.social import get_twitter_profile, verify_latest_tweet, \
     upsert_persona_from_twitter_profile, add_twitter_to_persona
 
 router = APIRouter()
@@ -534,9 +536,20 @@ def generate_description_endpoint(data: dict, uid: str = Depends(auth.get_curren
 async def get_twitter_profile_data(handle: str, uid: str = Depends(auth.get_current_user_uid)):
     if handle.startswith('@'):
         handle = handle[1:]
-    res = await get_twitter_profile(handle)
-    if res['avatar']:
-        res['avatar'] = res['avatar'].replace('_normal', '')
+    profile = await get_twitter_profile(handle)
+
+    # Convert TwitterProfile to dict for response
+    res = {
+        "name": profile.name,
+        "profile": profile.profile,
+        "rest_id": profile.rest_id,
+        "avatar": profile.avatar,
+        "desc": profile.desc,
+        "friends": profile.friends,
+        "sub_count": profile.sub_count,
+        "id": profile.id,
+        "status": profile.status,
+    }
 
     # By user persona first
     persona = get_user_persona_by_uid(uid)
@@ -602,7 +615,8 @@ async def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid
     # Migrate app ownership in the database
     migrate_app_owner_id_db(uid, old_id)
 
-    # Start async task to update persona connected accounts
+    # Start async tasks to migrate facts and update persona connected accounts
+    asyncio.create_task(migrate_facts(old_id, uid))
     asyncio.create_task(update_omi_persona_connected_accounts(uid))
 
     return {"status": "ok", "message": "Migration started"}
