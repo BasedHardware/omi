@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/fact.dart';
-import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/facts_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/widgets/extensions/functions.dart';
-import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
 import 'category_facts_page.dart';
