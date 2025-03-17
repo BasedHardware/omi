@@ -124,7 +124,7 @@ async def get_twitter_timeline(handle: str) -> TwitterTimeline:
             tweets = [TwitterTweet(
                 text=tweet['text'],
                 created_at=tweet['created_at'],
-                id=tweet['id']
+                id=tweet['tweet_id']
             ) for tweet in timeline_data]
 
             return TwitterTimeline(timeline=tweets)

@@ -111,8 +111,7 @@ class _SettingsPageState extends State<SettingsPage> {
               return getDialog(context, () {
                 Navigator.of(context).pop();
               }, () async {
-                SharedPreferencesUtil().hasOmiDevice = null;
-                SharedPreferencesUtil().verifiedPersonaId = null;
+                await SharedPreferencesUtil().clearUserPreferences();
                 Provider.of<PersonaProvider>(context, listen: false).setRouting(PersonaProfileRouting.no_device);
                 await signOut();
                 Navigator.of(context).pop();

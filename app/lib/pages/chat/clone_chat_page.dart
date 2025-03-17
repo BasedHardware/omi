@@ -35,6 +35,7 @@ class CloneChatPageState extends State<CloneChatPage> {
         var appProvider = Provider.of<AppProvider>(context, listen: false);
         SharedPreferencesUtil().appsList = [selectedApp];
         appProvider.setApps();
+        // Set to null to chat with Omi by default
         appProvider.setSelectedChatAppId(null);
         if (!selectedApp.enabled) {
           await appProvider.toggleApp(selectedApp.id, true, null);
