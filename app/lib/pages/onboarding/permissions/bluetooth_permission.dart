@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/providers/onboarding_provider.dart';
+import 'package:omi/providers/onboarding_provider.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
@@ -41,7 +41,7 @@ class _BluetoothPermissionWidgetState extends State<BluetoothPermissionWidget> {
                 }
               },
               title: const Text(
-                'Enable Bluetooth access for Friend\'s full experience.',
+                'Enable Bluetooth access for Omi\'s full experience.',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
               ),
               contentPadding: const EdgeInsets.only(left: 8),

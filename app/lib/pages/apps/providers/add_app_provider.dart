@@ -4,12 +4,12 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import 'package:friend_private/backend/http/api/apps.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/providers/app_provider.dart';
-import 'package:friend_private/utils/alerts/app_snackbar.dart';
-import 'package:friend_private/widgets/extensions/string.dart';
+import 'package:omi/backend/http/api/apps.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/providers/app_provider.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/widgets/extensions/string.dart';
 import 'package:image_picker/image_picker.dart';
 
 class AddAppProvider extends ChangeNotifier {

@@ -3,18 +3,18 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/http/api/speech_profile.dart';
-import 'package:friend_private/backend/http/api/users.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/backend/schema/message_event.dart';
-import 'package:friend_private/backend/schema/transcript_segment.dart';
-import 'package:friend_private/providers/device_provider.dart';
-import 'package:friend_private/services/devices.dart';
-import 'package:friend_private/services/services.dart';
-import 'package:friend_private/services/sockets/transcription_connection.dart';
-import 'package:friend_private/utils/audio/wav_bytes.dart';
+import 'package:omi/backend/http/api/speech_profile.dart';
+import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/message_event.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/services/devices.dart';
+import 'package:omi/services/services.dart';
+import 'package:omi/services/sockets/transcription_connection.dart';
+import 'package:omi/utils/audio/wav_bytes.dart';
 
 class SpeechProfileProvider extends ChangeNotifier
     with MessageNotifierMixin

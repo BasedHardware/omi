@@ -1,7 +1,7 @@
 import os
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Any
 import hashlib
 import secrets
 
@@ -25,7 +25,7 @@ from models.app import App, UsageHistoryItem, UsageHistoryType
 from models.memory import Memory
 from utils import stripe
 from utils.llm import condense_conversations, condense_facts, generate_persona_description, condense_tweets
-from utils.social import get_twitter_timeline
+from utils.social import get_twitter_timeline, TwitterProfile, get_twitter_profile
 
 MarketplaceAppReviewUIDs = os.getenv('MARKETPLACE_APP_REVIEWERS').split(',') if os.getenv(
     'MARKETPLACE_APP_REVIEWERS') else []
@@ -77,14 +77,13 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     all_apps = []
     tester = is_tester(uid)
     if cachedApps := get_generic_cache('get_public_approved_apps_data'):
-        print('get_public_approved_plugins_data from cache----------------------------')
+        print('get_public_approved_plugins_data from cache')
         public_approved_data = cachedApps
-        public_approved_data = get_public_approved_apps_db()
         public_unapproved_data = get_public_unapproved_apps(uid)
         private_data = get_private_apps(uid)
         pass
     else:
-        print('get_public_approved_plugins_data from db----------------------------')
+        print('get_public_approved_plugins_data from db')
         private_data = get_private_apps(uid)
         public_approved_data = get_public_approved_apps_db()
         public_unapproved_data = get_public_unapproved_apps(uid)
@@ -394,10 +393,10 @@ async def generate_persona_prompt(uid: str, persona: dict):
 
     tweets = None
     if "twitter" in persona['connected_accounts']:
-        print("twitter in connected accounts---------------------------")
+        print("twitter is in connected accounts")
         # Get latest tweets
-        tweets = await get_twitter_timeline(persona['twitter']['username'])
-        tweets = [{'tweet': tweet['text'], 'posted_at': tweet['created_at']} for tweet in tweets['timeline']]
+        timeline = await get_twitter_timeline(persona['twitter']['username'])
+        tweets = [{'tweet': tweet.text, 'posted_at': tweet.created_at} for tweet in timeline.timeline]
 
     # Condense facts
     facts_text = condense_facts([fact['content'] for fact in facts if not fact['deleted']], user_name)
@@ -474,13 +473,15 @@ def sync_update_persona_prompt(persona: dict):
     asyncio.set_event_loop(loop)
     try:
         return loop.run_until_complete(update_persona_prompt(persona))
+    except Exception as e:
+        print(f"Error in update_persona_prompt for persona {persona.get('id', 'unknown')}: {str(e)}")
+        return None
     finally:
         loop.close()
 
 
 async def update_persona_prompt(persona: dict):
     """Update a persona's chat prompt with latest facts and memories."""
-
     # Get latest facts and user info
     facts = get_facts(persona['uid'], limit=250)
     user_name = get_user_name(persona['uid'])
@@ -494,8 +495,8 @@ async def update_persona_prompt(persona: dict):
     # Condense tweets
     if "twitter" in persona['connected_accounts'] and 'twitter' in persona:
         # Get latest tweets
-        tweets = await get_twitter_timeline(persona['twitter']['username'])
-        tweets = [tweet['text'] for tweet in tweets['timeline']]
+        timeline = await get_twitter_timeline(persona['twitter']['username'])
+        tweets = [tweet.text for tweet in timeline.timeline]
         condensed_tweets = condense_tweets(tweets, persona['name'])
 
     # Condense facts
@@ -533,7 +534,7 @@ You have:
 
     # Add a guideline about tweets if they exist
     if condensed_tweets:
-        persona_prompt += "7. Utilize condensed tweets to enhance authenticity, incorporating common expressions, opinions, and phrasing from {user_name}’s social media presence.\n"
+        persona_prompt += "7. Utilize condensed tweets to enhance authenticity, incorporating common expressions, opinions, and phrasing from {user_name}'s social media presence.\n"
 
     persona_prompt += f"""
 **Rules:**
@@ -558,6 +559,7 @@ Use these facts, conversations and tweets to shape your personality. Responses s
 
     persona['persona_prompt'] = persona_prompt
     persona['updated_at'] = datetime.now(timezone.utc)
+    
     update_persona_in_db(persona)
     delete_app_cache_by_id(persona['id'])
 
@@ -585,27 +587,17 @@ def verify_api_key(app_id: str, api_key: str) -> bool:
     stored_key = get_api_key_by_hash_db(app_id, hashed_key)
     return stored_key is not None
 
-def app_has_action(app: App, action_name: str) -> bool:
-    """Check if an app has a specific action capability"""
-    if not app:
-        return False
-
-    if not app.get('external_integration') or not app.get('external_integration').get('actions'):
-        return False
-
-    for action in app.get('external_integration').get('actions'):
-        if action.get('action') == action_name:
-            return True
-
-    return False
 def app_has_action(app: dict, action_name: str) -> bool:
     """Check if an app has a specific action capability."""
+    if not app or not isinstance(app, dict):
+        return False
+
     if not app.get('external_integration'):
         return False
-    
+
     actions = app['external_integration'].get('actions', [])
     for action in actions:
         if action.get('action') == action_name:
             return True
-    
+
     return False
