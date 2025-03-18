@@ -180,6 +180,9 @@ class SpeechToTextWidgetState extends State<SpeechToTextWidget> {
         await Future.delayed(const Duration(milliseconds: 100));
       }
       
+      // Clear previous transcripts before starting new recording
+      captureProvider.clearTranscripts();
+      
       setState(() {
         _isRecording = true;
         _recognizedText = '';
@@ -205,9 +208,6 @@ class SpeechToTextWidgetState extends State<SpeechToTextWidget> {
           }
         }
       });
-      
-      // Clear previous transcripts
-      captureProvider.clearTranscripts();
       
       // Initialize recording
       captureProvider.updateRecordingState(RecordingState.initialising);
@@ -238,13 +238,16 @@ class SpeechToTextWidgetState extends State<SpeechToTextWidget> {
       
       _forceShowNavigationBar();
       
+      final String finalText = _recognizedText;
+      
       setState(() {
         _isRecording = false;
         _recordingDuration = 0;
         _currentSoundLevel = 0;
+        _recognizedText = '';  // Clear recognized text
         
-        if (_recognizedText.isNotEmpty) {
-          widget.onTextRecognized(_recognizedText);
+        if (finalText.isNotEmpty) {
+          widget.onTextRecognized(finalText);
         } else if (_recordingDuration >= 1) {
           // Only show this message if they actually tried to record (over 1 second)
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -260,6 +263,9 @@ class SpeechToTextWidgetState extends State<SpeechToTextWidget> {
           });
         }
       });
+      
+      // Clear transcript data after handling the recognized text
+      captureProvider.clearTranscripts();
     }
   }
 
