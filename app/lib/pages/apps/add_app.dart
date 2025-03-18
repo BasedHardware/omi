@@ -71,7 +71,7 @@ class _AddAppPageState extends State<AddAppPage> {
         throw Exception('OpenAI API key not found in environment variables');
       }
 
-      final systemPrompt = '''
+      const systemPrompt = '''
       You are an AI that creates structured app descriptions based on user input. 
       Your job is to turn user ideas into well-structured app descriptions with specific capabilities.
       You MUST respond with a valid JSON object in the following format:
@@ -212,13 +212,10 @@ class _AddAppPageState extends State<AddAppPage> {
           json['notification_scopes'] is! List) {
         return false;
       }
-      final validScopes = [
-        'all_day',
-        'conversation_end',
-        'conversation_start',
-        'memory_creation',
-        'transcript_processed'
-      ];
+      final validScopes = Provider.of<AddAppProvider>(context, listen: false)
+          .getNotificationScopes()
+          .map((scope) => scope.id)
+          .toList();
       for (final scope in json['notification_scopes']) {
         if (!validScopes.contains(scope)) return false;
       }
