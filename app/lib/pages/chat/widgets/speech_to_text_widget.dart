@@ -27,27 +27,42 @@ class SpeechToTextWidget extends StatefulWidget {
   State<SpeechToTextWidget> createState() => SpeechToTextWidgetState();
 }
 
-class SpeechToTextWidgetState extends State<SpeechToTextWidget> {
+class SpeechToTextWidgetState extends State<SpeechToTextWidget> with SingleTickerProviderStateMixin {
+  // Recording state
   bool _isRecording = false;
   String _recognizedText = '';
-  Timer? _recordingTimer;
   int _recordingDuration = 0;
-  double _currentSoundLevel = 0;
   bool _hasReconnected = false;
+
+  // Animation state
+  double _currentSoundLevel = 0;
+  final Random _random = Random();
+  
+  // Timers
+  Timer? _recordingTimer;
+  Timer? _waveTimer;
   Timer? _reconnectionTimer;
 
   bool get isRecording => _isRecording;
 
   @override
   void dispose() {
-    _recordingTimer?.cancel();
-    _reconnectionTimer?.cancel();
+    _cleanupTimers();
     if (_isRecording) {
       _forceShowNavigationBar();
-      final captureProvider = context.read<CaptureProvider>();
-      captureProvider.stopStreamRecording();
+      _stopRecording();
     }
     super.dispose();
+  }
+
+  void _cleanupTimers() {
+    _recordingTimer?.cancel();
+    _waveTimer?.cancel();
+    _reconnectionTimer?.cancel();
+    
+    _recordingTimer = null;
+    _waveTimer = null;
+    _reconnectionTimer = null;
   }
 
   String _formatDuration(int seconds) {
@@ -56,9 +71,123 @@ class SpeechToTextWidgetState extends State<SpeechToTextWidget> {
     return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
   }
 
-  Widget _buildRecordingOverlay() {
-    if (!_isRecording) return const SizedBox.shrink();
+  Future<void> _startRecording() async {
+    final captureProvider = context.read<CaptureProvider>();
     
+    // Clear previous transcripts
+    captureProvider.clearTranscripts();
+    
+    // Initialize recording state
+    setState(() {
+      _isRecording = true;
+      _recognizedText = '';
+      _recordingDuration = 0;
+      _currentSoundLevel = 0;
+    });
+    
+    // Don't request focus to prevent keyboard from appearing
+    await SystemChannels.textInput.invokeMethod('TextInput.hide');
+    
+    // Start the recording timer for duration tracking
+    _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() => _recordingDuration++);
+      }
+    });
+    
+    // Start animation timer
+    _waveTimer = Timer.periodic(const Duration(milliseconds: 60), (timer) {
+      if (!mounted || !_isRecording) return;
+      
+      final isActive = captureProvider.recordingState == RecordingState.record;
+      if (isActive && mounted) {
+        setState(() {
+          _currentSoundLevel = (5 + _random.nextDouble() * 15).clamp(2.0, 40.0);
+        });
+      }
+    });
+    
+    // Initialize and start backend recording
+    captureProvider.updateRecordingState(RecordingState.initialising);
+    await captureProvider.streamRecording();
+    
+    // Show reconnection indicator briefly to indicate we've started
+    if (mounted) {
+      setState(() => _hasReconnected = true);
+      _reconnectionTimer = Timer(const Duration(seconds: 3), () {
+        if (mounted) setState(() => _hasReconnected = false);
+      });
+    }
+  }
+
+  Future<void> _stopRecording() async {
+    final captureProvider = context.read<CaptureProvider>();
+    await captureProvider.stopStreamRecording();
+    captureProvider.clearTranscripts();
+  }
+
+  Future<void> toggleVoiceRecording() async {
+    if (!_isRecording) {
+      // Starting a new recording
+      if (MediaQuery.of(context).viewInsets.bottom > 0) {
+        FocusScope.of(context).unfocus();
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+      
+      await _startRecording();
+    } else {
+      // Stopping current recording
+      _cleanupTimers();
+      
+      // Stop streaming recording
+      await _stopRecording();
+      
+      _forceShowNavigationBar();
+      
+      final String finalText = _recognizedText;
+      
+      setState(() {
+        _isRecording = false;
+        _recordingDuration = 0;
+        _currentSoundLevel = 0;
+        _recognizedText = '';
+      });
+      
+      // Handle recognized text
+      if (finalText.isNotEmpty) {
+        widget.onTextRecognized(finalText);
+      } else if (_recordingDuration >= 1) {
+        // Only show this message if they actually tried to record
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('No speech detected. Please try again.'),
+                duration: Duration(seconds: 2),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+        });
+      }
+    }
+  }
+
+  //Helper function for showing navBar
+  void _forceShowNavigationBar() {
+    // Use HomeProvider to properly manage focus
+    if (mounted) {
+      final homeProvider = context.read<HomeProvider>();
+      homeProvider.chatFieldFocusNode.unfocus();
+    }
+    
+    FocusScope.of(context).unfocus();
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (mounted) setState(() {});
+    });
+  }
+
+  Widget _buildRecordingOverlay() {
     return Consumer<CaptureProvider>(
       builder: (context, captureProvider, child) {
         final bool isActive = captureProvider.recordingState == RecordingState.record;
@@ -72,7 +201,7 @@ class SpeechToTextWidgetState extends State<SpeechToTextWidget> {
         
         return Material(
           color: Colors.transparent,
-          elevation: 100, // High elevation to ensure it appears above other elements
+          elevation: 100,
           child: Container(
             width: double.infinity,
             height: 120,
@@ -93,9 +222,7 @@ class SpeechToTextWidgetState extends State<SpeechToTextWidget> {
                   children: [
                     IconButton(
                       icon: const Icon(Icons.close, color: Colors.white),
-                      onPressed: () {
-                        toggleVoiceRecording();
-                      },
+                      onPressed: toggleVoiceRecording,
                     ),
                     Row(
                       children: [
@@ -121,9 +248,7 @@ class SpeechToTextWidgetState extends State<SpeechToTextWidget> {
                     ),
                     IconButton(
                       icon: const Icon(Icons.check, color: Colors.white),
-                      onPressed: () {
-                        toggleVoiceRecording();
-                      },
+                      onPressed: toggleVoiceRecording,
                     ),
                   ],
                 ),
@@ -158,9 +283,11 @@ class SpeechToTextWidgetState extends State<SpeechToTextWidget> {
                 Container(
                   height: 40,
                   margin: const EdgeInsets.symmetric(horizontal: 20),
-                  child: CustomPaint(
-                    painter: WaveformPainter(soundLevel: isActive ? _currentSoundLevel : 0),
-                    size: Size.infinite,
+                  child: RepaintBoundary(
+                    child: CustomPaint(
+                      painter: WaveformPainter(soundLevel: isActive ? _currentSoundLevel : 0),
+                      size: Size.infinite,
+                    ),
                   ),
                 ),
               ],
@@ -171,138 +298,23 @@ class SpeechToTextWidgetState extends State<SpeechToTextWidget> {
     );
   }
 
-  Future<void> toggleVoiceRecording() async {
-    final captureProvider = context.read<CaptureProvider>();
-    
-    if (!_isRecording) {
-      if (MediaQuery.of(context).viewInsets.bottom > 0) {
-        FocusScope.of(context).unfocus();
-        await Future.delayed(const Duration(milliseconds: 100));
-      }
-      
-      // Clear previous transcripts before starting new recording
-      captureProvider.clearTranscripts();
-      
-      setState(() {
-        _isRecording = true;
-        _recognizedText = '';
-        _recordingDuration = 0;
-        _currentSoundLevel = 0;
-      });
-      
-      // Don't request focus to prevent keyboard from appearing
-      SystemChannels.textInput.invokeMethod('TextInput.hide');
-      
-      // Start the recording timer
-      _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-        if (mounted) {
-          setState(() {
-            _recordingDuration++;
-          });
-          
-          // Simulate sound level for waveform animation
-          if (captureProvider.recordingState == RecordingState.record) {
-            setState(() {
-              _currentSoundLevel = (5 + Random().nextDouble() * 15).clamp(2.0, 40.0);
-            });
-          }
-        }
-      });
-      
-      // Initialize recording
-      captureProvider.updateRecordingState(RecordingState.initialising);
-      
-      // Start streaming recording
-      await captureProvider.streamRecording();
-      
-      // Set reconnected indicator to indicate we've started
-      setState(() {
-        _hasReconnected = true;
-      });
-      
-      // Clear reconnection indicator after 3 seconds
-      _reconnectionTimer = Timer(const Duration(seconds: 3), () {
-        if (mounted) {
-          setState(() {
-            _hasReconnected = false;
-          });
-        }
-      });
-      
-    } else {
-      _recordingTimer?.cancel();
-      _reconnectionTimer?.cancel();
-      
-      // Stop streaming recording
-      await captureProvider.stopStreamRecording();
-      
-      _forceShowNavigationBar();
-      
-      final String finalText = _recognizedText;
-      
-      setState(() {
-        _isRecording = false;
-        _recordingDuration = 0;
-        _currentSoundLevel = 0;
-        _recognizedText = '';  // Clear recognized text
-        
-        if (finalText.isNotEmpty) {
-          widget.onTextRecognized(finalText);
-        } else if (_recordingDuration >= 1) {
-          // Only show this message if they actually tried to record (over 1 second)
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('No speech detected. Please try again.'),
-                  duration: Duration(seconds: 2),
-                  backgroundColor: Colors.orange,
-                ),
-              );
-            }
-          });
-        }
-      });
-      
-      // Clear transcript data after handling the recognized text
-      captureProvider.clearTranscripts();
-    }
-  }
-
-  //Helper function for showing navBar
-  void _forceShowNavigationBar() {
-    // Use HomeProvider to properly manage focus
-    if (mounted) {
-      final homeProvider = context.read<HomeProvider>();
-      homeProvider.chatFieldFocusNode.unfocus();
-    }
-    
-    FocusScope.of(context).unfocus();
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (mounted) {
-        setState(() {});
-      }
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (_isRecording) {
-      return Positioned(
-        bottom: 0,
-        left: 0,
-        right: 0,
-        child: Padding(
-          padding: EdgeInsets.only(
-            left: 28, 
-            right: 28, 
-            bottom: widget.isPivotBottom ? 40 : widget.bottomPadding
-          ),
-          child: _buildRecordingOverlay(),
+    if (!_isRecording) return const SizedBox.shrink();
+    
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 28, 
+          right: 28, 
+          bottom: widget.isPivotBottom ? 40 : widget.bottomPadding
         ),
-      );
-    }
-    return const SizedBox.shrink();
+        child: _buildRecordingOverlay(),
+      ),
+    );
   }
 }
 
@@ -345,8 +357,8 @@ class WaveformPainter extends CustomPainter {
     for (final level in waveHistory) {
       final x = i * barWidth.toDouble();
       
-      // Add some randomness for natural movement
-      final jitter = _random.nextDouble() * 2.0;
+      // Add subtle randomness for natural movement
+      final jitter = _random.nextDouble() * 1.5;
       final amplitude = (level + jitter).clamp(2.0, height / 2);
       
       canvas.drawLine(
