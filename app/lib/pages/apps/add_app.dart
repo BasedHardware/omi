@@ -66,8 +66,7 @@ class _AddAppPageState extends State<AddAppPage> {
     });
 
     try {
-      
-      final apiKey = // TODO: Get API key from environment variables
+      final apiKey = ""; // TODO: Get API key from environment variables
       if (apiKey == null || apiKey.isEmpty) {
         throw Exception('OpenAI API key not found in environment variables');
       }
@@ -75,46 +74,80 @@ class _AddAppPageState extends State<AddAppPage> {
       final systemPrompt = '''
       You are an AI that creates structured app descriptions based on user input. 
       Your job is to turn user ideas into well-structured app descriptions with specific capabilities.
-      Format your response EXACTLY using these headers:
-      App name: [concise name]
-      Description: [detailed description]
-      Category: [select one from: Productivity, Entertainment, Education, Lifestyle, Utilities, Health & Fitness, Finance, Social, Travel, Games]
-      Capabilities: [list applicable capabilities from: chat, memories, proactive_notification, external_trigger, app_actions]
-      Chat Prompt: [if chat capability is selected, provide a detailed system prompt]
-      Conversation Prompt: [if memories capability is selected, provide a detailed memory processing prompt]
-      Keep each section clearly separated with line breaks. Be creative but practical, focusing on what can realistically be built within the Omi ecosystem.
+      You MUST respond with a valid JSON object in the following format:
+      {
+        "name": "string - concise app name",
+        "description": "string - detailed description",
+        "category": "string - one from: Productivity, Entertainment, Education, Lifestyle, Utilities, Health & Fitness, Finance, Social, Travel, Games",
+        "capabilities": ["array of strings from: chat, memories, proactive_notification, external_trigger, app_actions"],
+        "chat_prompt": "string - if chat capability is selected, provide a detailed system prompt",
+        "conversation_prompt": "string - if memories capability is selected, provide a detailed memory processing prompt",
+        "notification_scopes": ["array of strings from: all_day, conversation_end, conversation_start, memory_creation, transcript_processed"] - if proactive_notification capability is selected
+      }
+      Be creative but practical, focusing on what can realistically be built within the Omi ecosystem.
 ''';
 
-      final response = await http.post(
-        Uri.parse('https://api.openai.com/v1/chat/completions'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $apiKey',
-        },
-        body: jsonEncode({
-          'model': 'gpt-4o',
-          'messages': [
-            {'role': 'system', 'content': systemPrompt},
-            {'role': 'user', 'content': prompt},
-          ],
-          'temperature': 0.7,
-        }),
-      );
+      int retryCount = 0;
+      const maxRetries = 3;
+      bool validResponse = false;
+      String? validJsonResponse;
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final rawContent = data['choices'][0]['message']['content'];
+      while (!validResponse && retryCount < maxRetries) {
+        final response = await http.post(
+          Uri.parse('https://api.openai.com/v1/chat/completions'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $apiKey',
+          },
+          body: jsonEncode({
+            'model': 'gpt-4',
+            'messages': [
+              {'role': 'system', 'content': systemPrompt},
+              {'role': 'user', 'content': prompt},
+            ],
+            'temperature': 0.7,
+          }),
+        );
 
-        // Clean up the response to only include the structured app description
-        final cleanedContent = _cleanGeneratedContent(rawContent);
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final rawContent = data['choices'][0]['message']['content'];
 
+          try {
+            // Try to parse the response as JSON
+            final jsonResponse = jsonDecode(rawContent);
+
+            // Validate the JSON structure
+            if (_validateAppJson(jsonResponse)) {
+              validResponse = true;
+              validJsonResponse = rawContent;
+            } else {
+              retryCount++;
+              if (retryCount >= maxRetries) {
+                throw Exception(
+                    'Failed to generate valid app structure after $maxRetries attempts');
+              }
+            }
+          } catch (e) {
+            retryCount++;
+            if (retryCount >= maxRetries) {
+              throw Exception(
+                  'Failed to generate valid JSON response after $maxRetries attempts');
+            }
+          }
+        } else {
+          throw Exception('Failed to generate app: ${response.body}');
+        }
+      }
+
+      if (validJsonResponse != null) {
         setState(() {
-          _generatedResult = cleanedContent;
+          _generatedResult = validJsonResponse!;
           _isGenerating = false;
         });
         _showResultDialog();
       } else {
-        throw Exception('Failed to generate app: ${response.body}');
+        throw Exception('Failed to generate valid app structure');
       }
     } catch (e) {
       setState(() {
@@ -126,88 +159,104 @@ class _AddAppPageState extends State<AddAppPage> {
     }
   }
 
-  // Cleans up the generated content to only include the structured app description
-  String _cleanGeneratedContent(String text) {
-    // Define the expected sections based on the system prompt
-    final List<String> sections = [
-      'App name:',
-      'Description:',
-      'Category:',
-      'Capabilities:',
-      'Chat Prompt:',
-      'Conversation Prompt:'
+  // Add this new method to validate the JSON structure
+  bool _validateAppJson(Map<String, dynamic> json) {
+    // Check required fields
+    final requiredFields = ['name', 'description', 'category', 'capabilities'];
+    for (final field in requiredFields) {
+      if (!json.containsKey(field)) return false;
+    }
+
+    // Validate category
+    final validCategories = [
+      'Productivity',
+      'Entertainment',
+      'Education',
+      'Lifestyle',
+      'Utilities',
+      'Health & Fitness',
+      'Finance',
+      'Social',
+      'Travel',
+      'Games'
     ];
+    if (!validCategories.contains(json['category'])) return false;
 
-    // Start with the first section
-    int startIndex = text.indexOf(sections[0]);
-    if (startIndex == -1) return text; // If not found, return original
+    // Validate capabilities
+    final validCapabilities = [
+      'chat',
+      'memories',
+      'proactive_notification',
+      'external_trigger',
+      'app_actions'
+    ];
+    if (json['capabilities'] is! List) return false;
+    for (final capability in json['capabilities']) {
+      if (!validCapabilities.contains(capability)) return false;
+    }
 
-    // Find the last section that appears in the text
-    String lastSection = sections[0];
-    int lastSectionIndex = startIndex;
+    // Validate optional fields based on capabilities
+    if (json['capabilities'].contains('chat') &&
+        (!json.containsKey('chat_prompt') || json['chat_prompt'].isEmpty)) {
+      return false;
+    }
+    if (json['capabilities'].contains('memories') &&
+        (!json.containsKey('conversation_prompt') ||
+            json['conversation_prompt'].isEmpty)) {
+      return false;
+    }
 
-    for (String section in sections) {
-      int index = text.indexOf(section);
-      if (index != -1 && index > lastSectionIndex) {
-        lastSection = section;
-        lastSectionIndex = index;
+    // Validate notification scopes if proactive_notification capability is selected
+    if (json['capabilities'].contains('proactive_notification')) {
+      if (!json.containsKey('notification_scopes') ||
+          json['notification_scopes'] is! List) {
+        return false;
+      }
+      final validScopes = [
+        'all_day',
+        'conversation_end',
+        'conversation_start',
+        'memory_creation',
+        'transcript_processed'
+      ];
+      for (final scope in json['notification_scopes']) {
+        if (!validScopes.contains(scope)) return false;
       }
     }
 
-    // Find the last section's content
-    String lastSectionContent = '';
-    if (lastSectionIndex != -1) {
-      int nextLineIndex = text.indexOf('\n', lastSectionIndex);
-      if (nextLineIndex == -1) {
-        // If there's no newline after the last section, take everything to the end
-        lastSectionContent = text.substring(lastSectionIndex);
-      } else {
-        // Find the end of the last section's content (empty line or start of unrelated text)
-        int endOfContent = text.length;
-        List<String> lines = text.substring(nextLineIndex).split('\n');
-        bool foundEmptyLine = false;
-
-        for (int i = 1; i < lines.length; i++) {
-          if (lines[i].trim().isEmpty) {
-            foundEmptyLine = true;
-          } else if (foundEmptyLine) {
-            // If we found an empty line and now have content that doesn't start with any section
-            bool isNewSection = false;
-            for (String section in sections) {
-              if (lines[i].trim().startsWith(section)) {
-                isNewSection = true;
-                break;
-              }
-            }
-            if (!isNewSection) {
-              // This is likely unrelated content, so truncate here
-              endOfContent =
-                  nextLineIndex + lines.sublist(0, i).join('\n').length;
-              break;
-            }
-          }
-        }
-
-        // Extract the content up to the determined end point
-        lastSectionContent = text.substring(lastSectionIndex, endOfContent);
-      }
-    }
-
-    // Return from the first section to the end of the last section's content
-    return text
-        .substring(startIndex, lastSectionIndex + lastSectionContent.length)
-        .trim();
+    return true;
   }
 
-  // This method parses the generated text and extracts relevant information
+  // Update the _parseGeneratedApp method to handle JSON
   Map<String, dynamic> _parseGeneratedApp(String text) {
+    try {
+      final jsonResponse = jsonDecode(text);
+      return {
+        'name': jsonResponse['name'] ?? '',
+        'description': jsonResponse['description'] ?? '',
+        'category': jsonResponse['category'] ?? '',
+        'capabilities': List<String>.from(jsonResponse['capabilities'] ?? []),
+        'chat_prompt': jsonResponse['chat_prompt'] ?? '',
+        'conversation_prompt': jsonResponse['conversation_prompt'] ?? '',
+        'notification_scopes':
+            List<String>.from(jsonResponse['notification_scopes'] ?? []),
+      };
+    } catch (e) {
+      // Fallback to the old parsing method if JSON parsing fails
+      return _parseGeneratedAppLegacy(text);
+    }
+  }
+
+  // Keep the old parsing method as fallback
+  Map<String, dynamic> _parseGeneratedAppLegacy(String text) {
     final Map<String, dynamic> result = {
       'name': '',
       'description': '',
       'category': '',
       'capabilities': <String>[],
       'chat_prompt': '',
-      'conversation_prompt': ''
+      'conversation_prompt': '',
+      'notification_scopes': <String>[],
     };
 
     // Extract app name (using exact prompt format)
@@ -258,28 +307,6 @@ class _AddAppPageState extends State<AddAppPage> {
           result['capabilities'].add(capability);
         }
       }
-    } else {
-      // Fallback to checking the entire text for capabilities if the section isn't found
-      final List<String> commonCapabilities = [
-        'chat',
-        'memories',
-        'proactive_notification',
-        'external_trigger',
-        'app_actions'
-      ];
-
-      for (final capability in commonCapabilities) {
-        if (text
-                .toLowerCase()
-                .contains(capability.toLowerCase().replaceAll('_', ' ')) ||
-            (capability == 'memories' &&
-                text.toLowerCase().contains('memory')) ||
-            (capability == 'proactive_notification' &&
-                (text.toLowerCase().contains('notification') ||
-                    text.toLowerCase().contains('proactive')))) {
-          result['capabilities'].add(capability);
-        }
-      }
     }
 
     // Extract Chat Prompt (using exact prompt format)
@@ -327,23 +354,25 @@ class _AddAppPageState extends State<AddAppPage> {
       }
     }
 
-    // Set capabilities
-    final List<String> capabilitiesToSet =
-        List<String>.from(appData['capabilities']);
-    for (final capability in capabilitiesToSet) {
-      provider.toggleCapability(capability);
-    }
+    // Set capabilities and their metadata
+    if (appData['capabilities'] is List) {
+      final List<String> capabilities =
+          List<String>.from(appData['capabilities']);
+      for (final capability in capabilities) {
+        // Toggle the capability
+        provider.toggleCapability(capability);
 
-    // Fill prompts if needed
-    if (provider.isCapabilitySelectedById('chat') &&
-        appData['chat_prompt'].isNotEmpty) {
-      provider.chatPromptController.text = appData['chat_prompt'];
-    }
-
-    if (provider.isCapabilitySelectedById('memories') &&
-        appData['conversation_prompt'].isNotEmpty) {
-      provider.conversationPromptController.text =
-          appData['conversation_prompt'];
+        // Set metadata for specific capabilities
+        if (capability == 'chat' &&
+            appData['chat_prompt']?.isNotEmpty == true) {
+          provider.chatPromptController.text = appData['chat_prompt'];
+        }
+        if (capability == 'memories' &&
+            appData['conversation_prompt']?.isNotEmpty == true) {
+          provider.conversationPromptController.text =
+              appData['conversation_prompt'];
+        }
+      }
     }
 
     // Validate form after autofill
