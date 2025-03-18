@@ -22,7 +22,7 @@ def process_external_integration_fact(uid: str, fact_data: ExternalIntegrationCr
 
     # Save each extracted fact
     for fact in extracted_facts:
-        fact_db = FactDB.from_fact(fact, uid, None, None)
+        fact_db = FactDB.from_fact(fact, uid, None, None, False)
         fact_db.manually_added = False
         fact_db.app_id = app_id
         saved_facts.append(fact_db)
@@ -45,7 +45,7 @@ def process_twitter_facts(uid: str, tweets_text: str, persona_id: str) -> List[F
     # Convert extracted facts to database format
     saved_facts = []
     for fact in extracted_facts:
-        fact_db = FactDB.from_fact(fact, uid, None, None)
+        fact_db = FactDB.from_fact(fact, uid, None, None, False)
         fact_db.manually_added = False
         fact_db.app_id = persona_id
         saved_facts.append(fact_db)

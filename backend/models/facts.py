@@ -23,13 +23,14 @@ class FactCategory(str, Enum):
 
 
 CATEGORY_BOOSTS = {FactCategory.core.value: 1,
-                   FactCategory.habits.value:10,
-                   FactCategory.work.value:40,
-                   FactCategory.skills.value:40,
+                   FactCategory.habits.value: 10,
+                   FactCategory.work.value: 40,
+                   FactCategory.skills.value: 40,
                    FactCategory.lifestyle.value: 40,
                    FactCategory.hobbies.value: 40,
-                   FactCategory.interests.value:40,
-                   FactCategory.other.value: 50,}
+                   FactCategory.interests.value: 40,
+                   FactCategory.other.value: 50, }
+
 
 class Fact(BaseModel):
     content: str = Field(description="The content of the fact")
@@ -82,7 +83,8 @@ class FactDB(Fact):
         return "{:02d}_{:02d}_{:010d}".format(user_manual_added_boost, cat_boost, int(fact.created_at.timestamp()))
 
     @staticmethod
-    def from_fact(fact: Fact, uid: str, memory_id: str, memory_category: CategoryEnum, manually_added: bool) -> 'FactDB':
+    def from_fact(fact: Fact, uid: str, memory_id: str, memory_category: CategoryEnum,
+                  manually_added: bool) -> 'FactDB':
         fact_db = FactDB(
             id=document_id_from_seed(fact.content),
             uid=uid,
