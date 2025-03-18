@@ -16,6 +16,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/chat/select_text_screen.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/animated_mini_banner.dart';
+import 'package:omi/pages/chat/widgets/speech_to_text_widget.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -30,7 +31,6 @@ import 'package:omi/widgets/extensions/string.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import 'widgets/message_action_menu.dart';
 
@@ -49,14 +49,11 @@ class ChatPage extends StatefulWidget {
 class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   TextEditingController textController = TextEditingController();
   late ScrollController scrollController;
-  final stt.SpeechToText _speech = stt.SpeechToText();
-  bool _isListening = false;
-  String _recognizedText = '';
+  final GlobalKey<SpeechToTextWidgetState> _speechToTextKey = GlobalKey<SpeechToTextWidgetState>();
 
   bool isScrollingDown = false;
 
   bool _showSendButton = false;
-  bool _isRecording = false;
 
   var prefs = SharedPreferencesUtil();
   late List<App> apps;
@@ -65,11 +62,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   // Keep track of the most recent transcription
   List<TranscriptSegment> _lastTranscriptSegments = [];
-
-  Timer? _recordingTimer;
-  int _recordingDuration = 0;
-
-  double _currentSoundLevel = 0;
 
   @override
   bool get wantKeepAlive => true;
@@ -102,61 +94,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       }
     });
     
-    // Initialize speech recognition
-    _initializeSpeech();
-    
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       scrollToBottom();
     });
     super.initState();
   }
 
-  void _initializeSpeech() async {
-    bool available = await _speech.initialize(
-      onError: (error) => debugPrint('Speech recognition error: $error'),
-      onStatus: (status) {
-        if (status == 'done') {
-          setState(() {
-            _isListening = false;
-            _isRecording = false;
-            if (_recognizedText.isNotEmpty) {
-              textController.text = _recognizedText;
-              setShowSendButton();
-            }
-          });
-          // Ensure navigation bar is shown again
-          _forceShowNavigationBar();
-        } else if (status == 'notListening') {
-          setState(() {
-            _isListening = false;
-            _isRecording = false;
-          });
-          // Ensure navigation bar is shown again
-          _forceShowNavigationBar();
-        }
-      },
-    );
-    if (!available) {
-      debugPrint('Speech recognition not available');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Speech recognition is not available on this device.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
   @override
   void dispose() {
-    _recordingTimer?.cancel();
-    _speech.cancel();
-    // Ensure navigation bar is shown when leaving this page
-    if (_isRecording || _isListening) {
-      _forceShowNavigationBar();
-    }
     textController.dispose();
     scrollController.dispose();
     super.dispose();
@@ -170,66 +115,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     }
   }
 
-  String _formatDuration(int seconds) {
-    final minutes = seconds ~/ 60;
-    final remainingSeconds = seconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
-  }
-
-  Widget _buildRecordingOverlay() {
-    if (!_isRecording) return const SizedBox.shrink();
-    
-    return Material(
-      color: Colors.transparent,
-      elevation: 100, // High elevation to ensure it appears above other elements
-      child: Container(
-        width: double.infinity,
-        height: 120,
-        decoration: BoxDecoration(
-          color: Colors.black,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.grey.withOpacity(0.3)),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white),
-                  onPressed: () {
-                    _toggleVoiceRecording();
-                  },
-                ),
-                Text(
-                  _formatDuration(_recordingDuration),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.check, color: Colors.white),
-                  onPressed: () {
-                    _toggleVoiceRecording();
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Container(
-              height: 40,
-              margin: const EdgeInsets.symmetric(horizontal: 20),
-              child: CustomPaint(
-                painter: WaveformPainter(soundLevel: _currentSoundLevel),
-                size: Size.infinite,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  void _toggleVoiceRecording() {
+    _speechToTextKey.currentState?.toggleVoiceRecording();
   }
 
   @override
@@ -460,7 +347,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (!_isRecording)
+                          if (_speechToTextKey.currentState == null || !_speechToTextKey.currentState!.isRecording)
                             Container(
                               width: double.maxFinite,
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -659,8 +546,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                         splashRadius: 1,
                                         onPressed: () => _toggleVoiceRecording(),
                                         icon: Icon(
-                                          _isRecording ? Icons.stop : Icons.mic,
-                                          color: _isRecording ? Colors.red : const Color(0xFFF7F4F4),
+                                          _speechToTextKey.currentState != null && _speechToTextKey.currentState!.isRecording ? Icons.stop : Icons.mic,
+                                          color: _speechToTextKey.currentState != null && _speechToTextKey.currentState!.isRecording ? Colors.red : const Color(0xFFF7F4F4),
                                           size: 20.0,
                                         ),
                                       ),
@@ -704,21 +591,18 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                 ],
               ),
             ),
-            // Render recording overlay at the top level to ensure it's above everything else
-            if (_isRecording) 
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: Padding(
-                  padding: EdgeInsets.only(
-                    left: 28, 
-                    right: 28, 
-                    bottom: widget.isPivotBottom ? 40 : 120
-                  ),
-                  child: _buildRecordingOverlay(),
-                ),
-              ),
+            // Add the speech-to-text widget
+            SpeechToTextWidget(
+              key: _speechToTextKey,
+              onTextRecognized: (text) {
+                setState(() {
+                  textController.text = text;
+                  setShowSendButton();
+                });
+              },
+              bottomPadding: widget.isPivotBottom ? 40 : 120,
+              isPivotBottom: widget.isPivotBottom,
+            ),
           ],
         );
       },
@@ -761,96 +645,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   }
 
   scrollToBottom() => _moveListToBottom();
-
-  Future<void> _toggleVoiceRecording() async {
-    if (!_isListening) {
-      bool available = await _speech.initialize();
-      if (available) {
-        if (MediaQuery.of(context).viewInsets.bottom > 0) {
-          FocusScope.of(context).unfocus();
-          await Future.delayed(const Duration(milliseconds: 100));
-        }
-        
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            setState(() {
-              _isListening = true;
-              _isRecording = true;
-              _recognizedText = '';
-              _recordingDuration = 0;
-              _currentSoundLevel = 0;
-            });
-            // Don't request focus to prevent keyboard from appearing
-            SystemChannels.textInput.invokeMethod('TextInput.hide');
-          }
-        });
-        
-        _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-          setState(() {
-            _recordingDuration++;
-          });
-        });
-        
-        try {
-          _speech.listen(
-            onResult: (result) {
-              setState(() {
-                _recognizedText = result.recognizedWords;
-              });
-            },
-            onSoundLevelChange: (level) {
-              setState(() {
-                _currentSoundLevel = level * 2;
-              });
-            },
-            listenFor: const Duration(minutes: 5),
-            partialResults: true,
-            listenMode: stt.ListenMode.deviceDefault,
-            cancelOnError: false,
-          );
-        } catch (e) {
-          debugPrint('Error starting speech recognition: $e');
-          _forceShowNavigationBar();
-          setState(() {
-            _isListening = false;
-            _isRecording = false;
-          });
-        }
-      }
-    } else {
-      try {
-        _speech.stop();
-      } finally {
-        _recordingTimer?.cancel();
-
-        _forceShowNavigationBar();
-        
-        setState(() {
-          _isListening = false;
-          _isRecording = false;
-          _recordingDuration = 0;
-          _currentSoundLevel = 0;
-          if (_recognizedText.isNotEmpty) {
-            textController.text = _recognizedText;
-            setShowSendButton();
-          }
-        });
-      }
-    }
-  }
-  
-  //Helper function for showing navBar
-  void _forceShowNavigationBar() {
-    final homeProvider = context.read<HomeProvider>();
-    homeProvider.chatFieldFocusNode.unfocus();
-
-    FocusScope.of(context).unfocus();
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (mounted) {
-        setState(() {});
-      }
-    });
-  }
 }
 
 class WaveformPainter extends CustomPainter {
