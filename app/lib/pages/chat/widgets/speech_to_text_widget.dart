@@ -90,12 +90,24 @@ class SpeechToTextWidgetState extends State<SpeechToTextWidget> {
                     toggleVoiceRecording();
                   },
                 ),
-                Text(
-                  _formatDuration(_recordingDuration),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                  ),
+                Row(
+                  children: [
+                    Text(
+                      _formatDuration(_recordingDuration),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Add a visual indicator when speech is recognized
+                    if (_recognizedText.isNotEmpty)
+                      const Icon(
+                        Icons.mic, 
+                        color: Colors.greenAccent, 
+                        size: 16
+                      ),
+                  ],
                 ),
                 IconButton(
                   icon: const Icon(Icons.check, color: Colors.white),
@@ -105,7 +117,38 @@ class SpeechToTextWidgetState extends State<SpeechToTextWidget> {
                 ),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 6),
+            // Add feedback text when speech is recognized
+            if (_recognizedText.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  _recognizedText.length > 30
+                      ? '${_recognizedText.substring(0, 30)}...'
+                      : _recognizedText,
+                  style: const TextStyle(
+                    color: Colors.greenAccent, 
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              )
+            else
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  "Speak now...",
+                  style: TextStyle(
+                    color: Colors.grey, 
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                  ),
+                  maxLines: 1,
+                ),
+              ),
+            const SizedBox(height: 6),
             Container(
               height: 40,
               margin: const EdgeInsets.symmetric(horizontal: 20),
@@ -230,8 +273,23 @@ class SpeechToTextWidgetState extends State<SpeechToTextWidget> {
           _isRecording = false;
           _recordingDuration = 0;
           _currentSoundLevel = 0;
+          
           if (_recognizedText.isNotEmpty) {
             widget.onTextRecognized(_recognizedText);
+          } else if (_recordingDuration >= 1) {
+            // Only show this message if they actually tried to record (over 1 second)
+            // This check prevents showing the message when they just tap and immediately cancel
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('No speech detected. Please try again.'),
+                    duration: Duration(seconds: 2),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+              }
+            });
           }
         });
       }
