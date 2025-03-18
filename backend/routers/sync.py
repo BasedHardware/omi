@@ -10,7 +10,7 @@ from opuslib import Decoder
 from pydub import AudioSegment
 
 from database.conversations import get_closest_conversation_to_timestamps, update_conversation_segments
-from models.memory import CreateMemory
+from models.memory import CreateConversation
 from models.transcript_segment import TranscriptSegment
 from utils.memories.process_memory import process_memory
 from utils.other import endpoints as auth
@@ -169,7 +169,7 @@ def process_segment(path: str, uid: str, response: dict):
     closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, timestamp + transcript_segments[-1].end)
 
     if not closest_memory:
-        create_memory = CreateMemory(
+        create_memory = CreateConversation(
             started_at=datetime.fromtimestamp(timestamp),
             finished_at=datetime.fromtimestamp(timestamp + transcript_segments[-1].end),
             transcript_segments=transcript_segments

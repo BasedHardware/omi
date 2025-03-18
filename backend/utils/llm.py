@@ -19,7 +19,7 @@ from database.redis_db import add_filter_category_item
 from models.app import App
 from models.chat import Message, MessageSender
 from models.facts import Fact, FactCategory
-from models.memory import Structured, MemoryPhoto, CategoryEnum, Memory
+from models.memory import Structured, ConversationPhoto, CategoryEnum, Conversation
 from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment
 from models.trend import TrendEnum, ceo_options, company_options, software_product_options, hardware_product_options, \
@@ -161,7 +161,7 @@ def get_plugin_result(transcript: str, plugin: Plugin) -> str:
 # ************* OPENGLASS **************
 # **************************************
 
-def summarize_open_glass(photos: List[MemoryPhoto]) -> Structured:
+def summarize_open_glass(photos: List[ConversationPhoto]) -> Structured:
     photos_str = ''
     for i, photo in enumerate(photos):
         photos_str += f'{i + 1}. "{photo.description}"\n'
@@ -295,10 +295,10 @@ def summarize_experience_text(text: str, text_source_spec: str = None) -> Struct
     return llm_mini.with_structured_output(Structured).invoke(prompt)
 
 
-def get_memory_summary(uid: str, memories: List[Memory]) -> str:
+def get_memory_summary(uid: str, memories: List[Conversation]) -> str:
     user_name, facts_str = get_prompt_facts(uid)
 
-    conversation_history = Memory.memories_to_string(memories)
+    conversation_history = Conversation.conversations_to_string(memories)
 
     prompt = f"""
     You are an experienced mentor, that helps people achieve their goals and improve their lives.
@@ -1267,7 +1267,7 @@ def qa_rag_v1(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
 # ************* RETRIEVAL (EMOTIONAL) **************
 # **************************************************
 
-def retrieve_memory_context_params(memory: Memory) -> List[str]:
+def retrieve_memory_context_params(memory: Conversation) -> List[str]:
     transcript = memory.get_transcript(False)
     if len(transcript) == 0:
         return []
@@ -1291,7 +1291,7 @@ def retrieve_memory_context_params(memory: Memory) -> List[str]:
         return []
 
 
-def obtain_emotional_message(uid: str, memory: Memory, context: str, emotion: str) -> str:
+def obtain_emotional_message(uid: str, memory: Conversation, context: str, emotion: str) -> str:
     user_name, facts_str = get_prompt_facts(uid)
     transcript = memory.get_transcript(False)
     prompt = f"""
@@ -1440,7 +1440,7 @@ class ExpectedOutput(BaseModel):
     items: List[Item] = Field(default=[], description="List of items.")
 
 
-def trends_extractor(memory: Memory) -> List[Item]:
+def trends_extractor(memory: Conversation) -> List[Item]:
     transcript = memory.get_transcript(False)
     if len(transcript) == 0:
         return []

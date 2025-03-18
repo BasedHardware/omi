@@ -16,7 +16,7 @@ import database.conversations as conversations_db
 import database.users as user_db
 from database import redis_db
 from database.redis_db import get_cached_user_geolocation
-from models.memory import Memory, TranscriptSegment, MemoryStatus, Structured, Geolocation
+from models.memory import Conversation, TranscriptSegment, ConversationStatus, Structured, Geolocation
 from models.message_event import MemoryEvent, MessageEvent, MessageServiceStatusEvent, LastMemoryEvent
 from utils.apps import is_audio_bytes_app_enabled
 from utils.memories.location import get_google_maps_location
@@ -171,11 +171,11 @@ async def _listen(
             pass
 
     async def _create_conversation(conversation: dict):
-        conversation = Memory(**conversation)
-        if conversation.status != MemoryStatus.processing:
+        conversation = Conversation(**conversation)
+        if conversation.status != ConversationStatus.processing:
             _send_message_event(MemoryEvent(event_type="memory_processing_started", memory=conversation))
-            conversations_db.update_conversation_status(uid, conversation.id, MemoryStatus.processing)
-            conversation.status = MemoryStatus.processing
+            conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
+            conversation.status = ConversationStatus.processing
 
         try:
             # Geolocation
@@ -262,7 +262,7 @@ async def _listen(
 
     def _get_or_create_in_progress_conversation(segments: List[dict]):
         if existing := retrieve_in_progress_conversation(uid):
-            conversation = Memory(**existing)
+            conversation = Conversation(**existing)
             conversation.transcript_segments = TranscriptSegment.combine_segments(
                 conversation.transcript_segments, [TranscriptSegment(**segment) for segment in segments]
             )
@@ -271,7 +271,7 @@ async def _listen(
             return conversation
 
         started_at = datetime.now(timezone.utc) - timedelta(seconds=segments[0]['end'] - segments[0]['start'])
-        conversation = Memory(
+        conversation = Conversation(
             id=str(uuid.uuid4()),
             uid=uid,
             structured=Structured(),
@@ -280,7 +280,7 @@ async def _listen(
             started_at=started_at,
             finished_at=datetime.now(timezone.utc),
             transcript_segments=[TranscriptSegment(**segment) for segment in segments],
-            status=MemoryStatus.in_progress,
+            status=ConversationStatus.in_progress,
         )
         print('_get_in_progress_conversation new', conversation, uid)
         conversations_db.upsert_conversation(uid, conversation_data=conversation.dict())

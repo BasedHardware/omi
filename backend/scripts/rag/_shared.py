@@ -16,7 +16,7 @@ from pinecone import Pinecone
 from plotly.subplots import make_subplots
 
 # noinspection PyUnresolvedReferences
-from models.memory import Memory
+from models.memory import Conversation
 
 load_dotenv('../../.env')
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')

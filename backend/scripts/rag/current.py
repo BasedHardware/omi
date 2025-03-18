@@ -4,7 +4,7 @@ from typing import Dict
 
 from _shared import *
 from models.chat import Message
-from models.memory import Memory
+from models.memory import Conversation
 
 
 def _get_mesage(text: str, sender: str):
@@ -117,7 +117,7 @@ def generate_topics_visualization(topics: List[str], file_path: str = 'embedding
     generate_html_visualization(fig, file_name=file_path)
 
 
-def get_data2(topics: List[str], retrieved_memories: List[Memory]) -> Dict[str, List]:
+def get_data2(topics: List[str], retrieved_memories: List[Conversation]) -> Dict[str, List]:
     # print('get_data2', len(topics), topics)
     # print('retrieved_memories', len(retrieved_memories))
     memories = get_memories()
@@ -141,7 +141,7 @@ def get_data2(topics: List[str], retrieved_memories: List[Memory]) -> Dict[str, 
 
 
 def generate_visualization(
-        topics: List[str], memories: List[Memory], file_path: str = 'embedding_visualization_multi_topic.html'
+        topics: List[str], memories: List[Conversation], file_path: str = 'embedding_visualization_multi_topic.html'
 ):
     # TODO: combine in single function
     print('topics', topics)

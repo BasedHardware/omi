@@ -4,7 +4,7 @@ import threading
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
-from models.memory import Memory
+from models.memory import Conversation
 
 llm_mini = ChatOpenAI(model='gpt-4o-mini')
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
@@ -32,7 +32,7 @@ if __name__ == '__main__':
                 print('Skipping', memory['id'])
                 continue
 
-            threads.append(threading.Thread(target=single, args=(uid, Memory(**memory), True)))
+            threads.append(threading.Thread(target=single, args=(uid, Conversation(**memory), True)))
             if len(threads) == 20:
                 [t.start() for t in threads]
                 [t.join() for t in threads]
