@@ -124,14 +124,14 @@ async def sdcard_streaming_endpoint(websocket: WebSocket, uid: str):
             if not fal_segments:
                 print('failed to get fal segments')
                 continue
-            temp_memory = CreateMemory(
+            temp_memory = CreateConversation(
                 started_at=datetime.datetime.now(datetime.UTC),
                 finished_at=datetime.datetime.now(datetime.UTC),
                 transcript_segments=fal_segments,
-                source=MemorySource.sdcard,
+                source=ConversationSource.sdcard,
                 language='en'
             )
-            result: Memory = process_memory(uid, temp_memory.language, temp_memory, force_process=False)
+            result: Conversation = process_memory(uid, temp_memory.language, temp_memory, force_process=False)
             # TODO: should use the websocket to send each memory as created to the client, check transcribe_v2.py
             # websocket.send_json(result.to_json()) 
         await websocket.send_json({"type": "done"})

@@ -2,7 +2,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel
 
-from models.memory import Memory, Message
+from models.memory import Conversation, Message
 
 
 class MessageEvent(BaseModel):
@@ -15,7 +15,7 @@ class MessageEvent(BaseModel):
         return j
 
 class MemoryEvent(MessageEvent):
-    memory: Memory
+    memory: Conversation
     messages: Optional[List[Message]] = []
 
     def to_json(self):
@@ -29,7 +29,7 @@ class NewMemoryCreated(MessageEvent):
     processing_memory_id: Optional[str] = None
     memory_id: Optional[str] = None
     message_ids: Optional[List[str]] = []
-    memory: Memory
+    memory: Conversation
     messages: Optional[List[Message]] = []
 
     def to_json(self):

@@ -45,12 +45,12 @@ class CategoryEnum(str, Enum):
     other = 'other'
 
 
-class UpdateMemory(BaseModel):
+class UpdateConversation(BaseModel):
     title: Optional[str] = None
     overview: Optional[str] = None
 
 
-class MemoryPhoto(BaseModel):
+class ConversationPhoto(BaseModel):
     base64: str
     description: str
 
@@ -85,8 +85,8 @@ class Structured(BaseModel):
         description="A brief overview of the conversation, highlighting the key details from it",
         default='',
     )
-    emoji: str = Field(description="An emoji to represent the memory", default='🧠')
-    category: CategoryEnum = Field(description="A category for this memory", default=CategoryEnum.other)
+    emoji: str = Field(description="An emoji to represent the conversation", default='🧠')
+    category: CategoryEnum = Field(description="A category for this conversation", default=CategoryEnum.other)
     action_items: List[ActionItem] = Field(description="A list of action items from the conversation", default=[])
     events: List[Event] = Field(
         description="A list of events extracted from the conversation, that the user must have on his calendar.",
@@ -117,7 +117,7 @@ class Geolocation(BaseModel):
     location_type: Optional[str] = None
 
 
-class MemorySource(str, Enum):
+class ConversationSource(str, Enum):
     friend = 'friend'
     omi = 'omi'
     openglass = 'openglass'
@@ -127,7 +127,7 @@ class MemorySource(str, Enum):
     external_integration = 'external_integration'
 
 
-class MemoryVisibility(str, Enum):
+class ConversationVisibility(str, Enum):
     private = 'private'
     shared = 'shared'
     public = 'public'
@@ -141,7 +141,7 @@ class PostProcessingStatus(str, Enum):
     failed = 'failed'
 
 
-class MemoryStatus(str, Enum):
+class ConversationStatus(str, Enum):
     in_progress = 'in_progress'
     processing = 'processing'
     completed = 'completed'
@@ -152,25 +152,25 @@ class PostProcessingModel(str, Enum):
     fal_whisperx = 'fal_whisperx'
 
 
-class MemoryPostProcessing(BaseModel):
+class ConversationPostProcessing(BaseModel):
     status: PostProcessingStatus
     model: PostProcessingModel
     fail_reason: Optional[str] = None
 
 
-class Memory(BaseModel):
+class Conversation(BaseModel):
     id: str
     created_at: datetime
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
 
-    source: Optional[MemorySource] = MemorySource.omi  # TODO: once released migrate db to include this field
+    source: Optional[ConversationSource] = ConversationSource.omi  # TODO: once released migrate db to include this field
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
 
     structured: Structured
     transcript_segments: List[TranscriptSegment] = []
     geolocation: Optional[Geolocation] = None
-    photos: List[MemoryPhoto] = []
+    photos: List[ConversationPhoto] = []
 
     plugins_results: List[PluginResult] = []
 
@@ -179,37 +179,37 @@ class Memory(BaseModel):
 
     discarded: bool = False
     deleted: bool = False
-    visibility: MemoryVisibility = MemoryVisibility.private
+    visibility: ConversationVisibility = ConversationVisibility.private
 
-    processing_memory_id: Optional[str] = None
-    status: Optional[MemoryStatus] = MemoryStatus.completed
+    processing_conversation_id: Optional[str] = None
+    status: Optional[ConversationStatus] = ConversationStatus.completed
 
     @staticmethod
-    def memories_to_string(memories: List['Memory'], use_transcript: bool = False) -> str:
+    def conversations_to_string(memories: List['Conversation'], use_transcript: bool = False) -> str:
         result = []
-        for i, memory in enumerate(memories):
-            if isinstance(memory, dict):
-                memory = Memory(**memory)
-            formatted_date = memory.created_at.astimezone(timezone.utc).strftime("%d %b %Y at %H:%M") + " UTC"
-            memory_str = (f"Memory #{i + 1}\n"
-                          f"{formatted_date} ({str(memory.structured.category.value).capitalize()})\n"
-                          f"{str(memory.structured.title).capitalize()}\n"
-                          f"{str(memory.structured.overview).capitalize()}\n")
+        for i, conversation in enumerate(memories):
+            if isinstance(conversation, dict):
+                conversation = Conversation(**conversation)
+            formatted_date = conversation.created_at.astimezone(timezone.utc).strftime("%d %b %Y at %H:%M") + " UTC"
+            conversation_str = (f"Conversation #{i + 1}\n"
+                          f"{formatted_date} ({str(conversation.structured.category.value).capitalize()})\n"
+                          f"{str(conversation.structured.title).capitalize()}\n"
+                          f"{str(conversation.structured.overview).capitalize()}\n")
 
-            if memory.structured.action_items:
-                memory_str += "Action Items:\n"
-                for item in memory.structured.action_items:
-                    memory_str += f"- {item.description}\n"
+            if conversation.structured.action_items:
+                conversation_str += "Action Items:\n"
+                for item in conversation.structured.action_items:
+                    conversation_str += f"- {item.description}\n"
 
-            if memory.structured.events:
-                memory_str += "Events:\n"
-                for event in memory.structured.events:
-                    memory_str += f"- {event.title} ({event.start} - {event.duration} minutes)\n"
+            if conversation.structured.events:
+                conversation_str += "Events:\n"
+                for event in conversation.structured.events:
+                    conversation_str += f"- {event.title} ({event.start} - {event.duration} minutes)\n"
 
             if use_transcript:
-                memory_str += (f"\nTranscript:\n{memory.get_transcript(include_timestamps=False)}\n")
+                conversation_str += (f"\nTranscript:\n{conversation.get_transcript(include_timestamps=False)}\n")
 
-            result.append(memory_str.strip())
+            result.append(conversation_str.strip())
 
         return "\n\n---------------------\n\n".join(result).strip()
 
@@ -218,48 +218,48 @@ class Memory(BaseModel):
         return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
 
     def as_dict_cleaned_dates(self):
-        memory_dict = self.dict()
-        memory_dict['structured']['events'] = [
-            {**event, 'start': event['start'].isoformat()} for event in memory_dict['structured']['events']
+        conversation_dict = self.dict()
+        conversation_dict['structured']['events'] = [
+            {**event, 'start': event['start'].isoformat()} for event in conversation_dict['structured']['events']
         ]
-        memory_dict['created_at'] = memory_dict['created_at'].isoformat()
-        memory_dict['started_at'] = memory_dict['started_at'].isoformat() if memory_dict['started_at'] else None
-        memory_dict['finished_at'] = memory_dict['finished_at'].isoformat() if memory_dict['finished_at'] else None
-        return memory_dict
+        conversation_dict['created_at'] = conversation_dict['created_at'].isoformat()
+        conversation_dict['started_at'] = conversation_dict['started_at'].isoformat() if conversation_dict['started_at'] else None
+        conversation_dict['finished_at'] = conversation_dict['finished_at'].isoformat() if conversation_dict['finished_at'] else None
+        return conversation_dict
 
 
-class CreateMemory(BaseModel):
+class CreateConversation(BaseModel):
     started_at: datetime
     finished_at: datetime
     transcript_segments: List[TranscriptSegment]
     geolocation: Optional[Geolocation] = None
 
-    photos: List[MemoryPhoto] = []
+    photos: List[ConversationPhoto] = []
 
-    source: MemorySource = MemorySource.omi
+    source: ConversationSource = ConversationSource.omi
     language: Optional[str] = None
 
-    processing_memory_id: Optional[str] = None
+    processing_conversation_id: Optional[str] = None
 
     def get_transcript(self, include_timestamps: bool) -> str:
         return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
 
 
-class ExternalIntegrationMemorySource(str, Enum):
+class ExternalIntegrationConversationSource(str, Enum):
     audio = 'audio_transcript'
     message = 'message'
     other = 'other_text'
 
 
-class ExternalIntegrationCreateMemory(BaseModel):
+class ExternalIntegrationCreateConversation(BaseModel):
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     text: str
-    text_source: ExternalIntegrationMemorySource = ExternalIntegrationMemorySource.audio
+    text_source: ExternalIntegrationConversationSource = ExternalIntegrationConversationSource.audio
     text_source_spec: Optional[str] = None
     geolocation: Optional[Geolocation] = None
 
-    source: MemorySource = MemorySource.workflow
+    source: ConversationSource = ConversationSource.workflow
     language: Optional[str] = None
 
     app_id: Optional[str] = None
@@ -268,17 +268,17 @@ class ExternalIntegrationCreateMemory(BaseModel):
         return self.text
 
 
-class CreateMemoryResponse(BaseModel):
-    memory: Memory
+class CreateConversationResponse(BaseModel):
+    memory: Conversation
     messages: List[Message] = []
 
 
-class SetMemoryEventsStateRequest(BaseModel):
+class SetConversationEventsStateRequest(BaseModel):
     events_idx: List[int]
     values: List[bool]
 
 
-class SetMemoryActionItemsStateRequest(BaseModel):
+class SetConversationActionItemsStateRequest(BaseModel):
     items_idx: List[int]
     values: List[bool]
 

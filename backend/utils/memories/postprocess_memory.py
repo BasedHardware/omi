@@ -23,7 +23,7 @@ def postprocess_memory(memory_id: str, file_path: str, uid: str, emotional_feedb
     if not memory_data:
         return 404, "Memory not found"
 
-    memory = Memory(**memory_data)
+    memory = Conversation(**memory_data)
     if memory.discarded:
         print('postprocess_memory: Memory is discarded')
         return 400, "Memory is discarded"
@@ -96,7 +96,7 @@ def postprocess_memory(memory_id: str, file_path: str, uid: str, emotional_feedb
             return 200, memory
 
         # Reprocess memory with improved transcription
-        result: Memory = process_memory(uid, memory.language, memory, force_process=True)
+        result: Conversation = process_memory(uid, memory.language, memory, force_process=True)
 
         # Process users emotion, async
         if emotional_feedback:
@@ -126,7 +126,7 @@ def _delete_postprocessing_audio(file_path):
     os.remove(file_path)
 
 
-async def _process_user_emotion(uid: str, language_code: str, memory: Memory, urls: [str]):
+async def _process_user_emotion(uid: str, language_code: str, memory: Conversation, urls: [str]):
     if not any(segment.is_user for segment in memory.transcript_segments):
         print(f"_process_user_emotion skipped for {memory.id}")
         return

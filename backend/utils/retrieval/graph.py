@@ -18,7 +18,7 @@ from database.vector_db import query_vectors_by_metadata
 import database.notifications as notification_db
 from models.app import App
 from models.chat import ChatSession, Message
-from models.memory import Memory
+from models.memory import Conversation
 from models.plugin import Plugin
 from utils.llm import (
     answer_omi_question,
@@ -103,7 +103,7 @@ class GraphState(TypedDict):
     filters: Optional[StructuredFilters]
     date_filters: Optional[DateRangeFilters]
 
-    memories_found: Optional[List[Memory]]
+    memories_found: Optional[List[Conversation]]
 
     parsed_question: Optional[str]
     answer: Optional[str]
@@ -319,7 +319,7 @@ def qa_handler(state: GraphState):
         response: str = qa_rag_stream(
             uid,
             state.get("parsed_question"),
-            Memory.memories_to_string(memories, False),
+            Conversation.conversations_to_string(memories, False),
             state.get("plugin_selected"),
             cited=state.get("cited"),
             messages=state.get("messages"),
@@ -333,7 +333,7 @@ def qa_handler(state: GraphState):
     response: str = qa_rag(
         uid,
         state.get("parsed_question"),
-        Memory.memories_to_string(memories, False),
+        Conversation.conversations_to_string(memories, False),
         state.get("plugin_selected"),
         cited=state.get("cited"),
         messages=state.get("messages"),
@@ -417,7 +417,7 @@ graph_stream = workflow.compile()
 @timeit
 def execute_graph_chat(
         uid: str, messages: List[Message], plugin: Optional[Plugin] = None, cited: Optional[bool] = False
-) -> Tuple[str, bool, List[Memory]]:
+) -> Tuple[str, bool, List[Conversation]]:
     print('execute_graph_chat plugin    :', plugin.id if plugin else '<none>')
     tz = notification_db.get_user_time_zone(uid)
     result = graph.invoke(

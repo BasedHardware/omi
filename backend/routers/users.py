@@ -8,7 +8,7 @@ from database.conversations import get_in_progress_conversation, get_conversatio
 from database.redis_db import cache_user_geolocation, set_user_webhook_db, get_user_webhook_db, disable_user_webhook_db, \
     enable_user_webhook_db, user_webhook_status_db
 from database.users import *
-from models.memory import Geolocation, Memory
+from models.memory import Geolocation, Conversation
 from models.other import Person, CreatePerson
 from models.users import WebhookType
 from utils.llm import followup_question_prompt
@@ -188,7 +188,7 @@ def delete_person_endpoint(memory_id: str, uid: str = Depends(auth.get_current_u
             raise HTTPException(status_code=400, detail='No memory in progres')
     else:
         memory = get_conversation(uid, memory_id)
-    memory = Memory(**memory)
+    memory = Conversation(**memory)
     return {'result': followup_question_prompt(memory.transcript_segments)}
 
 

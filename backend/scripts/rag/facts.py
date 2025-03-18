@@ -22,7 +22,7 @@ def get_facts_from_memories(
     all_facts = {}
 
     def execute(memory):
-        data = Memory(**memory)
+        data = Conversation(**memory)
         new_facts = new_facts_extractor(uid, data.transcript_segments, user_name, Fact.get_facts_as_str(existing_facts))
         # new_learnings = new_learnings_extractor(
         #     uid, data.transcript_segments, user_name,

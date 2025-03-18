@@ -14,7 +14,7 @@ from database.apps import record_app_usage
 from models.app import App
 from models.chat import ChatSession, Message, SendMessageRequest, MessageSender, ResponseMessage, MessageMemory, \
     FileChat
-from models.memory import Memory
+from models.memory import Conversation
 from models.plugin import UsageHistoryType
 from routers.sync import retrieve_file_paths, decode_files_to_wav, retrieve_vad_segments
 from utils.apps import get_available_app_by_id
@@ -111,7 +111,7 @@ def send_message(
             converted_memories = []
             for m in memories[:5]:
                 if isinstance(m, dict):
-                    converted_memories.append(Memory(**m))
+                    converted_memories.append(Conversation(**m))
                 else:
                     converted_memories.append(m)
             memories_id = [m.id for m in converted_memories]
@@ -209,7 +209,7 @@ def send_message_v1(
         converted_memories = []
         for m in memories[:5]:
             if isinstance(m, dict):
-                converted_memories.append(Memory(**m))
+                converted_memories.append(Conversation(**m))
             else:
                 converted_memories.append(m)
         memories_id = [m.id for m in converted_memories]

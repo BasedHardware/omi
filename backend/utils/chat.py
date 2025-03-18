@@ -9,7 +9,7 @@ import database.chat as chat_db
 import database.notifications as notification_db
 from database.apps import record_app_usage
 from models.chat import Message, ResponseMessage, MessageMemory
-from models.memory import Memory
+from models.memory import Conversation
 from models.notification_message import NotificationMessage
 from models.plugin import UsageHistoryType
 from models.transcript_segment import TranscriptSegment
@@ -57,7 +57,7 @@ def process_voice_message_segment(path: str, uid: str):
         converted_memories = []
         for m in memories[:5]:
             if isinstance(m, dict):
-                converted_memories.append(Memory(**m))
+                converted_memories.append(Conversation(**m))
             else:
                 converted_memories.append(m)
         memories_id = [m.id for m in converted_memories]
@@ -128,7 +128,7 @@ async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGene
             converted_memories = []
             for m in memories[:5]:
                 if isinstance(m, dict):
-                    converted_memories.append(Memory(**m))
+                    converted_memories.append(Conversation(**m))
                 else:
                     converted_memories.append(m)
             memories_id = [m.id for m in converted_memories]

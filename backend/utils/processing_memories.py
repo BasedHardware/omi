@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 import database.processing_memories as processing_memories_db
 from database.redis_db import get_cached_user_geolocation
-from models.memory import CreateMemory, Geolocation
+from models.memory import CreateConversation, Geolocation
 from models.processing_memory import ProcessingMemory, ProcessingMemoryStatus, DetailProcessingMemory
 from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory
@@ -25,7 +25,7 @@ async def create_memory_by_processing_memory(uid: str, processing_memory_id: str
         return
     timer_segment_start = processing_memory.timer_segment_start if processing_memory.timer_segment_start else processing_memory.timer_start
     segment_end = transcript_segments[-1].end
-    new_memory = CreateMemory(
+    new_memory = CreateConversation(
         started_at=datetime.fromtimestamp(timer_segment_start, timezone.utc),
         finished_at=datetime.fromtimestamp(timer_segment_start + segment_end, timezone.utc),
         language=processing_memory.language,

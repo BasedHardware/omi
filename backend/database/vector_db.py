@@ -6,7 +6,7 @@ from typing import List
 
 from pinecone import Pinecone
 
-from models.memory import Memory
+from models.memory import Conversation
 from utils.llm import embeddings
 
 if os.getenv('PINECONE_API_KEY') is not None:
@@ -28,12 +28,12 @@ def _get_data(uid: str, memory_id: str, vector: List[float]):
     }
 
 
-def upsert_vector(uid: str, memory: Memory, vector: List[float]):
+def upsert_vector(uid: str, memory: Conversation, vector: List[float]):
     res = index.upsert(vectors=[_get_data(uid, memory.id, vector)], namespace="ns1")
     print('upsert_vector', res)
 
 
-def upsert_vector2(uid: str, memory: Memory, vector: List[float], metadata: dict):
+def upsert_vector2(uid: str, memory: Conversation, vector: List[float], metadata: dict):
     data = _get_data(uid, memory.id, vector)
     data['metadata'].update(metadata)
     res = index.upsert(vectors=[data], namespace="ns1")
@@ -47,7 +47,7 @@ def update_vector_metadata(uid: str, memory_id: str, metadata: dict):
 
 
 def upsert_vectors(
-        uid: str, vectors: List[List[float]], memories: List[Memory]
+        uid: str, vectors: List[List[float]], memories: List[Conversation]
 ):
     data = [
         _get_data(uid, memory.id, vector) for memory, vector in

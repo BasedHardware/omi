@@ -64,7 +64,7 @@ def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
 async def create_conversation_via_integration(
     request: Request,
     app_id: str,
-    create_memory: memory_models.ExternalIntegrationCreateMemory,
+    create_memory: memory_models.ExternalIntegrationCreateConversation,
     uid: str,
     authorization: Optional[str] = Header(None)
 ):
@@ -110,7 +110,7 @@ async def create_conversation_via_integration(
         create_memory.language = language_code
 
     # Set source to external_integration
-    create_memory.source = memory_models.MemorySource.external_integration
+    create_memory.source = memory_models.ConversationSource.external_integration
 
     # Set app_id
     create_memory.app_id = app_id

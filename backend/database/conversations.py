@@ -9,7 +9,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from google.cloud.firestore_v1.async_client import AsyncClient
 
 import utils.other.hume as hume
-from models.memory import MemoryPhoto, PostProcessingStatus, PostProcessingModel, MemoryStatus
+from models.memory import ConversationPhoto, PostProcessingStatus, PostProcessingModel, ConversationStatus
 from models.transcript_segment import TranscriptSegment
 from ._client import db
 
@@ -279,7 +279,7 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
 # ********** OPENGLASS **************
 # ***********************************
 
-def store_conversation_photos(uid: str, conversation_id: str, photos: List[MemoryPhoto]):
+def store_conversation_photos(uid: str, conversation_id: str, photos: List[ConversationPhoto]):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection('memories').document(conversation_id)
     photos_ref = conversation_ref.collection('photos')
@@ -349,7 +349,7 @@ def get_last_completed_conversation(uid: str) -> Optional[dict]:
     query = (
         db.collection('users').document(uid).collection('memories')
         .where(filter=FieldFilter('deleted', '==', False))
-        .where(filter=FieldFilter('status', '==', MemoryStatus.completed))
+        .where(filter=FieldFilter('status', '==', ConversationStatus.completed))
         .order_by('created_at', direction=firestore.Query.DESCENDING)
         .limit(1)
     )
