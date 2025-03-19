@@ -213,7 +213,9 @@ def get_email_structure(text: str, started_at: datetime, language_code: str, tz:
         event.created = False
     return response
 
-def get_post_structure(text: str, started_at: datetime, language_code: str, tz: str, text_source_spec: str = None) -> Structured:
+
+def get_post_structure(text: str, started_at: datetime, language_code: str, tz: str,
+                       text_source_spec: str = None) -> Structured:
     prompt_text = '''
     You are an expert social media post analyzer. Your task is to analyze the post content and provide structure and clarity.
     The post language is {language_code}. Use the same language {language_code} for your response.
@@ -247,7 +249,9 @@ def get_post_structure(text: str, started_at: datetime, language_code: str, tz: 
         event.created = False
     return response
 
-def get_message_structure(text: str, started_at: datetime, language_code: str, tz: str, text_source_spec: str = None) -> Structured:
+
+def get_message_structure(text: str, started_at: datetime, language_code: str, tz: str,
+                          text_source_spec: str = None) -> Structured:
     prompt_text = '''
     You are an expert message analyzer. Your task is to analyze the message content and provide structure and clarity.
     The message language is {language_code}. Use the same language {language_code} for your response.
@@ -280,6 +284,7 @@ def get_message_structure(text: str, started_at: datetime, language_code: str, t
             event.duration = 180
         event.created = False
     return response
+
 
 def summarize_experience_text(text: str, text_source_spec: str = None) -> Structured:
     source_context = f"Source: {text_source_spec}" if text_source_spec else "their own experiences or thoughts"
@@ -358,7 +363,8 @@ def initial_persona_chat_message(uid: str, app: Optional[App] = None, messages: 
             chat_messages.append(AIMessage(content=msg.text))
         else:
             chat_messages.append(HumanMessage(content=msg.text))
-    chat_messages.append(HumanMessage(content='lets begin. you write the first message, one short provocative question relevant to your identity. never respond with **. while continuing the convo, always respond w short msgs, lowercase.'))
+    chat_messages.append(HumanMessage(
+        content='lets begin. you write the first message, one short provocative question relevant to your identity. never respond with **. while continuing the convo, always respond w short msgs, lowercase.'))
     llm_call = llm_persona_mini_stream
     if app.is_influencer:
         llm_call = llm_persona_medium_stream
@@ -793,7 +799,7 @@ def answer_persona_question_stream(app: App, messages: List[Message], callbacks:
     llm_call = llm_persona_mini_stream
     if app.is_influencer:
         llm_call = llm_persona_medium_stream
-    return llm_call.invoke(chat_messages, {'callbacks':callbacks}).content
+    return llm_call.invoke(chat_messages, {'callbacks': callbacks}).content
 
 
 def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
@@ -2023,7 +2029,8 @@ def retrieve_metadata_from_email(uid: str, created_at: datetime, email_text: str
     return _process_extracted_metadata(uid, prompt)
 
 
-def retrieve_metadata_from_post(uid: str, created_at: datetime, post_text: str, tz: str, source_spec: str = None) -> ExtractedInformation:
+def retrieve_metadata_from_post(uid: str, created_at: datetime, post_text: str, tz: str,
+                                source_spec: str = None) -> ExtractedInformation:
     """Extract metadata from social media post content"""
     source_context = f"from {source_spec}" if source_spec else "from a social media platform"
 
@@ -2055,7 +2062,8 @@ def retrieve_metadata_from_post(uid: str, created_at: datetime, post_text: str, 
     return _process_extracted_metadata(uid, prompt)
 
 
-def retrieve_metadata_from_message(uid: str, created_at: datetime, message_text: str, tz: str, source_spec: str = None) -> ExtractedInformation:
+def retrieve_metadata_from_message(uid: str, created_at: datetime, message_text: str, tz: str,
+                                   source_spec: str = None) -> ExtractedInformation:
     """Extract metadata from messaging app content"""
     source_context = f"from {source_spec}" if source_spec else "from a messaging application"
 
@@ -2087,7 +2095,8 @@ def retrieve_metadata_from_message(uid: str, created_at: datetime, message_text:
     return _process_extracted_metadata(uid, prompt)
 
 
-def retrieve_metadata_from_text(uid: str, created_at: datetime, text: str, tz: str, source_spec: str = None) -> ExtractedInformation:
+def retrieve_metadata_from_text(uid: str, created_at: datetime, text: str, tz: str,
+                                source_spec: str = None) -> ExtractedInformation:
     """Extract metadata from generic text content"""
     source_context = f"from {source_spec}" if source_spec else "from a text document"
 
@@ -2477,8 +2486,30 @@ Tweets:
 def generate_persona_intro_message(prompt: str, name: str):
     messages = [
         {"role": "system", "content": prompt},
-        {"role": "user", "content": f"Generate a short, funny 5-8 word message that would make someone want to chat with you. Be casual and witty, but don't mention being AI or a clone. Just be {name}. The message should feel natural and make people curious to chat with you."}
+        {"role": "user",
+         "content": f"Generate a short, funny 5-8 word message that would make someone want to chat with you. Be casual and witty, but don't mention being AI or a clone. Just be {name}. The message should feel natural and make people curious to chat with you."}
     ]
 
     response = llm_medium.invoke(messages)
     return response.content.strip('"').strip()
+
+
+# **************************************************
+# ***************** FACT/MEMORY ********************
+# **************************************************
+
+def identify_category_for_fact(fact: str, categories: List) -> str:
+    categories_str = ', '.join(categories)
+    prompt = f"""
+    You are an AI tasked with identifying the category of a fact from a list of predefined categories. 
+
+    Your task is to determine the most relevant category for the given fact. 
+    
+    Respond only with the category name.
+    
+    The categories are: {categories_str}
+
+    Fact: {fact}
+    """
+    response = llm_mini.invoke(prompt)
+    return response.content

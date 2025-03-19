@@ -4,8 +4,9 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 
 import database.facts as facts_db
-from models.facts import FactDB, Fact
+from models.facts import FactDB, Fact, FactCategory
 from utils.apps import update_personas_async
+from utils.llm import identify_category_for_fact
 from utils.other import endpoints as auth
 
 router = APIRouter()
@@ -13,6 +14,16 @@ router = APIRouter()
 
 @router.post('/v1/facts', tags=['facts'], response_model=FactDB)
 def create_fact(fact: Fact, uid: str = Depends(auth.get_current_user_uid)):
+    fact_db = FactDB.from_fact(fact, uid, None, None, True)
+    facts_db.create_fact(uid, fact_db.dict())
+    threading.Thread(target=update_personas_async, args=(uid,)).start()
+    return fact_db
+
+
+@router.post('/v2/facts', tags=['facts'], response_model=FactDB)
+def create_fact(fact: Fact, uid: str = Depends(auth.get_current_user_uid)):
+    categories = [category for category in FactCategory]
+    fact.category = identify_category_for_fact(fact.content, categories)
     fact_db = FactDB.from_fact(fact, uid, None, None, True)
     facts_db.create_fact(uid, fact_db.dict())
     threading.Thread(target=update_personas_async, args=(uid,)).start()
@@ -60,6 +71,12 @@ def get_facts(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_cur
 @router.delete('/v1/facts/{fact_id}', tags=['facts'])
 def delete_fact(fact_id: str, uid: str = Depends(auth.get_current_user_uid)):
     facts_db.delete_fact(uid, fact_id)
+    return {'status': 'ok'}
+
+
+@router.delete('/v1/facts', tags=['facts'])
+def delete_fact(uid: str = Depends(auth.get_current_user_uid)):
+    facts_db.delete_all_facts(uid)
     return {'status': 'ok'}
 
 
