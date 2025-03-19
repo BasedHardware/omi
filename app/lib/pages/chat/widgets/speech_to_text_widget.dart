@@ -8,7 +8,6 @@ import 'package:flutter/services.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/home_provider.dart';
-import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/enums.dart';
@@ -114,11 +113,13 @@ class SpeechToTextWidgetState extends State<SpeechToTextWidget> with SingleTicke
       });
     });
     
-    // Initialize microphone recording
+    // Initialize microphone recording with proper format
     await ServiceManager.instance().mic.start(
       onByteReceived: (bytes) {
-        // Store the received audio bytes
-        _audioBytes.add(bytes.toList());
+        // Process and store the received audio bytes
+        if (bytes.isNotEmpty) {
+          _audioBytes.add(bytes.toList());
+        }
       }, 
       onRecording: () {
         if (mounted) {
@@ -147,6 +148,15 @@ class SpeechToTextWidgetState extends State<SpeechToTextWidget> with SingleTicke
     
     // Check if we have captured any audio
     if (_audioBytes.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('No audio recorded. Please try again.'),
+            duration: const Duration(seconds: 2),
+            backgroundColor: Colors.orange.shade700,
+          ),
+        );
+      }
       return;
     }
     
@@ -167,6 +177,8 @@ class SpeechToTextWidgetState extends State<SpeechToTextWidget> with SingleTicke
     
     // Send audio to server through message provider
     final messageProvider = context.read<MessageProvider>();
+    
+    // The audio data is already in PCM format as captured by the mic service
     await messageProvider.sendVoiceMessageStreamToServer(_audioBytes);
     
     // Clear audio bytes
