@@ -5,14 +5,13 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/fact.dart';
 import 'package:omi/env/env.dart';
 
-Future<bool> createFactServer(String content, FactCategory category, String visibility) async {
+Future<bool> createFactServer(String content, String visibility) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/facts',
+    url: '${Env.apiBaseUrl}v2/facts',
     headers: {},
     method: 'POST',
     body: json.encode({
       'content': content,
-      'category': category.toString().split('.').last,
       'visibility': visibility,
     }),
   );
@@ -49,6 +48,18 @@ Future<List<Fact>> getFacts({int limit = 100, int offset = 0}) async {
 Future<bool> deleteFactServer(String factId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/facts/$factId',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('deleteFact response: ${response.body}');
+  return response.statusCode == 200;
+}
+
+Future<bool> deleteAllFactServer() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/facts',
     headers: {},
     method: 'DELETE',
     body: '',

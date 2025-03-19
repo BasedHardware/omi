@@ -114,6 +114,16 @@ def delete_fact(uid: str, fact_id: str):
     fact_ref.update({'deleted': True})
 
 
+def delete_all_facts(uid: str):
+    user_ref = db.collection('users').document(uid)
+    facts_ref = user_ref.collection('facts')
+    query = facts_ref.where(filter=FieldFilter('deleted', '==', False))
+    batch = db.batch()
+    for doc in query.stream():
+        batch.update(doc.reference, {'deleted': True})
+    batch.commit()
+
+
 def delete_facts_for_memory(uid: str, memory_id: str):
     batch = db.batch()
     user_ref = db.collection('users').document(uid)
