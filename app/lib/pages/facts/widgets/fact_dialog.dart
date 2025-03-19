@@ -33,7 +33,7 @@ class _FactDialogState extends State<FactDialog> {
     contentController.selection = TextSelection.fromPosition(
       TextPosition(offset: contentController.text.length),
     );
-    selectedCategory = widget.fact?.category ?? widget.provider.selectedCategory ?? FactCategory.values.first;
+    selectedCategory = widget.fact?.category ?? FactCategory.values.first;
     selectedVisibility = widget.fact?.visibility ?? FactVisibility.public;
   }
 
@@ -62,7 +62,7 @@ class _FactDialogState extends State<FactDialog> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    widget.fact != null ? 'Edit Fact' : 'New Fact',
+                    widget.fact != null ? 'Edit Memory' : 'New Memory',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
@@ -107,46 +107,6 @@ class _FactDialogState extends State<FactDialog> {
                 ),
               ),
               if (widget.fact == null || !widget.fact!.manuallyAdded) ...[
-                const SizedBox(height: 20),
-                Text(
-                  'Category',
-                  style: TextStyle(
-                    color: Colors.grey.shade400,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 36,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: FactCategory.values.length,
-                    separatorBuilder: (context, _) => const SizedBox(width: 8),
-                    itemBuilder: (context, index) {
-                      final category = FactCategory.values[index];
-                      final isSelected = category == selectedCategory;
-                      return ChoiceChip(
-                        label: Text(
-                          category.toString().split('.').last,
-                          style: TextStyle(
-                            color: isSelected ? Colors.black : Colors.white70,
-                            fontSize: 13,
-                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                          ),
-                        ),
-                        selected: isSelected,
-                        showCheckmark: false,
-                        backgroundColor: Colors.grey.shade800,
-                        selectedColor: Colors.white,
-                        onSelected: (bool selected) {
-                          if (selected) {
-                            setState(() => selectedCategory = category);
-                          }
-                        },
-                      );
-                    },
-                  ),
-                ),
                 const SizedBox(height: 20),
                 Text(
                   'Visibility',
@@ -256,14 +216,14 @@ class _FactDialogState extends State<FactDialog> {
   void _saveFact(String value) {
     if (value.trim().isNotEmpty) {
       if (widget.fact != null) {
-        widget.provider.editFact(widget.fact!, value, selectedCategory);
+        widget.provider.editFact(widget.fact!, value);
         if (widget.fact!.visibility != selectedVisibility) {
           widget.provider.updateFactVisibility(widget.fact!, selectedVisibility);
         }
         MixpanelManager().factsPageEditedFact();
       } else {
-        widget.provider.createFact(value, selectedCategory, selectedVisibility);
-        MixpanelManager().factsPageCreatedFact(selectedCategory);
+        widget.provider.createFact(value, selectedVisibility);
+        MixpanelManager().factsPageCreatedFact(FactCategory.values.first);
       }
       Navigator.pop(context);
     }

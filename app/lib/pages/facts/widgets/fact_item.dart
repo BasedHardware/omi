@@ -4,6 +4,8 @@ import 'package:omi/providers/facts_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
+import 'delete_confirmation.dart';
+
 class FactItem extends StatelessWidget {
   final Fact fact;
   final FactsProvider provider;
@@ -32,7 +34,7 @@ class FactItem extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ListTile(
-              contentPadding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+              contentPadding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
               title: Text(
                 fact.content.decodeString,
                 style: const TextStyle(
@@ -54,6 +56,10 @@ class FactItem extends StatelessWidget {
     return Dismissible(
       key: Key(fact.id),
       direction: DismissDirection.endToStart,
+      confirmDismiss: (direction) async {
+        final shouldDelete = await DeleteConfirmation.show(context);
+        return shouldDelete;
+      },
       onDismissed: (direction) {
         provider.deleteFact(fact);
         MixpanelManager().factsPageDeletedFact(fact);
