@@ -48,33 +48,6 @@ class FactsPageState extends State<FactsPage> {
           canPop: true,
           child: Scaffold(
             backgroundColor: Theme.of(context).colorScheme.primary,
-            appBar: AppBar(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              title: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  const Text('My Facts'),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${provider.facts.length} total facts',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade400,
-                      fontWeight: FontWeight.normal,
-                    ),
-                  ),
-                ],
-              ),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.add),
-                  onPressed: () {
-                    showFactDialog(context, provider);
-                    MixpanelManager().factsPageCreateFactBtn();
-                  },
-                ),
-              ],
-            ),
             body: provider.loading
                 ? const Center(
                     child: CircularProgressIndicator(
@@ -82,151 +55,107 @@ class FactsPageState extends State<FactsPage> {
                   ))
                 : CustomScrollView(
                     slivers: [
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          child: SearchBar(
-                            hintText: 'Search your facts',
-                            leading: const Icon(Icons.search, color: Colors.white70),
-                            backgroundColor: WidgetStateProperty.all(Colors.grey.shade900),
-                            elevation: WidgetStateProperty.all(0),
-                            padding: WidgetStateProperty.all(
-                              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            ),
-                            controller: _searchController,
-                            trailing: provider.searchQuery.isNotEmpty
-                                ? [
-                                    IconButton(
-                                      icon: const Icon(Icons.close, color: Colors.white70),
-                                      onPressed: () {
-                                        _searchController.clear();
-                                        setState(() {});
-                                        provider.setSearchQuery('');
-                                      },
-                                    )
-                                  ]
-                                : null,
-                            hintStyle: WidgetStateProperty.all(
-                              TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                            ),
-                            shape: WidgetStateProperty.all(
-                              RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                      SliverAppBar(
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        pinned: true,
+                        snap: true,
+                        floating: true,
+                        title: const Text('My Memory'),
+                        actions: [
+                          IconButton(
+                            icon: const Icon(Icons.delete_sweep_outlined),
+                            onPressed: () {
+                              _showDeleteAllConfirmation(context, provider);
+                            },
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.add),
+                            onPressed: () {
+                              showFactDialog(context, provider);
+                              MixpanelManager().factsPageCreateFactBtn();
+                            },
+                          ),
+                        ],
+                        bottom: PreferredSize(
+                          preferredSize: const Size.fromHeight(68),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                            child: SearchBar(
+                              hintText: 'Search Omi\'s memory about you',
+                              leading: const Icon(Icons.search, color: Colors.white70),
+                              backgroundColor: WidgetStateProperty.all(Colors.grey.shade900),
+                              elevation: WidgetStateProperty.all(0),
+                              padding: WidgetStateProperty.all(
+                                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                               ),
+                              controller: _searchController,
+                              trailing: provider.searchQuery.isNotEmpty
+                                  ? [
+                                      IconButton(
+                                        icon: const Icon(Icons.close, color: Colors.white70),
+                                        onPressed: () {
+                                          _searchController.clear();
+                                          setState(() {});
+                                          provider.setSearchQuery('');
+                                        },
+                                      )
+                                    ]
+                                  : null,
+                              hintStyle: WidgetStateProperty.all(
+                                TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                              ),
+                              shape: WidgetStateProperty.all(
+                                RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              onChanged: (value) => provider.setSearchQuery(value),
                             ),
-                            onChanged: (value) => provider.setSearchQuery(value),
                           ),
                         ),
                       ),
-                      if (provider.searchQuery.isEmpty) ...[
-                        SliverPadding(
-                          padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
-                          sliver: SliverGrid(
-                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              mainAxisSpacing: 12,
-                              crossAxisSpacing: 12,
-                              childAspectRatio: 1.8,
-                            ),
-                            delegate: SliverChildBuilderDelegate(
-                              (context, index) {
-                                final item = provider.categories[index];
-                                final category = item.item1;
-                                final count = item.item2;
-
-                                return GestureDetector(
-                                  onTap: () {
-                                    MixpanelManager().factsPageCategoryOpened(category);
-                                    provider.setCategory(category);
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => CategoryFactsPage(
-                                          category: category,
+                      SliverPadding(
+                        padding: const EdgeInsets.all(16),
+                        sliver: provider.filteredFacts.isEmpty
+                            ? SliverFillRemaining(
+                                child: Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.note_add, size: 48, color: Colors.grey.shade600),
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        provider.searchQuery.isEmpty ? 'No facts yet' : 'No facts found',
+                                        style: TextStyle(
+                                          color: Colors.grey.shade400,
+                                          fontSize: 18,
                                         ),
                                       ),
-                                    );
-                                  },
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade900,
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                    padding: const EdgeInsets.all(16),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          category.toString().split('.').last[0].toUpperCase() +
-                                              category.toString().split('.').last.substring(1),
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 10),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                                          decoration: BoxDecoration(
-                                            color: Colors.black26,
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                          child: Text(
-                                            count.toString(),
-                                            style: const TextStyle(
-                                              color: Colors.white70,
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
+                                      if (provider.searchQuery.isEmpty) ...[
+                                        const SizedBox(height: 8),
+                                        TextButton(
+                                          onPressed: () => showFactDialog(context, provider),
+                                          child: const Text('Add your first fact'),
                                         ),
                                       ],
-                                    ),
-                                  ),
-                                );
-                              },
-                              childCount: provider.categories.length,
-                            ),
-                          ),
-                        ),
-                      ] else ...[
-                        SliverPadding(
-                          padding: const EdgeInsets.all(16),
-                          sliver: provider.filteredFacts.isEmpty
-                              ? SliverFillRemaining(
-                                  child: Center(
-                                    child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.search_off, size: 48, color: Colors.grey.shade600),
-                                        const SizedBox(height: 16),
-                                        Text(
-                                          'No facts found',
-                                          style: TextStyle(
-                                            color: Colors.grey.shade400,
-                                            fontSize: 18,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                )
-                              : SliverList(
-                                  delegate: SliverChildBuilderDelegate(
-                                    (context, index) {
-                                      final fact = provider.filteredFacts[index];
-                                      return FactItem(
-                                        fact: fact,
-                                        provider: provider,
-                                        onTap: _showQuickEditSheet,
-                                      );
-                                    },
-                                    childCount: provider.filteredFacts.length,
+                                    ],
                                   ),
                                 ),
-                        ),
-                      ],
+                              )
+                            : SliverList(
+                                delegate: SliverChildBuilderDelegate(
+                                  (context, index) {
+                                    final fact = provider.filteredFacts[index];
+                                    return FactItem(
+                                      fact: fact,
+                                      provider: provider,
+                                      onTap: _showQuickEditSheet,
+                                    );
+                                  },
+                                  childCount: provider.filteredFacts.length,
+                                ),
+                              ),
+                      ),
                     ],
                   ),
           ),
@@ -263,6 +192,58 @@ class FactsPageState extends State<FactsPage> {
               provider: context.read<FactsProvider>(),
             );
           }),
+    );
+  }
+
+  void _showDeleteAllConfirmation(BuildContext context, FactsProvider provider) {
+    if (provider.facts.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No facts to delete'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey.shade900,
+        title: const Text(
+          'Clear Omi\'s Memory',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          'Are you sure you want to clear Omi\'s memory? This action cannot be undone.',
+          style: TextStyle(color: Colors.grey.shade300),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: Colors.grey.shade400),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              provider.deleteAllFacts();
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Omi\'s memory about you has been cleared'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
+            child: const Text(
+              'Clear Memory',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

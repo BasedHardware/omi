@@ -32,8 +32,7 @@ class FactsProvider extends BaseProvider {
     if (searchQuery.isNotEmpty) {
       filteredFacts = facts.where((fact) => fact.content.decodeString.toLowerCase().contains(searchQuery)).toList();
     } else {
-      filteredFacts =
-          selectedCategory == null ? facts : facts.where((fact) => fact.category == selectedCategory).toList();
+      filteredFacts = facts;
     }
     filteredFacts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
@@ -66,13 +65,21 @@ class FactsProvider extends BaseProvider {
     notifyListeners();
   }
 
-  void createFact(String content, FactCategory category, [FactVisibility visibility = FactVisibility.public]) async {
-    createFactServer(content, category, visibility.name);
+  void deleteAllFacts() async {
+    deleteAllFactServer();
+    facts.clear();
+    filteredFacts.clear();
+    _setCategories();
+    notifyListeners();
+  }
+
+  void createFact(String content, [FactVisibility visibility = FactVisibility.public]) async {
+    createFactServer(content, visibility.name);
     facts.add(Fact(
       id: const Uuid().v4(),
       uid: SharedPreferencesUtil().uid,
       content: content,
-      category: category,
+      category: FactCategory.other,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
       manuallyAdded: true,
@@ -95,11 +102,13 @@ class FactsProvider extends BaseProvider {
     _setCategories();
   }
 
-  void editFact(Fact fact, String value, FactCategory category) async {
+  void editFact(Fact fact, String value, [FactCategory? category]) async {
     var idx = facts.indexWhere((f) => f.id == fact.id);
     editFactServer(fact.id, value);
     fact.content = value;
-    fact.category = category;
+    if (category != null) {
+      fact.category = category;
+    }
     fact.updatedAt = DateTime.now();
     fact.edited = true;
     facts[idx] = fact;
