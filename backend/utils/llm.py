@@ -1,8 +1,9 @@
+
 import json
 import re
 import os
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import datetime, timezone, timedelta
+from typing import List, Optional, Dict
 
 import tiktoken
 from langchain.schema import (
@@ -27,6 +28,7 @@ from models.trend import TrendEnum, ceo_options, company_options, software_produ
 from utils.memories.facts import get_prompt_facts
 from utils.prompts import extract_facts_prompt, extract_learnings_prompt
 
+# LLM Initialization (Consider environment variables for API keys)
 llm_mini = ChatOpenAI(model='gpt-4o-mini')
 llm_mini_stream = ChatOpenAI(model='gpt-4o-mini', streaming=True)
 llm_large = ChatOpenAI(model='o1-preview')
@@ -52,16 +54,13 @@ llm_persona_medium_stream = ChatOpenAI(
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 parser = PydanticOutputParser(pydantic_object=Structured)
 
-encoding = tiktoken.encoding_for_model('gpt-4')
+encoding = tiktoken.encoding_for_model('gpt-4')  # Consider using a global or class-level variable
 
 
 def num_tokens_from_string(string: str) -> int:
     """Returns the number of tokens in a text string."""
     num_tokens = len(encoding.encode(string))
     return num_tokens
-
-
-# TODO: include caching layer, redis
 
 
 # **********************************************
@@ -82,13 +81,11 @@ def should_discard_memory(transcript: str) -> bool:
 
     parser = PydanticOutputParser(pydantic_object=DiscardMemory)
     prompt = ChatPromptTemplate.from_messages([
-        '''
-    You will be given a conversation transcript, and your task is to determine if the conversation is worth storing as a memory or not.
-    It is not worth storing if there are no interesting topics, facts, or information, in that case, output discard = True.
-
-    Transcript: ```{transcript}```
-
-    {format_instructions}'''.replace('    ', '').strip()
+        SystemMessage(
+            content="""You will be given a conversation transcript, and your task is to determine if the conversation is worth storing as a memory or not.
+    It is not worth storing if there are no interesting topics, facts, or information, in that case, output discard = True."""
+        ),
+        HumanMessage(content="Transcript: ```{transcript}```\n\n{format_instructions}"),
     ])
     chain = prompt | llm_mini | parser
     try:
@@ -104,21 +101,18 @@ def should_discard_memory(transcript: str) -> bool:
 
 
 def get_transcript_structure(transcript: str, started_at: datetime, language_code: str, tz: str) -> Structured:
-    prompt = ChatPromptTemplate.from_messages([(
-        'system',
-        '''You are an expert conversation analyzer. Your task is to analyze the conversation and provide structure and clarity to the recording transcription of a conversation.
+    prompt = ChatPromptTemplate.from_messages([
+        SystemMessage(content="""You are an expert conversation analyzer. Your task is to analyze the conversation and provide structure and clarity to the recording transcription of a conversation.
         The conversation language is {language_code}. Use the same language {language_code} for your response.
 
         For the title, use the main topic of the conversation.
         For the overview, condense the conversation into a summary with the main topics discussed, make sure to capture the key points and important details from the conversation.
         For the action items, include a list of commitments, specific tasks or actionable steps from the conversation that the user is planning to do or has to do on that specific day or in future. Remember the speaker is busy so this has to be very efficient and concise, otherwise they might miss some critical tasks. Specify which speaker is responsible for each action item.
         For the category, classify the conversation into one of the available categories.
-        For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on {started_at}. {tz} is the user's timezone, convert it to UTC and respond in UTC.
+        For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on {started_at}. {tz} is the user's timezone, convert it to UTC and respond in UTC."""),
+        HumanMessage(content="Transcript: ```{transcript}```\n\n{format_instructions}")
+    ])
 
-        Transcript: ```{transcript}```
-
-        {format_instructions}'''.replace('    ', '').strip()
-    )])
     chain = prompt | ChatOpenAI(model='gpt-4o') | parser
 
     response = chain.invoke({
@@ -139,9 +133,9 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
 def get_plugin_result(transcript: str, plugin: Plugin) -> str:
     prompt = f'''
     Your are an AI with the following characteristics:
-    Name: ${plugin.name},
-    Description: ${plugin.description},
-    Task: ${plugin.memory_prompt}
+    Name: {plugin.name},
+    Description: {plugin.description},
+    Task: {plugin.memory_prompt}
 
     Note: It is possible that the conversation you are given, has nothing to do with your task, \
     in that case, output an empty string. (For example, you are given a business conversation, but your task is medical analysis)
@@ -166,6 +160,7 @@ def summarize_open_glass(photos: List[MemoryPhoto]) -> Structured:
     photos_str = ''
     for i, photo in enumerate(photos):
         photos_str += f'{i + 1}. "{photo.description}"\n'
+
     prompt = f'''The user took a series of pictures from his POV, generated a description for each photo, and wants to create a memory from them.
 
       For the title, use the main topic of the scenes.
@@ -173,7 +168,7 @@ def summarize_open_glass(photos: List[MemoryPhoto]) -> Structured:
       For the category, classify the scenes into one of the available categories.
 
       Photos Descriptions: ```{photos_str}```
-      '''.replace('    ', '').strip()
+      '''
     return llm_mini.with_structured_output(Structured).invoke(prompt)
 
 
@@ -190,7 +185,7 @@ def summarize_experience_text(text: str) -> Structured:
       For the category, classify the scenes into one of the available categories.
 
       Text: ```{text}```
-      '''.replace('    ', '').strip()
+      '''
     return llm_mini.with_structured_output(Structured).invoke(prompt)
 
 
@@ -210,11 +205,10 @@ def get_memory_summary(uid: str, memories: List[Memory]) -> str:
     Respond in at most 50 words.
 
     Output your response in plain text, without markdown. No newline character and only use numbers for the action items.
-    ```
-    ${conversation_history}
-    ```
-    """.replace('    ', '').strip()
-    # print(prompt)
+
+    {conversation_history}
+
+    """
     return llm_mini.invoke(prompt).content
 
 
@@ -245,7 +239,6 @@ You know the following about {user_name}: {facts_str}.
 
 As {plugin.name}, fully embrace your personality and characteristics in your {"initial" if not prev_messages_str else "follow-up"} message to {user_name}. Use language, tone, and style that reflect your unique personality traits. {"Start" if not prev_messages_str else "Continue"} the conversation naturally with a short, engaging message that showcases your personality and humor, and connects with {user_name}. Do not mention that you are an AI or that this is an initial message.
 """
-    prompt = prompt.strip()
     return llm_mini.invoke(prompt).content
 
 
@@ -257,7 +250,8 @@ def initial_persona_chat_message(uid: str, app: Optional[App] = None, messages: 
             chat_messages.append(AIMessage(content=msg.text))
         else:
             chat_messages.append(HumanMessage(content=msg.text))
-    chat_messages.append(HumanMessage(content='lets begin. you write the first message, one short provocative question relevant to your identity. never respond with **. while continuing the convo, always respond w short msgs, lowercase.'))
+    chat_messages.append(HumanMessage(
+        content='lets begin. you write the first message, one short provocative question relevant to your identity. never respond with **. while continuing the convo, always respond w short msgs, lowercase.'))
     llm_call = llm_persona_mini_stream
     if app.is_influencer:
         llm_call = llm_persona_medium_stream
@@ -334,7 +328,7 @@ def retrieve_is_an_omi_question_v1(messages: List[Message]) -> bool:
 
     Conversation History:
     {Message.get_messages_as_string(messages)}
-    '''.replace('    ', '').strip()
+    '''
     with_parser = llm_mini.with_structured_output(IsAnOmiQuestion)
     response: IsAnOmiQuestion = with_parser.invoke(prompt)
     try:
@@ -367,7 +361,7 @@ def retrieve_is_an_omi_question_v2(messages: List[Message]) -> bool:
 
     Conversation Context:
     {Message.get_messages_as_string(messages)}
-    '''.replace('    ', '').strip()
+    '''
     with_parser = llm_mini.with_structured_output(IsAnOmiQuestion)
     response: IsAnOmiQuestion = with_parser.invoke(prompt)
     try:
@@ -400,7 +394,7 @@ def retrieve_is_an_omi_question(question: str) -> bool:
 
     User's Question:
     {question}
-    '''.replace('    ', '').strip()
+    '''
     with_parser = llm_mini.with_structured_output(IsAnOmiQuestion)
     response: IsAnOmiQuestion = with_parser.invoke(prompt)
     try:
@@ -450,7 +444,7 @@ def retrieve_context_topics(messages: List[Message]) -> List[str]:
 
     Conversation:
     {Message.get_messages_as_string(messages)}
-    '''.replace('    ', '').strip()
+    '''
     with_parser = llm_mini.with_structured_output(TopicsContext)
     try:
         response: TopicsContext = with_parser.invoke(prompt)
@@ -473,7 +467,7 @@ def retrieve_context_dates(messages: List[Message], tz: str) -> List[datetime]:
 
     Conversation:
     {Message.get_messages_as_string(messages)}
-    '''.replace('    ', '').strip()
+    '''
     with_parser = llm_mini.with_structured_output(DatesContext)
     response: DatesContext = with_parser.invoke(prompt)
     return response.dates_range
@@ -491,7 +485,7 @@ def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]
     {question}
     </question>
 
-    '''.replace('    ', '').strip()
+    '''
 
     # print(prompt)
     # print(llm_mini.invoke(prompt).content)
@@ -511,10 +505,7 @@ def retrieve_context_dates_by_question_v3(question: str, tz: str) -> List[dateti
     {question}
     ```
 
-    '''.replace('    ', '').strip()
-
-    # print(prompt)
-    # print(llm_mini.invoke(prompt).content)
+    '''
     with_parser = llm_mini.with_structured_output(DatesContext)
     response: DatesContext = with_parser.invoke(prompt)
     return response.dates_range
@@ -563,9 +554,7 @@ def retrieve_context_dates_by_question_v2(question: str, tz: str) -> List[dateti
     ```
     {question}
     ```
-    '''.replace('    ', '').strip()
-
-    # print(prompt)
+    '''
     with_parser = llm_mini.with_structured_output(DatesContext)
     response: DatesContext = with_parser.invoke(prompt)
     return response.dates_range
@@ -585,8 +574,7 @@ def retrieve_context_dates_by_question_v1(question: str, tz: str) -> List[dateti
 
     User's Question:
     {question}
-    '''.replace('    ', '').strip()
-
+    '''
     with_parser = llm_mini.with_structured_output(DatesContext)
     response: DatesContext = with_parser.invoke(prompt)
     return response.dates_range
@@ -636,7 +624,7 @@ def _get_answer_simple_message_prompt(uid: str, messages: List[Message], plugin:
     {conversation_history}
 
     Answer:
-    """.replace('    ', '').strip()
+    """
 
 
 def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[Plugin] = None) -> str:
@@ -668,7 +656,7 @@ def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> st
     {conversation_history}
 
     Answer:
-    """.replace('    ', '').strip()
+    """
 
 
 def answer_omi_question(messages: List[Message], context: str) -> str:
@@ -692,7 +680,7 @@ def answer_persona_question_stream(app: App, messages: List[Message], callbacks:
     llm_call = llm_persona_mini_stream
     if app.is_influencer:
         llm_call = llm_persona_medium_stream
-    return llm_call.invoke(chat_messages, {'callbacks':callbacks}).content
+    return llm_call.invoke(chat_messages, {'callbacks': callbacks}).content
 
 
 def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
@@ -701,15 +689,13 @@ def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[P
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
-    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
     context = context.replace('\n\n', '\n').strip()
     plugin_info = ""
     if plugin:
         plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
 
-    # Ref: https://www.reddit.com/r/perplexity_ai/comments/1hi981d
     cited_instruction = """
-    - You MUST cite the most relevant <memories> that answer the question. \
+    - You MUST cite the most relevant <memories> that answer the question.
       - Only cite in <memories> not <user_facts>, not <previous_messages>.
       - Cite in memories using [index] at the end of sentences when needed, for example "You discussed optimizing firmware with your teammate yesterday[1][2]".
       - NO SPACE between the last word and the citation.
@@ -775,18 +761,16 @@ def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[P
     </question_timezone>
 
     <answer>
-    """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
+    """
 
 
 def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
            messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
-    # print('qa_rag prompt', prompt)
     return llm_medium.invoke(prompt).content
 
 
-def qa_rag_stream(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
-                  messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]) -> str:
+def qa_rag_stream(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]) -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
     return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content
@@ -872,7 +856,6 @@ def _get_qa_rag_prompt_v5(uid: str, question: str, context: str, plugin: Optiona
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
-    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
     context = context.replace('\n\n', '\n').strip()
     plugin_info = ""
     if plugin:
@@ -939,7 +922,6 @@ def _get_qa_rag_prompt_v4(uid: str, question: str, context: str, plugin: Optiona
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
-    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
     context = context.replace('\n\n', '\n').strip()
     plugin_info = ""
     if plugin:
@@ -997,7 +979,7 @@ def _get_qa_rag_prompt_v4(uid: str, question: str, context: str, plugin: Optiona
 
 def qa_rag_v4(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
               messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
-    prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
+    prompt = _get_qa_rag_prompt_v4(uid, question, context, plugin, cited, messages, tz)  # Corrected prompt function
     # print('qa_rag prompt', prompt)
     return llm_large.invoke(prompt).content
 
@@ -1005,7 +987,7 @@ def qa_rag_v4(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
 def qa_rag_stream_v4(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
                      cited: Optional[bool] = False,
                      messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]) -> str:
-    prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
+    prompt = _get_qa_rag_prompt_v4(uid, question, context, plugin, cited, messages, tz)  # Corrected prompt function
     # print('qa_rag prompt', prompt)
     return llm_large_stream.invoke(prompt, {'callbacks': callbacks}).content
 
@@ -1015,7 +997,6 @@ def qa_rag_v3(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
-    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
     context = context.replace('\n\n', '\n').strip()
     plugin_info = ""
     if plugin:
@@ -1078,13 +1059,11 @@ def qa_rag_v2(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
-    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
     context = context.replace('\n\n', '\n').strip()
     plugin_info = ""
     if plugin:
         plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
 
-    # Ref: https://www.reddit.com/r/perplexity_ai/comments/1hi981d
     cited_prompt = """
     Cite conversations(memories) using [index] at the end of sentences when needed, for example "You discussed optimizing firmware with your teammate yesterday[1][2]". NO SPACE between the last word and the citation.
     Cite the most relevant conversations(memories) that answer the Question. Avoid citing irrelevant conversations(memories).
@@ -1128,7 +1107,6 @@ def qa_rag_v1(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
-    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
     context = context.replace('\n\n', '\n').strip()
     plugin_info = ""
     if plugin:
@@ -1338,7 +1316,7 @@ def trends_extractor(memory: Memory) -> List[Item]:
 
     Conversation:
     {transcript}
-    '''.replace('    ', '').strip()
+    '''
     try:
         with_parser = llm_mini.with_structured_output(ExpectedOutput)
         response: ExpectedOutput = with_parser.invoke(prompt)
@@ -1379,7 +1357,7 @@ def followup_question_prompt(segments: List[TranscriptSegment]):
 
         Output your response in plain text, without markdown.
         Output only the question, without context, be concise and straight to the point.
-        """.replace('    ', '').strip()
+        """
     return llm_mini.invoke(prompt).content
 
 
@@ -1486,7 +1464,7 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     - this day
     - etc.
     </date_in_term>
-    '''.replace('    ', '').strip()
+    '''
     # print(prompt)
     question = llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
     # print(question)
@@ -1557,7 +1535,7 @@ def extract_question_from_conversation_v6(messages: List[Message]) -> str:
     - this day
     - etc.
     </date_in_term>
-    '''.replace('    ', '').strip()
+    '''
     # print(prompt)
     return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
 
@@ -1587,6 +1565,8 @@ def extract_question_from_conversation_v5(messages: List[Message]) -> str:
 
     If the user's last message is a complete question, maintain the original version as accurately as possible. \
     Avoid adding unnecessary words.
+
+    You will be provided previous messages between you and user to    Avoid adding unnecessary words.
 
     You will be provided previous messages between you and user to help you answer the Question. \
     It's super IMPORTANT to refine the Question to be full context with the last messages only.
@@ -1792,7 +1772,6 @@ def retrieve_metadata_fields_from_transcript(
     for segment in transcript_segment:
         transcript += f'{segment["text"].strip()}\n\n'
 
-    # TODO: ask it to use max 2 words? to have more standardization possibilities
     prompt = f'''
     You will be given the raw transcript of a conversation, this transcript has about 20% word error rate,
     and diarization is also made very poorly.
