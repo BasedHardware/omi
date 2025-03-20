@@ -13,6 +13,8 @@ import 'package:omi/pages/chat/select_text_screen.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/animated_mini_banner.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
+import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
+import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -46,6 +48,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   bool isScrollingDown = false;
 
   bool _showSendButton = false;
+  bool _showVoiceRecorder = false;
 
   var prefs = SharedPreferencesUtil();
   late List<App> apps;
@@ -487,6 +490,28 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                   context.read<MessageProvider>().selectFile();
                                                 },
                                               ),
+                                              ListTile(
+                                                leading: const Icon(Icons.mic, color: Colors.white),
+                                                title:
+                                                    const Text("Record Voice", style: TextStyle(color: Colors.white)),
+                                                onTap: () {
+                                                  Navigator.pop(context);
+                                                  setState(() {
+                                                    _showVoiceRecorder = true;
+                                                  });
+                                                },
+                                              ),
+                                              ListTile(
+                                                leading: const Icon(Icons.mic, color: Colors.white),
+                                                title:
+                                                    const Text("Record Voice", style: TextStyle(color: Colors.white)),
+                                                onTap: () {
+                                                  Navigator.pop(context);
+                                                  setState(() {
+                                                    _showVoiceRecorder = true;
+                                                  });
+                                                },
+                                              ),
                                             ],
                                           ),
                                         );
@@ -495,32 +520,55 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                   },
                                 ),
                                 Expanded(
-                                  child: ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      maxHeight: 150,
-                                    ),
-                                    child: TextField(
-                                      enabled: true,
-                                      controller: textController,
-                                      obscureText: false,
-                                      onChanged: (value) {
-                                        setShowSendButton();
-                                      },
-                                      focusNode: home.chatFieldFocusNode,
-                                      textAlign: TextAlign.start,
-                                      textAlignVertical: TextAlignVertical.top,
-                                      decoration: const InputDecoration(
-                                        hintText: 'Message',
-                                        hintStyle: TextStyle(fontSize: 14.0, color: Colors.grey),
-                                        focusedBorder: InputBorder.none,
-                                        enabledBorder: InputBorder.none,
-                                        contentPadding: EdgeInsets.only(top: 8, bottom: 10),
+                                  child: _showVoiceRecorder
+                                    ? VoiceRecorderWidget(
+                                        onTranscriptReady: (transcript) {
+                                          setState(() {
+                                            textController.text = transcript;
+                                            _showVoiceRecorder = false;
+                                            _showSendButton = true;
+                                          });
+                                        },
+                                        onClose: () {
+                                          setState(() {
+                                            _showVoiceRecorder = false;
+                                          });
+                                        },
+                                      )
+                                    : ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          maxHeight: 150,
+                                        ),
+                                        child: TextField(
+                                          enabled: true,
+                                          controller: textController,
+                                          obscureText: false,
+                                          onChanged: (value) {
+                                            setShowSendButton();
+                                          },
+                                          focusNode: home.chatFieldFocusNode,
+                                          textAlign: TextAlign.start,
+                                          textAlignVertical: TextAlignVertical.top,
+                                          decoration: InputDecoration(
+                                            hintText: 'Message',
+                                            hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
+                                            focusedBorder: InputBorder.none,
+                                            enabledBorder: InputBorder.none,
+                                            contentPadding: const EdgeInsets.only(top: 8, bottom: 10),
+                                            suffixIcon: IconButton(
+                                              icon: const Icon(Icons.mic, color: Color(0xFFF7F4F4)),
+                                              onPressed: () {
+                                                setState(() {
+                                                  _showVoiceRecorder = true;
+                                                });
+                                              },
+                                            ),
+                                          ),
+                                          maxLines: null,
+                                          keyboardType: TextInputType.multiline,
+                                          style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200, height: 24 / 14),
+                                        ),
                                       ),
-                                      maxLines: null,
-                                      keyboardType: TextInputType.multiline,
-                                      style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200, height: 24 / 14),
-                                    ),
-                                  ),
                                 ),
                                 !shouldShowSuffixIcon(provider) && !shouldShowSendButton(provider)
                                     ? const SizedBox.shrink()
