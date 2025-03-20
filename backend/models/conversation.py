@@ -274,6 +274,12 @@ class CreateConversationResponse(BaseModel):
     messages: List[Message] = []
 
 
+# MIGRATE: For backward compatibility with the old memories routes and app
+class CreateMemoryResponse(BaseModel):
+    memory: Conversation
+    messages: List[Message] = []
+
+
 class SetConversationEventsStateRequest(BaseModel):
     events_idx: List[int]
     values: List[bool]
