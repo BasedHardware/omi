@@ -490,28 +490,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                   context.read<MessageProvider>().selectFile();
                                                 },
                                               ),
-                                              ListTile(
-                                                leading: const Icon(Icons.mic, color: Colors.white),
-                                                title:
-                                                    const Text("Record Voice", style: TextStyle(color: Colors.white)),
-                                                onTap: () {
-                                                  Navigator.pop(context);
-                                                  setState(() {
-                                                    _showVoiceRecorder = true;
-                                                  });
-                                                },
-                                              ),
-                                              ListTile(
-                                                leading: const Icon(Icons.mic, color: Colors.white),
-                                                title:
-                                                    const Text("Record Voice", style: TextStyle(color: Colors.white)),
-                                                onTap: () {
-                                                  Navigator.pop(context);
-                                                  setState(() {
-                                                    _showVoiceRecorder = true;
-                                                  });
-                                                },
-                                              ),
                                             ],
                                           ),
                                         );
@@ -521,55 +499,62 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                 ),
                                 Expanded(
                                   child: _showVoiceRecorder
-                                    ? VoiceRecorderWidget(
-                                        onTranscriptReady: (transcript) {
-                                          setState(() {
-                                            textController.text = transcript;
-                                            _showVoiceRecorder = false;
-                                            _showSendButton = true;
-                                          });
-                                        },
-                                        onClose: () {
-                                          setState(() {
-                                            _showVoiceRecorder = false;
-                                          });
-                                        },
-                                      )
-                                    : ConstrainedBox(
-                                        constraints: const BoxConstraints(
-                                          maxHeight: 150,
-                                        ),
-                                        child: TextField(
-                                          enabled: true,
-                                          controller: textController,
-                                          obscureText: false,
-                                          onChanged: (value) {
-                                            setShowSendButton();
+                                      ? VoiceRecorderWidget(
+                                          onTranscriptReady: (transcript) {
+                                            setState(() {
+                                              textController.text = transcript;
+                                              _showVoiceRecorder = false;
+                                              _showSendButton = true;
+                                            });
                                           },
-                                          focusNode: home.chatFieldFocusNode,
-                                          textAlign: TextAlign.start,
-                                          textAlignVertical: TextAlignVertical.top,
-                                          decoration: InputDecoration(
-                                            hintText: 'Message',
-                                            hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
-                                            focusedBorder: InputBorder.none,
-                                            enabledBorder: InputBorder.none,
-                                            contentPadding: const EdgeInsets.only(top: 8, bottom: 10),
-                                            suffixIcon: IconButton(
-                                              icon: const Icon(Icons.mic, color: Color(0xFFF7F4F4)),
-                                              onPressed: () {
-                                                setState(() {
-                                                  _showVoiceRecorder = true;
-                                                });
-                                              },
-                                            ),
+                                          onClose: () {
+                                            setState(() {
+                                              _showVoiceRecorder = false;
+                                            });
+                                          },
+                                        )
+                                      : ConstrainedBox(
+                                          constraints: const BoxConstraints(
+                                            maxHeight: 150,
                                           ),
-                                          maxLines: null,
-                                          keyboardType: TextInputType.multiline,
-                                          style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200, height: 24 / 14),
+                                          child: TextField(
+                                            enabled: true,
+                                            controller: textController,
+                                            obscureText: false,
+                                            onChanged: (value) {
+                                              setShowSendButton();
+                                            },
+                                            focusNode: home.chatFieldFocusNode,
+                                            textAlign: TextAlign.start,
+                                            textAlignVertical: TextAlignVertical.top,
+                                            decoration: InputDecoration(
+                                              hintText: 'Message',
+                                              hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
+                                              focusedBorder: InputBorder.none,
+                                              enabledBorder: InputBorder.none,
+                                              contentPadding: const EdgeInsets.only(top: 8, bottom: 10),
+                                            ),
+                                            maxLines: null,
+                                            keyboardType: TextInputType.multiline,
+                                            style:
+                                                TextStyle(fontSize: 14.0, color: Colors.grey.shade200, height: 24 / 14),
+                                          ),
                                         ),
-                                      ),
                                 ),
+                                if (!_showVoiceRecorder)
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.mic_outlined,
+                                      color: Color(0xFFF7F4F4),
+                                      size: 20.0,
+                                    ),
+                                    splashRadius: 1,
+                                    onPressed: () {
+                                      setState(() {
+                                        _showVoiceRecorder = true;
+                                      });
+                                    },
+                                  ),
                                 !shouldShowSuffixIcon(provider) && !shouldShowSendButton(provider)
                                     ? const SizedBox.shrink()
                                     : IconButton(
