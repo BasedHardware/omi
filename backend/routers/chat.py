@@ -392,21 +392,50 @@ async def create_voice_message_stream(files: List[UploadFile] = File(...),
 @router.post("/v1/voice-message/transcribe")
 async def transcribe_voice_message(files: List[UploadFile] = File(...),
                                    uid: str = Depends(auth.get_current_user_uid)):
-    # wav
-    paths = retrieve_file_paths(files, uid)
-    if len(paths) == 0:
-        raise HTTPException(status_code=400, detail='Paths is invalid')
-
-    wav_paths = decode_files_to_wav(paths)
-    if len(wav_paths) == 0:
-        raise HTTPException(status_code=400, detail='Wav path is invalid')
-
-    # process
-    transcript = transcribe_voice_message_segment(list(wav_paths)[0])
-    if not transcript:
-        raise HTTPException(status_code=400, detail='Failed to transcribe audio')
-
-    return {"transcript": transcript}
+    # Check if files are empty
+    if not files or len(files) == 0:
+        raise HTTPException(status_code=400, detail='No files provided')
+    
+    wav_paths = []
+    other_file_paths = []
+    
+    # Process all files in a single loop
+    for file in files:
+        if file.filename.lower().endswith('.wav'):
+            # For WAV files, save directly to a temporary path
+            temp_path = f"/tmp/{uid}_{uuid.uuid4()}.wav"
+            with open(temp_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            wav_paths.append(temp_path)
+        else:
+            # For other files, collect paths for later conversion
+            path = retrieve_file_paths([file], uid)
+            if path:
+                other_file_paths.extend(path)
+    
+    # Convert other files to WAV if needed
+    if other_file_paths:
+        converted_wav_paths = decode_files_to_wav(other_file_paths)
+        if converted_wav_paths:
+            wav_paths.extend(converted_wav_paths)
+    
+    # Process all WAV files
+    for wav_path in wav_paths:
+        transcript = transcribe_voice_message_segment(wav_path)
+        
+        # Clean up temporary WAV files created directly
+        if wav_path.startswith(f"/tmp/{uid}_"):
+            try:
+                Path(wav_path).unlink()
+            except:
+                pass
+                
+        # If we got a transcript, return it
+        if transcript:
+            return {"transcript": transcript}
+    
+    # If we got here, no transcript was produced
+    raise HTTPException(status_code=400, detail='Failed to transcribe audio')
 
 
 @router.post('/v1/files', response_model=List[FileChat], tags=['chat'])

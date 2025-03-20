@@ -311,3 +311,30 @@ Future reportMessageServer(String messageId) async {
     throw Exception('Failed to report message');
   }
 }
+
+
+Future<String> transcribeVoiceMessage(File audioFile) async {
+  try {
+    var request = http.MultipartRequest(
+      'POST',
+      Uri.parse('${Env.apiBaseUrl}v1/voice-message/transcribe'),
+    );
+    
+    request.headers.addAll({'Authorization': await getAuthHeader()});
+    request.files.add(await http.MultipartFile.fromPath('files', audioFile.path));
+    
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+    
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['transcript'] ?? '';
+    } else {
+      debugPrint('Failed to transcribe voice message: ${response.statusCode} ${response.body}');
+      throw Exception('Failed to transcribe voice message');
+    }
+  } catch (e) {
+    debugPrint('Error transcribing voice message: $e');
+    throw Exception('Error transcribing voice message: $e');
+  }
+}
