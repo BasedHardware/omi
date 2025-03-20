@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as Math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -50,6 +51,15 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
       duration: const Duration(milliseconds: 1000),
     )..repeat(reverse: true);
 
+    // Setup timer to update the wave visualization every second
+    _waveformTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_state == RecordingState.recording && mounted) {
+        setState(() {
+          // Just trigger a repaint
+        });
+      }
+    });
+
     _startRecording();
   }
 
@@ -57,9 +67,13 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
   void dispose() {
     _animationController.dispose();
     _waveformTimer?.cancel();
+
+    // Make sure to stop recording when widget is disposed
     if (_state == RecordingState.recording) {
-      _stopRecording();
+      // Use a synchronous call to stop recording to avoid any async issues
+      ServiceManager.instance().mic.stop();
     }
+
     super.dispose();
   }
 
@@ -81,66 +95,62 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
       }
     });
 
-    // Start the waveform animation - slower update rate
-    _waveformTimer = Timer.periodic(const Duration(milliseconds: 300), (_) {
-      if (_state == RecordingState.recording) {
-        setState(() {
-          // Only apply a subtle animation effect, most movement will come from real audio data
-          for (int i = 0; i < _audioLevels.length; i++) {
-            // Apply a very subtle animation effect (10% of the original animation)
-            double animationEffect = 0.05 * _animationController.value;
-            // Make sure we don't go below the minimum level
-            _audioLevels[i] = (_audioLevels[i] + animationEffect).clamp(0.1, 1.0);
-          }
-        });
-      }
-    });
+    // Timer is already set up in initState
 
     try {
       await ServiceManager.instance().mic.start(
         onByteReceived: (bytes) {
-          if (_state == RecordingState.recording) {
-            setState(() {
-              _audioChunks.add(bytes.toList());
+          if (_state == RecordingState.recording && mounted) {
+            // Check if widget is still mounted before calling setState
+            if (mounted) {
+              setState(() {
+                _audioChunks.add(bytes.toList());
 
-              // Update audio visualization based on actual audio levels
-              if (bytes.isNotEmpty) {
-                // Process audio in chunks to get more accurate visualization
-                final chunkSize = bytes.length ~/ 4;
-                if (chunkSize > 0) {
-                  // Calculate levels for multiple chunks within this audio packet
-                  List<double> newLevels = [];
-
-                  for (int i = 0; i < 4; i++) {
-                    final start = i * chunkSize;
-                    final end = (i + 1) * chunkSize;
-                    if (end <= bytes.length) {
-                      final chunk = bytes.sublist(start, end);
-                      final sum = chunk.fold<int>(0, (sum, value) => sum + value.abs());
-                      final avg = sum / chunk.length;
-                      // Use a logarithmic scale for better visualization
-                      final level = (0.3 + 0.7 * (avg / 128)).clamp(0.1, 1.0);
-                      newLevels.add(level);
+                // Update audio visualization based on actual audio levels
+                if (bytes.isNotEmpty) {
+                  // Calculate RMS (Root Mean Square) for PCM16 audio data
+                  double rms = 0;
+                  
+                  // Process bytes as 16-bit samples (2 bytes per sample)
+                  for (int i = 0; i < bytes.length - 1; i += 2) {
+                    // Convert two bytes to a 16-bit signed integer
+                    // PCM16 is little-endian: LSB first, then MSB
+                    int sample = bytes[i] | (bytes[i + 1] << 8);
+                    
+                    // Convert to signed value (if high bit is set)
+                    if (sample > 32767) {
+                      sample = sample - 65536;
                     }
+                    
+                    // Square the sample and add to sum
+                    rms += sample * sample;
+                  }
+                  
+                  // Calculate RMS and normalize to 0.0-1.0 range
+                  // 32768 is max absolute value for 16-bit audio
+                  int sampleCount = bytes.length ~/ 2;
+                  if (sampleCount > 0) {
+                    rms = Math.sqrt(rms / sampleCount) / 32768.0;
+                  } else {
+                    rms = 0;
                   }
 
-                  // Shift values in the array and add new levels
-                  if (newLevels.isNotEmpty) {
-                    final shiftCount = newLevels.length;
-                    for (int i = 0; i < _audioLevels.length - shiftCount; i++) {
-                      _audioLevels[i] = _audioLevels[i + shiftCount];
-                    }
+                  // Apply non-linear scaling to make quiet sounds more visible
+                  // and loud sounds more dramatic
+                  final level = Math.pow(rms, 0.4).toDouble().clamp(0.1, 1.0);
 
-                    // Add new levels at the end
-                    for (int i = 0; i < newLevels.length; i++) {
-                      if (_audioLevels.length - newLevels.length + i >= 0) {
-                        _audioLevels[_audioLevels.length - newLevels.length + i] = newLevels[i];
-                      }
-                    }
+                  // Shift all values left
+                  for (int i = 0; i < _audioLevels.length - 1; i++) {
+                    _audioLevels[i] = _audioLevels[i + 1];
                   }
+
+                  // Add new level at the end
+                  _audioLevels[_audioLevels.length - 1] = level;
+
+                  // We don't force setState here anymore - the timer will handle updates
                 }
-              }
-            });
+              });
+            }
           }
         },
         onRecording: () {
@@ -220,7 +230,6 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
 
   void _retry() {
     if (_audioChunks.isEmpty) {
-      // If no audio chunks are available, start a new recording
       _startRecording();
     } else {
       // Retry transcription with existing audio data
@@ -233,7 +242,6 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
     switch (_state) {
       case RecordingState.recording:
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: BoxDecoration(
             color: Colors.black,
             borderRadius: BorderRadius.circular(16),
@@ -241,22 +249,24 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: widget.onClose,
+              ),
               Expanded(
                 child: SizedBox(
                   height: 40,
                   child: CustomPaint(
-                    painter: AudioWavePainter(levels: _audioLevels),
+                    painter: AudioWavePainter(
+                      levels: _audioLevels,
+                      timestamp: DateTime.now(),
+                    ),
                   ),
                 ),
               ),
               IconButton(
                 icon: const Icon(Icons.check_circle, color: Colors.white),
                 onPressed: _processRecording,
-              ),
-              IconButton(
-                icon: const Icon(Icons.close, color: Colors.white),
-                onPressed: widget.onClose,
               ),
             ],
           ),
@@ -364,44 +374,39 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
 
 class AudioWavePainter extends CustomPainter {
   final List<double> levels;
+  // Add timestamp to control repaint frequency
+  final DateTime timestamp;
 
-  AudioWavePainter({required this.levels});
+  AudioWavePainter({
+    required this.levels,
+    DateTime? timestamp,
+  }) : timestamp = timestamp ?? DateTime.now();
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..color = Colors.white
-      ..strokeWidth = 3
+      ..strokeWidth = 4 // Slightly thicker for better visibility
       ..strokeCap = StrokeCap.round;
 
     final width = size.width;
     final height = size.height;
     final barWidth = width / levels.length / 2;
 
-    // Draw a baseline
-    final baselineY = height / 2;
-    canvas.drawLine(
-      Offset(0, baselineY),
-      Offset(width, baselineY),
-      Paint()
-        ..color = Colors.white.withOpacity(0.2)
-        ..strokeWidth = 1,
-    );
-
     for (int i = 0; i < levels.length; i++) {
       final x = i * (barWidth * 2) + barWidth;
 
-      // Calculate bar height with a smoother curve
+      // Use the level directly for more accurate RMS representation
       final level = levels[i];
-      // Apply a quadratic curve to make the visualization more dynamic
-      final barHeight = level * level * height * 0.8;
+      final barHeight = level * height * 0.8;
 
-      final y = height / 2 - barHeight / 2;
+      final topY = height / 2 - barHeight / 2;
+      final bottomY = height / 2 + barHeight / 2;
 
-      // Draw with rounded caps for a smoother look
+      // Draw only the individual bars with rounded caps
       canvas.drawLine(
-        Offset(x, y),
-        Offset(x, y + barHeight),
+        Offset(x, topY),
+        Offset(x, bottomY),
         paint,
       );
     }
@@ -409,6 +414,6 @@ class AudioWavePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant AudioWavePainter oldDelegate) {
-    return true; // Always repaint to show animation
+    return true;
   }
 }
