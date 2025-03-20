@@ -182,6 +182,8 @@ class Conversation(BaseModel):
     visibility: ConversationVisibility = ConversationVisibility.private
 
     processing_conversation_id: Optional[str] = None
+    # processing_memory_id should be removed from the model once v1/memories and v2/memories routes are removed
+    processing_memory_id: Optional[str] = None
     status: Optional[ConversationStatus] = ConversationStatus.completed
 
     @staticmethod
