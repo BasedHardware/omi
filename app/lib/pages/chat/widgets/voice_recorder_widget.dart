@@ -36,12 +36,12 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
   List<List<int>> _audioChunks = [];
   String _transcript = '';
   bool _isProcessing = false;
-  
+
   // Audio visualization
   final List<double> _audioLevels = List.generate(20, (_) => 0.1);
   late AnimationController _animationController;
   Timer? _waveformTimer;
-  
+
   @override
   void initState() {
     super.initState();
@@ -49,10 +49,10 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
       vsync: this,
       duration: const Duration(milliseconds: 1000),
     )..repeat(reverse: true);
-    
+
     _startRecording();
   }
-  
+
   @override
   void dispose() {
     _animationController.dispose();
@@ -62,7 +62,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
     }
     super.dispose();
   }
-  
+
   Future<void> _startRecording() async {
     // Request microphone permission
     var status = await Permission.microphone.request();
@@ -71,7 +71,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
       widget.onClose();
       return;
     }
-    
+
     setState(() {
       _state = RecordingState.recording;
       _audioChunks = [];
@@ -80,36 +80,65 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
         _audioLevels[i] = 0.1;
       }
     });
-    
-    // Start the waveform animation
-    _waveformTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
+
+    // Start the waveform animation - slower update rate
+    _waveformTimer = Timer.periodic(const Duration(milliseconds: 300), (_) {
       if (_state == RecordingState.recording) {
         setState(() {
+          // Only apply a subtle animation effect, most movement will come from real audio data
           for (int i = 0; i < _audioLevels.length; i++) {
-            _audioLevels[i] = 0.1 + 0.9 * (0.2 + 0.8 * (i % 3 == 0 ? 0.8 : 0.5)) * (0.5 + 0.5 * _animationController.value);
+            // Apply a very subtle animation effect (10% of the original animation)
+            double animationEffect = 0.05 * _animationController.value;
+            // Make sure we don't go below the minimum level
+            _audioLevels[i] = (_audioLevels[i] + animationEffect).clamp(0.1, 1.0);
           }
         });
       }
     });
-    
+
     try {
       await ServiceManager.instance().mic.start(
         onByteReceived: (bytes) {
           if (_state == RecordingState.recording) {
             setState(() {
               _audioChunks.add(bytes.toList());
-              
+
               // Update audio visualization based on actual audio levels
               if (bytes.isNotEmpty) {
-                final sum = bytes.fold<int>(0, (sum, value) => sum + value.abs());
-                final avg = sum / bytes.length;
-                final level = (avg / 128).clamp(0.1, 1.0); // Normalize to 0.1-1.0 range
-                
-                // Shift values in the array instead of removing/adding
-                for (int i = 0; i < _audioLevels.length - 1; i++) {
-                  _audioLevels[i] = _audioLevels[i + 1];
+                // Process audio in chunks to get more accurate visualization
+                final chunkSize = bytes.length ~/ 4;
+                if (chunkSize > 0) {
+                  // Calculate levels for multiple chunks within this audio packet
+                  List<double> newLevels = [];
+
+                  for (int i = 0; i < 4; i++) {
+                    final start = i * chunkSize;
+                    final end = (i + 1) * chunkSize;
+                    if (end <= bytes.length) {
+                      final chunk = bytes.sublist(start, end);
+                      final sum = chunk.fold<int>(0, (sum, value) => sum + value.abs());
+                      final avg = sum / chunk.length;
+                      // Use a logarithmic scale for better visualization
+                      final level = (0.3 + 0.7 * (avg / 128)).clamp(0.1, 1.0);
+                      newLevels.add(level);
+                    }
+                  }
+
+                  // Shift values in the array and add new levels
+                  if (newLevels.isNotEmpty) {
+                    final shiftCount = newLevels.length;
+                    for (int i = 0; i < _audioLevels.length - shiftCount; i++) {
+                      _audioLevels[i] = _audioLevels[i + shiftCount];
+                    }
+
+                    // Add new levels at the end
+                    for (int i = 0; i < newLevels.length; i++) {
+                      if (_audioLevels.length - newLevels.length + i >= 0) {
+                        _audioLevels[_audioLevels.length - newLevels.length + i] = newLevels[i];
+                      }
+                    }
+                  }
                 }
-                _audioLevels[_audioLevels.length - 1] = level;
               }
             });
           }
@@ -129,49 +158,49 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
       AppSnackbar.showSnackbarError('Failed to start recording: $e');
     }
   }
-  
+
   Future<void> _stopRecording() async {
     _waveformTimer?.cancel();
     ServiceManager.instance().mic.stop();
   }
-  
+
   Future<void> _processRecording() async {
     if (_audioChunks.isEmpty) {
       widget.onClose();
       return;
     }
-    
+
     setState(() {
       _state = RecordingState.transcribing;
       _isProcessing = true;
     });
-    
+
     try {
       await _stopRecording();
-      
+
       // Flatten audio chunks into a single list
       List<int> flattenedBytes = [];
       for (var chunk in _audioChunks) {
         flattenedBytes.addAll(chunk);
       }
-      
+
       // Convert PCM to WAV file
       final audioFile = await FileUtils.convertPcmToWavFile(
         Uint8List.fromList(flattenedBytes),
         16000, // Sample rate
-        1,     // Mono channel
+        1, // Mono channel
       );
-      
+
       // Send to API for transcription
       final transcript = await transcribeVoiceMessage(audioFile);
-      
+
       if (mounted) {
         setState(() {
           _transcript = transcript;
           _state = RecordingState.transcribeSuccess;
           _isProcessing = false;
         });
-        
+
         // If we have a transcript, send it to the parent widget
         if (transcript.isNotEmpty) {
           widget.onTranscriptReady(transcript);
@@ -188,7 +217,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
       AppSnackbar.showSnackbarError('Failed to transcribe audio');
     }
   }
-  
+
   void _retry() {
     if (_audioChunks.isEmpty) {
       // If no audio chunks are available, start a new recording
@@ -198,7 +227,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
       _processRecording();
     }
   }
-  
+
   @override
   Widget build(BuildContext context) {
     switch (_state) {
@@ -210,8 +239,8 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
             borderRadius: BorderRadius.circular(16),
           ),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const Icon(Icons.mic, color: Colors.red),
               const SizedBox(width: 8),
               Expanded(
                 child: SizedBox(
@@ -232,7 +261,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
             ],
           ),
         );
-        
+
       case RecordingState.transcribing:
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -256,10 +285,14 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
                 'Transcribing...',
                 style: TextStyle(color: Colors.white),
               ),
+              SizedBox(width: 16),
+              SizedBox(
+                width: 20,
+              ),
             ],
           ),
         );
-        
+
       case RecordingState.transcribeSuccess:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -292,7 +325,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
             ),
           ],
         );
-        
+
       case RecordingState.transcribeFailed:
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -322,7 +355,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
             ],
           ),
         );
-        
+
       default:
         return const SizedBox.shrink();
     }
@@ -331,25 +364,41 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
 
 class AudioWavePainter extends CustomPainter {
   final List<double> levels;
-  
+
   AudioWavePainter({required this.levels});
-  
+
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..color = Colors.white
-      ..strokeWidth = 2
+      ..strokeWidth = 3
       ..strokeCap = StrokeCap.round;
-    
+
     final width = size.width;
     final height = size.height;
     final barWidth = width / levels.length / 2;
-    
+
+    // Draw a baseline
+    final baselineY = height / 2;
+    canvas.drawLine(
+      Offset(0, baselineY),
+      Offset(width, baselineY),
+      Paint()
+        ..color = Colors.white.withOpacity(0.2)
+        ..strokeWidth = 1,
+    );
+
     for (int i = 0; i < levels.length; i++) {
       final x = i * (barWidth * 2) + barWidth;
-      final barHeight = levels[i] * height * 0.8;
+
+      // Calculate bar height with a smoother curve
+      final level = levels[i];
+      // Apply a quadratic curve to make the visualization more dynamic
+      final barHeight = level * level * height * 0.8;
+
       final y = height / 2 - barHeight / 2;
-      
+
+      // Draw with rounded caps for a smoother look
       canvas.drawLine(
         Offset(x, y),
         Offset(x, y + barHeight),
@@ -357,7 +406,7 @@ class AudioWavePainter extends CustomPainter {
       );
     }
   }
-  
+
   @override
   bool shouldRepaint(covariant AudioWavePainter oldDelegate) {
     return true; // Always repaint to show animation
