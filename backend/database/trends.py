@@ -4,7 +4,7 @@ from typing import Dict, List
 from firebase_admin import firestore
 from google.api_core.retry import Retry
 
-from models.memory import Conversation
+from models.conversation import Conversation
 from models.trend import Trend, valid_items
 from ._client import db, document_id_from_seed
 

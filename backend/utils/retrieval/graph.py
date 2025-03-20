@@ -18,7 +18,7 @@ from database.vector_db import query_vectors_by_metadata
 import database.notifications as notification_db
 from models.app import App
 from models.chat import ChatSession, Message
-from models.memory import Conversation
+from models.conversation import Conversation
 from models.plugin import Plugin
 from utils.llm import (
     answer_omi_question,

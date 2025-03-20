@@ -22,7 +22,7 @@ import umap
 from plotly.subplots import make_subplots
 
 # noinspection PyUnresolvedReferences
-from models.memory import Conversation
+from models.conversation import Conversation
 import database.conversations as conversations_db
 
 import multiprocessing

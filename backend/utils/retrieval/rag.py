@@ -4,7 +4,7 @@ from typing import List, Tuple
 
 from database.conversations import get_conversations_by_id
 from database.vector_db import query_vectors
-from models.memory import Conversation
+from models.conversation import Conversation
 from models.transcript_segment import TranscriptSegment
 from utils.llm import  chunk_extraction, num_tokens_from_string, retrieve_memory_context_params
 

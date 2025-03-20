@@ -9,7 +9,7 @@ import database.chat as chat_db
 import database.notifications as notification_db
 from database.apps import record_app_usage
 from models.chat import Message, ResponseMessage, MessageMemory
-from models.memory import Conversation
+from models.conversation import Conversation
 from models.notification_message import NotificationMessage
 from models.plugin import UsageHistoryType
 from models.transcript_segment import TranscriptSegment

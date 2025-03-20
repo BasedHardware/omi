@@ -6,7 +6,7 @@ from typing import List
 
 from pinecone import Pinecone
 
-from models.memory import Conversation
+from models.conversation import Conversation
 from utils.llm import embeddings
 
 if os.getenv('PINECONE_API_KEY') is not None:

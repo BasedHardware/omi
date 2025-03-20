@@ -22,7 +22,7 @@ from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_gener
     set_app_usage_count_cache, set_user_paid_app, get_user_paid_app, delete_app_cache_by_id, is_username_taken
 from database.users import get_stripe_connect_account_id
 from models.app import App, UsageHistoryItem, UsageHistoryType
-from models.memory import Conversation
+from models.conversation import Conversation
 from utils import stripe
 from utils.llm import condense_conversations, condense_facts, generate_persona_description, condense_tweets
 from utils.social import get_twitter_timeline, TwitterProfile, get_twitter_profile

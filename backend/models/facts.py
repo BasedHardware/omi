@@ -6,7 +6,7 @@ from typing import Optional, List
 from pydantic import BaseModel, Field
 
 from database._client import document_id_from_seed
-from models.memory import CategoryEnum
+from models.conversation import CategoryEnum
 
 
 class FactCategory(str, Enum):

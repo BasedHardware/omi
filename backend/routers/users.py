@@ -8,7 +8,7 @@ from database.conversations import get_in_progress_conversation, get_conversatio
 from database.redis_db import cache_user_geolocation, set_user_webhook_db, get_user_webhook_db, disable_user_webhook_db, \
     enable_user_webhook_db, user_webhook_status_db
 from database.users import *
-from models.memory import Geolocation, Conversation
+from models.conversation import Geolocation, Conversation
 from models.other import Person, CreatePerson
 from models.users import WebhookType
 from utils.llm import followup_question_prompt

@@ -13,7 +13,7 @@ import database.redis_db as redis_db
 from database.redis_db import get_enabled_plugins, r as redis_client
 import database.notifications as notification_db
 import models.integrations as integration_models
-import models.memory as memory_models
+import models.conversation as conversation_models
 from models.app import App
 from routers.memories import process_memory, trigger_external_integrations
 from utils.memories.location import get_google_maps_location
@@ -64,7 +64,7 @@ def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
 async def create_conversation_via_integration(
     request: Request,
     app_id: str,
-    create_memory: memory_models.ExternalIntegrationCreateConversation,
+    create_memory: conversation_models.ExternalIntegrationCreateConversation,
     uid: str,
     authorization: Optional[str] = Header(None)
 ):
@@ -110,7 +110,7 @@ async def create_conversation_via_integration(
         create_memory.language = language_code
 
     # Set source to external_integration
-    create_memory.source = memory_models.ConversationSource.external_integration
+    create_memory.source = conversation_models.ConversationSource.external_integration
 
     # Set app_id
     create_memory.app_id = app_id

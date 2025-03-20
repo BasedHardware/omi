@@ -10,7 +10,7 @@ from opuslib import Decoder
 from pydub import AudioSegment
 
 from database.conversations import get_closest_conversation_to_timestamps, update_conversation_segments
-from models.memory import CreateConversation
+from models.conversation import CreateConversation
 from models.transcript_segment import TranscriptSegment
 from utils.memories.process_memory import process_memory
 from utils.other import endpoints as auth

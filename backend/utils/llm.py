@@ -19,7 +19,7 @@ from database.redis_db import add_filter_category_item
 from models.app import App
 from models.chat import Message, MessageSender
 from models.facts import Fact, FactCategory
-from models.memory import Structured, ConversationPhoto, CategoryEnum, Conversation
+from models.conversation import Structured, ConversationPhoto, CategoryEnum, Conversation
 from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment
 from models.trend import TrendEnum, ceo_options, company_options, software_product_options, hardware_product_options, \

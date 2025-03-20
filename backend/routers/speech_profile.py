@@ -7,7 +7,7 @@ from pydub import AudioSegment
 from database.conversations import get_conversation
 from database.redis_db import remove_user_soniox_speech_profile
 from database.users import get_person
-from models.memory import Conversation
+from models.conversation import Conversation
 from models.other import UploadProfile
 from utils.other import endpoints as auth
 from utils.other.storage import upload_profile_audio, get_profile_audio_if_exists, get_memory_recording_if_exists, \

@@ -18,7 +18,7 @@ import database.conversations as conversations_db
 from database.redis_db import get_filter_category_items
 from database.vector_db import query_vectors_by_metadata
 from models.chat import Message
-from models.memory import Conversation
+from models.conversation import Conversation
 from utils.llm import select_structured_filters, generate_embedding, extract_question_from_transcript, \
     provide_advice_message
 

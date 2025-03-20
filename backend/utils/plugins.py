@@ -13,7 +13,7 @@ from database.redis_db import get_enabled_plugins, get_generic_cache, \
     set_generic_cache, get_plugins_reviews, get_plugins_installs_count
 from models.app import App
 from models.chat import Message
-from models.memory import Conversation, ConversationSource
+from models.conversation import Conversation, ConversationSource
 from models.notification_message import NotificationMessage
 from models.plugin import Plugin, UsageHistoryType
 from utils.apps import get_available_apps, weighted_rating

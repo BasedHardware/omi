@@ -9,7 +9,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from google.cloud.firestore_v1.async_client import AsyncClient
 
 import utils.other.hume as hume
-from models.memory import ConversationPhoto, PostProcessingStatus, PostProcessingModel, ConversationStatus
+from models.conversation import ConversationPhoto, PostProcessingStatus, PostProcessingModel, ConversationStatus
 from models.transcript_segment import TranscriptSegment
 from ._client import db
 

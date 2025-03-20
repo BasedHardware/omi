@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 import database.processing_memories as processing_memories_db
 from database.redis_db import get_cached_user_geolocation
-from models.memory import CreateConversation, Geolocation
+from models.conversation import CreateConversation, Geolocation
 from models.processing_memory import ProcessingMemory, ProcessingMemoryStatus, DetailProcessingMemory
 from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory

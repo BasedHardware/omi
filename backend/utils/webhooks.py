@@ -8,7 +8,7 @@ import websockets
 
 from database.redis_db import get_user_webhook_db, user_webhook_status_db, disable_user_webhook_db, \
     enable_user_webhook_db, set_user_webhook_db
-from models.memory import Conversation
+from models.conversation import Conversation
 from models.users import WebhookType
 import database.notifications as notification_db
 from utils.notifications import send_notification

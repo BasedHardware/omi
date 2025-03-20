@@ -16,8 +16,8 @@ from database.apps import record_app_usage, get_omi_personas_by_uid_db
 from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
 from models.facts import FactDB, Fact
-from models.memory import *
-from models.memory import ExternalIntegrationCreateConversation, Conversation, CreateConversation, ConversationSource
+from models.conversation import *
+from models.conversation import ExternalIntegrationCreateConversation, Conversation, CreateConversation, ConversationSource
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
 from models.notification_message import NotificationMessage

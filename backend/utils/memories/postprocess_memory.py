@@ -7,7 +7,7 @@ from pydub import AudioSegment
 
 import database.conversations as conversations_db
 from database.users import get_user_store_recording_permission
-from models.memory import *
+from models.conversation import *
 from utils.memories.process_memory import process_memory, process_user_emotion
 from utils.other.storage import upload_postprocessing_audio, \
     delete_postprocessing_audio, upload_memory_recording

@@ -4,7 +4,7 @@ from typing import Dict
 
 from _shared import *
 from models.chat import Message
-from models.memory import Conversation
+from models.conversation import Conversation
 
 
 def _get_mesage(text: str, sender: str):

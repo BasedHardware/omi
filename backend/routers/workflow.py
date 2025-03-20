@@ -7,7 +7,7 @@ from fastapi import Request, HTTPException
 
 import database.conversations as conversations_db
 import models.integrations as integration_models
-import models.memory as memory_models
+import models.conversation as conversation_models
 from routers.memories import process_memory, trigger_external_integrations
 from utils.memories.location import get_google_maps_location
 
@@ -17,7 +17,7 @@ router = APIRouter()
 @router.post('/v1/integrations/workflow/memories', response_model=integration_models.EmptyResponse,
              tags=['integration', 'workflow', 'memories'])
 def create_memory(request: Request, uid: str, api_key: Annotated[str | None, Header()],
-                  create_memory: memory_models.ExternalIntegrationCreateConversation):
+                  create_memory: conversation_models.ExternalIntegrationCreateConversation):
     if api_key != os.getenv('WORKFLOW_API_KEY'):
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
@@ -52,7 +52,7 @@ def create_memory(request: Request, uid: str, api_key: Annotated[str | None, Hea
     return {}
 
 
-@router.get('/v1/integrations/workflow/memories', response_model=List[memory_models.Conversation],
+@router.get('/v1/integrations/workflow/memories', response_model=List[conversation_models.Conversation],
             tags=['integration', 'workflow', 'memories'])
 def get_memory(request: Request, uid: str, api_key: Annotated[str | None, Header()], limit: int = 1):
     if api_key != os.getenv('WORKFLOW_API_KEY'):

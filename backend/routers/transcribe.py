@@ -16,7 +16,7 @@ import database.conversations as conversations_db
 import database.users as user_db
 from database import redis_db
 from database.redis_db import get_cached_user_geolocation
-from models.memory import Conversation, TranscriptSegment, ConversationStatus, Structured, Geolocation
+from models.conversation import Conversation, TranscriptSegment, ConversationStatus, Structured, Geolocation
 from models.message_event import MemoryEvent, MessageEvent, MessageServiceStatusEvent, LastMemoryEvent
 from utils.apps import is_audio_bytes_app_enabled
 from utils.memories.location import get_google_maps_location
