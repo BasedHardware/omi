@@ -59,7 +59,7 @@ def execute_for_user(uid: str):
     facts_db.delete_facts(uid)
     print('execute_for_user', uid, 'deleted facts')
     memories = conversations_db.get_conversations(uid, limit=2000)
-    print('execute_for_user', uid, 'found memories', len(memories))
+    print('execute_for_user', uid, 'found conversations', len(memories))
     user_name = get_user_name(uid)
     facts = []
     chunk_size = 10

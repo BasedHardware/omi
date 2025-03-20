@@ -19,8 +19,8 @@ from database.redis_db import get_cached_user_geolocation
 from models.conversation import Conversation, TranscriptSegment, ConversationStatus, Structured, Geolocation
 from models.message_event import MemoryEvent, MessageEvent, MessageServiceStatusEvent, PingEvent, LastMemoryEvent
 from utils.apps import is_audio_bytes_app_enabled
-from utils.memories.location import get_google_maps_location
-from utils.memories.process_memory import process_memory
+from utils.conversations.location import get_google_maps_location
+from utils.conversations.process_conversation import process_conversation
 from utils.plugins import trigger_external_integrations
 from utils.stt.streaming import *
 from utils.stt.streaming import process_audio_soniox, process_audio_dg, process_audio_speechmatics, \
@@ -187,7 +187,7 @@ async def _websocket_util(
                 geolocation = Geolocation(**geolocation)
                 conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
 
-            conversation = process_memory(uid, language, conversation)
+            conversation = process_conversation(uid, language, conversation)
             messages = trigger_external_integrations(uid, conversation)
         except Exception as e:
             print(f"Error processing conversation: {e}", uid)
@@ -204,7 +204,7 @@ async def _websocket_util(
         for conversation in processing:
             await _create_conversation(conversation)
 
-    # Process processing memories
+    # Process processing conversations
     processing = conversations_db.get_processing_conversations(uid)
     asyncio.create_task(finalize_processing_memories(processing))
 
@@ -237,7 +237,7 @@ async def _websocket_util(
 
     conversation_creation_timeout = 120
 
-    # Process existing memories
+    # Process existing conversations
     def _process_in_progess_memories():
         nonlocal conversation_creation_task
         nonlocal seconds_to_add

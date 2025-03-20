@@ -8,7 +8,7 @@ from pydub import AudioSegment
 
 from models.conversation import *
 from utils.audio import create_wav_from_bytes
-from utils.memories.process_memory import process_memory
+from utils.conversations.process_conversation import process_conversation
 from utils.other.storage import upload_sdcard_audio
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
 from utils.stt.vad import vad_is_empty
@@ -131,7 +131,7 @@ async def sdcard_streaming_endpoint(websocket: WebSocket, uid: str):
                 source=ConversationSource.sdcard,
                 language='en'
             )
-            result: Conversation = process_memory(uid, temp_memory.language, temp_memory, force_process=False)
+            result: Conversation = process_conversation(uid, temp_memory.language, temp_memory, force_process=False)
             # TODO: should use the websocket to send each memory as created to the client, check transcribe_v2.py
             # websocket.send_json(result.to_json()) 
         await websocket.send_json({"type": "done"})

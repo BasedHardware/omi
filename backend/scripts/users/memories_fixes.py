@@ -49,7 +49,7 @@ def process_memories(uid):
 def execute():
     uids = get_users_uid()
 
-    # Use multiprocessing to fetch and process memories in parallel
+    # Use multiprocessing to fetch and process conversations in parallel
     with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
         results = pool.map(process_memories, uids)
 
@@ -107,7 +107,7 @@ def merge_wrongly_separated_memories():
                     to_merge.append(memory)
                 else:
                     if len(to_merge) > 1:
-                        print('merging memories:')
+                        print('merging conversations:')
                         for m in to_merge:
                             print(str(m['started_at']).split('.')[0], str(m['finished_at']).split('.')[0])
                             # merge them

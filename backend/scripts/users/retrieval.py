@@ -14,7 +14,7 @@ os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPL
 
 from database._client import get_users_uid
 import database.conversations as conversations_db
-from utils.memories.process_memory import save_structured_vector
+from utils.conversations.process_conversation import save_structured_vector
 from database.redis_db import has_migrated_retrieval_conversation_id, save_migrated_retrieval_conversation_id
 
 if __name__ == '__main__':

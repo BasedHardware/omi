@@ -14,7 +14,7 @@ import database.notifications as notification_db
 from utils.notifications import send_notification
 
 
-def memory_created_webhook(uid, memory: Conversation):
+def conversation_created_webhook(uid, memory: Conversation):
     toggled = user_webhook_status_db(uid, WebhookType.memory_created)
     if toggled:
         webhook_url = get_user_webhook_db(uid, WebhookType.memory_created)

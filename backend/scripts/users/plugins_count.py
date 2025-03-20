@@ -66,7 +66,7 @@ def count_memory_prompt_plugins_trigger():
 
     def single(uid):
         memories = conversations_db.get_conversations(uid, limit=1000)
-        print('user', uid, 'memories', len(memories))
+        print('user', uid, 'conversations', len(memories))
         for memory in memories:
             triggered = memory.get('plugins_results', [])
             created_at = memory.get('created_at')

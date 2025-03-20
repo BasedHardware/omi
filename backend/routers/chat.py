@@ -106,7 +106,7 @@ def send_message(
         memories = [memories[i - 1] for i in cited_memory_idxs if 0 < i and i <= len(memories)]
 
         memories_id = []
-        # check if the items in the memories list are dict
+        # check if the items in the conversations list are dict
         if memories:
             converted_memories = []
             for m in memories[:5]:
@@ -204,7 +204,7 @@ def send_message_v1(
     memories = [memories[i - 1] for i in cited_memory_idxs if 0 < i and i <= len(memories)]
 
     memories_id = []
-    # check if the items in the memories list are dict
+    # check if the items in the conversations list are dict
     if memories:
         converted_memories = []
         for m in memories[:5]:

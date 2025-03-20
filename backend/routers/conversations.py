@@ -5,8 +5,8 @@ import database.redis_db as redis_db
 from database.vector_db import delete_vector
 from models.conversation import *
 from routers.transcribe_v2 import retrieve_in_progress_conversation
-from utils.memories.process_memory import process_memory
-from utils.memories.search import search_memories
+from utils.conversations.process_conversation import process_conversation
+from utils.conversations.search import search_memories
 from utils.other import endpoints as auth
 from utils.other.storage import get_memory_recording_if_exists
 from utils.plugins import trigger_external_integrations
@@ -30,7 +30,7 @@ def process_in_progress_conversation(uid: str = Depends(auth.get_current_user_ui
 
     conversation = Conversation(**conversation)
     conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
-    conversation = process_memory(uid, conversation.language, conversation, force_process=True)
+    conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
     messages = trigger_external_integrations(uid, conversation)
     return CreateConversationResponse(conversation=conversation, messages=messages)
 
@@ -61,7 +61,7 @@ def reprocess_conversation(
     if not language_code:
         language_code = conversation.language or 'en'
 
-    return process_memory(uid, language_code, conversation, force_process=True, is_reprocess=True)
+    return process_conversation(uid, language_code, conversation, force_process=True, is_reprocess=True)
 
 
 @router.get('/v1/conversations', response_model=List[Conversation], tags=['conversations'])

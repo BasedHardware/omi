@@ -8,8 +8,8 @@ from fastapi import Request, HTTPException
 import database.conversations as conversations_db
 import models.integrations as integration_models
 import models.conversation as conversation_models
-from routers.memories import process_memory, trigger_external_integrations
-from utils.memories.location import get_google_maps_location
+from routers.conversations import process_conversation, trigger_external_integrations
+from utils.conversations.location import get_google_maps_location
 
 router = APIRouter()
 
@@ -43,7 +43,7 @@ def create_memory(request: Request, uid: str, api_key: Annotated[str | None, Hea
         create_memory.language = language_code
 
     # Process
-    memory = process_memory(uid, language_code, create_memory)
+    memory = process_conversation(uid, language_code, create_memory)
 
     # Always trigger integration
     trigger_external_integrations(uid, memory)
