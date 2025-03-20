@@ -19,7 +19,7 @@ if project_root not in sys.path:
 from current import *
 from _shared import *
 from models.chat import Message
-from models.memory import Conversation
+from models.conversation import Conversation
 from models.transcript_segment import TranscriptSegment
 from utils.llm import qa_rag
 from utils.retrieval.rag import retrieve_rag_context

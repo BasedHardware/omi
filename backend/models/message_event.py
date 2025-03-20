@@ -2,7 +2,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel
 
-from models.memory import Conversation, Message
+from models.conversation import Conversation, Message
 
 
 class MessageEvent(BaseModel):
@@ -13,6 +13,7 @@ class MessageEvent(BaseModel):
         j["type"] = self.event_type
         del j["event_type"]
         return j
+
 
 class MemoryEvent(MessageEvent):
     memory: Conversation
@@ -61,6 +62,7 @@ class ProcessingMemoryStatusChanged(MessageEvent):
         del j["event_type"]
         return j
 
+
 class MemoryBackwardSycnedEvent(MessageEvent):
     name: Optional[str] = None
 
@@ -69,6 +71,7 @@ class MemoryBackwardSycnedEvent(MessageEvent):
         j["type"] = self.event_type
         del j["event_type"]
         return j
+
 
 class MessageServiceStatusEvent(MessageEvent):
     event_type: str = "service_status"
@@ -81,6 +84,7 @@ class MessageServiceStatusEvent(MessageEvent):
         del j["event_type"]
         return j
 
+
 class PingEvent(MessageEvent):
     event_type: str = "ping"
 
@@ -89,6 +93,7 @@ class PingEvent(MessageEvent):
         j["type"] = self.event_type
         del j["event_type"]
         return j
+
 
 class LastMemoryEvent(MessageEvent):
     event_type: str = "last_memory"

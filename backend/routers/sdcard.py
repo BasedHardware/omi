@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
 from pydub import AudioSegment
 
-from models.memory import *
+from models.conversation import *
 from utils.audio import create_wav_from_bytes
 from utils.memories.process_memory import process_memory
 from utils.other.storage import upload_sdcard_audio

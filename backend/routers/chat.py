@@ -14,7 +14,7 @@ from database.apps import record_app_usage
 from models.app import App
 from models.chat import ChatSession, Message, SendMessageRequest, MessageSender, ResponseMessage, MessageMemory, \
     FileChat
-from models.memory import Conversation
+from models.conversation import Conversation
 from models.plugin import UsageHistoryType
 from routers.sync import retrieve_file_paths, decode_files_to_wav, retrieve_vad_segments
 from utils.apps import get_available_app_by_id

@@ -28,7 +28,7 @@ import umap
 from plotly.subplots import make_subplots
 
 # noinspection PyUnresolvedReferences
-from models.memory import Conversation
+from models.conversation import Conversation
 from database.redis_db import get_enabled_plugins, set_plugin_installs_count
 from database._client import get_users_uid
 import database.conversations as conversations_db

@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel
 
-from models.memory import Geolocation
+from models.conversation import Geolocation
 from models.transcript_segment import TranscriptSegment
 
 
