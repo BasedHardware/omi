@@ -3,6 +3,7 @@ import re
 import os
 from datetime import datetime, timezone
 from typing import List, Optional, Tuple
+import time
 
 import tiktoken
 from langchain.schema import (
@@ -14,6 +15,7 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pydantic import BaseModel, Field, ValidationError
+from langsmith import Client
 
 from database.redis_db import add_filter_category_item
 from models.app import App
@@ -26,6 +28,9 @@ from models.trend import TrendEnum, ceo_options, company_options, software_produ
     ai_product_options, TrendType
 from utils.prompts import extract_facts_prompt, extract_learnings_prompt, extract_facts_text_content_prompt
 from utils.llms.fact import get_prompt_facts
+from utils.prompt_evaluation import PromptTester
+from utils.prompt_generator import PromptGenerator
+from models.prompt_version import PromptVersion
 
 llm_mini = ChatOpenAI(model='gpt-4o-mini')
 llm_mini_stream = ChatOpenAI(model='gpt-4o-mini', streaming=True)
@@ -796,94 +801,95 @@ def answer_persona_question_stream(app: App, messages: List[Message], callbacks:
     return llm_call.invoke(chat_messages, {'callbacks':callbacks}).content
 
 
-def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
-                       cited: Optional[bool] = False,
-                       messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
+def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[Plugin] = None) -> str:
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
-
-    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
     context = context.replace('\n\n', '\n').strip()
+    
     plugin_info = ""
     if plugin:
         plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
 
-    # Ref: https://www.reddit.com/r/perplexity_ai/comments/1hi981d
-    cited_instruction = """
-    - You MUST cite the most relevant <memories> that answer the question. \
-      - Only cite in <memories> not <user_facts>, not <previous_messages>.
-      - Cite in memories using [index] at the end of sentences when needed, for example "You discussed optimizing firmware with your teammate yesterday[1][2]".
-      - NO SPACE between the last word and the citation.
-      - Avoid citing irrelevant memories.
-    """
-
     return f"""
     <assistant_role>
-        You are an assistant for question-answering tasks.
+        You are an expert AI assistant focused on providing highly actionable, clear, and personalized responses.
+        You have access to extensive information about {user_name} that most AI assistants don't have - use this advantage.
+        
+        Core Response Requirements:
+        1. Structure and Formatting:
+           - Use markdown to make responses clear and scannable
+           - Start with ## for main points
+           - Use **bold** for key insights and important points
+           - Use bullet points for lists and steps
+           - Use `code` for technical terms or specific names
+           - Use > for quoting relevant context
+           
+        2. Response Quality:
+           - Be direct and actionable - start with the main answer
+           - Provide specific, practical advice based on {user_name}'s context
+           - Include concrete examples and clear next steps
+           - Keep responses concise but comprehensive
+           - If giving multiple options, clearly prioritize them
+           
+        3. Personalization:
+           - Actively use {user_name}'s historical context and preferences
+           - Reference relevant past experiences or decisions
+           - Adapt tone and detail level to {user_name}'s style
+           - Make connections between different pieces of context
     </assistant_role>
 
-    <task>
-        Write an accurate, detailed, and comprehensive response to the <question> in the most personalized way possible, using the <memories>, <user_facts> provided.
-    </task>
+    <context>
+    User Facts:
+    {facts_str}
 
-    <instructions>
-    - Refine the <question> based on the last <previous_messages> before answering it.
-    - DO NOT use the AI's message from <previous_messages> as references to answer the <question>
-    - Use <question_timezone> and <current_datetime_utc> to refer to the time context of the <question>
-    - It is EXTREMELY IMPORTANT to directly answer the question, keep the answer concise and high-quality.
-    - NEVER say "based on the available memories". Get straight to the point.
-    - If you don't know the answer or the premise is incorrect, explain why. If the <memories> are empty or unhelpful, answer the question as well as you can with existing knowledge.
-    - You MUST follow the <reports_instructions> if the user is asking for reporting or summarizing their dates, weeks, months, or years.
-    {cited_instruction if cited and len(context) > 0 else ""}
-    {"- Regard the <plugin_instructions>" if len(plugin_info) > 0 else ""}.
-    </instructions>
-
-    <plugin_instructions>
+    Relevant Context:
+    {context}
+    
     {plugin_info}
-    </plugin_instructions>
-
-    <reports_instructions>
-    - Answer with the template:
-     - Goals and Achievements
-     - Mood Tracker
-     - Gratitude Log
-     - Lessons Learned
-    </reports_instructions>
+    </context>
 
     <question>
     {question}
-    <question>
+    </question>
 
-    <memories>
-    {context}
-    </memories>
-
-    <previous_messages>
-    {Message.get_messages_as_xml(messages)}
-    </previous_messages>
-
-    <user_facts>
-    [Use the following User Facts if relevant to the <question>]
-        {facts_str.strip()}
-    </user_facts>
-
-    <current_datetime_utc>
-        Current date time in UTC: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}
-    </current_datetime_utc>
-
-    <question_timezone>
-        Question's timezone: {tz}
-    </question_timezone>
+    <instructions>
+    1. Analyze all available context about {user_name}
+    2. Formulate a clear, actionable response
+    3. Use markdown formatting to enhance readability
+    4. Ensure response is specific to {user_name}'s situation
+    5. Provide concrete next steps or recommendations
+    </instructions>
 
     <answer>
-    """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
+    """
 
+def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, 
+           cited: Optional[bool] = False, messages: List[Message] = [], 
+           tz: Optional[str] = "UTC") -> str:
+    """Enhanced question-answering with quality tracking"""
+    
+    start_time = time.time()
+    prompt = _get_qa_rag_prompt(uid, question, context, plugin)
+    response = llm_medium.invoke(prompt).content
+    response_time = time.time() - start_time
 
-def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
-           messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
-    prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
-    # print('qa_rag prompt', prompt)
-    return llm_medium.invoke(prompt).content
+    # Track response quality in LangSmith
+    client = Client()
+    run = client.create_run(
+        name="chat_response",
+        inputs={
+            "question": question,
+            "context_length": len(context),
+            "response_time": response_time,
+            "has_markdown": "**" in response or "#" in response or "`" in response
+        },
+        outputs={
+            "response": response,
+            "response_length": len(response)
+        }
+    )
+    
+    return response
 
 
 def qa_rag_stream(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
@@ -2482,3 +2488,24 @@ def generate_persona_intro_message(prompt: str, name: str):
 
     response = llm_medium.invoke(messages)
     return response.content.strip('"').strip()
+
+
+class ChatFeedback(BaseModel):
+    response_id: str
+    rating: int  # 1-5
+    has_markdown: bool
+    response_time: float
+    context_used: bool
+
+def track_chat_feedback(feedback: ChatFeedback):
+    """Track chat feedback in LangSmith"""
+    client = Client()
+    client.update_run(
+        feedback.response_id,
+        feedback={
+            "rating": feedback.rating,
+            "has_markdown": feedback.has_markdown,
+            "response_time": feedback.response_time,
+            "context_used": feedback.context_used
+        }
+    )
