@@ -319,12 +319,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                               ),
               ),
               Consumer<HomeProvider>(builder: (context, home, child) {
-                bool shouldShowSuffixIcon(MessageProvider p) {
-                  return !p.sendingMessage && _showSendButton;
-                }
-
                 bool shouldShowSendButton(MessageProvider p) {
-                  return !p.sendingMessage && _showSendButton;
+                  return !p.sendingMessage && _showSendButton && !_showVoiceRecorder;
                 }
 
                 return Align(
@@ -436,67 +432,68 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.add,
-                                    color: provider.selectedFiles.length > 3 ? Colors.grey : const Color(0xFFF7F4F4),
-                                    size: 24.0,
-                                  ),
-                                  onPressed: () {
-                                    if (provider.selectedFiles.length > 3) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('You can only upload 4 files at a time'),
-                                          duration: Duration(seconds: 2),
-                                        ),
-                                      );
-                                      return;
-                                    }
-                                    showModalBottomSheet(
-                                      context: context,
-                                      backgroundColor: Colors.grey[850],
-                                      shape: const RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
-                                      ),
-                                      builder: (BuildContext context) {
-                                        return Padding(
-                                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 40),
-                                          child: Wrap(
-                                            children: [
-                                              ListTile(
-                                                leading: const Icon(Icons.camera_alt, color: Colors.white),
-                                                title:
-                                                    const Text("Take a Photo", style: TextStyle(color: Colors.white)),
-                                                onTap: () {
-                                                  Navigator.pop(context);
-                                                  context.read<MessageProvider>().captureImage();
-                                                },
-                                              ),
-                                              ListTile(
-                                                leading: const Icon(Icons.photo, color: Colors.white),
-                                                title:
-                                                    const Text("Select a Photo", style: TextStyle(color: Colors.white)),
-                                                onTap: () {
-                                                  Navigator.pop(context);
-                                                  context.read<MessageProvider>().selectImage();
-                                                },
-                                              ),
-                                              ListTile(
-                                                leading: const Icon(Icons.insert_drive_file, color: Colors.white),
-                                                title:
-                                                    const Text("Select a File", style: TextStyle(color: Colors.white)),
-                                                onTap: () {
-                                                  Navigator.pop(context);
-                                                  context.read<MessageProvider>().selectFile();
-                                                },
-                                              ),
-                                            ],
+                                if (!_showVoiceRecorder)
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.add,
+                                      color: provider.selectedFiles.length > 3 ? Colors.grey : const Color(0xFFF7F4F4),
+                                      size: 24.0,
+                                    ),
+                                    onPressed: () {
+                                      if (provider.selectedFiles.length > 3) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('You can only upload 4 files at a time'),
+                                            duration: Duration(seconds: 2),
                                           ),
                                         );
-                                      },
-                                    );
-                                  },
-                                ),
+                                        return;
+                                      }
+                                      showModalBottomSheet(
+                                        context: context,
+                                        backgroundColor: Colors.grey[850],
+                                        shape: const RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
+                                        ),
+                                        builder: (BuildContext context) {
+                                          return Padding(
+                                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 40),
+                                            child: Wrap(
+                                              children: [
+                                                ListTile(
+                                                  leading: const Icon(Icons.camera_alt, color: Colors.white),
+                                                  title:
+                                                      const Text("Take a Photo", style: TextStyle(color: Colors.white)),
+                                                  onTap: () {
+                                                    Navigator.pop(context);
+                                                    context.read<MessageProvider>().captureImage();
+                                                  },
+                                                ),
+                                                ListTile(
+                                                  leading: const Icon(Icons.photo, color: Colors.white),
+                                                  title: const Text("Select a Photo",
+                                                      style: TextStyle(color: Colors.white)),
+                                                  onTap: () {
+                                                    Navigator.pop(context);
+                                                    context.read<MessageProvider>().selectImage();
+                                                  },
+                                                ),
+                                                ListTile(
+                                                  leading: const Icon(Icons.insert_drive_file, color: Colors.white),
+                                                  title: const Text("Select a File",
+                                                      style: TextStyle(color: Colors.white)),
+                                                  onTap: () {
+                                                    Navigator.pop(context);
+                                                    context.read<MessageProvider>().selectFile();
+                                                  },
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        },
+                                      );
+                                    },
+                                  ),
                                 Expanded(
                                   child: _showVoiceRecorder
                                       ? VoiceRecorderWidget(
@@ -542,25 +539,25 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                         ),
                                 ),
                                 if (!_showVoiceRecorder)
-                                  IconButton(
-                                    icon: const Icon(
-                                      Icons.mic_outlined,
-                                      color: Color(0xFFF7F4F4),
-                                      size: 20.0,
+                                  GestureDetector(
+                                    child: Container(
+                                      padding: const EdgeInsets.only(top: 14, bottom: 14, left: 14, right: 8),
+                                      child: const Icon(
+                                        Icons.mic_outlined,
+                                        color: Color(0xFFF7F4F4),
+                                        size: 20.0,
+                                      ),
                                     ),
-                                    splashRadius: 1,
-                                    onPressed: () {
+                                    onTap: () {
                                       setState(() {
                                         _showVoiceRecorder = true;
                                       });
                                     },
                                   ),
-                                !shouldShowSuffixIcon(provider) && !shouldShowSendButton(provider)
+                                !shouldShowSendButton(provider)
                                     ? const SizedBox.shrink()
-                                    : IconButton(
-                                        splashColor: Colors.transparent,
-                                        splashRadius: 1,
-                                        onPressed: provider.sendingMessage || provider.isUploadingFiles
+                                    : GestureDetector(
+                                        onTap: provider.sendingMessage || provider.isUploadingFiles
                                             ? null
                                             : () {
                                                 String message = textController.text;
@@ -577,10 +574,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                   );
                                                 }
                                               },
-                                        icon: const Icon(
-                                          Icons.arrow_upward_outlined,
-                                          color: Color(0xFFF7F4F4),
-                                          size: 20.0,
+                                        child: Container(
+                                          padding: const EdgeInsets.only(top: 14, bottom: 14, left: 8, right: 14),
+                                          child: const Icon(
+                                            Icons.arrow_upward_outlined,
+                                            color: Color(0xFFF7F4F4),
+                                            size: 20.0,
+                                          ),
                                         ),
                                       ),
                               ],
