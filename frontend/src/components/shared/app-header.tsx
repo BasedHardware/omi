@@ -42,6 +42,23 @@ const GithubIcon = () => (
   </svg>
 );
 
+const ZapIcon = () => (
+  <svg
+    className="h-4 w-4"
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="M13 3L4 14H12L11 21L20 10H12L13 3Z"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 const CartIcon = () => (
   <div className="relative">
     <svg
@@ -65,13 +82,13 @@ export default function AppHeader({
   navItems = [
     {
       href: 'https://rebrand.ly/discord-invite-a2a451',
-      label: '4.1k+ Join Discord',
+      label: '6.7k+ Join Discord',
       icon: <DiscordIcon />,
       className: 'flex items-center space-x-2 text-white hover:text-gray-300',
     },
     {
       href: 'https://github.com/BasedHardware/Omi',
-      label: '3.7K Github',
+      label: '4.4K Github',
       icon: <GithubIcon />,
       className: 'flex items-center space-x-2 text-white hover:text-gray-300',
     },
@@ -86,7 +103,14 @@ export default function AppHeader({
       className: 'text-white hover:text-gray-300',
     },
     {
-      href: 'https://www.omi.me/products/friend-dev-kit-2',
+      href: 'https://docs.omi.me/docs/developer/apps/Introduction',
+      label: 'Start Building',
+      icon: <ZapIcon />,
+      className: 'flex items-center space-x-2 rounded-full bg-[#6C2BD9] px-3 py-1 text-white transition-colors hover:bg-[#5A1CB8]',
+      target: '_blank',
+    },
+    {
+      href: 'https://www.omi.me/products/omi-dev-kit-2',
       label: 'Order Now',
       className: 'text-white hover:text-gray-300',
     },
@@ -166,20 +190,34 @@ export default function AppHeader({
           </button>
 
           {/* Desktop Navigation */}
-          <ul className="hidden gap-3 text-sm md:flex md:gap-4 md:text-base">
+          <ul className="hidden items-center gap-3 text-sm md:flex md:gap-4 md:text-base">
             {showShareButton && params.id && (
               <li>
                 <ShareButton />
               </li>
             )}
-            {navItems.map((item, index) => (
-              <li key={index}>
-                <Link href={item.href} target={item.target} className={item.className}>
-                  {item.icon && <span className="flex-shrink-0">{item.icon}</span>}
-                  <span>{item.label}</span>
-                </Link>
-              </li>
-            ))}
+            {navItems.map((item, index) => {
+              // Special styling for Start Building button
+              if (item.label === 'Start Building') {
+                return (
+                  <li key={index} className="ml-1">
+                    <Link href={item.href} target={item.target} className={item.className}>
+                      {item.icon && <span className="flex-shrink-0">{item.icon}</span>}
+                      <span>{item.label}</span>
+                    </Link>
+                  </li>
+                );
+              }
+              
+              return (
+                <li key={index}>
+                  <Link href={item.href} target={item.target} className={item.className}>
+                    {item.icon && <span className="flex-shrink-0">{item.icon}</span>}
+                    <span>{item.label}</span>
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         </nav>
       </header>

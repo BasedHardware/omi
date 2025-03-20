@@ -2,7 +2,7 @@
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:upgrader/upgrader.dart';
 
 class MyUpgrader extends Upgrader {

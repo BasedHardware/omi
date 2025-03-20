@@ -60,6 +60,9 @@ scaling:
         # Discuss a reasoanble value with your Deepgram Account Representative
         # Must also set engine.concurrencyLimit.activeRequests if using request ratio for autoscaling
         requestCapacityRatio:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 120  # Wait 2 minutes before scaling up
 
 api:
   image:
@@ -114,7 +117,7 @@ engine:
       gpu: 1
     limits:
       memory: "40Gi"
-      cpu: "8000m"
+      cpu: "12000m"
       gpu: 1
   # Discuss a reasonable value with your Deepgram Account Representative
   # If not using autoscaling, can be left empty, but must be set if using

@@ -1,0 +1,701 @@
+---
+title: Import Apps
+description: 'Building apps that import data in the OMI ecosystem'
+---
+
+# Import Integrations
+
+Integration apps with Imports allow your app to not just receive data from OMI but also perform specific Imports within the OMI ecosystem. This guide will walk you through creating apps that can perform Imports like creating memories, adding facts, and more.
+
+## What Are Integration Imports?
+
+Integration Imports are predefined capabilities that your app can perform within the OMI ecosystem. Unlike triggers (which respond to events), Imports allow your app to proactively create or modify data in OMI.
+
+Currently supported Imports include:
+- **Create Conversation**: Generate new conversations in the user's OMI account
+- **Create Facts**: Add specific facts to the user's knowledge base
+
+## Prerequisites
+
+Before building an integration with Imports, you should:
+1. Understand the [basics of OMI app development](https://docs.omi.me/docs/developer/apps/Introduction/)
+2. Be familiar with [integration apps](https://docs.omi.me/docs/developer/apps/Integrations/)
+3. Have a server or endpoint that can make API requests to OMI
+
+## Setting Up an Integration with Imports
+
+### Step 1: Define Your App's Purpose 🎯
+
+Decide what Imports your app will perform and when. For example:
+- Will your app create conversations based on external events?
+- Will it respond to user interImports in your own service?
+- Will it run on a schedule to create periodic conversations?
+
+### Step 2: Create Your App in OMI
+
+1. Open the OMI app on your device
+2. Go to the Apps section and select "Create App"
+3. Fill in the basic app information (name, description, etc.)
+4. Under "App Capabilities", select "External Integration"
+5. In the External Integration section, select "Imports"
+6. Choose the specific Imports your app will perform (e.g., "Create conversations")
+
+### Step 3: Generate API Keys
+
+After creating your app, you'll need to generate API keys to authenticate your requests:
+
+1. Go to your app's management page
+2. Scroll down to the "API Keys" section
+3. Click "Create Key"
+4. Copy and securely store the generated key - you won't be able to see it again!
+
+## Implementing the Create Conversation Import
+
+The Create Conversation Import allows your app to programmatically create new conversations in a user's OMI account.
+
+### API Endpoint
+
+To create a memory, make a POST request to:
+
+```
+POST https://api.omi.me/v2/integrations/{app_id}/user/conversations?uid={user_id}
+```
+
+Where:
+- `{app_id}` is your app's unique identifier
+- `{user_id}` is the OMI user ID for whom you're creating the memory
+
+### Authentication
+
+Include your API key in the request headers:
+
+```
+Authorization: Bearer sk_your_api_key_here
+```
+
+> **Important**: The API key must be associated with the app specified in the URL path.
+
+### Request Body
+
+The request body should be a JSON object with the following structure:
+
+```json
+{
+  "started_at": "2024-07-21T22:34:43.384323+00:00",
+  "finished_at": "2024-07-21T22:35:43.384323+00:00",
+  "text": "This is the full text content of the memory that will be processed.",
+  "text_source": "audio_transcript",
+  "text_source_spec": "phone_call",
+  "language": "en",
+  "geolocation": {
+    "latitude": 37.7749,
+    "longitude": -122.4194
+  }
+}
+```
+
+#### Required Fields:
+
+- `text`: The full text content of the conversation
+
+#### Optional Fields:
+
+- `started_at`: When the conversation/event started (ISO 8601 format) - defaults to current time if not provided
+- `finished_at`: When the conversation/event ended (ISO 8601 format) - defaults to started_at + 5 minutes if not provided
+- `language`: Language code (e.g., "en" for English) - defaults to "en" if not provided
+- `geolocation`: Location data for the conversation
+  - `latitude`: Latitude coordinate
+  - `longitude`: Longitude coordinate
+- `text_source`: Source of the text content (options: "audio_transcript", "message", "other_text") - defaults to "audio_transcript"
+- `text_source_spec`: Additional specification about the source (optional)
+
+### Response
+
+A successful request will return a 200 OK status with an empty response body:
+
+```json
+{}
+```
+
+The conversation will be created asynchronously in the user's account.
+
+### Error Handling
+
+Common error responses include:
+
+- `400 Bad Request`: Invalid request format
+- `401 Unauthorized`: Missing or invalid Authorization header
+- `403 Forbidden`: Invalid API key, app not enabled for user, or app lacks create_conversation capability
+- `404 Not Found`: App not found
+- `429 Too Many Requests`: Rate limit exceeded
+
+## Implementing the Create Facts Import
+
+The Create Facts Import allows your app to programmatically add facts to a user's knowledge base in OMI.
+
+### API Endpoint
+
+To create facts, make a POST request to:
+
+```
+POST https://api.omi.me/v2/integrations/{app_id}/user/facts?uid={user_id}
+```
+
+Where:
+- `{app_id}` is your app's unique identifier
+- `{user_id}` is the OMI user ID for whom you're creating the facts
+
+### Authentication
+
+Include your API key in the request headers:
+
+```
+Authorization: Bearer sk_your_api_key_here
+```
+
+> **Important**: The API key must be associated with the app specified in the URL path.
+
+### Request Body
+
+The request body should be a JSON object with the following structure:
+
+```json
+{
+  "text": "The text from which facts will be extracted. This could be information about preferences, important dates, or other factual information.",
+  "text_source": "email",
+  "text_source_spec": "newsletter"
+}
+```
+
+#### Required Fields:
+
+- `text`: The text content from which facts will be extracted
+
+#### Optional Fields:
+
+- `text_source`: Source of the text content (options: "email", "social_post", "other") - defaults to "other"
+- `text_source_spec`: Additional specification about the source (optional)
+
+### Response
+
+A successful request will return a 200 OK status with an empty response body:
+
+```json
+{}
+```
+
+The facts will be extracted and saved asynchronously in the user's account.
+
+### Error Handling
+
+Common error responses include:
+
+- `400 Bad Request`: Invalid request format
+- `401 Unauthorized`: Missing or invalid Authorization header
+- `403 Forbidden`: Invalid API key, app not enabled for user, or app lacks create_facts capability
+- `404 Not Found`: App not found
+- `422 Unprocessable Entity`: Text is required and cannot be empty
+- `429 Too Many Requests`: Rate limit exceeded
+
+## Best Practices
+
+1. **User Consent**: Always ensure you have user consent before creating memories or facts on their behalf
+2. **Rate Limiting**: Implement rate limiting in your app to avoid hitting API limits
+3. **Error Handling**: Implement robust error handling for API requests
+4. **Data Quality**: Ensure the content is well-formatted and contains meaningful information
+5. **Meaningful Content**: Only create memories and facts with meaningful content that provides value to users
+6. **Verify App Enablement**: Check that users have enabled your app before attempting to create content
+7. **Proper Authentication**: Securely store and use your API keys
+8. **Structured Data**: When possible, provide well-structured data to improve the quality of extracted information
+
+## Example Implementation
+
+Here are examples showing how to create memories and facts using different text sources:
+
+### Creating Conversations
+
+#### Example 1: Audio Transcript Conversation
+
+##### Python Example
+
+```python
+import requests
+import json
+from datetime import datetime, timezone
+
+# API configuration
+APP_ID = "your_app_id_here"
+API_KEY = "sk_your_api_key_here"
+USER_ID = "user_123"
+API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/conversations"
+
+# Audio transcript conversation data
+conversation_data = {
+    "started_at": datetime.now(timezone.utc).isoformat(),
+    "finished_at": datetime.now(timezone.utc).isoformat(),
+    "language": "en",
+    "text": "John: Hi Sarah, how was your weekend?\n\nSarah: It was great! I went hiking at Mount Rainier.\n\nJohn: That sounds amazing. I've been wanting to go there.\n\nSarah: You should definitely check it out. The views are breathtaking.",
+    "text_source": "audio_transcript",
+    "text_source_spec": "phone_call"
+}
+
+# Make the API request
+headers = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json"
+}
+
+response = requests.post(
+    f"{API_URL}?uid={USER_ID}",
+    headers=headers,
+    data=json.dumps(conversation_data)
+)
+
+# Handle the response
+if response.status_code == 200:
+    print("Conversation created successfully")
+else:
+    print(f"Error creating conversation: {response.status_code}")
+    print(response.text)
+```
+
+##### cURL Example
+
+```bash
+curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/conversations?uid=user_123" \
+  -H "Authorization: Bearer sk_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "started_at": "2024-03-10T15:00:00.000Z",
+    "finished_at": "2024-03-10T15:05:00.000Z",
+    "language": "en",
+    "text": "John: Hi Sarah, how was your weekend?\n\nSarah: It was great! I went hiking at Mount Rainier.\n\nJohn: That sounds amazing. I'\''ve been wanting to go there.\n\nSarah: You should definitely check it out. The views are breathtaking.",
+    "text_source": "audio_transcript",
+    "text_source_spec": "phone_call"
+  }'
+```
+
+#### Example 2: Other Text Conversation
+
+##### Python Example
+
+```python
+import requests
+import json
+from datetime import datetime, timezone
+
+# API configuration
+APP_ID = "your_app_id_here"
+API_KEY = "sk_your_api_key_here"
+USER_ID = "user_123"
+API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/conversations"
+
+# Other text conversation data
+conversation_data = {
+    "started_at": datetime.now(timezone.utc).isoformat(),
+    "finished_at": datetime.now(timezone.utc).isoformat(),
+    "language": "en",
+    "text": "From: alex@example.com\nTo: me@example.com\nSubject: Dinner Plans\n\nHi there,\n\nWould you like to grab dinner this Friday at 7pm? I found a new restaurant downtown that has great reviews.\n\nLet me know if you're available!\n\nBest,\nAlex",
+    "text_source": "other_text",
+    "text_source_spec": "email"
+}
+
+# Make the API request
+headers = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json"
+}
+
+response = requests.post(
+    f"{API_URL}?uid={USER_ID}",
+    headers=headers,
+    data=json.dumps(conversation_data)
+)
+
+# Handle the response
+if response.status_code == 200:
+    print("Conversation created successfully")
+else:
+    print(f"Error creating conversation: {response.status_code}")
+    print(response.text)
+```
+
+##### cURL Example
+
+```bash
+curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/conversations?uid=user_123" \
+  -H "Authorization: Bearer sk_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "started_at": "2024-03-10T15:00:00.000Z",
+    "finished_at": "2024-03-10T15:05:00.000Z",
+    "language": "en",
+    "text": "From: alex@example.com\nTo: me@example.com\nSubject: Dinner Plans\n\nHi there,\n\nWould you like to grab dinner this Friday at 7pm? I found a new restaurant downtown that has great reviews.\n\nLet me know if you'\''re available!\n\nBest,\nAlex",
+    "text_source": "other_text",
+    "text_source_spec": "email"
+  }'
+```
+
+#### Example 3: Other Text Conversation with Location
+
+##### Python Example
+
+```python
+import requests
+import json
+from datetime import datetime, timezone
+
+# API configuration
+APP_ID = "your_app_id_here"
+API_KEY = "sk_your_api_key_here"
+USER_ID = "user_123"
+API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/conversations"
+
+# Other text conversation data with location
+conversation_data = {
+    "started_at": datetime.now(timezone.utc).isoformat(),
+    "finished_at": datetime.now(timezone.utc).isoformat(),
+    "language": "en",
+    "text": "Just finished my first marathon! 26.2 miles in 4 hours and 15 minutes. So proud of this accomplishment after 6 months of training. #running #marathon #personalgoals",
+    "text_source": "other_text",
+    "text_source_spec": "social_post",
+    "geolocation": {
+        "latitude": 40.7128,
+        "longitude": -74.0060
+    }
+}
+
+# Make the API request
+headers = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json"
+}
+
+response = requests.post(
+    f"{API_URL}?uid={USER_ID}",
+    headers=headers,
+    data=json.dumps(conversation_data)
+)
+
+# Handle the response
+if response.status_code == 200:
+    print("Conversation created successfully")
+else:
+    print(f"Error creating conversation: {response.status_code}")
+    print(response.text)
+```
+
+##### cURL Example
+
+```bash
+curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/conversations?uid=user_123" \
+  -H "Authorization: Bearer sk_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "started_at": "2024-03-10T15:00:00.000Z",
+    "finished_at": "2024-03-10T15:05:00.000Z",
+    "language": "en",
+    "text": "Just finished my first marathon! 26.2 miles in 4 hours and 15 minutes. So proud of this accomplishment after 6 months of training. #running #marathon #personalgoals",
+    "text_source": "other_text",
+    "text_source_spec": "social_post",
+    "geolocation": {
+        "latitude": 40.7128,
+        "longitude": -74.0060
+    }
+  }'
+```
+
+#### Example 4: Message Conversation
+
+##### Python Example
+
+```python
+import requests
+import json
+from datetime import datetime, timezone
+
+# API configuration
+APP_ID = "your_app_id_here"
+API_KEY = "sk_your_api_key_here"
+USER_ID = "user_123"
+API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/conversations"
+
+# Message conversation data
+conversation_data = {
+    "started_at": datetime.now(timezone.utc).isoformat(),
+    "finished_at": datetime.now(timezone.utc).isoformat(),
+    "language": "en",
+    "text": "Mom: Don't forget to pick up milk on your way home\n\nMe: Will do. Need anything else?\n\nMom: Maybe some bread too if the store has the whole grain kind\n\nMe: Got it. I'll be home around 6pm",
+    "text_source": "message",
+    "text_source_spec": "sms"
+}
+
+# Make the API request
+headers = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json"
+}
+
+response = requests.post(
+    f"{API_URL}?uid={USER_ID}",
+    headers=headers,
+    data=json.dumps(conversation_data)
+)
+
+# Handle the response
+if response.status_code == 200:
+    print("Conversation created successfully")
+else:
+    print(f"Error creating conversation: {response.status_code}")
+    print(response.text)
+```
+
+##### cURL Example
+
+```bash
+curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/conversations?uid=user_123" \
+  -H "Authorization: Bearer sk_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "started_at": "2024-03-10T15:00:00.000Z",
+    "finished_at": "2024-03-10T15:05:00.000Z",
+    "language": "en",
+    "text": "Mom: Don'\''t forget to pick up milk on your way home\n\nMe: Will do. Need anything else?\n\nMom: Maybe some bread too if the store has the whole grain kind\n\nMe: Got it. I'\''ll be home around 6pm",
+    "text_source": "message",
+    "text_source_spec": "sms"
+  }'
+```
+
+### Creating Facts
+
+#### Example: Creating Facts from Different Sources
+
+##### Python Example - Email Facts
+
+```python
+import requests
+import json
+
+# API configuration
+APP_ID = "your_app_id_here"
+API_KEY = "sk_your_api_key_here"
+USER_ID = "user_123"
+API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/facts"
+
+# Facts data from email
+facts_data = {
+    "text": "Your flight to Paris has been confirmed for May 15th, 2024. Departure: JFK at 9:30 PM. Arrival: CDG at 11:00 AM local time. Confirmation code: ABC123. Your hotel reservation at Hotel de Paris is confirmed for May 16-20, 2024.",
+    "text_source": "email",
+    "text_source_spec": "travel_confirmation"
+}
+
+# Make the API request
+headers = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json"
+}
+
+response = requests.post(
+    f"{API_URL}?uid={USER_ID}",
+    headers=headers,
+    data=json.dumps(facts_data)
+)
+
+# Handle the response
+if response.status_code == 200:
+    print("Facts created successfully")
+else:
+    print(f"Error creating facts: {response.status_code}")
+    print(response.text)
+```
+
+##### cURL Example - Email Facts
+
+```bash
+curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/facts?uid=user_123" \
+  -H "Authorization: Bearer sk_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Your flight to Paris has been confirmed for May 15th, 2024. Departure: JFK at 9:30 PM. Arrival: CDG at 11:00 AM local time. Confirmation code: ABC123. Your hotel reservation at Hotel de Paris is confirmed for May 16-20, 2024.",
+    "text_source": "email",
+    "text_source_spec": "travel_confirmation"
+  }'
+```
+
+##### Python Example - Social Post Facts
+
+```python
+import requests
+import json
+
+# API configuration
+APP_ID = "your_app_id_here"
+API_KEY = "sk_your_api_key_here"
+USER_ID = "user_123"
+API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/facts"
+
+# Facts data from social post
+facts_data = {
+    "text": "I'm excited to announce that I've accepted a new position as Senior Software Engineer at TechCorp starting next month! Looking forward to this new chapter in my career. #newjob #softwareengineering #career",
+    "text_source": "social_post",
+    "text_source_spec": "linkedin"
+}
+
+# Make the API request
+headers = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json"
+}
+
+response = requests.post(
+    f"{API_URL}?uid={USER_ID}",
+    headers=headers,
+    data=json.dumps(facts_data)
+)
+
+# Handle the response
+if response.status_code == 200:
+    print("Facts created successfully")
+else:
+    print(f"Error creating facts: {response.status_code}")
+    print(response.text)
+```
+
+##### cURL Example - Social Post Facts
+
+```bash
+curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/facts?uid=user_123" \
+  -H "Authorization: Bearer sk_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "I'\''m excited to announce that I'\''ve accepted a new position as Senior Software Engineer at TechCorp starting next month! Looking forward to this new chapter in my career. #newjob #softwareengineering #career",
+    "text_source": "social_post",
+    "text_source_spec": "linkedin"
+  }'
+```
+
+##### Python Example - Other Facts
+
+```python
+import requests
+import json
+
+# API configuration
+APP_ID = "your_app_id_here"
+API_KEY = "sk_your_api_key_here"
+USER_ID = "user_123"
+API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/facts"
+
+# Facts data from other source
+facts_data = {
+    "text": "Dr. Smith's contact information: Phone: (555) 123-4567, Email: dr.smith@hospital.org. Next appointment scheduled for April 3rd at 2:30 PM. Remember to bring your insurance card and list of current medications.",
+    "text_source": "other",
+    "text_source_spec": "health_app"
+}
+
+# Make the API request
+headers = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json"
+}
+
+response = requests.post(
+    f"{API_URL}?uid={USER_ID}",
+    headers=headers,
+    data=json.dumps(facts_data)
+)
+
+# Handle the response
+if response.status_code == 200:
+    print("Facts created successfully")
+else:
+    print(f"Error creating facts: {response.status_code}")
+    print(response.text)
+```
+
+##### cURL Example - Other Facts
+
+```bash
+curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/facts?uid=user_123" \
+  -H "Authorization: Bearer sk_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Dr. Smith'\''s contact information: Phone: (555) 123-4567, Email: dr.smith@hospital.org. Next appointment scheduled for April 3rd at 2:30 PM. Remember to bring your insurance card and list of current medications.",
+    "text_source": "other",
+    "text_source_spec": "health_app"
+  }'
+```
+
+
+## Testing Your Integration
+
+To test your integration:
+
+1. Use a development API key
+2. Create test conversations with clearly marked test content
+3. Verify the conversations appear in the user's OMI app
+4. Check that the structured data (title, overview, Import items) appears correctly
+
+## Troubleshooting
+
+Common issues and solutions:
+
+- **Authentication Errors**: Double-check your API key and ensure it's being sent correctly in the Authorization header
+- **Invalid Request Format**: Validate your JSON against the required schema
+- **App Not Found**: Verify your app ID is correct
+- **Permission Errors**: Ensure your app has the create_conversation capability and is enabled for the user
+- **Rate Limiting**: If you receive a 429 error, implement exponential backoff in your requests
+- **Missing Required Fields**: Ensure you're providing `text`, `text_source`
+
+## Prerequisites for Using Integration Imports
+
+Before your app can use integration Imports, several conditions must be met:
+
+1. **App Configuration**: Your app must be configured with the "External Integration" capability and specifically have the appropriate Import enabled:
+   - For creating conversations: the "create_conversation" Import
+   - For creating facts: the "create_facts" Import
+
+2. **API Key**: You must generate an API key for your app through the app management interface.
+
+3. **User Enablement**: The user must have explicitly enabled your app in their OMI account.
+
+4. **Authorization**: Your API requests must include the proper Authorization header with your API key.
+
+If any of these conditions are not met, the API will return appropriate error responses.
+
+## Future Imports
+
+The OMI team is continuously working to expand the available Imports. Future Imports may include:
+- Updating existing conversations
+- Updating existing facts
+- Setting reminders
+- Accessing and updating user preferences
+- And more!
+
+Stay tuned to the documentation for updates on new Import capabilities.
+
+## Submitting Your App
+
+Once your integration with Imports is ready:
+
+1. Test thoroughly with real-world scenarios
+2. Create clear setup instructions for users
+3. Submit your app through the OMI mobile app
+4. Include details about what Imports your app performs and when
+
+For more details on the submission process, see the [Submitting Apps](https://docs.omi.me/docs/developer/apps/Submitting/) guide.
+
+## Example Use Cases
+
+Here are some inspiring examples of what you can build with integration Imports:
+
+1. **Journal Creator**: Automatically create conversation entries based on data from a journaling app
+2. **Meeting Summarizer**: Create conversations with structured summaries after calendar meetings
+3. **Health Tracker**: Generate conversations with health insights based on fitness tracker data
+4. **Social Media Archiver**: Create conversations from important social media interImports
+5. **Learning Assistant**: Create structured conversations from educational content consumption
+6. **Preference Tracker**: Extract facts about user preferences from emails or messages
+7. **Knowledge Base Builder**: Create facts from educational content or research materials
+8. **Contact Information Manager**: Extract contact details as facts from emails or messages
+
+We can't wait to see what you build with OMI integration Imports!

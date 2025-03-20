@@ -242,7 +242,7 @@ gcloud container node-pools create engine-pool \
     --num-nodes 1 \
     --enable-autoscaling \
     --max-nodes 8 \
-    --machine-type g2-standard-8 \
+    --machine-type g2-standard-12 \
     --accelerator=type=nvidia-l4,count=1,gpu-driver-version=latest \
     --node-labels k8s.deepgram.com/node-type=engine
   
