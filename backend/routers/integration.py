@@ -15,9 +15,9 @@ import database.notifications as notification_db
 import models.integrations as integration_models
 import models.conversation as conversation_models
 from models.app import App
-from routers.memories import process_memory, trigger_external_integrations
-from utils.memories.location import get_google_maps_location
-from utils.memories.facts import process_external_integration_fact
+from routers.conversations import process_conversation, trigger_external_integrations
+from utils.conversations.location import get_google_maps_location
+from utils.conversations.facts import process_external_integration_fact
 from utils.plugins import send_plugin_notification
 
 # Rate limit settings - more conservative limits to prevent notification fatigue
@@ -116,7 +116,7 @@ async def create_conversation_via_integration(
     create_memory.app_id = app_id
 
     # Process
-    memory = process_memory(uid, language_code, create_memory)
+    memory = process_conversation(uid, language_code, create_memory)
 
     # Always trigger integration
     trigger_external_integrations(uid, memory)

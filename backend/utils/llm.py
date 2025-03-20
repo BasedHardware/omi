@@ -76,7 +76,7 @@ class SpeakerIdMatch(BaseModel):
     speaker_id: int = Field(description="The speaker id assigned to the segment")
 
 
-def should_discard_memory(transcript: str) -> bool:
+def should_discard_conversation(transcript: str) -> bool:
     if len(transcript.split(' ')) > 100:
         return False
 

@@ -1,3 +1,9 @@
+# Memories are now conversations, and the routes are now in the routes/conversation.py file
+
+# MIGRATE: This file is deprecated and will be removed in the future.
+# Please refer to the routes/conversation.py file for the latest routes.
+# This file is only used by the old versions of the app
+
 from fastapi import APIRouter, Depends, HTTPException
 
 import database.conversations as conversations_db
@@ -7,8 +13,8 @@ from models.conversation import Conversation
 from models.conversation import *
 from routers.speech_profile import expand_speech_profile
 from routers.transcribe_v2 import retrieve_in_progress_conversation
-from utils.memories.process_memory import process_memory
-from utils.memories.search import search_memories
+from utils.conversations.process_conversation import process_conversation
+from utils.conversations.search import search_memories
 from utils.other import endpoints as auth
 from utils.other.storage import get_memory_recording_if_exists, \
     delete_additional_profile_audio, delete_speech_sample_for_people
@@ -33,7 +39,7 @@ def process_in_progress_memory(uid: str = Depends(auth.get_current_user_uid)):
 
     memory = Conversation(**memory)
     conversations_db.update_conversation_status(uid, memory.id, ConversationStatus.processing)
-    memory = process_memory(uid, memory.language, memory, force_process=True)
+    memory = process_conversation(uid, memory.language, memory, force_process=True)
     messages = trigger_external_integrations(uid, memory)
     return CreateMemoryResponse(memory=memory, messages=messages)
 
@@ -64,7 +70,7 @@ def reprocess_memory(
     if not language_code:
         language_code = memory.language or 'en'
 
-    return process_memory(uid, language_code, memory, force_process=True, is_reprocess=True)
+    return process_conversation(uid, language_code, memory, force_process=True, is_reprocess=True)
 
 
 @router.get('/v1/memories', response_model=List[Conversation], tags=['memories'])
@@ -264,7 +270,7 @@ def set_assignee_memory_segment(
         raise HTTPException(status_code=400, detail="Invalid assign type")
 
     conversations_db.update_conversation_segments(uid, memory_id, [segment.dict() for segment in memory.transcript_segments])
-    # This will be used when we setup recording for memories, not used for now
+    # This will be used when we setup recording for conversations, not used for now
     # get the segment with the most words with the speaker_id
     # segment_idx = 0
     # segment_words = 0

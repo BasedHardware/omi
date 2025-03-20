@@ -43,7 +43,7 @@ def retrieve_memories_for_topics(uid: str, topics: List[str], dates_range: List)
     return memories_id, get_conversations_by_id(uid, memories_id.keys())
 
 
-def get_better_memory_chunk(memory: Conversation, topics: List[str], context_data: dict) -> str:
+def get_better_conversation_chunk(memory: Conversation, topics: List[str], context_data: dict) -> str:
     print('get_better_memory_chunk', memory.id, topics)
     conversation = TranscriptSegment.segments_as_string(memory.transcript_segments, include_timestamps=True)
     if num_tokens_from_string(conversation) < 250:
@@ -54,7 +54,7 @@ def get_better_memory_chunk(memory: Conversation, topics: List[str], context_dat
     context_data[memory.id] = chunk
 
 
-def retrieve_rag_memory_context(uid: str, memory: Conversation) -> Tuple[str, List[Conversation]]:
+def retrieve_rag_conversation_context(uid: str, memory: Conversation) -> Tuple[str, List[Conversation]]:
     topics = retrieve_memory_context_params(memory)
     print('retrieve_memory_rag_context', topics)
     if not topics:
@@ -79,7 +79,7 @@ def retrieve_rag_memory_context(uid: str, memory: Conversation) -> Tuple[str, Li
         threads = []
         for memory in memories:
             topics = memories_id_to_topics.get(memory.id, [])
-            t = threading.Thread(target=get_better_memory_chunk, args=(memory, topics, context_data))
+            t = threading.Thread(target=get_better_conversation_chunk, args=(memory, topics, context_data))
             threads.append(t)
         [t.start() for t in threads]
         [t.join() for t in threads]

@@ -52,7 +52,7 @@ def process_voice_message_segment(path: str, uid: str):
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
     response, ask_for_nps, memories = execute_graph_chat(uid, messages, plugin)  # plugin
     memories_id = []
-    # check if the items in the memories list are dict
+    # check if the items in the conversations list are dict
     if memories:
         converted_memories = []
         for m in memories[:5]:
@@ -123,7 +123,7 @@ async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGene
         memories = callback_data.get('memories_found', [])
         ask_for_nps = callback_data.get('ask_for_nps', False)
         memories_id = []
-        # check if the items in the memories list are dict
+        # check if the items in the conversations list are dict
         if memories:
             converted_memories = []
             for m in memories[:5]:

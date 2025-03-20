@@ -378,7 +378,7 @@ def get_omi_personas_by_uid(uid: str):
 
 
 async def generate_persona_prompt(uid: str, persona: dict):
-    """Generate a persona prompt based on user facts and memories."""
+    """Generate a persona prompt based on user facts and conversations."""
 
     print(f"generate_persona_prompt {uid}")
 
@@ -386,7 +386,7 @@ async def generate_persona_prompt(uid: str, persona: dict):
     facts = get_facts(uid, limit=250)
     user_name = get_user_name(uid)
 
-    # Get and condense recent memories
+    # Get and condense recent conversations
     memories = get_conversations(uid, limit=100)
     conversation_history = Conversation.conversations_to_string(memories)
     conversation_history = condense_conversations([conversation_history])
@@ -481,12 +481,12 @@ def sync_update_persona_prompt(persona: dict):
 
 
 async def update_persona_prompt(persona: dict):
-    """Update a persona's chat prompt with latest facts and memories."""
+    """Update a persona's chat prompt with latest facts and conversations."""
     # Get latest facts and user info
     facts = get_facts(persona['uid'], limit=250)
     user_name = get_user_name(persona['uid'])
 
-    # Get and condense recent memories
+    # Get and condense recent conversations
     memories = get_conversations(persona['uid'], limit=100)
     conversation_history = Conversation.conversations_to_string(memories)
     conversation_history = condense_conversations([conversation_history])

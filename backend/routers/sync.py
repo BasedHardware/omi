@@ -12,7 +12,7 @@ from pydub import AudioSegment
 from database.conversations import get_closest_conversation_to_timestamps, update_conversation_segments
 from models.conversation import CreateConversation
 from models.transcript_segment import TranscriptSegment
-from utils.memories.process_memory import process_memory
+from utils.conversations.process_conversation import process_conversation
 from utils.other import endpoints as auth
 from utils.other.storage import get_syncing_file_temporal_signed_url, delete_syncing_temporal_file
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
@@ -174,7 +174,7 @@ def process_segment(path: str, uid: str, response: dict):
             finished_at=datetime.fromtimestamp(timestamp + transcript_segments[-1].end),
             transcript_segments=transcript_segments
         )
-        created = process_memory(uid, language, create_memory)
+        created = process_conversation(uid, language, create_memory)
         response['new_memories'].add(created.id)
     else:
         transcript_segments = [s.dict() for s in transcript_segments]
