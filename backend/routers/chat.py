@@ -18,7 +18,7 @@ from models.memory import Memory
 from models.plugin import UsageHistoryType
 from routers.sync import retrieve_file_paths, decode_files_to_wav, retrieve_vad_segments
 from utils.apps import get_available_app_by_id
-from utils.chat import process_voice_message_segment, process_voice_message_segment_stream
+from utils.chat import process_voice_message_segment, process_voice_message_segment_stream, transcribe_voice_message_segment
 from utils.llm import initial_chat_message, initial_persona_chat_message
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
@@ -387,6 +387,26 @@ async def create_voice_message_stream(files: List[UploadFile] = File(...),
         generate_stream(),
         media_type="text/event-stream"
     )
+
+
+@router.post("/v1/voice-message/transcribe")
+async def transcribe_voice_message(files: List[UploadFile] = File(...),
+                                   uid: str = Depends(auth.get_current_user_uid)):
+    # wav
+    paths = retrieve_file_paths(files, uid)
+    if len(paths) == 0:
+        raise HTTPException(status_code=400, detail='Paths is invalid')
+
+    wav_paths = decode_files_to_wav(paths)
+    if len(wav_paths) == 0:
+        raise HTTPException(status_code=400, detail='Wav path is invalid')
+
+    # process
+    transcript = transcribe_voice_message_segment(list(wav_paths)[0])
+    if not transcript:
+        raise HTTPException(status_code=400, detail='Failed to transcribe audio')
+
+    return {"transcript": transcript}
 
 
 @router.post('/v1/files', response_model=List[FileChat], tags=['chat'])
