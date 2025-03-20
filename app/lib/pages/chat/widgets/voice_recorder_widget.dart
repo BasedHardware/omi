@@ -190,7 +190,13 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
   }
   
   void _retry() {
-    _startRecording();
+    if (_audioChunks.isEmpty) {
+      // If no audio chunks are available, start a new recording
+      _startRecording();
+    } else {
+      // Retry transcription with existing audio data
+      _processRecording();
+    }
   }
   
   @override
