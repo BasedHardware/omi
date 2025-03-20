@@ -1,18 +1,18 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/http/api/device.dart';
-import 'package:friend_private/main.dart';
-import 'package:friend_private/pages/home/firmware_update.dart';
-import 'package:friend_private/providers/capture_provider.dart';
-import 'package:friend_private/services/devices.dart';
-import 'package:friend_private/services/notifications.dart';
-import 'package:friend_private/services/services.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/device.dart';
-import 'package:friend_private/widgets/confirmation_dialog.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/http/api/device.dart';
+import 'package:omi/main.dart';
+import 'package:omi/pages/home/firmware_update.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/devices.dart';
+import 'package:omi/services/notifications.dart';
+import 'package:omi/services/services.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/device.dart';
+import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
 class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption {
@@ -353,27 +353,16 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       return;
     }
 
-    bool dontShowAgain = false;
-
     showDialog(
       context: context,
       builder: (context) => ConfirmationDialog(
         title: 'Firmware Update Available',
         description:
             'A new firmware update (${_latestFirmwareVersion}) is available for your Omi device. Would you like to update now?',
-        checkboxText: "Don't show me again",
-        checkboxValue: dontShowAgain,
-        onCheckboxChanged: (value) {
-          dontShowAgain = value ?? false;
-        },
         confirmText: 'Update',
         cancelText: 'Later',
         onConfirm: () {
-          if (dontShowAgain) {
-            SharedPreferencesUtil().showFirmwareUpdateDialog = false;
-          }
           Navigator.of(context).pop();
-          // Navigate to firmware update page
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (context) => FirmwareUpdate(device: pairedDevice),
@@ -381,9 +370,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
           );
         },
         onCancel: () {
-          if (dontShowAgain) {
-            SharedPreferencesUtil().showFirmwareUpdateDialog = false;
-          }
           Navigator.of(context).pop();
         },
       ),

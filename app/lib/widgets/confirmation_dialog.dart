@@ -6,9 +6,9 @@ import 'package:flutter/material.dart';
 class ConfirmationDialog extends StatefulWidget {
   final String title;
   final String description;
-  final String checkboxText;
-  final bool checkboxValue;
-  final void Function(bool value) onCheckboxChanged;
+  final String? checkboxText;
+  final bool? checkboxValue;
+  final void Function(bool value)? onCheckboxChanged;
   final String? cancelText;
   final String? confirmText;
   final void Function() onConfirm;
@@ -18,9 +18,9 @@ class ConfirmationDialog extends StatefulWidget {
     super.key,
     required this.title,
     required this.description,
-    required this.checkboxText,
-    required this.checkboxValue,
-    required this.onCheckboxChanged,
+    this.checkboxText,
+    this.checkboxValue,
+    this.onCheckboxChanged,
     this.cancelText,
     this.confirmText,
     required this.onConfirm,
@@ -32,22 +32,22 @@ class ConfirmationDialog extends StatefulWidget {
 }
 
 class _ConfirmationDialogState extends State<ConfirmationDialog> {
-  late bool _checkboxValue;
+  bool _checkboxValue = false;
 
   @override
   void initState() {
     super.initState();
-    _checkboxValue = widget.checkboxValue;
+    _checkboxValue = widget.checkboxValue ?? false;
   }
 
   void _updateCheckboxValue(bool? value) {
-    debugPrint("checked option ${value ?? false}");
-    debugPrint("checked ${_checkboxValue}");
     if (value != null) {
       setState(() {
         _checkboxValue = value;
       });
-      widget.onCheckboxChanged(value);
+      if (widget.onCheckboxChanged != null) {
+        widget.onCheckboxChanged!(value);
+      }
     }
   }
 
@@ -79,42 +79,44 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
                 fontSize: 14,
               ),
             ),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.start,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Theme(
-                  data: Theme.of(context).copyWith(
-                    checkboxTheme: CheckboxThemeData(
-                      fillColor: MaterialStateProperty.resolveWith<Color>(
-                        (Set<MaterialState> states) {
-                          if (states.contains(MaterialState.selected)) {
-                            return Colors.deepPurple;
-                          }
-                          return Colors.grey.shade700;
-                        },
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(4),
+            if (widget.checkboxText != null && widget.checkboxText!.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Theme(
+                    data: Theme.of(context).copyWith(
+                      checkboxTheme: CheckboxThemeData(
+                        fillColor: MaterialStateProperty.resolveWith<Color>(
+                          (Set<MaterialState> states) {
+                            if (states.contains(MaterialState.selected)) {
+                              return Colors.deepPurple;
+                            }
+                            return Colors.grey.shade700;
+                          },
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(4),
+                        ),
                       ),
                     ),
+                    child: Checkbox(
+                      value: _checkboxValue,
+                      onChanged: _updateCheckboxValue,
+                    ),
                   ),
-                  child: Checkbox(
-                    value: _checkboxValue,
-                    onChanged: _updateCheckboxValue,
+                  const SizedBox(width: 8),
+                  Text(
+                    widget.checkboxText!,
+                    style: TextStyle(
+                      color: Colors.grey.shade300,
+                      fontSize: 14,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  widget.checkboxText,
-                  style: TextStyle(
-                    color: Colors.grey.shade300,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
           ],
         ),
         actions: [
@@ -163,26 +165,28 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
                 color: Colors.grey.shade200,
               ),
             ),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.start,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                CupertinoCheckbox(
-                  value: _checkboxValue,
-                  onChanged: _updateCheckboxValue,
-                  activeColor: Colors.deepPurple,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  widget.checkboxText,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade300,
+            if (widget.checkboxText != null && widget.checkboxText!.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  CupertinoCheckbox(
+                    value: _checkboxValue,
+                    onChanged: _updateCheckboxValue,
+                    activeColor: Colors.deepPurple,
                   ),
-                ),
-              ],
-            ),
+                  const SizedBox(width: 8),
+                  Text(
+                    widget.checkboxText!,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey.shade300,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
         actions: [
@@ -190,7 +194,7 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
             onPressed: widget.onCancel,
             isDestructiveAction: false,
             child: Text(
-              widget.cancelText ?? "Cancel", 
+              widget.cancelText ?? "Cancel",
               style: TextStyle(
                 fontSize: 16,
                 color: Colors.grey.shade300,
@@ -201,7 +205,7 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
             onPressed: widget.onConfirm,
             isDefaultAction: true,
             child: Text(
-              widget.confirmText ?? "Confirm", 
+              widget.confirmText ?? "Confirm",
               style: const TextStyle(
                 fontSize: 16,
                 color: Colors.deepPurple,
