@@ -2023,20 +2023,20 @@ def select_structured_filters(question: str, filters_available: dict) -> dict:
     except ValidationError:
         return {}
     def extract_question_from_transcript(uid: str, segments: List[TranscriptSegment]) -> str:
-    user_name, facts_str = get_prompt_facts(uid)
-    prompt = f'''
-    {user_name} is having a conversation.  You know: {facts_str}
+        user_name, facts_str = get_prompt_facts(uid)
+        prompt = f'''
+        {user_name} is having a conversation.  You know: {facts_str}
 
-    Given the conversation transcript, identify what other information about {user_name} you need to advise them.
+        Given the conversation transcript, identify what other information about {user_name} you need to advise them.
 
-    First, fix transcript errors.  Then, output a WH-question ("What", "When", "Where", "Who", "Why", "How").
+        First, fix transcript errors.  Then, output a WH-question ("What", "When", "Where", "Who", "Why", "How").
 
-    Example: Conversation about a new job -> "What discussions have I had about job search?".
+        Example: Conversation about a new job -> "What discussions have I had about job search?".
 
-    Conversation:
-    ```{TranscriptSegment.segments_as_string(segments)}```
-    '''.replace('    ', '').strip()
-    return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
+        Conversation:
+        ```{TranscriptSegment.segments_as_string(segments)}```
+        '''.replace('    ', '').strip()
+        return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
 class OutputMessage(BaseModel):
     message: str = Field(description='The message to the user.', max_length=200)
 
@@ -2065,7 +2065,7 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
     ```{context}```
     """.replace('    ', '').strip()
     return llm_mini.with_structured_output(OutputMessage).invoke(prompt).message
-def get_proactive_message(uid: str, plugin_prompt: str, params: [str], context: str,
+def get_proactive_message(uid: str, plugin_prompt: str, params: List[str], context: str,
                           chat_messages: List[Message]) -> str:
     user_name, facts_str = get_prompt_facts(uid)
 
