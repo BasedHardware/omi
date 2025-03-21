@@ -8,7 +8,7 @@ from typing import List, AsyncGenerator
 import database.chat as chat_db
 import database.notifications as notification_db
 from database.apps import record_app_usage
-from models.chat import Message, ResponseMessage, MessageMemory
+from models.chat import Message, ResponseMessage, MessageConversation
 from models.conversation import Conversation
 from models.notification_message import NotificationMessage
 from models.plugin import UsageHistoryType
@@ -165,7 +165,7 @@ async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGene
             memories_id=memories_id,
         )
         chat_db.add_message(uid, ai_message.dict())
-        ai_message.memories = [MessageMemory(**m) for m in (memories if len(memories) < 5 else memories[:5])]
+        ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
 
         if plugin_id:
             record_app_usage(uid, plugin_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)

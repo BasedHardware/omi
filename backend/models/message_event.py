@@ -15,7 +15,7 @@ class MessageEvent(BaseModel):
         return j
 
 
-class MemoryEvent(MessageEvent):
+class ConversationEvent(MessageEvent):
     memory: Conversation
     messages: Optional[List[Message]] = []
 
@@ -26,7 +26,7 @@ class MemoryEvent(MessageEvent):
         return j
 
 
-class NewMemoryCreated(MessageEvent):
+class NewConversationCreated(MessageEvent):
     processing_memory_id: Optional[str] = None
     memory_id: Optional[str] = None
     message_ids: Optional[List[str]] = []
@@ -40,7 +40,7 @@ class NewMemoryCreated(MessageEvent):
         return j
 
 
-class NewProcessingMemoryCreated(MessageEvent):
+class NewProcessingConversationCreated(MessageEvent):
     processing_memory_id: Optional[str] = None
     memory_id: Optional[str] = None
 
@@ -51,7 +51,7 @@ class NewProcessingMemoryCreated(MessageEvent):
         return j
 
 
-class ProcessingMemoryStatusChanged(MessageEvent):
+class ProcessingConversationStatusChanged(MessageEvent):
     processing_memory_id: Optional[str] = None
     processing_memory_status: Optional[str] = None
     memory_id: Optional[str] = None
@@ -95,7 +95,7 @@ class PingEvent(MessageEvent):
         return j
 
 
-class LastMemoryEvent(MessageEvent):
+class LastConversationEvent(MessageEvent):
     event_type: str = "last_memory"
     memory_id: str
 

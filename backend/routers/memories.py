@@ -15,9 +15,9 @@ from models.conversation import *
 from routers.speech_profile import expand_speech_profile
 from routers.transcribe_v2 import retrieve_in_progress_conversation
 from utils.conversations.process_conversation import process_conversation
-from utils.conversations.search import search_memories
+from utils.conversations.search import search_conversations
 from utils.other import endpoints as auth
-from utils.other.storage import get_memory_recording_if_exists, \
+from utils.other.storage import get_conversation_recording_if_exists, \
     delete_additional_profile_audio, delete_speech_sample_for_people
 from utils.plugins import trigger_external_integrations
 
@@ -120,7 +120,7 @@ def delete_memory(memory_id: str, uid: str = Depends(auth.get_current_user_uid))
 @router.get("/v1/memories/{memory_id}/recording", response_model=dict, tags=['memories'])
 def memory_has_audio_recording(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_memory_by_id(uid, memory_id)
-    return {'has_recording': get_memory_recording_if_exists(uid, memory_id) is not None}
+    return {'has_recording': get_conversation_recording_if_exists(uid, memory_id) is not None}
 
 
 @router.patch("/v1/memories/{memory_id}/events", response_model=dict, tags=['memories'])
@@ -150,7 +150,8 @@ def set_action_item_status(data: SetConversationActionItemsStateRequest, memory_
             continue
         action_items[action_item_idx].completed = data.values[i]
 
-    conversations_db.update_conversation_action_items(uid, memory_id, [action_item.dict() for action_item in action_items])
+    conversations_db.update_conversation_action_items(uid, memory_id,
+                                                      [action_item.dict() for action_item in action_items])
     return {"status": "Ok"}
 
 
@@ -163,7 +164,8 @@ def delete_action_item(data: DeleteActionItemRequest, memory_id: str, uid=Depend
     for i, action_item in enumerate(action_items):
         if action_item.description == data.description:
             action_item.deleted = True
-    conversations_db.update_conversation_action_items(uid, memory_id, [action_item.dict() for action_item in action_items])
+    conversations_db.update_conversation_action_items(uid, memory_id,
+                                                      [action_item.dict() for action_item in action_items])
     return {"status": "Ok"}
 
 
@@ -209,7 +211,8 @@ def set_assignee_memory_segment(
         print(assign_type)
         raise HTTPException(status_code=400, detail="Invalid assign type")
 
-    conversations_db.update_conversation_segments(uid, memory_id, [segment.dict() for segment in memory.transcript_segments])
+    conversations_db.update_conversation_segments(uid, memory_id,
+                                                  [segment.dict() for segment in memory.transcript_segments])
     # thinh's note: disabled for now
     # segment_words = len(memory.transcript_segments[segment_idx].text.split(' '))
     # # TODO: can do this async
@@ -271,7 +274,8 @@ def set_assignee_memory_segment(
         print(assign_type)
         raise HTTPException(status_code=400, detail="Invalid assign type")
 
-    conversations_db.update_conversation_segments(uid, memory_id, [segment.dict() for segment in memory.transcript_segments])
+    conversations_db.update_conversation_segments(uid, memory_id,
+                                                  [segment.dict() for segment in memory.transcript_segments])
     # This will be used when we setup recording for conversations, not used for now
     # get the segment with the most words with the speaker_id
     # segment_idx = 0
@@ -350,6 +354,6 @@ def get_public_memories(offset: int = 0, limit: int = 1000):
 
 @router.post("/v1/memories/search", response_model=dict, tags=['memories'])
 def search_memories_endpoint(search_request: SearchRequest, uid: str = Depends(auth.get_current_user_uid)):
-    return search_memories(query=search_request.query, page=search_request.page,
-                           per_page=search_request.per_page, uid=uid,
-                           include_discarded=search_request.include_discarded)
+    return search_conversations(query=search_request.query, page=search_request.page,
+                                per_page=search_request.per_page, uid=uid,
+                                include_discarded=search_request.include_discarded)

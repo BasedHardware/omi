@@ -13,7 +13,7 @@ from models.other import Person, CreatePerson
 from models.users import WebhookType
 from utils.llm import followup_question_prompt
 from utils.other import endpoints as auth
-from utils.other.storage import delete_all_memory_recordings, get_user_person_speech_samples, \
+from utils.other.storage import delete_all_conversation_recordings, get_user_person_speech_samples, \
     delete_user_person_speech_samples
 from utils.webhooks import webhook_first_time_setup
 
@@ -110,7 +110,7 @@ def get_store_recording_permission(uid: str = Depends(auth.get_current_user_uid)
 @router.delete('/v1/users/store-recording-permission', tags=['v1'])
 def delete_permission_and_recordings(uid: str = Depends(auth.get_current_user_uid)):
     set_user_store_recording_permission(uid, False)
-    delete_all_memory_recordings(uid)
+    delete_all_conversation_recordings(uid)
     return {'status': 'ok'}
 
 
@@ -202,7 +202,7 @@ def set_memory_summary_rating(
         value: int,  # 0, 1, -1 (shown)
         uid: str = Depends(auth.get_current_user_uid),
 ):
-    set_memory_summary_rating_score(uid, memory_id, value)
+    set_conversation_summary_rating_score(uid, memory_id, value)
     return {'status': 'ok'}
 
 
@@ -211,7 +211,7 @@ def get_memory_summary_rating(
         memory_id: str,
         _: str = Depends(auth.get_current_user_uid),
 ):
-    rating = get_memory_summary_rating_score(memory_id)
+    rating = get_conversation_summary_rating_score(memory_id)
     # TODO: later ask reason, a set of options, if user says good, whats the best, if bad, whats the worst
     if not rating:
         return {'has_rating': False}

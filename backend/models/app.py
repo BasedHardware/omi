@@ -125,7 +125,7 @@ class App(BaseModel):
     def works_externally(self) -> bool:
         return self.has_capability('external_integration')
 
-    def triggers_on_memory_creation(self) -> bool:
+    def triggers_on_conversation_creation(self) -> bool:
         return self.works_externally() and self.external_integration.triggers_on == 'memory_creation'
 
     def triggers_realtime(self) -> bool:

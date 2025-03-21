@@ -21,7 +21,7 @@ from models.conversation import ExternalIntegrationCreateConversation, Conversat
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
 from models.notification_message import NotificationMessage
-from utils.apps import get_available_apps, update_personas_async
+from utils.apps import get_available_apps, update_personas_async, sync_update_persona_prompt
 from utils.llm import obtain_emotional_message, retrieve_metadata_fields_from_transcript, \
     summarize_open_glass, get_transcript_structure, generate_embedding, \
     get_plugin_result, should_discard_conversation, summarize_experience_text, new_facts_extractor, \
@@ -123,7 +123,7 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
         if result := get_plugin_result(conversation.get_transcript(False), app).strip():
             conversation.plugins_results.append(PluginResult(plugin_id=app.id, content=result))
             if not is_reprocess:
-                record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, memory_id=conversation.id)
+                record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, conversation_id=conversation.id)
 
     for app in filtered_apps:
         threads.append(threading.Thread(target=execute_app, args=(app,)))

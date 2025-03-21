@@ -10,7 +10,7 @@ from database.users import get_person
 from models.conversation import Conversation
 from models.other import UploadProfile
 from utils.other import endpoints as auth
-from utils.other.storage import upload_profile_audio, get_profile_audio_if_exists, get_memory_recording_if_exists, \
+from utils.other.storage import upload_profile_audio, get_profile_audio_if_exists, get_conversation_recording_if_exists, \
     upload_additional_profile_audio, delete_additional_profile_audio, get_additional_profile_recordings, \
     upload_user_person_speech_sample, delete_user_person_speech_sample, get_user_person_speech_samples, \
     delete_speech_sample_for_people, get_user_has_speech_profile
@@ -67,14 +67,14 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
 
 
 # ******************************************************
-# ************* SPEECH SAMPLES FROM MEMORY *************
+# ********** SPEECH SAMPLES FROM CONVERSATION **********
 # ******************************************************
 
 
 def expand_speech_profile(
-        memory_id: str, uid: str, segment_idx: int, assign_type: str, person_id: Optional[str] = None
+        conversation_id: str, uid: str, segment_idx: int, assign_type: str, person_id: Optional[str] = None
 ):
-    print('expand_speech_profile', memory_id, uid, segment_idx, assign_type, person_id)
+    print('expand_speech_profile', conversation_id, uid, segment_idx, assign_type, person_id)
     if assign_type == 'is_user':
         profile_path = get_profile_audio_if_exists(uid)
         if not profile_path:  # TODO: validate this in front
@@ -84,22 +84,22 @@ def expand_speech_profile(
         if not get_person(uid, person_id):
             raise HTTPException(status_code=404, detail="Person not found")
 
-    memory_recording_path = get_memory_recording_if_exists(uid, memory_id)
-    if not memory_recording_path:
-        raise HTTPException(status_code=404, detail="Memory recording not found")
+    conversation_recording_path = get_conversation_recording_if_exists(uid, conversation_id)
+    if not conversation_recording_path:
+        raise HTTPException(status_code=404, detail="Conversation recording not found")
 
-    memory = get_conversation(uid, memory_id)
-    if not memory:
-        raise HTTPException(status_code=404, detail="Memory not found")
+    conversation = get_conversation(uid, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
-    memory = Conversation(**memory)
-    segment = memory.transcript_segments[segment_idx]
+    conversation = Conversation(**conversation)
+    segment = conversation.transcript_segments[segment_idx]
     print('expand_speech_profile', segment)
-    aseg = AudioSegment.from_wav(memory_recording_path)
+    aseg = AudioSegment.from_wav(conversation_recording_path)
     segment_aseg = aseg[segment.start * 1000:segment.end * 1000]
-    os.remove(memory_recording_path)
+    os.remove(conversation_recording_path)
 
-    segment_recording_path = f'_temp/{memory_id}_segment_{segment_idx}.wav'
+    segment_recording_path = f'_temp/{conversation_id}_segment_{segment_idx}.wav'
     segment_aseg.export(segment_recording_path, format='wav')
 
     apply_vad_for_speech_profile(segment_recording_path)

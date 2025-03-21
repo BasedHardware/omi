@@ -5,16 +5,16 @@ from enum import Enum
 from models.facts import FactCategory
 
 
-class MemoryTimestampRange(BaseModel):
+class ConversationTimestampRange(BaseModel):
     start: int
     end: int
 
 
-class ScreenPipeCreateMemory(BaseModel):
+class ScreenPipeCreateConversation(BaseModel):
     request_id: str
     source: str
     text: str
-    timestamp_range: MemoryTimestampRange
+    timestamp_range: ConversationTimestampRange
 
 
 class ExternalIntegrationFactSource(str, Enum):
