@@ -10,6 +10,7 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 
 
 [![Discord Follow](https://dcbadge.vercel.app/api/server/ZutWMTJnwA?style=flat)](https://discord.gg/omi) &ensp;&ensp;&ensp;
+[![Twitter Follow](https://img.shields.io/twitter/follow/kodjima33)](https://x.com/kodjima33) &ensp;&ensp;&ensp;
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)&ensp;&ensp;&ensp;
 [![GitHub Repo stars](https://img.shields.io/github/stars/BasedHardware/Omi)](https://github.com/BasedHardware/Omi)
 
@@ -19,8 +20,7 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 
 </h3>
 
-[<img src='https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg' alt='Get it on Google Play' height="50px" width="180px">](https://play.google.com/store/apps/details?id=com.friend.ios)
-[<img src='https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg' alt="Download on the App Store" height="50px" width="180px">](https://apps.apple.com/us/app/friend-ai-wearable/id6502156163)
+
 
 </div>
 
@@ -35,6 +35,32 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 [//]: # (- **Open-Source Software**: Access and contribute to the pin's software stack, designed with openness and community collaboration in mind.)
 
 [//]: # (- **Wearable Design**: Experience unparalleled convenience with ergonomic and lightweight design, perfect for everyday wear.)
+
+## Quick Start (2 min)
+Download omi App
+
+[<img src='https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg' alt='Get it on Google Play' height="50px" width="180px">](https://play.google.com/store/apps/details?id=com.friend.ios)
+[<img src='https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg' alt="Download on the App Store" height="50px" width="180px">](https://apps.apple.com/us/app/friend-ai-wearable/id6502156163)
+
+
+
+Create webhook using [webhook.site](https://webhook.site) and copy this url 
+
+<img src="https://github.com/user-attachments/assets/083a6ec4-4694-4c7a-843a-4a1a0c254453" width="500">
+
+In omi App:
+
+| Explore => Create an App  | Select Capability  | Paste Webhook URL | Install App 
+| ------------- | ------------- | ------------- | ------------- | 
+| <img src="https://github.com/user-attachments/assets/31809b81-7de2-4381-b5fc-5c9714972211" width="200">  |<img src="https://github.com/user-attachments/assets/59cfbe8e-7e3b-437f-81f7-25eb50ccdd7d" width="200">| <img src="https://github.com/user-attachments/assets/3d864ee8-555f-4ded-b4db-87ff78128323" width = "200">  | <img src="https://github.com/user-attachments/assets/58cf6da6-e245-415e-92e7-dc1f46583cfc" width="200">| 
+
+Start speaking, you'll see Real-time transcript on [webhook.site ](https://webhook.site)
+
+
+
+
+
+
 
 ## In this repo:
 
