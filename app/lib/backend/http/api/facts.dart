@@ -5,14 +5,14 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/fact.dart';
 import 'package:omi/env/env.dart';
 
-Future<bool> createFact(String content, FactCategory category) async {
+Future<bool> createFactServer(String content, String visibility) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/facts',
+    url: '${Env.apiBaseUrl}v2/facts',
     headers: {},
     method: 'POST',
     body: json.encode({
       'content': content,
-      'category': category.toString().split('.').last,
+      'visibility': visibility,
     }),
   );
   if (response == null) return false;
@@ -20,9 +20,21 @@ Future<bool> createFact(String content, FactCategory category) async {
   return response.statusCode == 200;
 }
 
+Future<bool> updateFactVisibilityServer(String factId, String visibility) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/facts/$factId/visibility?value=$visibility',
+    headers: {},
+    method: 'PATCH',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('updateFactVisibility response: ${response.body}');
+  return response.statusCode == 200;
+}
+
 Future<List<Fact>> getFacts({int limit = 100, int offset = 0}) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v2/facts?limit=${limit}&offset=${offset}',
+    url: '${Env.apiBaseUrl}v2/facts?limit=$limit&offset=$offset',
     headers: {},
     method: 'GET',
     body: '',
@@ -33,7 +45,7 @@ Future<List<Fact>> getFacts({int limit = 100, int offset = 0}) async {
   return facts.map((fact) => Fact.fromJson(fact)).toList();
 }
 
-Future<bool> deleteFact(String factId) async {
+Future<bool> deleteFactServer(String factId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/facts/$factId',
     headers: {},
@@ -45,7 +57,19 @@ Future<bool> deleteFact(String factId) async {
   return response.statusCode == 200;
 }
 
-Future<bool> reviewFact(String factId, bool value) async {
+Future<bool> deleteAllFactServer() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/facts',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('deleteFact response: ${response.body}');
+  return response.statusCode == 200;
+}
+
+Future<bool> reviewFactServer(String factId, bool value) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/facts/$factId/review?value=$value',
     headers: {},
@@ -57,7 +81,7 @@ Future<bool> reviewFact(String factId, bool value) async {
   return response.statusCode == 200;
 }
 
-Future<bool> editFact(String factId, String value) async {
+Future<bool> editFactServer(String factId, String value) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/facts/$factId?value=$value',
     headers: {},

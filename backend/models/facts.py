@@ -23,17 +23,19 @@ class FactCategory(str, Enum):
 
 
 CATEGORY_BOOSTS = {FactCategory.core.value: 1,
-                   FactCategory.habits.value:10,
-                   FactCategory.work.value:40,
-                   FactCategory.skills.value:40,
+                   FactCategory.habits.value: 10,
+                   FactCategory.work.value: 40,
+                   FactCategory.skills.value: 40,
                    FactCategory.lifestyle.value: 40,
                    FactCategory.hobbies.value: 40,
-                   FactCategory.interests.value:40,
-                   FactCategory.other.value: 50,}
+                   FactCategory.interests.value: 40,
+                   FactCategory.other.value: 50, }
+
 
 class Fact(BaseModel):
     content: str = Field(description="The content of the fact")
     category: FactCategory = Field(description="The category of the fact", default=FactCategory.other)
+    visibility: str = Field(description="The visibility of the fact", default='public')
 
     @staticmethod
     def get_facts_as_str(facts: List):
@@ -62,6 +64,7 @@ class FactDB(Fact):
 
     reviewed: bool = False
     user_review: Optional[bool] = None
+    visibility: Optional[str] = 'public'
 
     manually_added: bool = False
     edited: bool = False
@@ -80,7 +83,8 @@ class FactDB(Fact):
         return "{:02d}_{:02d}_{:010d}".format(user_manual_added_boost, cat_boost, int(fact.created_at.timestamp()))
 
     @staticmethod
-    def from_fact(fact: Fact, uid: str, memory_id: str, memory_category: CategoryEnum) -> 'FactDB':
+    def from_fact(fact: Fact, uid: str, memory_id: str, memory_category: CategoryEnum,
+                  manually_added: bool) -> 'FactDB':
         fact_db = FactDB(
             id=document_id_from_seed(fact.content),
             uid=uid,
@@ -90,6 +94,10 @@ class FactDB(Fact):
             updated_at=datetime.now(timezone.utc),
             memory_id=memory_id,
             memory_category=memory_category,
+            manually_added=manually_added,
+            user_review=True if manually_added else None,
+            reviewed=True if manually_added else False,
+            visibility=fact.visibility,
         )
         fact_db.scoring = FactDB.calculate_score(fact_db)
         return fact_db
