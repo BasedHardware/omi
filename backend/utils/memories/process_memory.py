@@ -21,12 +21,13 @@ from models.memory import ExternalIntegrationCreateMemory, Memory, CreateMemory,
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
 from models.notification_message import NotificationMessage
-from utils.apps import get_available_apps, sync_update_persona_prompt
+from utils.apps import get_available_apps, update_personas_async
 from utils.llm import obtain_emotional_message, retrieve_metadata_fields_from_transcript, \
     summarize_open_glass, get_transcript_structure, generate_embedding, \
     get_plugin_result, should_discard_memory, summarize_experience_text, new_facts_extractor, \
     trends_extractor, get_email_structure, get_post_structure, get_message_structure, \
-    retrieve_metadata_from_email, retrieve_metadata_from_post, retrieve_metadata_from_message, retrieve_metadata_from_text, \
+    retrieve_metadata_from_email, retrieve_metadata_from_post, retrieve_metadata_from_message, \
+    retrieve_metadata_from_text, \
     extract_facts_from_text
 from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
@@ -46,7 +47,8 @@ def _get_structured(
                 return structured, False
 
             if memory.text_source == ExternalIntegrationMemorySource.message:
-                structured = get_message_structure(memory.text, memory.started_at, language_code, tz, memory.text_source_spec)
+                structured = get_message_structure(memory.text, memory.started_at, language_code, tz,
+                                                   memory.text_source_spec)
                 return structured, False
 
             if memory.text_source == ExternalIntegrationMemorySource.other:
@@ -77,7 +79,8 @@ def _get_structured(
         return _get_structured(uid, language_code, memory, force_process, retries + 1)
 
 
-def _get_memory_obj(uid: str, structured: Structured, memory: Union[Memory, CreateMemory, ExternalIntegrationCreateMemory]):
+def _get_memory_obj(uid: str, structured: Structured,
+                    memory: Union[Memory, CreateMemory, ExternalIntegrationCreateMemory]):
     discarded = structured.title == ''
     if isinstance(memory, CreateMemory):
         memory = Memory(
@@ -147,7 +150,7 @@ def _extract_facts(uid: str, memory: Memory):
 
     parsed_facts = []
     for fact in new_facts:
-        parsed_facts.append(FactDB.from_fact(fact, uid, memory.id, memory.structured.category))
+        parsed_facts.append(FactDB.from_fact(fact, uid, memory.id, memory.structured.category, False))
         print('_extract_facts:', fact.category.value.upper(), '|', fact.content)
 
     if len(parsed_facts) == 0:
@@ -156,6 +159,7 @@ def _extract_facts(uid: str, memory: Memory):
 
     print(f"Saving {len(parsed_facts)} facts for memory {memory.id}")
     facts_db.save_facts(uid, [fact.dict() for fact in parsed_facts])
+
 
 def send_new_facts_notification(token: str, facts: [FactDB]):
     facts_str = ", ".join([fact.content for fact in facts])
@@ -208,19 +212,6 @@ def save_structured_vector(uid: str, memory: Memory, update_only: bool = False):
         update_vector_metadata(uid, memory.id, metadata)
 
 
-def _update_personas_async(uid: str):
-    print(f"[PERSONAS] Starting persona updates in background thread for uid={uid}")
-    personas = get_omi_personas_by_uid_db(uid)
-    if personas:
-        threads = []
-        for persona in personas:
-            threads.append(threading.Thread(target=sync_update_persona_prompt, args=(persona,)))
-        
-        [t.start() for t in threads]
-        [t.join() for t in threads]
-        print(f"[PERSONAS] Finished persona updates in background thread for uid={uid}")
-
-
 def process_memory(
         uid: str, language_code: str, memory: Union[Memory, CreateMemory, ExternalIntegrationCreateMemory],
         force_process: bool = False, is_reprocess: bool = False
@@ -238,11 +229,8 @@ def process_memory(
 
     if not is_reprocess:
         threading.Thread(target=memory_created_webhook, args=(uid, memory,)).start()
-        # TODO: Bad code, cause the websocket was drop, need to check it carefully before enabling.
         # Update persona prompts with new memory
-        print("before creating the thread for _update_personas_async")
-        threading.Thread(target=_update_personas_async, args=(uid,)).start()
-        print("after calling start for _update_personas_async")
+        threading.Thread(target=update_personas_async, args=(uid,)).start()
 
     # TODO: trigger external integrations here too
 

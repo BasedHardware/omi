@@ -1,9 +1,12 @@
+import threading
 from typing import List
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 import database.facts as facts_db
-from models.facts import FactDB, Fact
+from models.facts import FactDB, Fact, FactCategory
+from utils.apps import update_personas_async
+from utils.llm import identify_category_for_fact
 from utils.other import endpoints as auth
 
 router = APIRouter()
@@ -11,9 +14,19 @@ router = APIRouter()
 
 @router.post('/v1/facts', tags=['facts'], response_model=FactDB)
 def create_fact(fact: Fact, uid: str = Depends(auth.get_current_user_uid)):
-    fact_db = FactDB.from_fact(fact, uid, None, None)
-    fact_db.manually_added = True
+    fact_db = FactDB.from_fact(fact, uid, None, None, True)
     facts_db.create_fact(uid, fact_db.dict())
+    threading.Thread(target=update_personas_async, args=(uid,)).start()
+    return fact_db
+
+
+@router.post('/v2/facts', tags=['facts'], response_model=FactDB)
+def create_fact(fact: Fact, uid: str = Depends(auth.get_current_user_uid)):
+    categories = [category for category in FactCategory]
+    fact.category = identify_category_for_fact(fact.content, categories)
+    fact_db = FactDB.from_fact(fact, uid, None, None, True)
+    facts_db.create_fact(uid, fact_db.dict())
+    threading.Thread(target=update_personas_async, args=(uid,)).start()
     return fact_db
 
 
@@ -61,6 +74,12 @@ def delete_fact(fact_id: str, uid: str = Depends(auth.get_current_user_uid)):
     return {'status': 'ok'}
 
 
+@router.delete('/v1/facts', tags=['facts'])
+def delete_fact(uid: str = Depends(auth.get_current_user_uid)):
+    facts_db.delete_all_facts(uid)
+    return {'status': 'ok'}
+
+
 @router.post('/v1/facts/{fact_id}/review', tags=['facts'])
 def review_fact(fact_id: str, value: bool, uid: str = Depends(auth.get_current_user_uid)):
     facts_db.review_fact(uid, fact_id, value)
@@ -75,4 +94,13 @@ def edit_fact(fact_id: str, value: str, uid: str = Depends(auth.get_current_user
     #     value = value[len(first_word):].strip()
 
     facts_db.edit_fact(uid, fact_id, value)
+    return {'status': 'ok'}
+
+
+@router.patch('/v1/facts/{fact_id}/visibility', tags=['facts'])
+def update_fact_visibility(fact_id: str, value: str, uid: str = Depends(auth.get_current_user_uid)):
+    if value not in ['public', 'private']:
+        raise HTTPException(status_code=400, detail='Invalid visibility value')
+    facts_db.change_fact_visibility(uid, fact_id, value)
+    threading.Thread(target=update_personas_async, args=(uid,)).start()
     return {'status': 'ok'}
