@@ -6,9 +6,9 @@ from database.vector_db import delete_vector
 from models.conversation import *
 from routers.transcribe_v2 import retrieve_in_progress_conversation
 from utils.conversations.process_conversation import process_conversation
-from utils.conversations.search import search_memories
+from utils.conversations.search import search_conversations
 from utils.other import endpoints as auth
-from utils.other.storage import get_memory_recording_if_exists
+from utils.other.storage import get_conversation_recording_if_exists
 from utils.plugins import trigger_external_integrations
 
 router = APIRouter()
@@ -111,7 +111,7 @@ def delete_conversation(conversation_id: str, uid: str = Depends(auth.get_curren
 @router.get("/v1/conversations/{conversation_id}/recording", response_model=dict, tags=['conversations'])
 def conversation_has_audio_recording(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_conversation_by_id(uid, conversation_id)
-    return {'has_recording': get_memory_recording_if_exists(uid, conversation_id) is not None}
+    return {'has_recording': get_conversation_recording_if_exists(uid, conversation_id) is not None}
 
 
 @router.patch("/v1/conversations/{conversation_id}/events", response_model=dict, tags=['conversations'])
@@ -349,6 +349,6 @@ def get_public_conversations(offset: int = 0, limit: int = 1000):
 
 @router.post("/v1/conversations/search", response_model=dict, tags=['conversations'])
 def search_conversations_endpoint(search_request: SearchRequest, uid: str = Depends(auth.get_current_user_uid)):
-    return search_memories(query=search_request.query, page=search_request.page,
-                           per_page=search_request.per_page, uid=uid,
-                           include_discarded=search_request.include_discarded)
+    return search_conversations(query=search_request.query, page=search_request.page,
+                                per_page=search_request.per_page, uid=uid,
+                                include_discarded=search_request.include_discarded)

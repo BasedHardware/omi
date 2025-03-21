@@ -17,7 +17,7 @@ import database.users as user_db
 from database import redis_db
 from database.redis_db import get_cached_user_geolocation
 from models.conversation import Conversation, TranscriptSegment, ConversationStatus, Structured, Geolocation
-from models.message_event import MemoryEvent, MessageEvent, MessageServiceStatusEvent, PingEvent, LastMemoryEvent
+from models.message_event import ConversationEvent, MessageEvent, MessageServiceStatusEvent, PingEvent, LastConversationEvent
 from utils.apps import is_audio_bytes_app_enabled
 from utils.conversations.location import get_google_maps_location
 from utils.conversations.process_conversation import process_conversation
@@ -176,7 +176,7 @@ async def _websocket_util(
     async def _create_conversation(conversation: dict):
         conversation = Conversation(**conversation)
         if conversation.status != ConversationStatus.processing:
-            _send_message_event(MemoryEvent(event_type="memory_processing_started", memory=conversation))
+            _send_message_event(ConversationEvent(event_type="memory_processing_started", memory=conversation))
             conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
             conversation.status = ConversationStatus.processing
 
@@ -195,7 +195,7 @@ async def _websocket_util(
             conversation.discarded = True
             messages = []
 
-        _send_message_event(MemoryEvent(event_type="memory_created", memory=conversation, messages=messages))
+        _send_message_event(ConversationEvent(event_type="memory_created", memory=conversation, messages=messages))
 
     async def finalize_processing_memories(processing: List[dict]):
         # handle edge case of conversation was actually processing? maybe later, doesn't hurt really anyway.
@@ -212,7 +212,7 @@ async def _websocket_util(
     async def send_last_conversation():
         last_conversation = conversations_db.get_last_completed_conversation(uid)
         if last_conversation:
-            await _send_message_event(LastMemoryEvent(memory_id=last_conversation['id']))
+            await _send_message_event(LastConversationEvent(memory_id=last_conversation['id']))
 
     asyncio.create_task(send_last_conversation())
 

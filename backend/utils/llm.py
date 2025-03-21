@@ -65,11 +65,11 @@ def num_tokens_from_string(string: str) -> int:
 
 
 # **********************************************
-# ************* MEMORY PROCESSING **************
+# ********** CONVERSATION PROCESSING ***********
 # **********************************************
 
-class DiscardMemory(BaseModel):
-    discard: bool = Field(description="If the memory should be discarded or not")
+class DiscardConversation(BaseModel):
+    discard: bool = Field(description="If the conversation should be discarded or not")
 
 
 class SpeakerIdMatch(BaseModel):
@@ -80,7 +80,7 @@ def should_discard_conversation(transcript: str) -> bool:
     if len(transcript.split(' ')) > 100:
         return False
 
-    parser = PydanticOutputParser(pydantic_object=DiscardMemory)
+    parser = PydanticOutputParser(pydantic_object=DiscardConversation)
     prompt = ChatPromptTemplate.from_messages([
         '''
     You will be given a conversation transcript, and your task is to determine if the conversation is worth storing as a memory or not.
@@ -92,7 +92,7 @@ def should_discard_conversation(transcript: str) -> bool:
     ])
     chain = prompt | llm_mini | parser
     try:
-        response: DiscardMemory = chain.invoke({
+        response: DiscardConversation = chain.invoke({
             'transcript': transcript.strip(),
             'format_instructions': parser.get_format_instructions(),
         })
@@ -300,7 +300,7 @@ def summarize_experience_text(text: str, text_source_spec: str = None) -> Struct
     return llm_mini.with_structured_output(Structured).invoke(prompt)
 
 
-def get_memory_summary(uid: str, memories: List[Conversation]) -> str:
+def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
     user_name, facts_str = get_prompt_facts(uid)
 
     conversation_history = Conversation.conversations_to_string(memories)

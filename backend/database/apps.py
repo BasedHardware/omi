@@ -226,21 +226,21 @@ def is_tester_db(uid: str) -> bool:
 # ********************************
 
 def record_app_usage(
-        uid: str, app_id: str, usage_type: UsageHistoryType, memory_id: str = None, message_id: str = None,
+        uid: str, app_id: str, usage_type: UsageHistoryType, conversation_id: str = None, message_id: str = None,
         timestamp: datetime = None
 ):
-    if not memory_id and not message_id:
+    if not conversation_id and not message_id:
         raise ValueError('memory_id or message_id must be provided')
 
     data = {
         'uid': uid,
-        'memory_id': memory_id,
+        'memory_id': conversation_id,
         'message_id': message_id,
         'timestamp': datetime.now(timezone.utc) if timestamp is None else timestamp,
         'type': usage_type,
     }
 
-    db.collection('plugins').document(app_id).collection('usage_history').document(memory_id or message_id).set(data)
+    db.collection('plugins').document(app_id).collection('usage_history').document(conversation_id or message_id).set(data)
     return data
 
 

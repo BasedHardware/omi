@@ -10,7 +10,7 @@ from database.users import get_user_store_recording_permission
 from models.conversation import *
 from utils.conversations.process_conversation import process_conversation, process_user_emotion
 from utils.other.storage import upload_postprocessing_audio, \
-    delete_postprocessing_audio, upload_memory_recording
+    delete_postprocessing_audio, upload_conversation_recording
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
 from utils.stt.speech_profile import get_speech_profile_matching_predictions
 from utils.stt.vad import vad_is_empty
@@ -60,7 +60,7 @@ def postprocess_conversation(conversation_id: str, file_path: str, uid: str, emo
         threading.Thread(target=_delete_postprocessing_audio, args=(file_path,)).start()
 
         if aseg.frame_rate == 16000 and get_user_store_recording_permission(uid):
-            upload_memory_recording(file_path, uid, conversation_id)
+            upload_conversation_recording(file_path, uid, conversation_id)
 
         speakers_count = len(set([segment.speaker for segment in conversation.transcript_segments]))
         words = fal_whisperx(signed_url, speakers_count)
