@@ -79,95 +79,76 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
   }
 
   Future<void> _startRecording() async {
-    // Request microphone permission
-    var status = await Permission.microphone.request();
-    if (status != PermissionStatus.granted) {
-      AppSnackbar.showSnackbarError('Microphone permission is required to record audio');
-      widget.onClose();
-      return;
-    }
+    await Permission.microphone.request();
 
-    setState(() {
-      _state = RecordingState.recording;
-      _audioChunks = [];
-      // Reset audio levels
-      for (int i = 0; i < _audioLevels.length; i++) {
-        _audioLevels[i] = 0.1;
-      }
-    });
+    await ServiceManager.instance().mic.start(onByteReceived: (bytes) {
+      if (_state == RecordingState.recording && mounted) {
+        // Check if widget is still mounted before calling setState
+        if (mounted) {
+          setState(() {
+            _audioChunks.add(bytes.toList());
 
-    // Timer is already set up in initState
+            // Update audio visualization based on actual audio levels
+            if (bytes.isNotEmpty) {
+              // Calculate RMS (Root Mean Square) for PCM16 audio data
+              double rms = 0;
 
-    try {
-      await ServiceManager.instance().mic.start(
-        onByteReceived: (bytes) {
-          if (_state == RecordingState.recording && mounted) {
-            // Check if widget is still mounted before calling setState
-            if (mounted) {
-              setState(() {
-                _audioChunks.add(bytes.toList());
+              // Process bytes as 16-bit samples (2 bytes per sample)
+              for (int i = 0; i < bytes.length - 1; i += 2) {
+                // Convert two bytes to a 16-bit signed integer
+                // PCM16 is little-endian: LSB first, then MSB
+                int sample = bytes[i] | (bytes[i + 1] << 8);
 
-                // Update audio visualization based on actual audio levels
-                if (bytes.isNotEmpty) {
-                  // Calculate RMS (Root Mean Square) for PCM16 audio data
-                  double rms = 0;
-
-                  // Process bytes as 16-bit samples (2 bytes per sample)
-                  for (int i = 0; i < bytes.length - 1; i += 2) {
-                    // Convert two bytes to a 16-bit signed integer
-                    // PCM16 is little-endian: LSB first, then MSB
-                    int sample = bytes[i] | (bytes[i + 1] << 8);
-
-                    // Convert to signed value (if high bit is set)
-                    if (sample > 32767) {
-                      sample = sample - 65536;
-                    }
-
-                    // Square the sample and add to sum
-                    rms += sample * sample;
-                  }
-
-                  // Calculate RMS and normalize to 0.0-1.0 range
-                  // 32768 is max absolute value for 16-bit audio
-                  int sampleCount = bytes.length ~/ 2;
-                  if (sampleCount > 0) {
-                    rms = Math.sqrt(rms / sampleCount) / 32768.0;
-                  } else {
-                    rms = 0;
-                  }
-
-                  // Apply non-linear scaling to make quiet sounds more visible
-                  // and loud sounds more dramatic
-                  final level = Math.pow(rms, 0.4).toDouble().clamp(0.1, 1.0);
-
-                  // Shift all values left
-                  for (int i = 0; i < _audioLevels.length - 1; i++) {
-                    _audioLevels[i] = _audioLevels[i + 1];
-                  }
-
-                  // Add new level at the end
-                  _audioLevels[_audioLevels.length - 1] = level;
-
-                  // We don't force setState here anymore - the timer will handle updates
+                // Convert to signed value (if high bit is set)
+                if (sample > 32767) {
+                  sample = sample - 65536;
                 }
-              });
+
+                // Square the sample and add to sum
+                rms += sample * sample;
+              }
+
+              // Calculate RMS and normalize to 0.0-1.0 range
+              // 32768 is max absolute value for 16-bit audio
+              int sampleCount = bytes.length ~/ 2;
+              if (sampleCount > 0) {
+                rms = Math.sqrt(rms / sampleCount) / 32768.0;
+              } else {
+                rms = 0;
+              }
+
+              // Apply non-linear scaling to make quiet sounds more visible
+              // and loud sounds more dramatic
+              final level = Math.pow(rms, 0.4).toDouble().clamp(0.1, 1.0);
+
+              // Shift all values left
+              for (int i = 0; i < _audioLevels.length - 1; i++) {
+                _audioLevels[i] = _audioLevels[i + 1];
+              }
+
+              // Add new level at the end
+              _audioLevels[_audioLevels.length - 1] = level;
+
+              // We don't force setState here anymore - the timer will handle updates
             }
-          }
-        },
-        onRecording: () {
-          debugPrint('Recording started');
-        },
-        onStop: () {
-          debugPrint('Recording stopped');
-        },
-      );
-    } catch (e) {
-      debugPrint('Error starting recording: $e');
+          });
+        }
+      }
+    }, onRecording: () {
+      debugPrint('Recording started');
       setState(() {
-        _state = RecordingState.transcribeFailed;
+        _state = RecordingState.recording;
+        _audioChunks = [];
+        // Reset audio levels
+        for (int i = 0; i < _audioLevels.length; i++) {
+          _audioLevels[i] = 0.1;
+        }
       });
-      AppSnackbar.showSnackbarError('Failed to start recording: $e');
-    }
+    }, onStop: () {
+      debugPrint('Recording stopped');
+    }, onInitializing: () {
+      debugPrint('Initializing');
+    });
   }
 
   Future<void> _stopRecording() async {
