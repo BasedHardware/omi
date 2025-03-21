@@ -348,19 +348,24 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
               Row(
                 children: [
                   GestureDetector(
-                    onTap: _retry,
-                    child: Container(
-                        padding: const EdgeInsets.only(left: 14, right: 8, top: 14, bottom: 14),
-                        child: const Icon(
-                          Icons.refresh,
+                      onTap: _retry,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        margin: const EdgeInsets.only(left: 10, right: 0, top: 10, bottom: 10),
+                        decoration: const BoxDecoration(
                           color: Colors.white,
-                          size: 20,
-                        )),
-                  ),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          color: Colors.black,
+                          Icons.refresh,
+                          size: 20.0,
+                        ),
+                      )),
                   GestureDetector(
                     onTap: widget.onClose,
                     child: Container(
-                      padding: const EdgeInsets.only(left: 14, right: 8, top: 14, bottom: 14),
+                      padding: const EdgeInsets.only(left: 14, right: 0, top: 14, bottom: 14),
                       child: const Icon(
                         Icons.close,
                         color: Colors.white,
