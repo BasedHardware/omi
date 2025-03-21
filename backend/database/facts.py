@@ -21,6 +21,27 @@ def get_facts(uid: str, limit: int = 100, offset: int = 0):
     result = [fact for fact in facts if fact['user_review'] is not False]
     return result
 
+
+def get_user_public_facts(uid: str, limit: int = 100, offset: int = 0):
+    print('get_public_facts', limit, offset)
+
+    facts_ref = db.collection('users').document(uid).collection('facts')
+    facts_ref = (
+        facts_ref.order_by('scoring', direction=firestore.Query.DESCENDING)
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+        .where(filter=FieldFilter('deleted', '==', False))
+    )
+
+    facts_ref = facts_ref.limit(limit).offset(offset)
+
+    facts = [doc.to_dict() for doc in facts_ref.stream()]
+
+    # Consider visibility as 'public' if it's missing
+    public_facts = [fact for fact in facts if fact.get('visibility', 'public') == 'public']
+
+    return public_facts
+
+
 def get_non_filtered_facts(uid: str, limit: int = 100, offset: int = 0):
     print('get_non_filtered_facts', uid, limit, offset)
     facts_ref = db.collection('users').document(uid).collection('facts')
@@ -72,6 +93,13 @@ def review_fact(uid: str, fact_id: str, value: bool):
     fact_ref.update({'reviewed': True, 'user_review': value})
 
 
+def change_fact_visibility(uid: str, fact_id: str, value: str):
+    user_ref = db.collection('users').document(uid)
+    facts_ref = user_ref.collection('facts')
+    fact_ref = facts_ref.document(fact_id)
+    fact_ref.update({'visibility': value})
+
+
 def edit_fact(uid: str, fact_id: str, value: str):
     user_ref = db.collection('users').document(uid)
     facts_ref = user_ref.collection('facts')
@@ -84,6 +112,16 @@ def delete_fact(uid: str, fact_id: str):
     facts_ref = user_ref.collection('facts')
     fact_ref = facts_ref.document(fact_id)
     fact_ref.update({'deleted': True})
+
+
+def delete_all_facts(uid: str):
+    user_ref = db.collection('users').document(uid)
+    facts_ref = user_ref.collection('facts')
+    query = facts_ref.where(filter=FieldFilter('deleted', '==', False))
+    batch = db.batch()
+    for doc in query.stream():
+        batch.update(doc.reference, {'deleted': True})
+    batch.commit()
 
 
 def delete_facts_for_memory(uid: str, memory_id: str):

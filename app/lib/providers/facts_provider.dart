@@ -1,3 +1,4 @@
+import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/backend/http/api/facts.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/fact.dart';
@@ -10,12 +11,30 @@ class FactsProvider extends BaseProvider {
   List<Fact> filteredFacts = [];
   List<Tuple2<FactCategory, int>> categories = [];
   FactCategory? selectedCategory;
+  String searchQuery = '';
+
+  List<Fact> get unreviewed =>
+      facts.where((f) => !f.reviewed && f.createdAt.isAfter(DateTime.now().subtract(const Duration(days: 1)))).toList();
 
   void setCategory(FactCategory? category) {
     selectedCategory = category;
-    filteredFacts = category == null ? facts : facts.where((fact) => fact.category == category).toList();
-    filteredFacts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    _filterFacts();
     notifyListeners();
+  }
+
+  void setSearchQuery(String query) {
+    searchQuery = query.toLowerCase();
+    _filterFacts();
+    notifyListeners();
+  }
+
+  void _filterFacts() {
+    if (searchQuery.isNotEmpty) {
+      filteredFacts = facts.where((fact) => fact.content.decodeString.toLowerCase().contains(searchQuery)).toList();
+    } else {
+      filteredFacts = facts;
+    }
+    filteredFacts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   void _setCategories() {
@@ -23,12 +42,12 @@ class FactsProvider extends BaseProvider {
       final count = facts.where((fact) => fact.category == category).length;
       return Tuple2(category, count);
     }).toList();
-    setCategory(selectedCategory); // refresh
+    _filterFacts();
     notifyListeners();
   }
 
-  void init() async {
-    loadFacts();
+  Future<void> init() async {
+    await loadFacts();
   }
 
   Future loadFacts() async {
@@ -39,48 +58,78 @@ class FactsProvider extends BaseProvider {
     _setCategories();
   }
 
-  // void reviewFactProvider(int idx, bool value) async {
-  //   var fact = facts[idx];
-  //   reviewFact(fact.id, value);
-  //   fact.reviewed = true;
-  //   fact.userReview = value;
-  //   if (!value) {
-  //     facts.removeAt(idx);
-  //   } else {
-  //     facts[idx] = fact;
-  //   }
-  //   _setCategories();
-  //   notifyListeners();
-  // }
-
-  void deleteFactProvider(Fact fact) async {
-    deleteFact(fact.id);
+  void deleteFact(Fact fact) async {
+    deleteFactServer(fact.id);
     facts.remove(fact);
     _setCategories();
+    notifyListeners();
   }
 
-  void createFactProvider(String content, FactCategory category) async {
-    createFact(content, category);
+  void deleteAllFacts() async {
+    deleteAllFactServer();
+    facts.clear();
+    filteredFacts.clear();
+    _setCategories();
+    notifyListeners();
+  }
+
+  void createFact(String content, [FactVisibility visibility = FactVisibility.public]) async {
+    createFactServer(content, visibility.name);
     facts.add(Fact(
       id: const Uuid().v4(),
       uid: SharedPreferencesUtil().uid,
       content: content,
-      category: category,
+      category: FactCategory.other,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
       manuallyAdded: true,
+      edited: false,
+      reviewed: false,
+      userReview: null,
+      conversationId: null,
+      conversationCategory: null,
+      deleted: false,
+      visibility: visibility,
     ));
     _setCategories();
   }
 
-  void editFactProvider(Fact fact, String value, FactCategory category) async {
+  void updateFactVisibility(Fact fact, FactVisibility visibility) async {
     var idx = facts.indexWhere((f) => f.id == fact.id);
-    editFact(fact.id, value);
+    updateFactVisibilityServer(fact.id, visibility.name);
+    fact.visibility = visibility;
+    facts[idx] = fact;
+    _setCategories();
+  }
+
+  void editFact(Fact fact, String value, [FactCategory? category]) async {
+    var idx = facts.indexWhere((f) => f.id == fact.id);
+    editFactServer(fact.id, value);
     fact.content = value;
-    fact.category = category;
+    if (category != null) {
+      fact.category = category;
+    }
     fact.updatedAt = DateTime.now();
     fact.edited = true;
     facts[idx] = fact;
     _setCategories();
+  }
+
+  void reviewFact(Fact fact, bool approved) async {
+    var idx = facts.indexWhere((f) => f.id == fact.id);
+    if (idx != -1) {
+      fact.reviewed = true;
+      fact.userReview = approved;
+      if (!approved) {
+        fact.deleted = true;
+        facts.removeAt(idx);
+        deleteFact(fact);
+      } else {
+        facts[idx] = fact;
+        reviewFactServer(fact.id, approved);
+      }
+      _setCategories();
+      notifyListeners();
+    }
   }
 }

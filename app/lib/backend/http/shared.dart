@@ -7,7 +7,6 @@ import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
-import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 
 Future<String> getAuthHeader() async {
   DateTime? expiry = DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
@@ -38,13 +37,6 @@ Future<http.Response?> makeApiCall({
   required String method,
 }) async {
   try {
-    // var startTime = DateTime.now();
-    bool result = await InternetConnection().hasInternetAccess; // 600 ms on avg
-    // debugPrint('Internet connection check took: ${DateTime.now().difference(startTime).inMilliseconds} ms');
-    if (!result) {
-      debugPrint('No internet connection, aborting $method $url');
-      return null;
-    }
     if (url.contains(Env.apiBaseUrl!)) {
       headers['Authorization'] = await getAuthHeader();
       // headers['Authorization'] = ''; // set admin key + uid here for testing
