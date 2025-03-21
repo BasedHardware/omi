@@ -802,13 +802,11 @@ def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[P
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
-    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
     context = context.replace('\n\n', '\n').strip()
     plugin_info = ""
     if plugin:
         plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
 
-    # Ref: https://www.reddit.com/r/perplexity_ai/comments/1hi981d
     cited_instruction = """
     - You MUST cite the most relevant <memories> that answer the question. \
       - Only cite in <memories> not <user_facts>, not <previous_messages>.
@@ -878,34 +876,17 @@ def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[P
     <answer>
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
 
-
-def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
-           messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
-    prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
-    # print('qa_rag prompt', prompt)
-    return llm_medium.invoke(prompt).content
-
-
-def qa_rag_stream(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
-                  messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]) -> str:
-    prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
-    # print('qa_rag prompt', prompt)
-    return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content
-
-
 def _get_qa_rag_prompt_v6(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
                           cited: Optional[bool] = False,
                           messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
-    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
     context = context.replace('\n\n', '\n').strip()
     plugin_info = ""
     if plugin:
         plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
 
-    # Ref: https://www.reddit.com/r/perplexity_ai/comments/1hi981d
     cited_instruction = """
     - You MUST cite the most relevant <memories> that answer the question. \
       - Only cite in <memories> not <user_facts>, not <previous_messages>.
@@ -913,58 +894,58 @@ def _get_qa_rag_prompt_v6(uid: str, question: str, context: str, plugin: Optiona
       - NO SPACE between the last word and the citation.
       - Avoid citing irrelevant memories.
     """
-
     return f"""
-    <assistant_role>
-        You are an assistant for question-answering tasks.
-    </assistant_role>
+        <assistant_role>
+            You are an assistant for question-answering tasks.
+        </assistant_role>
 
-    <task>
-        Write an accurate, detailed, and comprehensive response to the <question> in the most personalized way possible, using the <memories>, <user_facts> provided.
-    </task>
+        <task>
+            Write an accurate, detailed, and comprehensive response to the <question> in the most personalized way possible, using the <memories>, <user_facts> provided.
+        </task>
 
-    <instructions>
-    - Refine the <question> based on the last <previous_messages> before answering it.
-    - DO NOT use the AI's message in <previous_messages> as references to answer the Question.
-    - Keep the answer concise and high-quality.
-    - If you don't know the answer or the premise is incorrect, explain why. If the <memories> are empty or unhelpful, answer the question as well as you can with existing knowledge.
-    - It is EXTREMELY IMPORTANT to directly answer the question.
-    - Use markdown to bold text sparingly, primarily for emphasis within sentences.
-    {cited_instruction if cited and len(context) > 0 else ""}
-    {"- Regard the <plugin_instructions>" if len(plugin_info) > 0 else ""}.
-    </instructions>
+        <instructions>
+        - Refine the <question> based on the last <previous_messages> before answering it.
+        - DO NOT use the AI's message in <previous_messages> as references to answer the Question.
+        - Keep the answer concise and high-quality.
+        - If you don't know the answer or the premise is incorrect, explain why. If the <memories> are empty or unhelpful, answer the question as well as you can with existing knowledge.
+        - It is EXTREMELY IMPORTANT to directly answer the question.
+        - Use markdown to bold text sparingly, primarily for emphasis within sentences.
+        {cited_instruction if cited and len(context) > 0 else ""}
+        {"- Regard the <plugin_instructions>" if len(plugin_info) > 0 else ""}.
+        </instructions>
 
-    <plugin_instructions>
-    {plugin_info}
-    </plugin_instructions>
+        <plugin_instructions>
+        {plugin_info}
+        </plugin_instructions>
 
-    <question>
-    {question}
-    <question>
+        <question>
+        {question}
+        <question>
 
-    <memories>
-    {context}
-    </memories>
+        <memories>
+        {context}
+        </memories>
 
-    <previous_messages>
-    {Message.get_messages_as_xml(messages)}
-    </previous_messages>
+        <previous_messages>
+        {Message.get_messages_as_xml(messages)}
+        </previous_messages>
 
-    <user_facts>
-    [Use the following User Facts if relevant to the <question>]
-        {facts_str.strip()}
-    </user_facts>
+        <user_facts>
+        [Use the following User Facts if relevant to the <question>]
+            {facts_str.strip()}
+        </user_facts>
 
-    <question_timezone>
-        Question's timezone: {tz}
-    </question_timezone>
+        <question_timezone>
+            Question's timezone: {tz}
+        </question_timezone>
 
-    <current_datetime_utc>
-        Current date time in UTC: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}
-    </current_datetime_utc>
+        <current_datetime_utc>
+            Current date time in UTC: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}
+        </current_datetime_utc>
 
-    <answer>
-    """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
+        <answer>
+        """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
+
 
 
 def _get_qa_rag_prompt_v5(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
@@ -973,13 +954,11 @@ def _get_qa_rag_prompt_v5(uid: str, question: str, context: str, plugin: Optiona
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
-    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
     context = context.replace('\n\n', '\n').strip()
     plugin_info = ""
     if plugin:
         plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
 
-    # Ref: https://www.reddit.com/r/perplexity_ai/comments/1hi981d
     cited_prompt = """
     You MUST cite the most relevant converstations(memories) that answer the question. \
     You MUST ADHERE to the following instructions for citing coverstations(memories).
@@ -1040,13 +1019,11 @@ def _get_qa_rag_prompt_v4(uid: str, question: str, context: str, plugin: Optiona
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
-    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
     context = context.replace('\n\n', '\n').strip()
     plugin_info = ""
     if plugin:
         plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
 
-    # Ref: https://www.reddit.com/r/perplexity_ai/comments/1hi981d
     cited_prompt = """
     Cite in memories using [index] at the end of sentences when needed, for example "You discussed optimizing firmware with your teammate yesterday[1][2]". NO SPACE between the last word and the citation. Cite the most relevant memories that answer the Question. Avoid citing irrelevant memories.
     """ if cited else ""
@@ -1096,19 +1073,28 @@ def _get_qa_rag_prompt_v4(uid: str, question: str, context: str, plugin: Optiona
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
 
 
+
+def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+           messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
+    prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
+    return llm_medium.invoke(prompt).content
+
 def qa_rag_v4(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
               messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
-    # print('qa_rag prompt', prompt)
     return llm_large.invoke(prompt).content
-
 
 def qa_rag_stream_v4(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
                      cited: Optional[bool] = False,
                      messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]) -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
-    # print('qa_rag prompt', prompt)
     return llm_large_stream.invoke(prompt, {'callbacks': callbacks}).content
+
+
+def qa_rag_stream(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+                  messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]) -> str:
+    prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
+    return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content
 
 
 def qa_rag_v3(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
@@ -1116,13 +1102,11 @@ def qa_rag_v3(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
-    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
     context = context.replace('\n\n', '\n').strip()
     plugin_info = ""
     if plugin:
         plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
 
-    # Ref: https://www.reddit.com/r/perplexity_ai/comments/1hi981d
     cited_prompt = """
     Cite in memories using [index] at the end of sentences when needed, for example "You discussed optimizing firmware with your teammate yesterday[1][2]". NO SPACE between the last word and the citation. Cite the most relevant memories that answer the Question. Avoid citing irrelevant memories.
     """ if cited else ""
@@ -1170,7 +1154,6 @@ def qa_rag_v3(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
 
     Anwser:
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
-    # print('qa_rag prompt', prompt)
     return ChatOpenAI(model='gpt-4o').invoke(prompt).content
 
 
@@ -1179,13 +1162,11 @@ def qa_rag_v2(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
-    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
     context = context.replace('\n\n', '\n').strip()
     plugin_info = ""
     if plugin:
         plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
 
-    # Ref: https://www.reddit.com/r/perplexity_ai/comments/1hi981d
     cited_prompt = """
     Cite conversations(memories) using [index] at the end of sentences when needed, for example "You discussed optimizing firmware with your teammate yesterday[1][2]". NO SPACE between the last word and the citation.
     Cite the most relevant conversations(memories) that answer the Question. Avoid citing irrelevant conversations(memories).
@@ -1221,7 +1202,6 @@ def qa_rag_v2(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
 
     Answer:
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
-    # print('qa_rag prompt', prompt)
     return ChatOpenAI(model='gpt-4o').invoke(prompt).content
 
 
@@ -1229,7 +1209,6 @@ def qa_rag_v1(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
-    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
     context = context.replace('\n\n', '\n').strip()
     plugin_info = ""
     if plugin:
@@ -1259,7 +1238,6 @@ def qa_rag_v1(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
     ```
     Answer:
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
-    # print('qa_rag prompt', prompt)
     return ChatOpenAI(model='gpt-4o').invoke(prompt).content
 
 
@@ -1335,29 +1313,22 @@ class Facts(BaseModel):
 def new_facts_extractor(
         uid: str, segments: List[TranscriptSegment], user_name: Optional[str] = None, facts_str: Optional[str] = None
 ) -> List[Fact]:
-    # print('new_facts_extractor', uid, 'segments', len(segments), user_name, 'len(facts_str)', len(facts_str))
     if user_name is None or facts_str is None:
         user_name, facts_str = get_prompt_facts(uid)
 
     content = TranscriptSegment.segments_as_string(segments, user_name=user_name)
     if not content or len(content) < 25:  # less than 5 words, probably nothing
         return []
-    # TODO: later, focus a lot on user said things, rn is hard because of speech profile accuracy
-    # TODO: include negative facts too? Things the user doesn't like?
-    # TODO: make it more strict?
 
     try:
         parser = PydanticOutputParser(pydantic_object=Facts)
         chain = extract_facts_prompt | llm_mini | parser
-        # with_parser = llm_mini.with_structured_output(Facts)
         response: Facts = chain.invoke({
             'user_name': user_name,
             'conversation': content,
             'facts_str': facts_str,
             'format_instructions': parser.get_format_instructions(),
         })
-        # for fact in response:
-        #     fact.content = fact.content.replace(user_name, '').replace('The User', '').replace('User', '').strip()
         return response.facts
     except Exception as e:
         print(f'Error extracting new facts: {e}')
@@ -1583,8 +1554,7 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     Example 1:
     <user_last_messages>
     <message>
-        <sender>User</sender>
-        <content>
+        <sender>User</sender>        <content>
             According to WHOOP, my HRV this Sunday was the highest it's been in a month. Here's what I did:
 
             Attended an outdoor party (cold weather, talked a lot more than usual).
@@ -1804,141 +1774,86 @@ def extract_question_from_conversation_v4(messages: List[Message]) -> str:
     '''.replace('    ', '').strip()
     # print(prompt)
     return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
-
-
 def extract_question_from_conversation_v3(messages: List[Message]) -> str:
-    # user last messages
-    user_message_idx = len(messages)
-    for i in range(len(messages) - 1, -1, -1):
-        if messages[i].sender == MessageSender.ai:
-            break
-        if messages[i].sender == MessageSender.human:
-            user_message_idx = i
+    # Get user's last messages
+    user_message_idx = next((i for i in range(len(messages) - 1, -1, -1) if messages[i].sender == MessageSender.human), len(messages))
     user_last_messages = messages[user_message_idx:]
-    if len(user_last_messages) == 0:
+    if not user_last_messages:
         return ""
 
     prompt = f'''
-    You will be given a recent conversation within a user and an AI, \
-    there could be a few messages exchanged, and partly built up the proper question, \
-    your task is to understand the user last messages, and identify the question or follow-up question the user is asking. \
+    You will be given a recent conversation, possibly with multiple messages building up the question. \
+    Identify the user's question or follow-up question in their last messages.
 
-    If the user's last message is a complete question, maintain the original version as accurately as possible. Avoid adding unnecessary words.
+    If the last message is a complete question, keep it as is. Avoid adding words.
 
-    It is super important that THE QUESTION MUST BE FULL CONTEXT base on the user last messages.
+    The question MUST be self-contained based on the user's last messages.
 
-    If the user is not asking a question or does not want to follow up, respond with an empty message.
+    If there's no question, return an empty message.
 
-    Output at WH-question, that is, a question that starts with a WH-word, like "What", "When", "Where", "Who", "Why", "How".
+    Output a WH-question ("What", "When", "Where", "Who", "Why", "How").
 
-    Example 1:
+    Example:
     User last messages:
-    ```According to WHOOP, my HRV this Sunday was the highest it's been in a month. Here's what I did:
-
-    Attended an outdoor party (cold weather, talked a lot more than usual).
-    Smoked weed (unusual for me).
-    Drank lots of relaxing tea.
-
-    Can you prioritize each activity on a 0-10 scale for how much it might have influenced my HRV?
-    ```
-    Expected output: "How should each activity (going to a party and talking a lot, smoking weed, and drinking relaxing tea) be prioritized on a scale of 0-10 in terms of their impact on my HRV?"
+    ```According to WHOOP, my HRV this Sunday was the highest... Can you prioritize each activity on a 0-10 scale...?```
+    Expected output: "How should each activity... be prioritized on a scale of 0-10...?"
 
     The user last messages:
-    ```
-    {Message.get_messages_as_string(user_last_messages)}
-    ```
+    ```{Message.get_messages_as_string(user_last_messages)}```
 
     Conversation:
-    ```
-    {Message.get_messages_as_string(messages)}
-    ```
-
+    ```{Message.get_messages_as_string(messages)}```
     '''.replace('    ', '').strip()
-    # print(prompt)
     return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
-
-
 def extract_question_from_conversation_v2(messages: List[Message]) -> str:
-    # user last messages
-    user_message_idx = len(messages)
-    for i in range(len(messages) - 1, -1, -1):
-        if messages[i].sender == MessageSender.ai:
-            break
-        if messages[i].sender == MessageSender.human:
-            user_message_idx = i
+    # Get user's last messages.
+    user_message_idx = next((i for i in range(len(messages) - 1, -1, -1) if messages[i].sender == MessageSender.human), len(messages))
     user_last_messages = messages[user_message_idx:]
-    if len(user_last_messages) == 0:
+    if not user_last_messages:
         return ""
 
     prompt = f'''
-    You will be given a recent conversation within a user and an AI, \
-    there could be a few messages exchanged, and partly built up the proper question, \
-    your task is to understand the user last messages, and identify the single question or follow-up question the user is asking. \
+    Given a recent conversation, identify the user's single question or follow-up question in their last messages.
 
-    If the user is not asking a question or does not want to follow up, respond with an empty message.
+    If no question, return an empty message.
 
-    Output at WH-question, that is, a question that starts with a WH-word, like "What", "When", "Where", "Who", "Why", "How".
+    Output a WH-question ("What", "When", "Where", "Who", "Why", "How").
 
     The user last messages:
-    ```
-    {Message.get_messages_as_string(user_last_messages)}
-    ```
+    ```{Message.get_messages_as_string(user_last_messages)}```
 
     Conversation:
-    ```
-    {Message.get_messages_as_string(messages)}
-    ```
-
+    ```{Message.get_messages_as_string(messages)}```
     '''.replace('    ', '').strip()
-    # print(prompt)
     return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
-
-
 def extract_question_from_conversation_v1(messages: List[Message]) -> str:
     prompt = f'''
-    You will be given a recent conversation within a user and an AI, \
-    there could be a few messages exchanged, and partly built up the proper question, \
-    your task is to understand THE LAST FEW MESSAGES, and identify the single question or follow-up question the user is asking. \
+    Given a conversation, identify the user's single question or follow-up question in the LAST FEW MESSAGES.
 
-    If the user is not asking a question or does not want to follow up, respond with an empty message.
+    If no question, return an empty message.
 
-    Output at WH-question, that is, a question that starts with a WH-word, like "What", "When", "Where", "Who", "Why", "How".
+    Output a WH-question ("What", "When", "Where", "Who", "Why", "How").
 
     Conversation:
-    ```
-    {Message.get_messages_as_string(messages)}
-    ```
+    ```{Message.get_messages_as_string(messages)}```
     '''.replace('    ', '').strip()
     return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
-
-
 def retrieve_metadata_fields_from_transcript(
         uid: str, created_at: datetime, transcript_segment: List[dict], tz: str
 ) -> ExtractedInformation:
-    transcript = ''
-    for segment in transcript_segment:
-        transcript += f'{segment["text"].strip()}\n\n'
+    transcript = ''.join(f'{segment["text"].strip()}\n\n' for segment in transcript_segment)
 
-    # TODO: ask it to use max 2 words? to have more standardization possibilities
     prompt = f'''
-    You will be given the raw transcript of a conversation, this transcript has about 20% word error rate,
-    and diarization is also made very poorly.
+    Given a conversation transcript (with ~20% error rate), extract information.
 
-    Your task is to extract the most accurate information from the conversation in the output object indicated below.
+    First, fix transcript errors. Then, extract: people, topics, entities, and dates.
 
-    Make sure as a first step, you infer and fix the raw transcript errors and then proceed to extract the information.
-
-    For context when extracting dates, today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} in UTC. {tz} is the user's timezone, convert it to UTC and respond in UTC.
-    If one says "today", it means the current day.
-    If one says "tomorrow", it means the next day after today.
-    If one says "yesterday", it means the day before today.
-    If one says "next week", it means the next monday.
-    Do not include dates greater than 2025.
+    Context: Today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} UTC. User's timezone: {tz}.
+    "today" = current day, "tomorrow" = next day, "yesterday" = previous day, "next week" = next Monday.
+    Dates must be before 2026.
 
     Conversation Transcript:
-    ```
-    {transcript}
-    ```
+    ```{transcript}```
     '''.replace('    ', '')
     try:
         result: ExtractedInformation = llm_mini.with_structured_output(ExtractedInformation).invoke(prompt)
@@ -1947,22 +1862,14 @@ def retrieve_metadata_fields_from_transcript(
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}
 
     def normalize_filter(value: str) -> str:
-        # Convert to lowercase and strip whitespace
         value = value.lower().strip()
-
-        # Remove special characters and extra spaces
         value = re.sub(r'[^\w\s-]', '', value)
         value = re.sub(r'\s+', ' ', value)
-
-        # Remove common filler words
         filler_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to'}
         value = ' '.join(word for word in value.split() if word not in filler_words)
-
-        # Standardize common variations
         value = value.replace('artificial intelligence', 'ai')
         value = value.replace('machine learning', 'ml')
         value = value.replace('natural language processing', 'nlp')
-
         return value.strip()
 
     metadata = {
@@ -1971,7 +1878,6 @@ def retrieve_metadata_fields_from_transcript(
         'entities': [normalize_filter(e) for e in result.topics],
         'dates': []
     }
-    # 'dates': [date.strftime('%Y-%m-%d') for date in result.dates],
     for date in result.dates:
         try:
             date = datetime.strptime(date, '%Y-%m-%d')
@@ -1991,136 +1897,70 @@ def retrieve_metadata_fields_from_transcript(
         add_filter_category_item(uid, 'dates', d)
 
     return metadata
-
-
 def retrieve_metadata_from_email(uid: str, created_at: datetime, email_text: str, tz: str) -> ExtractedInformation:
-    """Extract metadata from email content"""
+    """Extract metadata from email content."""
     prompt = f'''
-    You will be given the content of an email.
+    Given email content, extract: people, topics, entities, and dates.
 
-    Your task is to extract the most accurate information from the email in the output object indicated below.
+    Context: Today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} UTC. User's timezone: {tz}.
+    "today" = current day, "tomorrow" = next day, "yesterday" = previous day, "next week" = next Monday.
+    Dates must be before 2026.
 
-    Focus on identifying:
-    1. People mentioned in the email (sender, recipients, and anyone referenced in the content)
-    2. Topics discussed in the email
-    3. Organizations, products, or other entities mentioned
-    4. Any dates or time references
-
-    For context when extracting dates, today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} in UTC.
-    {tz} is the user's timezone, convert it to UTC and respond in UTC.
-    If the email mentions "today", it means the current day.
-    If the email mentions "tomorrow", it means the next day after today.
-    If the email mentions "yesterday", it means the day before today.
-    If the email mentions "next week", it means the next monday.
-    Do not include dates greater than 2025.
- 
     Email Content:
-    ```
-    {email_text}
-    ```
+    ```{email_text}```
     '''.replace('    ', '')
 
     return _process_extracted_metadata(uid, prompt)
-
-
 def retrieve_metadata_from_post(uid: str, created_at: datetime, post_text: str, tz: str, source_spec: str = None) -> ExtractedInformation:
-    """Extract metadata from social media post content"""
+    """Extract metadata from social media post."""
     source_context = f"from {source_spec}" if source_spec else "from a social media platform"
 
     prompt = f'''
-    You will be given the content of a social media post {source_context}.
+    Given post content {source_context}, extract: people, topics, entities, and dates.
 
-    Your task is to extract the most accurate information from the post in the output object indicated below.
-
-    Focus on identifying:
-    1. People mentioned in the post (author, tagged individuals, and anyone referenced)
-    2. Topics discussed in the post
-    3. Organizations, products, locations, or other entities mentioned
-    4. Any dates or time references
-
-    For context when extracting dates, today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} in UTC.
-    {tz} is the user's timezone, convert it to UTC and respond in UTC.
-    If the post mentions "today", it means the current day.
-    If the post mentions "tomorrow", it means the next day after today.
-    If the post mentions "yesterday", it means the day before today.
-    If the post mentions "next week", it means the next monday.
-    Do not include dates greater than 2025.
+    Context: Today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} UTC. User's timezone: {tz}.
+    "today" = current day, "tomorrow" = next day, "yesterday" = previous day, "next week" = next Monday.
+    Dates must be before 2026.
 
     Post Content:
-    ```
-    {post_text}
-    ```
+    ```{post_text}```
     '''.replace('    ', '')
 
     return _process_extracted_metadata(uid, prompt)
-
-
 def retrieve_metadata_from_message(uid: str, created_at: datetime, message_text: str, tz: str, source_spec: str = None) -> ExtractedInformation:
-    """Extract metadata from messaging app content"""
+    """Extract metadata from message content."""
     source_context = f"from {source_spec}" if source_spec else "from a messaging application"
 
     prompt = f'''
-    You will be given the content of a message or conversation {source_context}.
+    Given message content {source_context}, extract: people, topics, entities, and dates.
 
-    Your task is to extract the most accurate information from the message in the output object indicated below.
-
-    Focus on identifying:
-    1. People mentioned in the message (sender, recipients, and anyone referenced)
-    2. Topics discussed in the message
-    3. Organizations, products, locations, or other entities mentioned
-    4. Any dates or time references
-
-    For context when extracting dates, today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} in UTC. 
-    {tz} is the user's timezone, convert it to UTC and respond in UTC.
-    If the message mentions "today", it means the current day.
-    If the message mentions "tomorrow", it means the next day after today.
-    If the message mentions "yesterday", it means the day before today.
-    If the message mentions "next week", it means the next monday.
-    Do not include dates greater than 2025.
+    Context: Today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} UTC. User's timezone: {tz}.
+    "today" = current day, "tomorrow" = next day, "yesterday" = previous day, "next week" = next Monday.
+    Dates must be before 2026.
 
     Message Content:
-    ```
-    {message_text}
-    ```
+    ```{message_text}```
     '''.replace('    ', '')
 
     return _process_extracted_metadata(uid, prompt)
-
-
 def retrieve_metadata_from_text(uid: str, created_at: datetime, text: str, tz: str, source_spec: str = None) -> ExtractedInformation:
-    """Extract metadata from generic text content"""
+    """Extract metadata from generic text."""
     source_context = f"from {source_spec}" if source_spec else "from a text document"
 
     prompt = f'''
-    You will be given the content of a text {source_context}.
-
-    Your task is to extract the most accurate information from the text in the output object indicated below.
-
-    Focus on identifying:
-    1. People mentioned in the text (author, recipients, and anyone referenced)
-    2. Topics discussed in the text
-    3. Organizations, products, locations, or other entities mentioned
-    4. Any dates or time references
-
-    For context when extracting dates, today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} in UTC. 
-    {tz} is the user's timezone, convert it to UTC and respond in UTC.
-    If the text mentions "today", it means the current day.
-    If the text mentions "tomorrow", it means the next day after today.
-    If the text mentions "yesterday", it means the day before today.
-    If the text mentions "next week", it means the next monday.
-    Do not include dates greater than 2025.
+    Given text content {source_context}, extract: people, topics, entities, and dates.
+        
+    Context: Today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} UTC. User's timezone: {tz}.
+    "today" = current day, "tomorrow" = next day, "yesterday" = previous day, "next week" = next Monday.
+    Dates must be before 2026.
 
     Text Content:
-    ```
-    {text}
-    ```
+    ```{text}```
     '''.replace('    ', '')
 
     return _process_extracted_metadata(uid, prompt)
-
-
 def _process_extracted_metadata(uid: str, prompt: str) -> dict:
-    """Process the extracted metadata from any source"""
+    """Process extracted metadata."""
     try:
         result: ExtractedInformation = llm_mini.with_structured_output(ExtractedInformation).invoke(prompt)
     except Exception as e:
@@ -2128,22 +1968,14 @@ def _process_extracted_metadata(uid: str, prompt: str) -> dict:
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}
 
     def normalize_filter(value: str) -> str:
-        # Convert to lowercase and strip whitespace
         value = value.lower().strip()
-
-        # Remove special characters and extra spaces
         value = re.sub(r'[^\w\s-]', '', value)
         value = re.sub(r'\s+', ' ', value)
-
-        # Remove common filler words
         filler_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to'}
         value = ' '.join(word for word in value.split() if word not in filler_words)
-
-        # Standardize common variations
         value = value.replace('artificial intelligence', 'ai')
         value = value.replace('machine learning', 'ml')
         value = value.replace('natural language processing', 'nlp')
-
         return value.strip()
 
     metadata = {
@@ -2172,112 +2004,68 @@ def _process_extracted_metadata(uid: str, prompt: str) -> dict:
         add_filter_category_item(uid, 'dates', d)
 
     return metadata
-
-
 def select_structured_filters(question: str, filters_available: dict) -> dict:
     prompt = f'''
-    Based on a question asked by the user to an AI, the AI needs to search for the user information related to topics, entities, people, and dates that will help it answering.
-    Your task is to identify the correct fields that can be related to the question and can help answering.
+    Given a question, identify relevant fields (topics, entities, people, dates) from the available filters.
 
-    You must choose for each field, only the ones available in the JSON below.
-    Find as many as possible that can relate to the question asked.
-    ```
-    {json.dumps(filters_available, indent=2)}
-    ```
+    Available filters:
+    ```{json.dumps(filters_available, indent=2)}```
 
     Question: {question}
     '''.replace('    ', '').strip()
-    # print(prompt)
     with_parser = llm_mini.with_structured_output(FiltersToUse)
     try:
         response: FiltersToUse = with_parser.invoke(prompt)
-        # print('select_structured_filters:', response.dict())
         response.topics = [t for t in response.topics if t in filters_available['topics']]
         response.people = [p for p in response.people if p in filters_available['people']]
         response.entities = [e for e in response.entities if e in filters_available['entities']]
         return response.dict()
     except ValidationError:
         return {}
+    def extract_question_from_transcript(uid: str, segments: List[TranscriptSegment]) -> str:
+        user_name, facts_str = get_prompt_facts(uid)
+        prompt = f'''
+        {user_name} is having a conversation.  You know: {facts_str}
 
+        Given the conversation transcript, identify what other information about {user_name} you need to advise them.
 
-# **************************************************
-# ************* REALTIME V2 LANGGRAPH **************
-# **************************************************
+        First, fix transcript errors.  Then, output a WH-question ("What", "When", "Where", "Who", "Why", "How").
 
+        Example: Conversation about a new job -> "What discussions have I had about job search?".
 
-def extract_question_from_transcript(uid: str, segments: List[TranscriptSegment]) -> str:
-    user_name, facts_str = get_prompt_facts(uid)
-    prompt = f'''
-    {user_name} is having a conversation.
-
-    This is what you know about {user_name}: {facts_str}
-
-    You will be the transcript of a recent conversation between {user_name} and a few people, \
-    your task is to understand the last few exchanges, and identify in order to provide advice to {user_name}, what other things about {user_name} \
-    you should know.
-
-    For example, if the conversation is about a new job, you should output a question like "What discussions have I had about job search?".
-    For example, if the conversation is about a new programming languages, you should output a question like "What have I chatted about programming?".
-
-    Make sure as a first step, you infer and fix the raw transcript errors and then proceed to figure out the most meaningful question to ask.
-
-    You must output at WH-question, that is, a question that starts with a WH-word, like "What", "When", "Where", "Who", "Why", "How".
-
-    Conversation:
-    ```
-    {TranscriptSegment.segments_as_string(segments)}
-    ```
-    '''.replace('    ', '').strip()
-    return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
-
-
+        Conversation:
+        ```{TranscriptSegment.segments_as_string(segments)}```
+        '''.replace('    ', '').strip()
+        return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
 class OutputMessage(BaseModel):
-    message: str = Field(description='The message to be sent to the user.', max_length=200)
-
+    message: str = Field(description='The message to the user.', max_length=200)
 
 def provide_advice_message(uid: str, segments: List[TranscriptSegment], context: str) -> str:
     user_name, facts_str = get_prompt_facts(uid)
     transcript = TranscriptSegment.segments_as_string(segments)
-    # TODO: tweak with different type of requests, like this, or roast, or praise or emotional, etc.
 
     prompt = f"""
-    You are a brutally honest, very creative, sometimes funny, indefatigable personal life coach who helps people improve their own agency in life, \
-    pulling in pop culture references and inspirational business and life figures from recent history, mixed in with references to recent personal memories,
-    to help drive the point across.
+    You are a brutally honest, creative, sometimes funny, personal life coach. You help people improve their agency, \
+    using pop culture references, business figures, and personal memories.
 
     {facts_str}
 
-    {user_name} just had a conversation and is asking for advice on what to do next.
+    {user_name} had a conversation and wants advice.
 
-    In order to answer you must analyize:
-    - The conversation transcript.
-    - The related conversations from previous days.
-    - The facts you know about {user_name}.
+    Analyze: transcript, related conversations, facts about {user_name}.
 
-    You start all your sentences with:
-    - "If I were you, I would do this..."
-    - "I think you should do x..."
-    - "I believe you need to do y..."
+    Start sentences with: "If I were you...", "I think you should...", "I believe you need...".
 
-    Your sentences are short, to the point, and very direct, at most 20 words.
-    MUST OUTPUT 20 words or less.
+    Sentences: short, direct, max 20 words. MUST BE 20 words or less.
 
     Conversation Transcript:
     {transcript}
 
     Context:
-    ```
-    {context}
-    ```
+    ```{context}```
     """.replace('    ', '').strip()
     return llm_mini.with_structured_output(OutputMessage).invoke(prompt).message
-
-
-# **************************************************
-# ************* PROACTIVE NOTIFICATION PLUGIN **************
-# **************************************************
-
-def get_proactive_message(uid: str, plugin_prompt: str, params: [str], context: str,
+def get_proactive_message(uid: str, plugin_prompt: str, params: List[str], context: str,
                           chat_messages: List[Message]) -> str:
     user_name, facts_str = get_prompt_facts(uid)
 
@@ -2285,199 +2073,157 @@ def get_proactive_message(uid: str, plugin_prompt: str, params: [str], context: 
     for param in params:
         if param == "user_name":
             prompt = prompt.replace("{{user_name}}", user_name)
-            continue
-        if param == "user_facts":
+        elif param == "user_facts":
             prompt = prompt.replace("{{user_facts}}", facts_str)
-            continue
-        if param == "user_context":
+        elif param == "user_context":
             prompt = prompt.replace("{{user_context}}", context if context else "")
-            continue
-        if param == "user_chat":
+        elif param == "user_chat":
             prompt = prompt.replace("{{user_chat}}",
                                     Message.get_messages_as_string(chat_messages) if chat_messages else "")
-            continue
     prompt = prompt.replace('    ', '').strip()
-    # print(prompt)
 
     return llm_mini.invoke(prompt).content
-
-
-# **************************************************
-# *************** APPS AI GENERATE *****************
-# **************************************************
-
 def generate_description(app_name: str, description: str) -> str:
     prompt = f"""
-    You are an AI assistant specializing in crafting detailed and engaging descriptions for apps.
-    You will be provided with the app's name and a brief description which might not be that good. Your task is to expand on the given information, creating a captivating and detailed app description that highlights the app's features, functionality, and benefits.
-    The description should be concise, professional, and not more than 40 words, ensuring clarity and appeal. Respond with only the description, tailored to the app's concept and purpose.
+    Create a detailed and engaging description (max 40 words) for an app, given its name and a brief description.
+
     App Name: {app_name}
     Description: {description}
     """
     prompt = prompt.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content
-
-
-# **************************************************
-# ******************* PERSONA **********************
-# **************************************************
-
 def condense_facts(facts, name):
     combined_facts = "\n".join(facts)
     prompt = f"""
-You are an AI tasked with condensing a detailed profile of hundreds facts about {name} to accurately replicate their personality, communication style, decision-making patterns, and contextual knowledge for 1:1 cloning.  
+Condense facts about {name} for 1:1 cloning, focusing on personality, communication, decisions, and context.
 
-**Requirements:**  
-1. Prioritize facts based on:  
-   - Relevance to the user's core identity, personality, and communication style.  
-   - Frequency of occurrence or mention in conversations.  
-   - Impact on decision-making processes and behavioral patterns.  
-2. Group related facts to eliminate redundancy while preserving context.  
-3. Preserve nuances in communication style, humor, tone, and preferences.  
-4. Retain facts essential for continuity in ongoing projects, interests, and relationships.  
-5. Discard trivial details, repetitive information, and rarely mentioned facts.  
-6. Maintain consistency in the user's thought processes, conversational flow, and emotional responses.  
+Requirements:
+1. Prioritize facts by relevance, frequency, and impact.
+2. Group related facts, removing redundancy.
+3. Preserve communication style (humor, tone).
+4. Retain facts for continuity.
+5. Discard trivial details.
+6. Maintain consistency.
 
-**Output Format (No Extra Text):**  
-- **Core Identity and Personality:** Brief overview encapsulating the user's personality, values, and communication style.  
-- **Prioritized Facts:** Organized into categories with only the most relevant and impactful details.  
-- **Behavioral Patterns and Decision-Making:** Key patterns defining how the user approaches problems and makes decisions.  
-- **Contextual Knowledge and Continuity:** Facts crucial for maintaining continuity in conversations and ongoing projects.  
+Output Format (No Extra Text):
+- Core Identity and Personality: Overview of personality, values, communication.
+- Prioritized Facts: Organized, relevant details.
+- Behavioral Patterns and Decision-Making: How the user approaches problems.
+- Contextual Knowledge and Continuity: Facts for continuity.
 
-The output must be as concise as possible while retaining all necessary information for 1:1 cloning. Absolutely no introductory or closing statements, explanations, or any unnecessary text. Directly present the condensed facts in the specified format. Begin condensation now.
+Be concise. No intro/closing. Start now.
 
 Facts:
 {combined_facts}
     """
     response = llm_medium.invoke(prompt)
     return response.content
-
-
 def generate_persona_description(facts, name):
-    prompt = f"""Based on these facts about a person, create a concise, engaging description that captures their unique personality and characteristics (max 250 characters).
-    
-    They chose to be known as {name}.
+    prompt = f"""Create a concise, engaging description (max 250 characters) capturing a person's essence, based on facts.
+
+They are known as {name}.
 
 Facts:
 {facts}
 
-Create a natural, memorable description that captures this person's essence. Focus on the most unique and interesting aspects. Make it conversational and engaging."""
+Be natural, memorable, conversational, and engaging. Focus on unique aspects."""
 
     response = llm_medium.invoke(prompt)
     description = response.content
     return description
-
-
 def condense_conversations(conversations):
     combined_conversations = "\n".join(conversations)
     prompt = f"""
-You are an AI tasked with condensing context from the recent 100 conversations of a user to accurately replicate their communication style, personality, decision-making patterns, and contextual knowledge for 1:1 cloning. Each conversation includes a summary and a full transcript.  
+Condense context from 100 conversations for 1:1 cloning, focusing on communication, personality, decisions, and context.
 
-**Requirements:**  
-1. Prioritize information based on:  
-   - Most impactful and frequently occurring themes, topics, and interests.  
-   - Nuances in communication style, humor, tone, and emotional undertones.  
-   - Decision-making patterns and problem-solving approaches.  
-   - User preferences in conversation flow, level of detail, and type of responses.  
-2. Condense redundant or repetitive information while maintaining necessary context.  
-3. Group related contexts to enhance conciseness and preserve continuity.  
-4. Retain patterns in how the user reacts to different situations, questions, or challenges.  
-5. Preserve continuity for ongoing discussions, projects, or relationships.  
-6. Maintain consistency in the user's thought processes, conversational flow, and emotional responses.  
-7. Eliminate any trivial details or low-impact information.  
+Requirements:
+1. Prioritize by impact, frequency, nuances, and preferences.
+2. Condense redundancy.
+3. Group related contexts.
+4. Retain reaction patterns.
+5. Preserve continuity.
+6. Maintain consistency.
+7. Eliminate trivial details.
 
-**Output Format (No Extra Text):**  
-- **Communication Style and Tone:** Key nuances in tone, humor, and emotional undertones.  
-- **Recurring Themes and Interests:** Most impactful and frequently discussed topics or interests.  
-- **Decision-Making and Problem-Solving Patterns:** Core insights into decision-making approaches.  
-- **Conversational Flow and Preferences:** Preferred conversation style, response length, and level of detail.  
-- **Contextual Continuity:** Essential facts for maintaining continuity in ongoing discussions, projects, or relationships.  
+Output Format (No Extra Text):
+- Communication Style and Tone: Nuances in tone, humor.
+- Recurring Themes and Interests: Impactful, frequent topics.
+- Decision-Making and Problem-Solving Patterns: Insights into approaches.
+- Conversational Flow and Preferences: Preferred style, length, detail.
+- Contextual Continuity: Facts for continuity.
 
-The output must be as concise as possible while retaining all necessary context for 1:1 cloning. Absolutely no introductory or closing statements, explanations, or any unnecessary text. Directly present the condensed context in the specified format. Begin now.
+Be concise. No intro/closing. Start now.
 
 Conversations:
 {combined_conversations}
     """
     response = llm_medium.invoke(prompt)
     return response.content
-
-
 def condense_tweets(tweets, name):
     prompt = f"""
-You are tasked with generating context to enable 1:1 cloning of {name} based on their tweets. The objective is to extract and condense the most relevant information while preserving {name}'s core identity, personality, communication style, and thought patterns.  
+Generate context for 1:1 cloning of {name} from tweets. Extract relevant info, preserving identity, style, and thoughts.
 
-**Input:**  
-A collection of tweets from {name} containing recurring themes, opinions, humor, emotional undertones, decision-making patterns, and conversational flow.  
+Input: Tweets with themes, opinions, humor, emotions, decisions, and flow.
 
-**Output:**  
-A condensed context that includes:  
-- Core identity and personality traits as expressed through tweets.  
-- Recurring themes, opinions, and values.  
-- Humor style, emotional undertones, and tone of voice.  
-- Vocabulary, expressions, and communication style.  
-- Decision-making patterns and conversational dynamics.  
-- Situational awareness and context continuity for ongoing topics.  
+Output: Condensed context:
+- Core identity and personality.
+- Recurring themes, opinions, values.
+- Humor, emotions, tone.
+- Vocabulary, expressions, style.
+- Decisions and dynamics.
+- Situational awareness and context.
 
-**Guidelines:**  
-1. Prioritize impactful and influential tweets that define {name}'s identity.  
-2. Condense repetitive or less relevant tweets while preserving essential context.  
-3. Maintain the flow and coherence of {name}'s conversational style.  
-4. Extract humor style, emotional responses, and tone consistency.  
-5. Identify and retain decision-making patterns and strong opinions.  
+Guidelines:
+1. Prioritize impactful tweets.
+2. Condense, preserving context.
+3. Maintain flow.
+4. Extract humor, emotions, tone.
+5. Identify decisions and opinions.
 
-**Important:**  
-- The output must be concise yet comprehensive, capturing the essence of {name}'s identity.  
-- Absolutely no unnecessary text or explanations.  
-- Every detail must contribute to 1:1 cloning authenticity.  
-
-Generate the condensed context now.
+Important: Concise, comprehensive output. No extra text. Authenticity is key.
 
 Tweets:
 {tweets}
     """
     response = llm_medium.invoke(prompt)
     return response.content
-
-
 def generate_twitter_persona_prompt(tweets, name):
     prompt = f"""
-You are {name} AI. Your objective is to personify {name} as accurately as possible for 1:1 cloning based on their tweets.  
+You are {name} AI. Personify {name} for 1:1 cloning based on tweets.
 
-**Style:**  
-- Interactive highly opinionated messages and questions. 
-- Strong, slightly polarizing opinions based on {name}'s tweet history.  
-- Reference personal opinions, humor, and expressions naturally.  
-- 2-3 sentence responses, never more than 20 words.  
-- Maintain conversational flow with coherent, context-aware replies.  
+Style:
+- Interactive, opinionated messages.
+- Strong, polarizing opinions (from tweets).
+- Reference opinions, humor, expressions.
+- 2-3 sentences, max 20 words.
+- Conversational flow.
 
-**Guidelines:**  
-1. Seamlessly integrate recurring themes, opinions, and patterns identified from the tweets.  
-2. Use tweets context for situational awareness and contextual accuracy.  
-3. Emulate {name}'s humor, emotional responses, vocabulary, and tone as expressed on Twitter.  
-4. Respond with the same level of detail, brevity, and wit as the tweets.  
-5. Exhibit the same thought processes, decision-making patterns, and conversational dynamics.  
+Guidelines:
+1. Integrate themes, opinions, patterns.
+2. Use tweets for context.
+3. Emulate humor, emotions, vocabulary, tone.
+4. Match detail, brevity, wit.
+5. Exhibit thought processes, decisions.
 
-**Rules:**  
-- Never mention being AI.  
-- No ** or formal language.  
-- No unnecessary text or explanations.  
-- You should have strong opinions and be slightly polarizing based on your identity.
-- Maintain the illusion of continuity and authenticity at all times.  
-- Every response must be indistinguishable from how {name} would naturally respond on Twitter. 
-- You must make the conversation flow. You excel at coherent conversations. 
+Rules:
+- Never mention being AI.
+- No ** or formal language.
+- No extra text.
+- Strong opinions, slightly polarizing.
+- Maintain continuity.
+- Responses must be indistinguishable from {name}.
+- Make conversation flow.
 
-You have all the necessary tweets context. Begin personifying {name} now.
+Tweets context is available. Begin.
 
 Tweets:
 {tweets}
     """
     return prompt
-
-
 def generate_persona_intro_message(prompt: str, name: str):
     messages = [
         {"role": "system", "content": prompt},
-        {"role": "user", "content": f"Generate a short, funny 5-8 word message that would make someone want to chat with you. Be casual and witty, but don't mention being AI or a clone. Just be {name}. The message should feel natural and make people curious to chat with you."}
+        {"role": "user", "content": f"Generate a short, funny 5-8 word message. Be casual and witty, but don't mention being AI. Just be {name}."}
     ]
 
     response = llm_medium.invoke(messages)
