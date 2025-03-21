@@ -1,34 +1,34 @@
 ---
-title: Integration with Actions
-description: 'Building apps that perform actions in the OMI ecosystem'
+title: Import Apps
+description: 'Building apps that import data in the OMI ecosystem'
 ---
 
-# Integration with Actions
+# Import Integrations
 
-Integration apps with actions allow your app to not just receive data from OMI but also perform specific actions within the OMI ecosystem. This guide will walk you through creating apps that can perform actions like creating memories, adding facts, and more.
+Integration apps with Imports allow your app to not just receive data from OMI but also perform specific Imports within the OMI ecosystem. This guide will walk you through creating apps that can perform Imports like creating memories, adding facts, and more.
 
-## What Are Integration Actions?
+## What Are Integration Imports?
 
-Integration actions are predefined capabilities that your app can perform within the OMI ecosystem. Unlike triggers (which respond to events), actions allow your app to proactively create or modify data in OMI.
+Integration Imports are predefined capabilities that your app can perform within the OMI ecosystem. Unlike triggers (which respond to events), Imports allow your app to proactively create or modify data in OMI.
 
-Currently supported actions include:
+Currently supported Imports include:
 - **Create Conversation**: Generate new conversations in the user's OMI account
 - **Create Facts**: Add specific facts to the user's knowledge base
 
 ## Prerequisites
 
-Before building an integration with actions, you should:
+Before building an integration with Imports, you should:
 1. Understand the [basics of OMI app development](https://docs.omi.me/docs/developer/apps/Introduction/)
 2. Be familiar with [integration apps](https://docs.omi.me/docs/developer/apps/Integrations/)
 3. Have a server or endpoint that can make API requests to OMI
 
-## Setting Up an Integration with Actions
+## Setting Up an Integration with Imports
 
 ### Step 1: Define Your App's Purpose 🎯
 
-Decide what actions your app will perform and when. For example:
+Decide what Imports your app will perform and when. For example:
 - Will your app create conversations based on external events?
-- Will it respond to user interactions in your own service?
+- Will it respond to user interImports in your own service?
 - Will it run on a schedule to create periodic conversations?
 
 ### Step 2: Create Your App in OMI
@@ -37,8 +37,8 @@ Decide what actions your app will perform and when. For example:
 2. Go to the Apps section and select "Create App"
 3. Fill in the basic app information (name, description, etc.)
 4. Under "App Capabilities", select "External Integration"
-5. In the External Integration section, select "Actions"
-6. Choose the specific actions your app will perform (e.g., "Create conversations")
+5. In the External Integration section, select "Imports"
+6. Choose the specific Imports your app will perform (e.g., "Create conversations")
 
 ### Step 3: Generate API Keys
 
@@ -49,9 +49,9 @@ After creating your app, you'll need to generate API keys to authenticate your r
 3. Click "Create Key"
 4. Copy and securely store the generated key - you won't be able to see it again!
 
-## Implementing the Create Conversation Action
+## Implementing the Create Conversation Import
 
-The Create Conversation action allows your app to programmatically create new conversations in a user's OMI account.
+The Create Conversation Import allows your app to programmatically create new conversations in a user's OMI account.
 
 ### API Endpoint
 
@@ -129,9 +129,9 @@ Common error responses include:
 - `404 Not Found`: App not found
 - `429 Too Many Requests`: Rate limit exceeded
 
-## Implementing the Create Facts Action
+## Implementing the Create Facts Import
 
-The Create Facts action allows your app to programmatically add facts to a user's knowledge base in OMI.
+The Create Facts Import allows your app to programmatically add facts to a user's knowledge base in OMI.
 
 ### API Endpoint
 
@@ -634,7 +634,7 @@ To test your integration:
 1. Use a development API key
 2. Create test conversations with clearly marked test content
 3. Verify the conversations appear in the user's OMI app
-4. Check that the structured data (title, overview, action items) appears correctly
+4. Check that the structured data (title, overview, Import items) appears correctly
 
 ## Troubleshooting
 
@@ -647,13 +647,13 @@ Common issues and solutions:
 - **Rate Limiting**: If you receive a 429 error, implement exponential backoff in your requests
 - **Missing Required Fields**: Ensure you're providing `text`, `text_source`
 
-## Prerequisites for Using Integration Actions
+## Prerequisites for Using Integration Imports
 
-Before your app can use integration actions, several conditions must be met:
+Before your app can use integration Imports, several conditions must be met:
 
-1. **App Configuration**: Your app must be configured with the "External Integration" capability and specifically have the appropriate action enabled:
-   - For creating conversations: the "create_conversation" action
-   - For creating facts: the "create_facts" action
+1. **App Configuration**: Your app must be configured with the "External Integration" capability and specifically have the appropriate Import enabled:
+   - For creating conversations: the "create_conversation" Import
+   - For creating facts: the "create_facts" Import
 
 2. **API Key**: You must generate an API key for your app through the app management interface.
 
@@ -663,39 +663,39 @@ Before your app can use integration actions, several conditions must be met:
 
 If any of these conditions are not met, the API will return appropriate error responses.
 
-## Future Actions
+## Future Imports
 
-The OMI team is continuously working to expand the available actions. Future actions may include:
+The OMI team is continuously working to expand the available Imports. Future Imports may include:
 - Updating existing conversations
 - Updating existing facts
 - Setting reminders
 - Accessing and updating user preferences
 - And more!
 
-Stay tuned to the documentation for updates on new action capabilities.
+Stay tuned to the documentation for updates on new Import capabilities.
 
 ## Submitting Your App
 
-Once your integration with actions is ready:
+Once your integration with Imports is ready:
 
 1. Test thoroughly with real-world scenarios
 2. Create clear setup instructions for users
 3. Submit your app through the OMI mobile app
-4. Include details about what actions your app performs and when
+4. Include details about what Imports your app performs and when
 
 For more details on the submission process, see the [Submitting Apps](https://docs.omi.me/docs/developer/apps/Submitting/) guide.
 
 ## Example Use Cases
 
-Here are some inspiring examples of what you can build with integration actions:
+Here are some inspiring examples of what you can build with integration Imports:
 
 1. **Journal Creator**: Automatically create conversation entries based on data from a journaling app
 2. **Meeting Summarizer**: Create conversations with structured summaries after calendar meetings
 3. **Health Tracker**: Generate conversations with health insights based on fitness tracker data
-4. **Social Media Archiver**: Create conversations from important social media interactions
+4. **Social Media Archiver**: Create conversations from important social media interImports
 5. **Learning Assistant**: Create structured conversations from educational content consumption
 6. **Preference Tracker**: Extract facts about user preferences from emails or messages
 7. **Knowledge Base Builder**: Create facts from educational content or research materials
 8. **Contact Information Manager**: Extract contact details as facts from emails or messages
 
-We can't wait to see what you build with OMI integration actions!
+We can't wait to see what you build with OMI integration Imports!

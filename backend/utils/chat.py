@@ -19,6 +19,29 @@ from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
 
 
+def transcribe_voice_message_segment(path: str):
+    url = get_syncing_file_temporal_signed_url(path)
+
+    def delete_file():
+        time.sleep(480)
+        delete_syncing_temporal_file(path)
+
+    threading.Thread(target=delete_file).start()
+
+    words, language = fal_whisperx(url, 3, 2, True)
+    transcript_segments: List[TranscriptSegment] = fal_postprocessing(words, 0)
+    if not transcript_segments:
+        print('failed to get fal segments')
+        return None
+
+    text = " ".join([segment.text for segment in transcript_segments]).strip()
+    if len(text) == 0:
+        print('voice message text is empty')
+        return None
+
+    return text
+
+
 def process_voice_message_segment(path: str, uid: str):
     url = get_syncing_file_temporal_signed_url(path)
 

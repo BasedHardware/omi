@@ -21,7 +21,7 @@ from models.conversation import ExternalIntegrationCreateConversation, Conversat
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
 from models.notification_message import NotificationMessage
-from utils.apps import get_available_apps, sync_update_persona_prompt
+from utils.apps import get_available_apps, update_personas_async
 from utils.llm import obtain_emotional_message, retrieve_metadata_fields_from_transcript, \
     summarize_open_glass, get_transcript_structure, generate_embedding, \
     get_plugin_result, should_discard_conversation, summarize_experience_text, new_facts_extractor, \
@@ -150,7 +150,7 @@ def _extract_facts(uid: str, conversation: Conversation):
 
     parsed_facts = []
     for fact in new_facts:
-        parsed_facts.append(FactDB.from_fact(fact, uid, conversation.id, conversation.structured.category))
+        parsed_facts.append(FactDB.from_fact(fact, uid, conversation.id, conversation.structured.category, False))
         print('_extract_facts:', fact.category.value.upper(), '|', fact.content)
 
     if len(parsed_facts) == 0:
@@ -242,11 +242,8 @@ def process_conversation(
 
     if not is_reprocess:
         threading.Thread(target=conversation_created_webhook, args=(uid, conversation,)).start()
-        # TODO: Bad code, cause the websocket was drop, need to check it carefully before enabling.
         # Update persona prompts with new conversation
-        print("before creating the thread for _update_personas_async")
-        threading.Thread(target=_update_personas_async, args=(uid,)).start()
-        print("after calling start for _update_personas_async")
+        threading.Thread(target=update_personas_async, args=(uid,)).start()
 
     # TODO: trigger external integrations here too
 

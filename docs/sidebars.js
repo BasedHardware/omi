@@ -40,6 +40,7 @@ const sidebars = {
             'developer/apps/PromptBased',
             'developer/apps/Integrations',
             'developer/apps/audiostreaming',
+            'developer/apps/Import',
             'developer/apps/Submitting',
           ]
         },
