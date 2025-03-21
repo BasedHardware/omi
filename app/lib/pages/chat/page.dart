@@ -14,7 +14,6 @@ import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/animated_mini_banner.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
 import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
-import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -47,7 +46,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   bool isScrollingDown = false;
 
-  bool _showSendButton = false;
   bool _showVoiceRecorder = false;
 
   var prefs = SharedPreferencesUtil();
@@ -96,14 +94,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     textController.dispose();
     scrollController.dispose();
     super.dispose();
-  }
-
-  void setShowSendButton() {
-    if (_showSendButton != textController.text.isNotEmpty) {
-      setState(() {
-        _showSendButton = textController.text.isNotEmpty;
-      });
-    }
   }
 
   @override
@@ -320,7 +310,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
               ),
               Consumer<HomeProvider>(builder: (context, home, child) {
                 bool shouldShowSendButton(MessageProvider p) {
-                  return !p.sendingMessage && _showSendButton && !_showVoiceRecorder;
+                  return !p.sendingMessage && !_showVoiceRecorder;
                 }
 
                 bool shouldShowVoiceRecorderButton() {
@@ -509,7 +499,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                             setState(() {
                                               textController.text = transcript;
                                               _showVoiceRecorder = false;
-                                              _showSendButton = true;
                                             });
                                           },
                                           onClose: () {
@@ -526,9 +515,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                             enabled: true,
                                             controller: textController,
                                             obscureText: false,
-                                            onChanged: (value) {
-                                              setShowSendButton();
-                                            },
                                             focusNode: home.chatFieldFocusNode,
                                             textAlign: TextAlign.start,
                                             textAlignVertical: TextAlignVertical.top,
@@ -549,7 +535,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                 if (shouldShowVoiceRecorderButton())
                                   GestureDetector(
                                     child: Container(
-                                      padding: const EdgeInsets.only(top: 14, bottom: 14, left: 14, right: 8),
+                                      padding: const EdgeInsets.only(top: 14, bottom: 14, left: 14, right: 14),
                                       child: const Icon(
                                         Icons.mic_outlined,
                                         color: Color(0xFFF7F4F4),
@@ -584,7 +570,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                               },
                                         child: Container(
                                           padding: const EdgeInsets.all(4),
-                                          margin: EdgeInsets.only(top: 10, bottom: 10, right: 6),
+                                          margin: const EdgeInsets.only(top: 10, bottom: 10, right: 6),
                                           decoration: const BoxDecoration(
                                             color: Colors.white,
                                             shape: BoxShape.circle,
@@ -622,7 +608,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     provider.sendMessageStreamToServer(text);
     provider.clearSelectedFiles();
     provider.setSendingMessage(false);
-    setShowSendButton();
   }
 
   sendInitialAppMessage(App? app) async {
