@@ -323,6 +323,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                   return !p.sendingMessage && _showSendButton && !_showVoiceRecorder;
                 }
 
+                bool shouldShowVoiceRecorderButton() {
+                  return !_showVoiceRecorder;
+                }
+
+                bool shouldShowMenuButton() {
+                  return !_showVoiceRecorder;
+                }
+
                 return Align(
                   alignment: Alignment.bottomCenter,
                   child: Column(
@@ -432,7 +440,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                if (!_showVoiceRecorder)
+                                if (shouldShowMenuButton())
                                   IconButton(
                                     icon: Icon(
                                       Icons.add,
@@ -538,7 +546,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                           ),
                                         ),
                                 ),
-                                if (!_showVoiceRecorder)
+                                if (shouldShowVoiceRecorderButton())
                                   GestureDetector(
                                     child: Container(
                                       padding: const EdgeInsets.only(top: 14, bottom: 14, left: 14, right: 8),
@@ -575,10 +583,15 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                 }
                                               },
                                         child: Container(
-                                          padding: const EdgeInsets.only(top: 14, bottom: 14, left: 8, right: 14),
+                                          padding: const EdgeInsets.all(4),
+                                          margin: EdgeInsets.only(top: 10, bottom: 10, right: 6),
+                                          decoration: const BoxDecoration(
+                                            color: Colors.white,
+                                            shape: BoxShape.circle,
+                                          ),
                                           child: const Icon(
                                             Icons.arrow_upward_outlined,
-                                            color: Color(0xFFF7F4F4),
+                                            color: Colors.black,
                                             size: 20.0,
                                           ),
                                         ),
@@ -609,6 +622,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     provider.sendMessageStreamToServer(text);
     provider.clearSelectedFiles();
     provider.setSendingMessage(false);
+    setShowSendButton();
   }
 
   sendInitialAppMessage(App? app) async {

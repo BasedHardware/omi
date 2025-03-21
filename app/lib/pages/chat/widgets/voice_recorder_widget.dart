@@ -9,6 +9,7 @@ import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/file.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shimmer/shimmer.dart';
 
 enum RecordingState {
   notRecording,
@@ -110,22 +111,22 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
                 if (bytes.isNotEmpty) {
                   // Calculate RMS (Root Mean Square) for PCM16 audio data
                   double rms = 0;
-                  
+
                   // Process bytes as 16-bit samples (2 bytes per sample)
                   for (int i = 0; i < bytes.length - 1; i += 2) {
                     // Convert two bytes to a 16-bit signed integer
                     // PCM16 is little-endian: LSB first, then MSB
                     int sample = bytes[i] | (bytes[i + 1] << 8);
-                    
+
                     // Convert to signed value (if high bit is set)
                     if (sample > 32767) {
                       sample = sample - 65536;
                     }
-                    
+
                     // Square the sample and add to sum
                     rms += sample * sample;
                   }
-                  
+
                   // Calculate RMS and normalize to 0.0-1.0 range
                   // 32768 is max absolute value for 16-bit audio
                   int sampleCount = bytes.length ~/ 2;
@@ -185,33 +186,29 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
       _isProcessing = true;
     });
 
+    await _stopRecording();
+
+    // Flatten audio chunks into a single list
+    List<int> flattenedBytes = [];
+    for (var chunk in _audioChunks) {
+      flattenedBytes.addAll(chunk);
+    }
+
+    // Convert PCM to WAV file
+    final audioFile = await FileUtils.convertPcmToWavFile(
+      Uint8List.fromList(flattenedBytes),
+      16000, // Sample rate
+      1, // Mono channel
+    );
+
     try {
-      await _stopRecording();
-
-      // Flatten audio chunks into a single list
-      List<int> flattenedBytes = [];
-      for (var chunk in _audioChunks) {
-        flattenedBytes.addAll(chunk);
-      }
-
-      // Convert PCM to WAV file
-      final audioFile = await FileUtils.convertPcmToWavFile(
-        Uint8List.fromList(flattenedBytes),
-        16000, // Sample rate
-        1, // Mono channel
-      );
-
-      // Send to API for transcription
       final transcript = await transcribeVoiceMessage(audioFile);
-
       if (mounted) {
         setState(() {
           _transcript = transcript;
           _state = RecordingState.transcribeSuccess;
           _isProcessing = false;
         });
-
-        // If we have a transcript, send it to the parent widget
         if (transcript.isNotEmpty) {
           widget.onTranscriptReady(transcript);
         }
@@ -264,9 +261,21 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
                   ),
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.check_circle, color: Colors.white),
-                onPressed: _processRecording,
+              GestureDetector(
+                onTap: _processRecording,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  margin: const EdgeInsets.only(top: 10, bottom: 10, right: 6, left: 16),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.check,
+                    color: Colors.black,
+                    size: 20.0,
+                  ),
+                ),
               ),
             ],
           ),
@@ -279,25 +288,18 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
             color: Colors.black,
             borderRadius: BorderRadius.circular(16),
           ),
-          child: const Row(
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  strokeWidth: 2,
+              Shimmer.fromColors(
+                baseColor: Colors.grey.shade800,
+                highlightColor: Colors.white,
+                child: const Text(
+                  'Transcribing...',
+                  style: TextStyle(
+                    color: Colors.white,
+                  ),
                 ),
-              ),
-              SizedBox(width: 16),
-              Text(
-                'Transcribing...',
-                style: TextStyle(color: Colors.white),
-              ),
-              SizedBox(width: 16),
-              SizedBox(
-                width: 20,
               ),
             ],
           ),
@@ -338,7 +340,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
 
       case RecordingState.transcribeFailed:
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
           decoration: BoxDecoration(
             color: Colors.black,
             borderRadius: BorderRadius.circular(16),
@@ -347,18 +349,43 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                'Transcription failed',
-                style: TextStyle(color: Colors.white),
+                'Error',
+                style: TextStyle(color: Colors.redAccent, fontSize: 14, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: SizedBox(
+                  height: 40,
+                  child: CustomPaint(
+                    painter: AudioWavePainter(
+                      levels: _audioLevels,
+                      timestamp: DateTime.now(),
+                    ),
+                  ),
+                ),
               ),
               Row(
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.refresh, color: Colors.white),
-                    onPressed: _retry,
+                  GestureDetector(
+                    onTap: _retry,
+                    child: Container(
+                        padding: const EdgeInsets.only(left: 14, right: 8, top: 14, bottom: 14),
+                        child: const Icon(
+                          Icons.refresh,
+                          color: Colors.white,
+                          size: 20,
+                        )),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: widget.onClose,
+                  GestureDetector(
+                    onTap: widget.onClose,
+                    child: Container(
+                      padding: const EdgeInsets.only(left: 14, right: 8, top: 14, bottom: 14),
+                      child: const Icon(
+                        Icons.close,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
                   ),
                 ],
               ),
