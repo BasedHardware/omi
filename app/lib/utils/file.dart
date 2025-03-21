@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
+import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:path_provider/path_provider.dart';
 
 class FileUtils {
@@ -23,5 +25,28 @@ class FileUtils {
     await file.writeAsBytes(data);
 
     return file;
+  }
+  
+  static Future<File> convertPcmToWavFile(Uint8List pcmBytes, int sampleRate, int channels) async {
+    try {
+      // Convert PCM to WAV bytes
+      final wavBytes = WavBytes.fromPcm(
+        pcmBytes,
+        sampleRate: sampleRate,
+        numChannels: channels,
+      ).asBytes();
+      
+      // Create a temporary file
+      final tempDir = await getTemporaryDirectory();
+      final tempPath = '${tempDir.path}/recording_${DateTime.now().millisecondsSinceEpoch}.wav';
+      final file = File(tempPath);
+      
+      // Write WAV bytes to file
+      await file.writeAsBytes(wavBytes);
+      return file;
+    } catch (e) {
+      debugPrint('Error converting PCM to WAV: $e');
+      rethrow;
+    }
   }
 }

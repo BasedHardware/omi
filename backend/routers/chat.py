@@ -18,7 +18,7 @@ from models.memory import Memory
 from models.plugin import UsageHistoryType
 from routers.sync import retrieve_file_paths, decode_files_to_wav, retrieve_vad_segments
 from utils.apps import get_available_app_by_id
-from utils.chat import process_voice_message_segment, process_voice_message_segment_stream
+from utils.chat import process_voice_message_segment, process_voice_message_segment_stream, transcribe_voice_message_segment
 from utils.llm import initial_chat_message, initial_persona_chat_message
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
@@ -387,6 +387,55 @@ async def create_voice_message_stream(files: List[UploadFile] = File(...),
         generate_stream(),
         media_type="text/event-stream"
     )
+
+
+@router.post("/v1/voice-message/transcribe")
+async def transcribe_voice_message(files: List[UploadFile] = File(...),
+                                   uid: str = Depends(auth.get_current_user_uid)):
+    # Check if files are empty
+    if not files or len(files) == 0:
+        raise HTTPException(status_code=400, detail='No files provided')
+    
+    wav_paths = []
+    other_file_paths = []
+    
+    # Process all files in a single loop
+    for file in files:
+        if file.filename.lower().endswith('.wav'):
+            # For WAV files, save directly to a temporary path
+            temp_path = f"/tmp/{uid}_{uuid.uuid4()}.wav"
+            with open(temp_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            wav_paths.append(temp_path)
+        else:
+            # For other files, collect paths for later conversion
+            path = retrieve_file_paths([file], uid)
+            if path:
+                other_file_paths.extend(path)
+    
+    # Convert other files to WAV if needed
+    if other_file_paths:
+        converted_wav_paths = decode_files_to_wav(other_file_paths)
+        if converted_wav_paths:
+            wav_paths.extend(converted_wav_paths)
+    
+    # Process all WAV files
+    for wav_path in wav_paths:
+        transcript = transcribe_voice_message_segment(wav_path)
+        
+        # Clean up temporary WAV files created directly
+        if wav_path.startswith(f"/tmp/{uid}_"):
+            try:
+                Path(wav_path).unlink()
+            except:
+                pass
+                
+        # If we got a transcript, return it
+        if transcript:
+            return {"transcript": transcript}
+    
+    # If we got here, no transcript was produced
+    raise HTTPException(status_code=400, detail='Failed to transcribe audio')
 
 
 @router.post('/v1/files', response_model=List[FileChat], tags=['chat'])
