@@ -60,6 +60,13 @@ def send_message(
     if plugin_id in ['null', '']:
         plugin_id = None
 
+    # Check if the user has access to the persona/plugin
+    if plugin_id:
+        app = get_available_app_by_id(plugin_id, uid)
+        if not app:
+            # If the persona is private and the user doesn't have access, return an error
+            raise HTTPException(status_code=403, detail='You do not have access to this persona')
+
     # get chat session
     chat_session = chat_db.get_chat_session(uid, plugin_id=plugin_id)
     chat_session = ChatSession(**chat_session) if chat_session else None
@@ -181,6 +188,13 @@ def send_message_v1(
     if plugin_id in ['null', '']:
         plugin_id = None
 
+    # Check if the user has access to the persona/plugin
+    if plugin_id:
+        app = get_available_app_by_id(plugin_id, uid)
+        if not app:
+            # If the persona is private and the user doesn't have access, return an error
+            raise HTTPException(status_code=403, detail='You do not have access to this persona')
+
     message = Message(
         id=str(uuid.uuid4()), text=data.text, created_at=datetime.now(timezone.utc), sender='human', type='text',
         plugin_id=plugin_id,
@@ -237,6 +251,16 @@ def send_message_v1(
 async def send_message_with_file(
         file: UploadFile = File(...), plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
+    if plugin_id in ['null', '']:
+        plugin_id = None
+
+    # Check if the user has access to the persona/plugin
+    if plugin_id:
+        app = get_available_app_by_id(plugin_id, uid)
+        if not app:
+            # If the persona is private and the user doesn't have access, return an error
+            raise HTTPException(status_code=403, detail='You do not have access to this persona')
+
     print('send_message_with_file', file.filename, plugin_id, uid)
     content = await file.read()
     # TODO: steps
@@ -253,6 +277,13 @@ async def send_message_with_file(
 def clear_chat_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
     if plugin_id in ['null', '']:
         plugin_id = None
+
+    # Check if the user has access to the persona/plugin
+    if plugin_id:
+        app = get_available_app_by_id(plugin_id, uid)
+        if not app:
+            # If the persona is private and the user doesn't have access, return an error
+            raise HTTPException(status_code=403, detail='You do not have access to this persona')
 
     # get current chat session
     chat_session = chat_db.get_chat_session(uid, plugin_id=plugin_id)
@@ -319,10 +350,20 @@ def create_initial_message(plugin_id: Optional[str], uid: str = Depends(auth.get
 
 
 @router.get('/v1/messages', response_model=List[Message], tags=['chat'])
-def get_messages_v1(uid: str = Depends(auth.get_current_user_uid)):
-    messages = chat_db.get_messages(uid, limit=100, include_memories=True)
+def get_messages_v1(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
+    if plugin_id in ['null', '']:
+        plugin_id = None
+
+    # Check if the user has access to the persona/plugin
+    if plugin_id:
+        app = get_available_app_by_id(plugin_id, uid)
+        if not app:
+            # If the persona is private and the user doesn't have access, return empty list
+            return []
+
+    messages = chat_db.get_messages(uid, limit=100, include_memories=True, plugin_id=plugin_id)
     if not messages:
-        return [initial_message_util(uid)]
+        return [initial_message_util(uid, plugin_id)]
     return messages
 
 
@@ -330,6 +371,13 @@ def get_messages_v1(uid: str = Depends(auth.get_current_user_uid)):
 def get_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
     if plugin_id in ['null', '']:
         plugin_id = None
+
+    # Check if the user has access to the persona/plugin
+    if plugin_id:
+        app = get_available_app_by_id(plugin_id, uid)
+        if not app:
+            # If the persona is private and the user doesn't have access, return empty list
+            return []
 
     chat_session = chat_db.get_chat_session(uid, plugin_id=plugin_id)
     chat_session_id = chat_session['id'] if chat_session else None
