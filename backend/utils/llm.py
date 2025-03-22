@@ -1395,7 +1395,6 @@ def extract_facts_from_text(
             'facts_str': facts_str,
             'format_instructions': parser.get_format_instructions(),
         })
-        print(response.facts)
         return response.facts
     except Exception as e:
         print(f'Error extracting facts from {text_source}: {e}')
