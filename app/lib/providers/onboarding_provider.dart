@@ -17,6 +17,7 @@ import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/audio/foreground.dart';
+import 'package:omi/utils/runtime.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class OnboardingProvider extends BaseProvider with MessageNotifierMixin implements IDeviceServiceSubsciption {
@@ -80,8 +81,11 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   Future askForBluetoothPermissions() async {
-    FlutterBluePlus.setLogLevel(LogLevel.info, color: true);
-    if (Platform.isIOS) {
+    SafeInit.init(() {
+      // Not supported on web.
+      FlutterBluePlus.setLogLevel(LogLevel.info, color: true);
+    });
+    if (kIsWeb || Platform.isIOS) {
       PermissionStatus bleStatus = await Permission.bluetooth.request();
       debugPrint('bleStatus: $bleStatus');
       updateBluetoothPermission(bleStatus.isGranted);

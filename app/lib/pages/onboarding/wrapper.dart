@@ -83,9 +83,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           SharedPreferencesUtil().verifiedPersonaId = null;
           MixpanelManager().onboardingStepCompleted('Auth');
           context.read<HomeProvider>().setupHasSpeakerProfile();
-          IntercomManager.instance.intercom.loginIdentifiedUser(
-            userId: SharedPreferencesUtil().uid,
-          );
+          IntercomManager.instance.intercom.loginIdentifiedUser(userId: SharedPreferencesUtil().uid);
           if (SharedPreferencesUtil().onboardingCompleted) {
             routeToPage(context, const HomePageWrapper(), replace: true);
           } else {

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
@@ -72,6 +73,9 @@ Future<http.Response?> makeApiCall({
     return response;
   } catch (e, stackTrace) {
     debugPrint('HTTP request failed: $e, $stackTrace');
+    if (kIsWeb) { // CrashReporting uses `platform` which doesn't support web, so leaving empty for now.
+      return null;
+    }
     CrashReporting.reportHandledCrash(
       e,
       stackTrace,
@@ -127,6 +131,9 @@ dynamic extractContentFromResponse(
     return data['choices'][0]['message']['content'];
   } else {
     debugPrint('Error fetching data: ${response?.statusCode}');
+    if (kIsWeb) {
+      return null;
+    }
     // TODO: handle error, better specially for script migration
     CrashReporting.reportHandledCrash(
       Exception('Error fetching data: ${response?.statusCode}'),

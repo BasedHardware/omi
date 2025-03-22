@@ -208,7 +208,7 @@ getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordingState state) 
                 Text(
                   state == RecordingState.initialising
                       ? 'Initialising Recorder'
-                      : (state == RecordingState.record ? 'Stop Recording' : 'Try With Phone Mic'),
+                      : (state == RecordingState.record ? 'Stop Recording' : 'Try With Device Mic'),
                   style: const TextStyle(fontSize: 14),
                 ),
                 const SizedBox(width: 4),

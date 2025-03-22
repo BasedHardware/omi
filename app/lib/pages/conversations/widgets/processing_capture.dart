@@ -281,7 +281,7 @@ getPhoneMicRecordingButton(BuildContext context, toggleRecording, RecordingState
         Text(
           state == RecordingState.initialising
               ? 'Initialising Recorder'
-              : (state == RecordingState.record ? 'Stop Recording' : 'Try With Phone Mic'),
+              : (state == RecordingState.record ? 'Stop Recording' : 'Try With Device Mic'),
           style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white, fontWeight: FontWeight.w500),
         ),
         const SizedBox(width: 4),
