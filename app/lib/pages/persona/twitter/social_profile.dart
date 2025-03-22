@@ -69,17 +69,9 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         const Spacer(flex: 5),
-                        const Center(
-                          child: Text(
-                            '🤖',
-                            style: TextStyle(
-                              fontSize: 42,
-                            ),
-                          ),
-                        ),
                         const Spacer(flex: 1),
                         Text(
-                          'Let\'s train your clone!\nWhat\'s your X handle?',
+                          'What\'s your X handle?',
                           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white,
