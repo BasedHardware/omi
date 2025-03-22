@@ -433,6 +433,22 @@ function ChatContent() {
         const result = await signInWithPopup(auth, googleProvider);
         const user = result.user;
 
+        // Get the ID token
+        const idToken = await user.getIdToken();
+        
+        // Create session cookie
+        const response = await fetch('/api/auth/session', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ idToken }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to create session');
+        }
+
         // Save user data if first time
         const userRef = doc(db, 'users', user.uid);
         const userSnap = await getDoc(userRef);
