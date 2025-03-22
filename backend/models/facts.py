@@ -18,24 +18,25 @@ class FactCategory(str, Enum):
     work = "work"
     skills = "skills"
     # world = "world"
-    # learnings = "learnings"
+    learnings = "learnings"
     other = "other"
 
 
 CATEGORY_BOOSTS = {FactCategory.core.value: 1,
-                   FactCategory.habits.value: 10,
-                   FactCategory.work.value: 40,
-                   FactCategory.skills.value: 40,
-                   FactCategory.lifestyle.value: 40,
-                   FactCategory.hobbies.value: 40,
-                   FactCategory.interests.value: 40,
-                   FactCategory.other.value: 50, }
+                   FactCategory.habits.value: 1,
+                   FactCategory.work.value: 1,
+                   FactCategory.skills.value: 1,
+                   FactCategory.lifestyle.value: 1,
+                   FactCategory.hobbies.value: 1,
+                   FactCategory.interests.value: 1,
+                   FactCategory.other.value: 1, }
 
 
 class Fact(BaseModel):
     content: str = Field(description="The content of the fact")
     category: FactCategory = Field(description="The category of the fact", default=FactCategory.other)
     visibility: str = Field(description="The visibility of the fact", default='public')
+    tags: List[str] = Field(description="The tags of the fact and learning", default=[])
 
     @staticmethod
     def get_facts_as_str(facts: List):

@@ -1337,6 +1337,11 @@ class Facts(BaseModel):
         default=[],
     )
 
+class FactsByTexts(BaseModel):
+    facts: List[Fact] = Field(
+        description="List of **new** facts. If any",
+        default=[],
+    )
 
 def new_facts_extractor(
         uid: str, segments: List[TranscriptSegment], user_name: Optional[str] = None, facts_str: Optional[str] = None
@@ -1381,7 +1386,7 @@ def extract_facts_from_text(
         return []
 
     try:
-        parser = PydanticOutputParser(pydantic_object=Facts)
+        parser = PydanticOutputParser(pydantic_object=FactsByTexts)
         chain = extract_facts_text_content_prompt | llm_mini | parser
         response: Facts = chain.invoke({
             'user_name': user_name,
