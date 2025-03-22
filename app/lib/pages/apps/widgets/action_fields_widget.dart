@@ -24,7 +24,7 @@ class ActionFieldsWidget extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(left: 8.0, bottom: 12.0),
                   child: Text(
-                    'Actions',
+                    'Import',
                     style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                   ),
                 ),
