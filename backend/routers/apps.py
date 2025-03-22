@@ -481,19 +481,19 @@ def get_notification_scopes():
 def get_plugin_capabilities():
     return [
         {'title': 'Chat', 'id': 'chat'},
-        {'title': 'Memories', 'id': 'memories'},
+        {'title': 'Conversations', 'id': 'memories'},
         {'title': 'External Integration', 'id': 'external_integration', 'triggers': [
             {'title': 'Audio Bytes', 'id': 'audio_bytes'},
             {'title': 'Memory Creation', 'id': 'memory_creation'},
             {'title': 'Transcript Processed', 'id': 'transcript_processed'},
         ], 'actions': [
             {'title': 'Create conversations', 'id': 'create_conversation', 'doc_url': 'https://docs.omi.me/docs/developer/apps/IntegrationActions'},
-            {'title': 'Create facts', 'id': 'create_facts', 'doc_url': 'https://docs.omi.me/docs/developer/apps/IntegrationActions'}
+            {'title': 'Create memories', 'id': 'create_facts', 'doc_url': 'https://docs.omi.me/docs/developer/apps/IntegrationActions'}
         ]},
         {'title': 'Notification', 'id': 'proactive_notification', 'scopes': [
             {'title': 'User Name', 'id': 'user_name'},
             {'title': 'User Facts', 'id': 'user_facts'},
-            {'title': 'User Memories', 'id': 'user_context'},
+            {'title': 'User Conversations', 'id': 'user_context'},
             {'title': 'User Chat', 'id': 'user_chat'}
         ]}
     ]
