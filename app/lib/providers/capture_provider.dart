@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -416,28 +417,48 @@ class CaptureProvider extends ChangeNotifier
   }
 
   streamRecording() async {
-    await Permission.microphone.request();
+    if(!Platform.isMacOS) {
+      await Permission.microphone.request();
+    }
 
     // prepare
     await changeAudioRecordProfile(BleAudioCodec.pcm16, 16000);
 
+    if(Platform.isMacOS) {
+      await ServiceManager.instance().systemMic.start(onByteReceived: (bytes) {
+        if (_socket?.state == SocketServiceState.connected) {
+          _socket?.send(bytes);
+        }
+      }, onRecording: () {
+        updateRecordingState(RecordingState.record);
+      }, onStop: () {
+        updateRecordingState(RecordingState.stop);
+      }, onInitializing: () {
+        updateRecordingState(RecordingState.initialising);
+      });
+    } else {
     // record
-    await ServiceManager.instance().mic.start(onByteReceived: (bytes) {
-      if (_socket?.state == SocketServiceState.connected) {
-        _socket?.send(bytes);
-      }
-    }, onRecording: () {
-      updateRecordingState(RecordingState.record);
-    }, onStop: () {
-      updateRecordingState(RecordingState.stop);
-    }, onInitializing: () {
-      updateRecordingState(RecordingState.initialising);
-    });
+      await ServiceManager.instance().mic.start(onByteReceived: (bytes) {
+        if (_socket?.state == SocketServiceState.connected) {
+          _socket?.send(bytes);
+        }
+      }, onRecording: () {
+        updateRecordingState(RecordingState.record);
+      }, onStop: () {
+        updateRecordingState(RecordingState.stop);
+      }, onInitializing: () {
+        updateRecordingState(RecordingState.initialising);
+      });
+    }
   }
 
   stopStreamRecording() async {
     _cleanupCurrentState();
-    ServiceManager.instance().mic.stop();
+    if(Platform.isMacOS) {
+      ServiceManager.instance().systemMic.stop();
+    }  else {
+     ServiceManager.instance().mic.stop();
+    }
     await _socket?.stop(reason: 'stop stream recording');
   }
 
