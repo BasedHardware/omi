@@ -30,6 +30,7 @@
         mmc {
             compatible = "zephyr,sdmmc-disk";
             status = "okay";
+            disk-name = "SD_CARD";
         };
         spi-max-frequency = <24000000>;  // 24 MHz SPI speed for SD card
     };
@@ -71,4 +72,3 @@
 &temp {
     status = "disabled";
 };
-
