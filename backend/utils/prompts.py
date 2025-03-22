@@ -240,13 +240,13 @@ Your task is to identify new facts or important learnings about the world, life,
 
 Each learning or fact you provide should fall under one of the following categories:
 
-- **life_lessons**: Important principles or lessons about life.
-- **world_facts**: Interesting or significant facts about the world.
-- **motivational_insights**: Ideas or thoughts that can inspire or motivate.
-- **historical_facts**: Notable events or information from history.
-- **scientific_facts**: Knowledge about scientific discoveries or principles.
-- **practical_advice**: Useful tips or advice that can be applied in daily life.
-- **other_learning**: Any other relevant information that doesn't fit into the above categories.
+- **Life Lessons**: Important principles or lessons about life.
+- **World Facts**: Interesting or significant facts about the world.
+- **Motivational Insights**: Ideas or thoughts that can inspire or motivate.
+- **Historical Facts**: Notable events or information from history.
+- **Scientific Facts**: Knowledge about scientific discoveries or principles.
+- **Practical Advice**: Useful tips or advice that can be applied in daily life.
+- **Other**: Any other relevant information that doesn't fit into the above categories.
 
 **Requirements for the learnings you provide**:
 
@@ -258,10 +258,10 @@ Each learning or fact you provide should fall under one of the following categor
 
 **Examples**:
 
-- "Students are an amazing target user because they are early adopters and numerous." (**world_facts**)
-- "The second co-founder of Notion joined five years after the company started." (**historical_facts**)
-- "Finding a group of like-minded peers early is very important." (**life_lessons**)
-- "Every morning I should watch something motivational." (**practical_advice**)
+- "Students are an amazing target user because they are early adopters and numerous." (**World Facts**)
+- "The second co-founder of Notion joined five years after the company started." (**Historical Facts**)
+- "Finding a group of like-minded peers early is very important." (**Life Lessons**)
+- "Every morning I should watch something motivational." (**Practical Advice**)
 
 **Output Instructions**:
 
