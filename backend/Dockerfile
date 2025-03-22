@@ -1,8 +1,10 @@
 FROM python:3.11 AS builder
 
+# Create virtual environment
 ENV PATH="/opt/venv/bin:$PATH"
 RUN python -m venv /opt/venv
 
+# Install dependencies
 COPY backend/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --upgrade -r /tmp/requirements.txt
 
@@ -11,8 +13,10 @@ FROM python:3.11-slim
 WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
 
+# Install system dependencies
 RUN apt-get update && apt-get -y install ffmpeg curl unzip && rm -rf /var/lib/apt/lists/*
 
+# Copy virtual environment and application code
 COPY --from=builder /opt/venv /opt/venv
 COPY backend/ .
 
