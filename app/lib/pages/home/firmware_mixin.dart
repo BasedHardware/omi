@@ -7,7 +7,7 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/http/api/device.dart';
-import 'package:omi/services/services.dart';
+import 'package:omi/services/manager/services_default.dart';
 import 'package:omi/utils/device.dart';
 import 'package:nordic_dfu/nordic_dfu.dart';
 import 'package:package_info_plus/package_info_plus.dart';

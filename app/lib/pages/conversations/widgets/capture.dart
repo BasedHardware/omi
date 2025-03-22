@@ -6,7 +6,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/services/services.dart';
+import 'package:omi/services/manager/services_default.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:provider/provider.dart';
 

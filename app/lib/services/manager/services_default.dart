@@ -6,11 +6,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/manager/service_mac.dart';
+import 'package:omi/services/manager/types.dart' as types;
 import 'package:omi/services/sockets.dart';
 import 'package:omi/services/wals.dart';
 
+class DefaultBackgroundService {
+  late types.BaseBackgroundService instance;
+  DefaultBackgroundService() {
+    instance = FlutterBackgroundService() as types.BaseBackgroundService;
+  }
+}
+
 class ServiceManager {
-  late IMicRecorderService _mic;
+  late types.IMicRecorderService _mic;
   late IDeviceService _device;
   late ISocketService _socket;
   late IWalService _wal;
@@ -37,7 +46,7 @@ class ServiceManager {
     return _instance!;
   }
 
-  IMicRecorderService get mic => _mic;
+  types.IMicRecorderService get mic => _mic;
 
   IDeviceService get device => _device;
 
@@ -64,11 +73,6 @@ class ServiceManager {
   }
 }
 
-enum BackgroundServiceStatus {
-  initiated,
-  running,
-}
-
 @pragma('vm:entry-point')
 Future<bool> onIosBackground(ServiceInstance service) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -76,8 +80,10 @@ Future<bool> onIosBackground(ServiceInstance service) async {
   return true;
 }
 
+// Future onStartMac(types.BaseBackgroundService service) async {}
+
 @pragma('vm:entry-point')
-Future onStart(ServiceInstance service) async {
+Future onStart(dynamic service) async {
   // Recorder
   MicRecorderService? recorder;
   service.on('recorder.start').listen((event) async {
@@ -85,7 +91,7 @@ Future onStart(ServiceInstance service) async {
     recorder?.start(onByteReceived: (bytes) {
       Uint8List audioBytes = bytes;
       List<dynamic> audioBytesList = audioBytes.toList();
-      service.invoke("recorder.ui.audioBytes", {"data": audioBytesList});
+      service.invoke("recorder.ui.audioBytes", {"state": audioBytesList});
     }, onStop: () {
       service.invoke("recorder.ui.stateUpdate", {"state": 'stopped'});
     }, onRecording: () {
@@ -95,15 +101,20 @@ Future onStart(ServiceInstance service) async {
 
   service.on('recorder.stop').listen((event) async {
     service.invoke("recorder.ui.stateUpdate", {"state": 'stopped'});
+    if (Platform.isMacOS) {
+      service?.stopService();
+    }
     recorder?.stop();
   });
 
   service.on('stop').listen((event) async {
-    if (recorder?.status != RecorderServiceStatus.stop) {
+    if (recorder?.status != types.RecorderServiceStatus.stop) {
       recorder?.stop();
     }
     service.invoke("recorder.ui.stateUpdate", {"state": 'stopped'});
-    service.stopSelf();
+    if (!Platform.isMacOS) {
+      service.stopSelf();
+    }
   });
 
   // watchdog
@@ -114,11 +125,13 @@ Future onStart(ServiceInstance service) async {
   Timer.periodic(const Duration(seconds: 5), (timer) async {
     if (pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 15)))) {
       // retire
-      if (recorder?.status != RecorderServiceStatus.stop) {
+      if (recorder?.status != types.RecorderServiceStatus.stop) {
         recorder?.stop();
       }
       service.invoke("recorder.ui.stateUpdate", {"state": 'stopped'});
-      service.stopSelf();
+      if (!Platform.isMacOS) {
+        service.stopSelf();
+      }
       return;
     }
     service.invoke("ui.ping");
@@ -126,31 +139,35 @@ Future onStart(ServiceInstance service) async {
 }
 
 class BackgroundService {
-  late FlutterBackgroundService _service;
-  BackgroundServiceStatus? _status;
+  late types.BaseBackgroundService _service;
+  types.BackgroundServiceStatus? _status;
 
-  BackgroundServiceStatus? get status => _status;
+  types.BackgroundServiceStatus? get status => _status;
 
   Future<void> init() async {
-    _service = FlutterBackgroundService();
-    _status = BackgroundServiceStatus.initiated;
+    if (Platform.isMacOS) {
+      _service = BackgroundIsoLateService() as types.BaseBackgroundService;
+    } else {
+      _service = DefaultBackgroundService().instance;
+    }
+    _status = types.BackgroundServiceStatus.initiated;
 
     await _service.configure(
-      iosConfiguration: IosConfiguration(
-        autoStart: false,
-        onForeground: onStart,
-        onBackground: onIosBackground,
-      ),
-      androidConfiguration: AndroidConfiguration(
-        autoStart: false,
-        onStart: onStart,
-        isForegroundMode: true,
-        autoStartOnBoot: false,
-        foregroundServiceType: AndroidForegroundType.microphone,
-      ),
-    );
+        iosConfiguration: IosConfiguration(
+          autoStart: false,
+          onForeground: onStart,
+          onBackground: onIosBackground,
+        ),
+        androidConfiguration: AndroidConfiguration(
+          autoStart: false,
+          onStart: onStart,
+          isForegroundMode: true,
+          autoStartOnBoot: false,
+          foregroundServiceType: AndroidForegroundType.microphone,
+        ),
+        macConfig: types.MacConfiguration(onStart: onStart));
 
-    _status = BackgroundServiceStatus.initiated;
+    _status = types.BackgroundServiceStatus.initiated;
   }
 
   Future<void> ensureRunning() async {
@@ -163,7 +180,7 @@ class BackgroundService {
 
     // status
     if (await _service.isRunning()) {
-      _status = BackgroundServiceStatus.running;
+      _status = types.BackgroundServiceStatus.running;
     }
 
     // heartbeat
@@ -190,7 +207,7 @@ class BackgroundService {
   }) {
     // tracking service events
     _service.on('recorder.ui.audioBytes').listen((event) {
-      Uint8List bytes = Uint8List.fromList(event!['data'].cast<int>());
+      Uint8List bytes = Uint8List.fromList(event!['state'].cast<int>());
       onByteReceived(bytes);
     });
     _service.on('recorder.ui.stateUpdate').listen((event) {
@@ -218,23 +235,7 @@ class BackgroundService {
   }
 }
 
-enum RecorderServiceStatus {
-  initialising,
-  recording,
-  stop,
-}
-
-abstract class IMicRecorderService {
-  Future<void> start({
-    required Function(Uint8List bytes) onByteReceived,
-    Function()? onRecording,
-    Function()? onStop,
-    Function()? onInitializing,
-  });
-  void stop();
-}
-
-class MicRecorderBackgroundService implements IMicRecorderService {
+class MicRecorderBackgroundService implements types.IMicRecorderService {
   late BackgroundService _runner;
 
   MicRecorderBackgroundService({required BackgroundService runner}) {
@@ -266,8 +267,8 @@ class MicRecorderBackgroundService implements IMicRecorderService {
   }
 }
 
-class MicRecorderService implements IMicRecorderService {
-  RecorderServiceStatus? _status;
+class MicRecorderService implements types.IMicRecorderService {
+  types.RecorderServiceStatus? _status;
 
   late FlutterSoundRecorder _recorder;
   late StreamController<Uint8List> _controller;
@@ -292,14 +293,14 @@ class MicRecorderService implements IMicRecorderService {
     Function()? onStop,
     Function()? onInitializing,
   }) async {
-    if (_status == RecorderServiceStatus.recording) {
+    if (_status == types.RecorderServiceStatus.recording) {
       throw Exception("Recorder is recording, please stop it before start new recording.");
     }
-    if (_status == RecorderServiceStatus.initialising) {
+    if (_status == types.RecorderServiceStatus.initialising) {
       throw Exception("Recorder is initialising");
     }
 
-    _status = RecorderServiceStatus.initialising;
+    _status = types.RecorderServiceStatus.initialising;
 
     // callback
     _onByteReceived = onByteReceived;
@@ -312,7 +313,6 @@ class MicRecorderService implements IMicRecorderService {
     // new record
     await _recorder.openRecorder(isBGService: _isInBG);
     _controller = StreamController<Uint8List>();
-
     await _recorder.startRecorder(
       toStream: _controller.sink,
       codec: Codec.pcm16,
@@ -327,17 +327,19 @@ class MicRecorderService implements IMicRecorderService {
       }
     });
 
-    _status = RecorderServiceStatus.recording;
+    _status = types.RecorderServiceStatus.recording;
     return;
   }
 
   @override
   void stop() {
-    _recorder.stopRecorder();
+    _status = types.RecorderServiceStatus.stop;
+    if (_recorder.isRecording) {
+      _recorder.stopRecorder();
+    }
     _controller.close();
 
     // callback
-    _status = RecorderServiceStatus.stop;
     if (_onStop != null) {
       _onStop!();
     }

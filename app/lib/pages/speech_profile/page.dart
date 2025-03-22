@@ -9,7 +9,7 @@ import 'package:omi/pages/settings/people.dart';
 import 'package:omi/pages/speech_profile/user_speech_samples.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
-import 'package:omi/services/services.dart';
+import 'package:omi/services/manager/services_default.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/device_widget.dart';

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:app_links/app_links.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -39,8 +40,8 @@ import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
+import 'package:omi/services/manager/services_default.dart';
 import 'package:omi/services/notifications.dart';
-import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
 import 'package:omi/utils/analytics/intercom.dart';
@@ -60,9 +61,9 @@ Future<bool> _init() async {
 
   // Firebase
   if (F.env == Environment.prod) {
-    await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform, name: 'prod');
+    await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform);
   } else {
-    await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform, name: 'dev');
+    await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform);
   }
 
   await IntercomManager().initIntercom();
@@ -75,7 +76,9 @@ Future<bool> _init() async {
 
   bool isAuth = (await getIdToken()) != null;
   if (isAuth) MixpanelManager().identify();
-  initOpus(await opus_flutter.load());
+  if (!Platform.isMacOS) {
+    initOpus(await opus_flutter.load());
+  }
 
   await GrowthbookUtil.init();
   CalendarUtil.init();
