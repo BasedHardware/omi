@@ -7,10 +7,10 @@ from datetime import time
 import pytz
 
 import database.chat as chat_db
-import database.memories as memories_db
+import database.conversations as conversations_db
 import database.notifications as notification_db
 from models.notification_message import NotificationMessage
-from utils.llm import get_memory_summary
+from utils.llm import get_conversation_summary
 from utils.notifications import send_notification, send_bulk_notification
 from utils.webhooks import day_summary_webhook
 
@@ -53,13 +53,13 @@ def _send_summary_notification(user_data: tuple):
     uid = user_data[0]
     fcm_token = user_data[1]
     daily_summary_title = "Here is your action plan for tomorrow"  # TODO: maybe include llm a custom message for this
-    memories = memories_db.filter_memories_by_date(
+    memories = conversations_db.filter_conversations_by_date(
         uid, datetime.combine(datetime.now().date(), time.min), datetime.now()
     )
     if not memories:
         return
     else:
-        summary = get_memory_summary(uid, memories)
+        summary = get_conversation_summary(uid, memories)
 
     ai_message = NotificationMessage(
         text=summary,
@@ -86,7 +86,7 @@ async def _send_bulk_summary_notification(users: list):
 async def send_daily_notification():
     try:
         morning_alert_title = "omi says"
-        morning_alert_body = "Wear your omi and capture your memories today."
+        morning_alert_body = "Wear your omi and capture your conversations today."
         morning_target_time = "08:00"
 
         await _send_notification_for_time(morning_target_time, morning_alert_title, morning_alert_body)

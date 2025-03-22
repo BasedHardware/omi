@@ -172,19 +172,19 @@ def download_postprocessing_audio(file_path: str, destination_file_path: str):
 
 
 # ************************************************
-# ************* MEMORIES RECORDINGS **************
+# *********** CONVERSATIONS RECORDINGS ***********
 # ************************************************
 
-def upload_memory_recording(file_path: str, uid: str, memory_id: str):
+def upload_conversation_recording(file_path: str, uid: str, conversation_id: str):
     bucket = storage_client.bucket(memories_recordings_bucket)
-    path = f'{uid}/{memory_id}.wav'
+    path = f'{uid}/{conversation_id}.wav'
     blob = bucket.blob(path)
     blob.upload_from_filename(file_path)
     return f'https://storage.googleapis.com/{memories_recordings_bucket}/{path}'
 
 
-def get_memory_recording_if_exists(uid: str, memory_id: str) -> str:
-    print('get_memory_recording_if_exists', uid, memory_id)
+def get_conversation_recording_if_exists(uid: str, memory_id: str) -> str:
+    print('get_conversation_recording_if_exists', uid, memory_id)
     bucket = storage_client.bucket(memories_recordings_bucket)
     path = f'{uid}/{memory_id}.wav'
     blob = bucket.blob(path)
@@ -195,7 +195,7 @@ def get_memory_recording_if_exists(uid: str, memory_id: str) -> str:
     return None
 
 
-def delete_all_memory_recordings(uid: str):
+def delete_all_conversation_recordings(uid: str):
     if not uid:
         return
     bucket = storage_client.bucket(memories_recordings_bucket)

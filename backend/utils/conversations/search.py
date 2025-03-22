@@ -16,7 +16,7 @@ client = typesense.Client({
 })
 
 
-def search_memories(
+def search_conversations(
         uid: str,
         query: str,
         page: int = 1,

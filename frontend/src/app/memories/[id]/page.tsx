@@ -17,7 +17,7 @@ export async function generateMetadata(
 ): Promise<Metadata> {
   const prevData = (await parent) as Metadata;
   const memory = (await (
-    await fetch(`${envConfig.API_URL}/v1/memories/${params.id}/shared`, {
+    await fetch(`${envConfig.API_URL}/v1/conversations/${params.id}/shared`, {
       next: {
         revalidate: 60,
       },

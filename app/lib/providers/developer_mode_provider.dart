@@ -154,7 +154,7 @@ class DeveloperModeProvider extends BaseProvider {
       return;
     }
     if (webhookOnConversationCreated.text.isNotEmpty && !isValidUrl(webhookOnConversationCreated.text)) {
-      AppSnackbar.showSnackbarError('Invalid memory created webhook URL');
+      AppSnackbar.showSnackbarError('Invalid conversation created webhook URL');
       setIsLoading(false);
       return;
     }
