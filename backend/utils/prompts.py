@@ -116,7 +116,7 @@ extract_facts_text_content_prompt = ChatPromptTemplate.from_messages([
     You will also identify up to 100 valuable learnings, facts, or insights that {user_name} can gain from the text. These can be about the world, life lessons, motivational ideas, historical or scientific facts, or practical advice.
 
     **Categories for Learnings**:
-    - **learning**: Any learning the user has.
+    - **learnings**: Any learning the user has.
 
     **Tags for Learnings**:
     - **life_lessons**: General wisdom or principles for living.

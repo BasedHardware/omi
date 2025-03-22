@@ -35,7 +35,7 @@ def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
     """
     now = datetime.utcnow()
     hour_key = f"notification_rate_limit:{app_id}:{user_id}:{now.strftime('%Y-%m-%d-%H')}"
-    
+
     # Check hourly limit
     hour_count = redis_client.get(hour_key)
     if hour_count is None:
@@ -54,9 +54,9 @@ def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
 
     # Increment counter
     redis_client.incr(hour_key)
-    
+
     remaining = MAX_NOTIFICATIONS_PER_HOUR - hour_count - 1
-    
+
     return True, remaining, reset_time, 0
 
 
@@ -126,6 +126,49 @@ async def create_conversation_via_integration(
     return {}
 
 
+@router.post('/v2/integrations/{app_id}/user/memories', response_model=integration_models.EmptyResponse,
+             tags=['integration', 'facts'])
+async def create_memories_via_integration(
+    request: Request,
+    app_id: str,
+    fact_data: integration_models.ExternalIntegrationCreateFact,
+    uid: str,
+    authorization: Optional[str] = Header(None)
+):
+    # Verify API key from Authorization header
+    if not authorization or not authorization.startswith('Bearer '):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'")
+
+    api_key = authorization.replace('Bearer ', '')
+    if not verify_api_key(app_id, api_key):
+        raise HTTPException(status_code=403, detail="Invalid API key")
+
+    # Verify if the app exists
+    app = apps_db.get_app_by_id_db(app_id)
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+
+    # Verify if the uid has enabled the app
+    enabled_plugins = redis_db.get_enabled_plugins(uid)
+    if app_id not in enabled_plugins:
+        raise HTTPException(status_code=403, detail="App is not enabled for this user")
+
+    # Check if the app has the capability external_integration > action > create_facts
+    if not apps_utils.app_has_action(app, 'create_facts'):
+        raise HTTPException(status_code=403, detail="App does not have the capability to create facts")
+
+    # Validate that text is provided or explicit facts are provided
+    if (not fact_data.text or len(fact_data.text.strip()) == 0) and \
+            (not fact_data.memories or len(fact_data.memories) == 0):
+        raise HTTPException(status_code=422, detail="Either text or explicit memories(facts) are required and cannot be empty")
+
+    # Process and save the fact using the utility function
+    process_external_integration_fact(uid, fact_data, app_id)
+
+    # Empty response
+    return {}
+
+
 @router.post('/v2/integrations/{app_id}/user/facts', response_model=integration_models.EmptyResponse,
              tags=['integration', 'facts'])
 async def create_facts_via_integration(
@@ -157,9 +200,10 @@ async def create_facts_via_integration(
     if not apps_utils.app_has_action(app, 'create_facts'):
         raise HTTPException(status_code=403, detail="App does not have the capability to create facts")
 
-    # Validate that text is provided
-    if not fact_data.text or len(fact_data.text.strip()) == 0:
-        raise HTTPException(status_code=422, detail="Text is required and cannot be empty")
+    # Validate that text is provided or explicit facts are provided
+    if (not fact_data.text or len(fact_data.text.strip()) == 0) and \
+            (not fact_data.memories or len(fact_data.memories) == 0):
+        raise HTTPException(status_code=422, detail="Either text or explicit memories(facts) are required and cannot be empty")
 
     # Process and save the fact using the utility function
     process_external_integration_fact(uid, fact_data, app_id)
@@ -189,9 +233,9 @@ async def send_notification_via_integration(
     app_data = apps_utils.get_available_app_by_id(app_id, uid)
     if not app_data:
         raise HTTPException(status_code=404, detail='App not found')
-    
+
     app = App(**app_data)
-    
+
     # Check if user has app installed
     user_enabled = set(get_enabled_plugins(uid))
     if app_id not in user_enabled:
@@ -199,14 +243,14 @@ async def send_notification_via_integration(
 
     # Check rate limit
     allowed, remaining, reset_time, retry_after = check_rate_limit(app.id, uid)
-    
+
     # Add rate limit headers to response
     headers = {
         'X-RateLimit-Limit': str(MAX_NOTIFICATIONS_PER_HOUR),
         'X-RateLimit-Remaining': str(remaining),
         'X-RateLimit-Reset': str(reset_time),
     }
-    
+
     if not allowed:
         headers['Retry-After'] = str(retry_after)
         return JSONResponse(
