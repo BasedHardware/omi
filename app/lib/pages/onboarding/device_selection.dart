@@ -102,7 +102,7 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                             ),
                           ),
                           child: const Text(
-                            'Get Started',
+                            'Connect omi',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -117,10 +117,10 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                             routeToPage(context, const OnboardingWrapper());
                           },
                           child: const Text(
-                            'Sign in',
+                            'I don\'t have omi',
                             style: TextStyle(
                               color: Colors.white,
-                              fontWeight: FontWeight.w500,
+                              fontWeight: FontWeight.bold,
                               fontSize: 16,
                             ),
                           ),
