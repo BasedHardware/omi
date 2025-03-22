@@ -19,7 +19,6 @@ Write-Host "- .\setup.ps1 ios"
 Write-Host "- .\setup.ps1 android"
 Write-Host ""
 
-$API_BASE_URL = "https://backend-dt5lrfkkoa-uc.a.run.app/"
 
 function SetupFirebase {
     # Create directories if they don't exist
@@ -81,8 +80,12 @@ function SetupProvisioningProfile {
         --git_url "git@github.com:BasedHardware/omi-community-certs.git"
 }
 
+
 function SetupAppEnv {
-    "API_BASE_URL=$API_BASE_URL" | Out-File -FilePath ".dev.env"
+    $API_BASE_URL = "https://backend-dt5lrfkkoa-uc.a.run.app/"
+    # Using Set-Content with UTF8 encoding
+    $content = "API_BASE_URL=$API_BASE_URL"
+    [System.IO.File]::WriteAllText((Join-Path (Get-Location) ".dev.env"), $content, [System.Text.Encoding]::UTF8)
 }
 
 function SetupKeystoreAndroid {
