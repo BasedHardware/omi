@@ -434,7 +434,7 @@ class AddAppProvider extends ChangeNotifier {
         }
         if (capability.title == 'memories') {
           if (conversationPromptController.text.isEmpty) {
-            AppSnackbar.showSnackbarError('Please enter a memory prompt for your app');
+            AppSnackbar.showSnackbarError('Please enter a conversation prompt for your app');
             return false;
           }
         }

@@ -12,13 +12,13 @@ from langgraph.graph import START, StateGraph
 from typing_extensions import TypedDict, Literal
 # import os
 # os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
-import database.memories as memories_db
+import database.conversations as conversations_db
 from database.redis_db import get_filter_category_items
 from database.vector_db import query_vectors_by_metadata
 import database.notifications as notification_db
 from models.app import App
 from models.chat import ChatSession, Message
-from models.memory import Memory
+from models.conversation import Conversation
 from models.plugin import Plugin
 from utils.llm import (
     answer_omi_question,
@@ -103,7 +103,7 @@ class GraphState(TypedDict):
     filters: Optional[StructuredFilters]
     date_filters: Optional[DateRangeFilters]
 
-    memories_found: Optional[List[Memory]]
+    memories_found: Optional[List[Conversation]]
 
     parsed_question: Optional[str]
     answer: Optional[str]
@@ -294,7 +294,7 @@ def query_vectors(state: GraphState):
         dates=state.get("filters", {}).get("dates", []),
         limit=100,
     )
-    memories = memories_db.get_memories_by_id(uid, memories_id)
+    memories = conversations_db.get_conversations_by_id(uid, memories_id)
 
     # stream
     # if state.get('streaming', False):
@@ -319,7 +319,7 @@ def qa_handler(state: GraphState):
         response: str = qa_rag_stream(
             uid,
             state.get("parsed_question"),
-            Memory.memories_to_string(memories, False),
+            Conversation.conversations_to_string(memories, False),
             state.get("plugin_selected"),
             cited=state.get("cited"),
             messages=state.get("messages"),
@@ -333,7 +333,7 @@ def qa_handler(state: GraphState):
     response: str = qa_rag(
         uid,
         state.get("parsed_question"),
-        Memory.memories_to_string(memories, False),
+        Conversation.conversations_to_string(memories, False),
         state.get("plugin_selected"),
         cited=state.get("cited"),
         messages=state.get("messages"),
@@ -417,7 +417,7 @@ graph_stream = workflow.compile()
 @timeit
 def execute_graph_chat(
         uid: str, messages: List[Message], plugin: Optional[Plugin] = None, cited: Optional[bool] = False
-) -> Tuple[str, bool, List[Memory]]:
+) -> Tuple[str, bool, List[Conversation]]:
     print('execute_graph_chat plugin    :', plugin.id if plugin else '<none>')
     tz = notification_db.get_user_time_zone(uid)
     result = graph.invoke(

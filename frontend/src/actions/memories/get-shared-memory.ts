@@ -4,7 +4,7 @@ import { Memory } from '@/src/types/memory.types';
 
 export default async function getSharedMemory(id: string) {
   try {
-    const response = await fetch(`${envConfig.API_URL}/v1/memories/${id}/shared`, {
+    const response = await fetch(`${envConfig.API_URL}/v1/conversations/${id}/shared`, {
       headers: {
         'Content-Type': 'application/json',
       },

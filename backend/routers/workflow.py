@@ -5,11 +5,11 @@ from typing import Annotated, List
 from fastapi import APIRouter, Header
 from fastapi import Request, HTTPException
 
-import database.memories as memories_db
+import database.conversations as conversations_db
 import models.integrations as integration_models
-import models.memory as memory_models
-from routers.memories import process_memory, trigger_external_integrations
-from utils.memories.location import get_google_maps_location
+import models.conversation as conversation_models
+from routers.conversations import process_conversation, trigger_external_integrations
+from utils.conversations.location import get_google_maps_location
 
 router = APIRouter()
 
@@ -17,7 +17,7 @@ router = APIRouter()
 @router.post('/v1/integrations/workflow/memories', response_model=integration_models.EmptyResponse,
              tags=['integration', 'workflow', 'memories'])
 def create_memory(request: Request, uid: str, api_key: Annotated[str | None, Header()],
-                  create_memory: memory_models.ExternalIntegrationCreateMemory):
+                  create_memory: conversation_models.ExternalIntegrationCreateConversation):
     if api_key != os.getenv('WORKFLOW_API_KEY'):
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
@@ -43,7 +43,7 @@ def create_memory(request: Request, uid: str, api_key: Annotated[str | None, Hea
         create_memory.language = language_code
 
     # Process
-    memory = process_memory(uid, language_code, create_memory)
+    memory = process_conversation(uid, language_code, create_memory)
 
     # Always trigger integration
     trigger_external_integrations(uid, memory)
@@ -52,7 +52,7 @@ def create_memory(request: Request, uid: str, api_key: Annotated[str | None, Hea
     return {}
 
 
-@router.get('/v1/integrations/workflow/memories', response_model=List[memory_models.Memory],
+@router.get('/v1/integrations/workflow/memories', response_model=List[conversation_models.Conversation],
             tags=['integration', 'workflow', 'memories'])
 def get_memory(request: Request, uid: str, api_key: Annotated[str | None, Header()], limit: int = 1):
     if api_key != os.getenv('WORKFLOW_API_KEY'):
@@ -62,4 +62,4 @@ def get_memory(request: Request, uid: str, api_key: Annotated[str | None, Header
     limit = min(limit, 12)
 
     print('get_memories', uid, limit)
-    return memories_db.get_memories(uid, limit, 0, include_discarded=False)
+    return conversations_db.get_conversations(uid, limit, 0, include_discarded=False)

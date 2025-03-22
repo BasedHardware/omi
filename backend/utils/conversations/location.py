@@ -3,7 +3,7 @@ from typing import Optional
 
 import requests
 
-from models.memory import Geolocation
+from models.conversation import Geolocation
 
 
 def get_google_maps_location(latitude: float, longitude: float) -> Optional[Geolocation]:
