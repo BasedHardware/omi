@@ -272,9 +272,9 @@ class CaptureProvider extends ChangeNotifier
   Future<void> _resetState() async {
     debugPrint('resetState');
     _cleanupCurrentState();
-    await _recheckCodecChange();
-    await _ensureSocketConnection();
-    await _initiateFriendAudioStreaming();
+    await _recheckDeviceCodecChange();
+    await _ensureDeviceSocketConnection();
+    await _initiateDeviceAudioStreaming();
     await initiateStorageBytesStreaming(); // ??
     notifyListeners();
   }
@@ -342,19 +342,23 @@ class CaptureProvider extends ChangeNotifier
     return connection.getBleButtonState();
   }
 
-  Future<bool> _recheckCodecChange() async {
-    if (_recordingDevice != null) {
-      BleAudioCodec newCodec = await _getAudioCodec(_recordingDevice!.id);
-      if (SharedPreferencesUtil().deviceCodec != newCodec) {
-        debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $newCodec');
-        await SharedPreferencesUtil().setDeviceCodec(newCodec);
-        return true;
-      }
+  Future<bool> _recheckDeviceCodecChange() async {
+    if (_recordingDevice == null) {
+      return false;
+    }
+    BleAudioCodec newCodec = await _getAudioCodec(_recordingDevice!.id);
+    if (SharedPreferencesUtil().deviceCodec != newCodec) {
+      debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $newCodec');
+      await SharedPreferencesUtil().setDeviceCodec(newCodec);
+      return true;
     }
     return false;
   }
 
-  Future<void> _ensureSocketConnection() async {
+  Future<void> _ensureDeviceSocketConnection() async {
+    if (_recordingDevice == null) {
+      return;
+    }
     var codec = SharedPreferencesUtil().deviceCodec;
     var language = SharedPreferencesUtil().recordingsLanguage;
     if (language != _socket?.language || codec != _socket?.codec || _socket?.state != SocketServiceState.connected) {
@@ -362,15 +366,16 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
-  Future<void> _initiateFriendAudioStreaming() async {
-    if (_recordingDevice == null) return;
-
+  Future<void> _initiateDeviceAudioStreaming() async {
+    if (_recordingDevice == null) {
+      return;
+    }
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
     if (SharedPreferencesUtil().deviceCodec != codec) {
       debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $codec');
       SharedPreferencesUtil().deviceCodec = codec;
       notifyInfo('FIM_CHANGE');
-      await _ensureSocketConnection();
+      await _ensureDeviceSocketConnection();
     }
 
     // Why is the _recordingDevice null at this point?
