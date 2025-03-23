@@ -133,12 +133,15 @@ class CaptureProvider extends ChangeNotifier
     await _resetState();
   }
 
-  Future<void> changeAudioRecordProfile([
-    BleAudioCodec? audioCodec,
+  Future<void> changeAudioRecordProfile({
+    required BleAudioCodec audioCodec,
     int? sampleRate,
-  ]) async {
+  }) async {
     debugPrint("changeAudioRecordProfile");
     await _resetState();
+
+    // New codec
+    SharedPreferencesUtil().deviceCodec = audioCodec;
     await _initiateWebsocket(audioCodec: audioCodec, sampleRate: sampleRate);
   }
 
@@ -424,7 +427,7 @@ class CaptureProvider extends ChangeNotifier
     await Permission.microphone.request();
 
     // prepare
-    await changeAudioRecordProfile(BleAudioCodec.pcm16, 16000);
+    await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
 
     // record
     await ServiceManager.instance().mic.start(onByteReceived: (bytes) {
@@ -487,7 +490,6 @@ class CaptureProvider extends ChangeNotifier
           t.cancel();
           return;
         }
-
         await _initiateWebsocket();
       });
     }
