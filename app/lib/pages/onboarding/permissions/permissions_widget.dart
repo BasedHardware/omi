@@ -122,7 +122,8 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
               onChanged: (s) async {
                 if (s != null) {
                   if (s) {
-                    await provider.askForNotificationPermissions();
+                    //TODO: isolate!web
+                    // await provider.askForNotificationPermissions();
                   } else {
                     provider.updateNotificationPermission(false);
                   }

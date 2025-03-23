@@ -147,8 +147,9 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void initState() {
-    NotificationUtil.initializeNotificationsEventListeners();
-    NotificationUtil.initializeIsolateReceivePort();
+    // TODO: isolate!web
+    // NotificationUtil.initializeNotificationsEventListeners();
+    // NotificationUtil.initializeIsolateReceivePort();
     WidgetsBinding.instance.addObserver(this);
     super.initState();
   }

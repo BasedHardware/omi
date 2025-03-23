@@ -107,11 +107,12 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     notifyListeners();
   }
 
-  Future askForNotificationPermissions() async {
-    var isAllowed = await NotificationService.instance.requestNotificationPermissions();
-    updateNotificationPermission(isAllowed);
-    notifyListeners();
-  }
+  //TODO: isolate!web
+  // Future askForNotificationPermissions() async {
+  //   var isAllowed = await NotificationService.instance.requestNotificationPermissions();
+  //   updateNotificationPermission(isAllowed);
+  //   notifyListeners();
+  // }
 
   Future askForBackgroundPermissions() async {
     await FlutterForegroundTask.requestIgnoreBatteryOptimization();
