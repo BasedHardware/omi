@@ -551,25 +551,25 @@ async def _listen(
 
     # Audio bytes
     #
-    # Initiate a separate vad for each websocket
-    w_vad = webrtcvad.Vad()
-    w_vad.set_mode(1)
+    # # Initiate a separate vad for each websocket
+    # w_vad = webrtcvad.Vad()
+    # w_vad.set_mode(1)
 
     decoder = opuslib.Decoder(sample_rate, 1)
 
-    # A  frame must be either 10, 20, or 30 ms in duration
-    def _has_speech(data, sample_rate):
-        sample_size = 320 if sample_rate == 16000 else 160
-        offset = 0
-        while offset < len(data):
-            sample = data[offset:offset + sample_size]
-            if len(sample) < sample_size:
-                sample = sample + bytes([0x00] * (sample_size - len(sample) % sample_size))
-            has_speech = w_vad.is_speech(sample, sample_rate)
-            if has_speech:
-                return True
-            offset += sample_size
-        return False
+    # # A  frame must be either 10, 20, or 30 ms in duration
+    # def _has_speech(data, sample_rate):
+    #     sample_size = 320 if sample_rate == 16000 else 160
+    #     offset = 0
+    #     while offset < len(data):
+    #         sample = data[offset:offset + sample_size]
+    #         if len(sample) < sample_size:
+    #             sample = sample + bytes([0x00] * (sample_size - len(sample) % sample_size))
+    #         has_speech = w_vad.is_speech(sample, sample_rate)
+    #         if has_speech:
+    #             return True
+    #         offset += sample_size
+    #     return False
 
     async def receive_audio(dg_socket1, dg_socket2, soniox_socket, speechmatics_socket1):
         nonlocal websocket_active
@@ -585,8 +585,9 @@ async def _listen(
 
                 # STT
                 has_speech = True
-                if include_speech_profile and codec != 'opus':  # don't do for opus 1.0.4 for now
-                    has_speech = _has_speech(data, sample_rate)
+                # thinh's comment: disabled cause bad performance
+                # if include_speech_profile and codec != 'opus':  # don't do for opus 1.0.4 for now
+                #     has_speech = _has_speech(data, sample_rate)
 
                 if has_speech:
                     if soniox_socket is not None:
