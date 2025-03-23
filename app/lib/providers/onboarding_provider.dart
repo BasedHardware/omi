@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+// import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -114,12 +114,13 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   //   notifyListeners();
   // }
 
-  Future askForBackgroundPermissions() async {
-    await FlutterForegroundTask.requestIgnoreBatteryOptimization();
-    var isAllowed = await ForegroundUtil().isIgnoringBatteryOptimizations;
-    updateBackgroundPermission(isAllowed);
-    notifyListeners();
-  }
+  //TODO: flutter_foreground_task!web
+  // Future askForBackgroundPermissions() async { 
+  //   await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+  //   var isAllowed = await ForegroundUtil().isIgnoringBatteryOptimizations;
+  //   updateBackgroundPermission(isAllowed);
+  //   notifyListeners();
+  // }
 
   Future<(bool, PermissionStatus)> askForLocationPermissions() async {
     if (await Permission.location.serviceStatus.isDisabled) {

@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+// import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
@@ -98,7 +98,8 @@ void main() async {
   } else {
     Env.init(DevEnv());
   }
-  FlutterForegroundTask.initCommunicationPort();
+  //TODO: flutter_foreground_task!web
+  // FlutterForegroundTask.initCommunicationPort();
   if (Env.posthogApiKey != null) {
     await initPostHog();
   }
@@ -218,72 +219,72 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => MemoriesProvider()),
         ],
         builder: (context, child) {
-          return WithForegroundTask(
-            child: MaterialApp(
-              navigatorObservers: [
-                if (Env.instabugApiKey != null) InstabugNavigatorObserver(),
-                if (Env.posthogApiKey != null) PosthogObserver(),
-              ],
-              debugShowCheckedModeBanner: F.env == Environment.dev,
-              title: F.title,
-              navigatorKey: MyApp.navigatorKey,
-              localizationsDelegates: const [
-                GlobalMaterialLocalizations.delegate,
-                GlobalWidgetsLocalizations.delegate,
-                GlobalCupertinoLocalizations.delegate,
-              ],
-              supportedLocales: const [Locale('en')],
-              theme: ThemeData(
-                  useMaterial3: false,
-                  colorScheme: const ColorScheme.dark(
-                    primary: Colors.black,
-                    secondary: Colors.deepPurple,
-                    surface: Colors.black38,
-                  ),
-                  snackBarTheme: SnackBarThemeData(
-                    backgroundColor: Colors.grey.shade900,
-                    contentTextStyle: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
-                  ),
-                  textTheme: TextTheme(
-                    titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
-                    titleMedium: const TextStyle(fontSize: 16, color: Colors.white),
-                    bodyMedium: const TextStyle(fontSize: 14, color: Colors.white),
-                    labelMedium: TextStyle(fontSize: 12, color: Colors.grey.shade200),
-                  ),
-                  textSelectionTheme: const TextSelectionThemeData(
-                    cursorColor: Colors.white,
-                    selectionColor: Colors.deepPurple,
-                    selectionHandleColor: Colors.white,
-                  ),
-                  cupertinoOverrideTheme: const CupertinoThemeData(
-                    primaryColor: Colors.white, // Controls the selection handles on iOS
-                  )),
-              themeMode: ThemeMode.dark,
-              builder: (context, child) {
-                FlutterError.onError = (FlutterErrorDetails details) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    Logger.instance.talker.handle(details.exception, details.stack);
-                  });
-                };
-                ErrorWidget.builder = (errorDetails) {
-                  return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
-                };
-                return child!;
-              },
-              home: TalkerWrapper(
-                talker: Logger.instance.talker,
-                options: TalkerWrapperOptions(
-                  enableErrorAlerts: true,
-                  enableExceptionAlerts: true,
-                  errorAlertBuilder: (context, data) {
-                    return LoggerSnackbar(error: data);
-                  },
-                  exceptionAlertBuilder: (context, data) {
-                    return LoggerSnackbar(exception: data);
-                  },
+          //TODO: flutter_foreground_task!web
+          //TODO: Wrap MaterialApp with WithForegroundTask 
+          return MaterialApp(
+            navigatorObservers: [
+              if (Env.instabugApiKey != null) InstabugNavigatorObserver(),
+              if (Env.posthogApiKey != null) PosthogObserver(),
+            ],
+            debugShowCheckedModeBanner: F.env == Environment.dev,
+            title: F.title,
+            navigatorKey: MyApp.navigatorKey,
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: const [Locale('en')],
+            theme: ThemeData(
+                useMaterial3: false,
+                colorScheme: const ColorScheme.dark(
+                  primary: Colors.black,
+                  secondary: Colors.deepPurple,
+                  surface: Colors.black38,
                 ),
-                child: const DeciderWidget(),
+                snackBarTheme: SnackBarThemeData(
+                  backgroundColor: Colors.grey.shade900,
+                  contentTextStyle: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
+                ),
+                textTheme: TextTheme(
+                  titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
+                  titleMedium: const TextStyle(fontSize: 16, color: Colors.white),
+                  bodyMedium: const TextStyle(fontSize: 14, color: Colors.white),
+                  labelMedium: TextStyle(fontSize: 12, color: Colors.grey.shade200),
+                ),
+                textSelectionTheme: const TextSelectionThemeData(
+                  cursorColor: Colors.white,
+                  selectionColor: Colors.deepPurple,
+                  selectionHandleColor: Colors.white,
+                ),
+                cupertinoOverrideTheme: const CupertinoThemeData(
+                  primaryColor: Colors.white, // Controls the selection handles on iOS
+                )),
+            themeMode: ThemeMode.dark,
+            builder: (context, child) {
+              FlutterError.onError = (FlutterErrorDetails details) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  Logger.instance.talker.handle(details.exception, details.stack);
+                });
+              };
+              ErrorWidget.builder = (errorDetails) {
+                return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
+              };
+              return child!;
+            },
+            home: TalkerWrapper(
+              talker: Logger.instance.talker,
+              options: TalkerWrapperOptions(
+                enableErrorAlerts: true,
+                enableExceptionAlerts: true,
+                errorAlertBuilder: (context, data) {
+                  return LoggerSnackbar(error: data);
+                },
+                exceptionAlertBuilder: (context, data) {
+                  return LoggerSnackbar(exception: data);
+                },
               ),
+              child: const DeciderWidget(),
             ),
           );
         });

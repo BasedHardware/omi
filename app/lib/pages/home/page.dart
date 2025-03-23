@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+// import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/backend/http/api/users.dart';
@@ -95,7 +95,8 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver, TickerProviderStateMixin {
-  ForegroundUtil foregroundUtil = ForegroundUtil();
+  //TODO: flutter_foreground_task!web
+  // ForegroundUtil foregroundUtil = ForegroundUtil();
   List<Widget> screens = [Container(), const SizedBox(), const SizedBox(), const SizedBox()];
 
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
@@ -199,8 +200,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       _initiateApps();
 
       // ForegroundUtil.requestPermissions();
-      await ForegroundUtil.initializeForegroundService();
-      ForegroundUtil.startForegroundTask();
+
+      //TODO: flutter_foreground_task!web
+      // await ForegroundUtil.initializeForegroundService();
+      // ForegroundUtil.startForegroundTask();
       if (mounted) {
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
@@ -254,8 +257,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     _listenToMessagesFromNotification();
     super.initState();
 
+    //TODO: flutter_foreground_task!web
     // After init
-    FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
+    // FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
   }
 
   void _listenToMessagesFromNotification() {
@@ -562,7 +566,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    ForegroundUtil.stopForegroundTask();
+    //TODO: flutter_foreground_task!web
+    // ForegroundUtil.stopForegroundTask();
     if (_controller != null) {
       _controller!.dispose();
       _controller = null;
