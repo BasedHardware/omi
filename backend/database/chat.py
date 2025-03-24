@@ -19,7 +19,7 @@ def add_message(uid: str, message_data: dict):
     return message_data
 
 
-def add_plugin_message(text: str, plugin_id: str, uid: str, memory_id: Optional[str] = None) -> Message:
+def add_plugin_message(text: str, plugin_id: str, uid: str, conversation_id: Optional[str] = None) -> Message:
     ai_message = Message(
         id=str(uuid.uuid4()),
         text=text,
@@ -28,7 +28,7 @@ def add_plugin_message(text: str, plugin_id: str, uid: str, memory_id: Optional[
         plugin_id=plugin_id,
         from_external_integration=False,
         type='text',
-        memories_id=[memory_id] if memory_id else [],
+        memories_id=[conversation_id] if conversation_id else [],
     )
     add_message(uid, ai_message.dict())
     return ai_message
@@ -49,7 +49,7 @@ def add_summary_message(text: str, uid: str) -> Message:
     return ai_message
 
 
-def get_plugin_messages(uid: str, plugin_id: str, limit: int = 20, offset: int = 0, include_memories: bool = False):
+def get_plugin_messages(uid: str, plugin_id: str, limit: int = 20, offset: int = 0, include_conversations: bool = False):
     user_ref = db.collection('users').document(uid)
     messages_ref = (
         user_ref.collection('messages')
@@ -59,9 +59,9 @@ def get_plugin_messages(uid: str, plugin_id: str, limit: int = 20, offset: int =
         .offset(offset)
     )
     messages = []
-    memories_id = set()
+    conversations_id = set()
 
-    # Fetch messages and collect memory IDs
+    # Fetch messages and collect conversation IDs
     for doc in messages_ref.stream():
         message = doc.to_dict()
 
@@ -69,25 +69,25 @@ def get_plugin_messages(uid: str, plugin_id: str, limit: int = 20, offset: int =
             continue
 
         messages.append(message)
-        memories_id.update(message.get('memories_id', []))
+        conversations_id.update(message.get('memories_id', []))
 
-    if not include_memories:
+    if not include_conversations:
         return messages
 
-    # Fetch all memories at once
-    memories = {}
-    memories_ref = user_ref.collection('memories')
-    doc_refs = [memories_ref.document(str(memory_id)) for memory_id in memories_id]
+    # Fetch all conversations at once
+    conversations = {}
+    conversations_ref = user_ref.collection('memories')
+    doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversations_id]
     docs = db.get_all(doc_refs)
     for doc in docs:
         if doc.exists:
-            memory = doc.to_dict()
-            memories[memory['id']] = memory
+            conversation = doc.to_dict()
+            conversations[conversation['id']] = conversation
 
-    # Attach memories to messages
+    # Attach conversations to messages
     for message in messages:
         message['memories'] = [
-            memories[memory_id] for memory_id in message.get('memories_id', []) if memory_id in memories
+            conversations[conversation_id] for conversation_id in message.get('memories_id', []) if conversation_id in conversations
         ]
 
     return messages
@@ -95,10 +95,10 @@ def get_plugin_messages(uid: str, plugin_id: str, limit: int = 20, offset: int =
 
 @timeit
 def get_messages(
-        uid: str, limit: int = 20, offset: int = 0, include_memories: bool = False, plugin_id: Optional[str] = None, chat_session_id: Optional[str] = None
+        uid: str, limit: int = 20, offset: int = 0, include_conversations: bool = False, plugin_id: Optional[str] = None, chat_session_id: Optional[str] = None
         # include_plugin_id_filter: bool = True,
 ):
-    print('get_messages', uid, limit, offset, plugin_id, include_memories)
+    print('get_messages', uid, limit, offset, plugin_id, include_conversations)
     user_ref = db.collection('users').document(uid)
     messages_ref = (
         user_ref.collection('messages')
@@ -112,35 +112,35 @@ def get_messages(
     messages_ref = messages_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit).offset(offset)
 
     messages = []
-    memories_id = set()
+    conversations_id = set()
     files_id = set()
 
-    # Fetch messages and collect memory IDs
+    # Fetch messages and collect conversation IDs
     for doc in messages_ref.stream():
         message = doc.to_dict()
         # if message.get('deleted') is True:
         #     continue
         messages.append(message)
-        memories_id.update(message.get('memories_id', []))
+        conversations_id.update(message.get('memories_id', []))
         files_id.update(message.get('files_id', []))
 
-    if not include_memories:
+    if not include_conversations:
         return messages
 
-    # Fetch all memories at once
-    memories = {}
-    memories_ref = user_ref.collection('memories')
-    doc_refs = [memories_ref.document(str(memory_id)) for memory_id in memories_id]
+    # Fetch all conversations at once
+    conversations = {}
+    conversations_ref = user_ref.collection('memories')
+    doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversations_id]
     docs = db.get_all(doc_refs)
     for doc in docs:
         if doc.exists:
-            memory = doc.to_dict()
-            memories[memory['id']] = memory
+            conversation = doc.to_dict()
+            conversations[conversation['id']] = conversation
 
-    # Attach memories to messages
+    # Attach conversations to messages
     for message in messages:
         message['memories'] = [
-            memories[memory_id] for memory_id in message.get('memories_id', []) if memory_id in memories
+            conversations[conversation_id] for conversation_id in message.get('memories_id', []) if conversation_id in conversations
         ]
 
     # Fetch file chat

@@ -15,14 +15,14 @@ class MessageType(str, Enum):
     day_summary = 'day_summary'
 
 
-class MessageMemoryStructured(BaseModel):
+class MessageConversationStructured(BaseModel):
     title: str
     emoji: str
 
 
-class MessageMemory(BaseModel):
+class MessageConversation(BaseModel):
     id: str
-    structured: MessageMemoryStructured
+    structured: MessageConversationStructured
     created_at: datetime
 
 class FileChat(BaseModel):
@@ -52,7 +52,7 @@ class Message(BaseModel):
     from_external_integration: bool = False
     type: MessageType
     memories_id: List[str] = []  # used in db
-    memories: List[MessageMemory] = []  # used front facing
+    memories: List[MessageConversation] = []  # used front facing
     deleted: bool = False
     reported: bool = False
     report_reason: Optional[str] = None

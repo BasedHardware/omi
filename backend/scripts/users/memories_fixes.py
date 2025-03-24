@@ -22,18 +22,18 @@ import umap
 from plotly.subplots import make_subplots
 
 # noinspection PyUnresolvedReferences
-from models.memory import Memory
-import database.memories as memories_db
+from models.conversation import Conversation
+import database.conversations as conversations_db
 
 import multiprocessing
 import matplotlib.pyplot as plt
 
 
-# Assuming get_users_uid() and memories_db.get_memories() are already defined
+# Assuming get_users_uid() and conversations_db.get_conversations() are already defined
 
 def process_memories(uid):
     durations = []
-    memories = memories_db.get_memories(uid, limit=1000)
+    memories = conversations_db.get_conversations(uid, limit=1000)
 
     for memory in memories:
         segments = memory.get('transcript_segments', [])
@@ -49,7 +49,7 @@ def process_memories(uid):
 def execute():
     uids = get_users_uid()
 
-    # Use multiprocessing to fetch and process memories in parallel
+    # Use multiprocessing to fetch and process conversations in parallel
     with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
         results = pool.map(process_memories, uids)
 
@@ -84,7 +84,7 @@ def execute():
 
 
 def check():
-    memories = memories_db.get_memories('', limit=20)
+    memories = conversations_db.get_conversations('', limit=20)
     for memory in memories:
         # print(memory['started_at'])
         started_at = str(memory['started_at']).split(' ')[1].split('.')[0]
@@ -95,7 +95,7 @@ def check():
 def merge_wrongly_separated_memories():
     uids = get_users_uid()
     for uid in uids:
-        memories = memories_db.get_memories(uid, limit=50)
+        memories = conversations_db.get_conversations(uid, limit=50)
         to_merge = []
         for memory in memories:
             segments = memory.get('transcript_segments', [])
@@ -107,7 +107,7 @@ def merge_wrongly_separated_memories():
                     to_merge.append(memory)
                 else:
                     if len(to_merge) > 1:
-                        print('merging memories:')
+                        print('merging conversations:')
                         for m in to_merge:
                             print(str(m['started_at']).split('.')[0], str(m['finished_at']).split('.')[0])
                             # merge them
