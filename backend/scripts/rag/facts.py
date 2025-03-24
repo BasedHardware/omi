@@ -1,4 +1,4 @@
-import database.facts as facts_db
+import database.memories as memories_db
 from utils.llm import new_facts_extractor, new_learnings_extractor
 import threading
 from typing import Tuple
@@ -50,13 +50,13 @@ def get_facts_from_memories(
         response += facts
         for fact in facts:
             parsed_facts.append(FactDB.from_fact(fact, uid, memory['id'], memory['structured']['category'],False))
-        facts_db.save_facts(uid, [fact.dict() for fact in parsed_facts])
+        memories_db.save_memories(uid, [fact.dict() for fact in parsed_facts])
 
     return response
 
 
 def execute_for_user(uid: str):
-    facts_db.delete_facts(uid)
+    memories_db.delete_memories(uid)
     print('execute_for_user', uid, 'deleted facts')
     memories = conversations_db.get_conversations(uid, limit=2000)
     print('execute_for_user', uid, 'found conversations', len(memories))
@@ -91,7 +91,7 @@ def migration_fact_scoring_for_user(uid: str):
     print('migration_fact_scoring_for_user', uid)
     offset = 0
     while True:
-        facts_data = facts_db.get_non_filtered_facts(uid, limit=400, offset=offset)
+        facts_data = memories_db.get_non_filtered_memories(uid, limit=400, offset=offset)
         facts = [FactDB(**d) for d in facts_data]
         if not facts or len(facts) == 0:
             break
@@ -99,7 +99,7 @@ def migration_fact_scoring_for_user(uid: str):
         print('execute_for_user', uid, 'found facts', len(facts))
         for fact in facts:
             fact.scoring = FactDB.calculate_score(fact)
-        facts_db.save_facts(uid, [fact.dict() for fact in facts])
+        memories_db.save_memories(uid, [fact.dict() for fact in facts])
         offset += len(facts)
 
 def script_migrate_fact_scoring_users(uids: [str]):

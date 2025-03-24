@@ -1,6 +1,6 @@
 from typing import List, Tuple, Optional
 
-import database.facts as facts_db
+import database.memories as memories_db
 from database.auth import get_user_name
 from models.facts import Fact
 
@@ -14,7 +14,7 @@ def get_prompt_facts(uid: str) -> str:
 
 def get_prompt_data(uid: str) -> Tuple[str, List[Fact], List[Fact]]:
     # TODO: cache this
-    existing_facts = facts_db.get_facts(uid, limit=100)
+    existing_facts = memories_db.get_memories(uid, limit=100)
     user_made = [Fact(**fact) for fact in existing_facts if fact['manually_added']]
     # TODO: filter only reviewed True
     generated = [Fact(**fact) for fact in existing_facts if not fact['manually_added']]

@@ -15,7 +15,7 @@ from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
     get_omi_personas_by_uid_db, get_api_key_by_hash_db
 from database.auth import get_user_name
 from database.conversations import get_conversations
-from database.facts import get_facts, get_user_public_facts
+from database.memories import get_memories, get_user_public_memories
 from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_generic_cache, \
     set_generic_cache, set_app_usage_history_cache, get_app_usage_history_cache, get_app_money_made_cache, \
     set_app_money_made_cache, get_plugins_installs_count, get_plugins_reviews, get_app_cache_by_id, set_app_cache_by_id, \
@@ -383,8 +383,8 @@ async def generate_persona_prompt(uid: str, persona: dict):
 
     print(f"generate_persona_prompt {uid}")
 
-    # Get latest facts and user info
-    facts = get_facts(uid, limit=250)
+    # Get latest memories and user info
+    facts = get_memories(uid, limit=250)
     user_name = get_user_name(uid)
 
     # Get and condense recent conversations
@@ -461,7 +461,7 @@ async def generate_persona_prompt(uid: str, persona: dict):
 
 def generate_persona_desc(uid: str, persona_name: str):
     """Generate a persona description based on user facts."""
-    facts = get_facts(uid, limit=250)
+    facts = get_memories(uid, limit=250)
 
     persona_description = generate_persona_description(facts, persona_name)
     return persona_description
@@ -498,8 +498,8 @@ def sync_update_persona_prompt(persona: dict):
 
 async def update_persona_prompt(persona: dict):
     """Update a persona's chat prompt with latest facts and conversations."""
-    # Get latest facts and user info
-    facts = get_user_public_facts(persona['uid'], limit=250)
+    # Get latest memories and user info
+    facts = get_user_public_memories(persona['uid'], limit=250)
     user_name = get_user_name(persona['uid'])
 
     # Get and condense recent conversations
