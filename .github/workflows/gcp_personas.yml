@@ -2,7 +2,7 @@ name: Deploy Personas to Cloud RUN
 
 on:
   push:
-    branches: [ "main", "development" ]
+    branches: [ "main", "development" , "moving-folders"]
     paths:
       - 'web/personas-open-source/**'
   workflow_dispatch:
