@@ -4,7 +4,7 @@ on:
   push:
     branches: [ "main", "development" ]
     paths:
-      - 'personas-open-source/**'
+      - 'web/personas-open-source/**'
   workflow_dispatch:
     inputs:
       branch:
@@ -54,7 +54,7 @@ jobs:
             --build-arg NEXT_PUBLIC_MIXPANEL_TOKEN=${{ secrets.NEXT_PUBLIC_MIXPANEL_TOKEN }} \
             --build-arg NEXT_PUBLIC_EXTRA_PROMPT_RULES=${{ secrets.NEXT_PUBLIC_EXTRA_PROMPT_RULES }} \
             -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} \
-            -f personas-open-source/Dockerfile .
+            -f web/personas-open-source/Dockerfile .
 
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
       - name: Deploy to Cloud Run

@@ -2,7 +2,7 @@ FROM node:18-alpine AS base
 WORKDIR /app
 
 # Copy all files
-COPY personas-open-source .
+COPY web/personas-open-source .
 
 # Install dependencies and types
 RUN npm ci --legacy-peer-deps && \

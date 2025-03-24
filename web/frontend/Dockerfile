@@ -9,7 +9,7 @@ RUN echo "deps: $(pwd)"
 RUN ls -la
 
 # Install dependencies based on the preferred package manager
-COPY frontend/package.json frontend/yarn.lock* frontend/package-lock.json* frontend/pnpm-lock.yaml* ./
+COPY web/frontend/package.json web/frontend/yarn.lock* web/frontend/package-lock.json* web/frontend/pnpm-lock.yaml* ./
 
 RUN \
   if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
@@ -23,8 +23,8 @@ FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 #COPY frontend/. .
-ENV API_URL=https://backend-hhibjajaja-uc.a.run.app
 COPY frontend .
+ENV API_URL=https://backend-hhibjajaja-uc.a.run.app
 RUN npm run build
 
 RUN echo "base files"
@@ -34,10 +34,8 @@ RUN ls -la
 # Production image, copy all the files and run next
 FROM base AS runner
 WORKDIR /app
-RUN apk add --no-cache libc6-compat
 RUN echo "production: $(pwd)"
 RUN ls -la
-RUN npm install dd-trace --save
 ENV NODE_ENV production
 
 RUN addgroup --system --gid 1001 nodejs
@@ -50,7 +48,6 @@ RUN chown nextjs:nodejs .next
 
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --from=gcr.io/datadoghq/serverless-init:1 --chown=nextjs:nodejs /datadog-init /app/datadog-init
 
 USER nextjs
 
@@ -59,5 +56,4 @@ EXPOSE 3000
 ENV PORT 3000
 ENV HOSTNAME "0.0.0.0"
 
-ENTRYPOINT ["/app/datadog-init"]
 CMD ["node", "server.js"]
