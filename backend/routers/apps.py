@@ -3,6 +3,7 @@ import os
 import asyncio
 from datetime import datetime, timezone
 from typing import List
+from pydantic import ValidationError
 import requests
 from ulid import ULID
 from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header
@@ -28,7 +29,7 @@ from utils.llm import generate_description, generate_persona_intro_message
 
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
-from models.app import App, ActionType
+from models.app import App, ActionType, AppCreate, AppUpdate
 from utils.other.storage import upload_plugin_logo, delete_plugin_logo, upload_app_thumbnail, get_app_thumbnail_url
 from utils.social import get_twitter_profile, verify_latest_tweet, \
     upsert_persona_from_twitter_profile, add_twitter_to_persona
@@ -56,11 +57,11 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['approved'] = False
     data['deleted'] = False
     data['status'] = 'under-review'
-    data['name'] = data['name'].strip()
+    data['name'] = (data.get('name') or '').strip()
     data['id'] = str(ULID())
     if not data.get('author') and not data.get('email'):
         user = get_user_from_uid(uid)
-        data['author'] = user['display_name']
+        data['author'] = user.get('display_name', '')
         data['email'] = user['email']
     if not data.get('is_paid'):
         data['is_paid'] = False
@@ -112,10 +113,14 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
                 len(ext_int['auth_steps']) == 1):
             ext_int['app_home_url'] = ext_int['auth_steps'][0]['url']
 
-    add_app_to_db(data)
+    try:
+        app = AppCreate.model_validate(data)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    add_app_to_db(app.model_dump(exclude_unset=True))
 
     # payment link
-    app = App(**data)
     upsert_app_payment_link(app.id, app.is_paid, app.price, app.payment_plan, app.uid)
 
     return {'status': 'ok', 'app_id': app.id}
@@ -129,12 +134,12 @@ async def create_persona(persona_data: str = Form(...), file: UploadFile = File(
     data['deleted'] = False
     data['status'] = 'under-review'
     data['category'] = 'personality-emulation'
-    data['name'] = data['name'].strip()
+    data['name'] = (data.get('name') or '').strip()
     data['id'] = str(ULID())
     data['uid'] = uid
     data['capabilities'] = ['persona']
     user = get_user_from_uid(uid)
-    data['author'] = user['display_name']
+    data['author'] = user.get('display_name', '')
     data['email'] = user['email']
 
     if 'username' not in data or data['username'] == '' or data['username'] is None:
@@ -154,7 +159,12 @@ async def create_persona(persona_data: str = Form(...), file: UploadFile = File(
     data['image'] = img_url
     data['created_at'] = datetime.now(timezone.utc)
 
-    add_app_to_db(data)
+    try:
+        app_create = AppCreate.model_validate(data)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    add_app_to_db(app_create.model_dump(exclude_unset=True))
 
     return {'status': 'ok', 'app_id': data['id'], 'username': data['username']}
 
@@ -190,7 +200,12 @@ async def update_persona(persona_id: str, persona_data: str = Form(...), file: U
             'omi' not in persona.get('connected_accounts', []):
         data['persona_prompt'] = await generate_persona_prompt(uid, persona)
 
-    update_app_in_db(data)
+    try:
+        update_app = AppUpdate.model_validate(data)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    update_app_in_db(update_app.model_dump(exclude_unset=True))
 
     if persona['approved'] and (persona['private'] is None or persona['private'] is False):
         delete_generic_cache('get_public_approved_apps_data')
@@ -255,11 +270,16 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
     # Generate persona prompt
     persona_data['persona_prompt'] = await generate_persona_prompt(uid, persona_data)
 
+    try:
+        persona_create = AppCreate.model_validate(persona_data)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
     # Save username
     save_username(persona_data['username'], uid)
 
     # Add persona to database
-    add_app_to_db(persona_data)
+    add_app_to_db(persona_create.model_dump(exclude_unset=True))
 
     return persona_data
 
@@ -306,8 +326,12 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
                 len(ext_int['auth_steps']) == 1):
             ext_int['app_home_url'] = ext_int['auth_steps'][0]['url']
 
-    # Warn: the user can update any fields, e.g. approved.
-    update_app_in_db(data)
+    try:
+        update_app = AppUpdate.model_validate(data)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    update_app_in_db(update_app.model_dump(exclude_unset=True))
 
     # payment link
     upsert_app_payment_link(data.get('id'), data.get('is_paid', False), data.get('price'), data.get('payment_plan'),
