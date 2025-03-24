@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 
 class DeleteConfirmation {
   static Future<bool> show(BuildContext context, {String? title, String? content}) async {
-    title ??= 'Delete fact?';
+    title ??= 'Delete memory?';
     content ??= 'This action cannot be undone.';
 
     if (Platform.isIOS) {
