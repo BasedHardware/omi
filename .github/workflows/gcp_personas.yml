@@ -19,7 +19,7 @@ env:
 
 jobs:
   deploy:
-    environment: ${{ (github.ref == 'refs/heads/development' && 'development') || (github.ref == 'refs/heads/main' && 'prod') }}
+    environment: ${{ (github.ref == 'refs/heads/development' && 'development') || (github.ref == 'refs/heads/main' && 'prod') || (github.ref == 'refs/heads/moving-folders' && 'prod')}}
     permissions:
       contents: 'read'
       id-token: 'write'
