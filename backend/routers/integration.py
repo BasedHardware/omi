@@ -9,16 +9,15 @@ from fastapi.responses import JSONResponse
 import database.apps as apps_db
 import utils.apps as apps_utils
 from utils.apps import verify_api_key
-import database.memories as memories_db
 import database.redis_db as redis_db
 from database.redis_db import get_enabled_plugins, r as redis_client
 import database.notifications as notification_db
 import models.integrations as integration_models
-import models.memory as memory_models
+import models.conversation as conversation_models
 from models.app import App
-from routers.memories import process_memory, trigger_external_integrations
-from utils.memories.location import get_google_maps_location
-from utils.memories.facts import process_external_integration_fact
+from routers.conversations import process_conversation, trigger_external_integrations
+from utils.conversations.location import get_google_maps_location
+from utils.conversations.facts import process_external_integration_fact
 from utils.plugins import send_plugin_notification
 
 # Rate limit settings - more conservative limits to prevent notification fatigue
@@ -65,7 +64,7 @@ def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
 async def create_conversation_via_integration(
     request: Request,
     app_id: str,
-    create_memory: memory_models.ExternalIntegrationCreateMemory,
+    create_memory: conversation_models.ExternalIntegrationCreateConversation,
     uid: str,
     authorization: Optional[str] = Header(None)
 ):
@@ -111,13 +110,13 @@ async def create_conversation_via_integration(
         create_memory.language = language_code
 
     # Set source to external_integration
-    create_memory.source = memory_models.MemorySource.external_integration
+    create_memory.source = conversation_models.ConversationSource.external_integration
 
     # Set app_id
     create_memory.app_id = app_id
 
     # Process
-    memory = process_memory(uid, language_code, create_memory)
+    memory = process_conversation(uid, language_code, create_memory)
 
     # Always trigger integration
     trigger_external_integrations(uid, memory)

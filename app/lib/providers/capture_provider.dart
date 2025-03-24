@@ -524,7 +524,7 @@ class CaptureProvider extends ChangeNotifier
   void onMessageEventReceived(ServerMessageEvent event) {
     if (event.type == MessageEventType.conversationProcessingStarted) {
       if (event.conversation == null) {
-        debugPrint("Memory data not received in event. Content is: $event");
+        debugPrint("Conversation data not received in event. Content is: $event");
         return;
       }
       conversationProvider!.addProcessingConversation(event.conversation!);
@@ -545,7 +545,7 @@ class CaptureProvider extends ChangeNotifier
 
     if (event.type == MessageEventType.lastConversation) {
       if (event.memoryId == null) {
-        debugPrint("Memory ID not received in last_memory event. Content is: $event");
+        debugPrint("Conversation ID not received in last_memory event. Content is: $event");
         return;
       }
       _handleLastConvoEvent(event.memoryId!);

@@ -22,7 +22,7 @@ def get_facts_from_memories(
     all_facts = {}
 
     def execute(memory):
-        data = Memory(**memory)
+        data = Conversation(**memory)
         new_facts = new_facts_extractor(uid, data.transcript_segments, user_name, Fact.get_facts_as_str(existing_facts))
         # new_learnings = new_learnings_extractor(
         #     uid, data.transcript_segments, user_name,
@@ -58,8 +58,8 @@ def get_facts_from_memories(
 def execute_for_user(uid: str):
     facts_db.delete_facts(uid)
     print('execute_for_user', uid, 'deleted facts')
-    memories = memories_db.get_memories(uid, limit=2000)
-    print('execute_for_user', uid, 'found memories', len(memories))
+    memories = conversations_db.get_conversations(uid, limit=2000)
+    print('execute_for_user', uid, 'found conversations', len(memories))
     user_name = get_user_name(uid)
     facts = []
     chunk_size = 10
