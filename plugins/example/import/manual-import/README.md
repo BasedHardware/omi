@@ -35,13 +35,24 @@ Alternatively, you can edit the `app.py` file and replace the placeholder with y
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "your_openai_api_key_here")
 ```
 
-3. Run the Flask application:
+3. go to Omi AI app in Appstore, create a new app with "external integration capability", and allow "facts"
+
+<img src="https://github.com/user-attachments/assets/e3d3769a-d582-4356-b5f6-b480b99c5739" width='300'>
+
+Go to settings, copy your App ID and create private key
+
+<img src="https://github.com/user-attachments/assets/05ed579f-dee2-443b-818c-6bfad810595e" width='300'>
+
+
+4. in app.py file, provide the app ID and private key you've generated
+
+5. Run the Flask application:
 
 ```bash
 python app.py
 ```
 
-4. Open your browser and navigate to `http://localhost:5001`
+6. Open your browser and navigate to `http://localhost:5001`
 
 ## How to Use
 
