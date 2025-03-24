@@ -9,12 +9,12 @@ import 'delete_confirmation.dart';
 
 class MemoryDialog extends StatefulWidget {
   final MemoriesProvider provider;
-  final Memory? fact;
+  final Memory? memory;
 
   const MemoryDialog({
     super.key,
     required this.provider,
-    this.fact,
+    this.memory,
   });
 
   @override
@@ -29,12 +29,12 @@ class _MemoryDialogState extends State<MemoryDialog> {
   @override
   void initState() {
     super.initState();
-    contentController = TextEditingController(text: widget.fact?.content ?? '');
+    contentController = TextEditingController(text: widget.memory?.content ?? '');
     contentController.selection = TextSelection.fromPosition(
       TextPosition(offset: contentController.text.length),
     );
-    selectedCategory = widget.fact?.category ?? MemoryCategory.values.first;
-    selectedVisibility = widget.fact?.visibility ?? MemoryVisibility.public;
+    selectedCategory = widget.memory?.category ?? MemoryCategory.values.first;
+    selectedVisibility = widget.memory?.visibility ?? MemoryVisibility.public;
   }
 
   @override
@@ -62,7 +62,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    widget.fact != null ? 'Edit Memory' : 'New Memory',
+                    widget.memory != null ? 'Edit Memory' : 'New Memory',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
@@ -106,7 +106,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
                   onSubmitted: (value) => _saveFact(value),
                 ),
               ),
-              if (widget.fact == null || !widget.fact!.manuallyAdded) ...[
+              if (widget.memory == null || !widget.memory!.manuallyAdded) ...[
                 const SizedBox(height: 20),
                 Text(
                   'Visibility',
@@ -194,12 +194,12 @@ class _MemoryDialogState extends State<MemoryDialog> {
                 ],
               ),
               const SizedBox(height: 16),
-              if (widget.fact != null)
+              if (widget.memory != null)
                 TextButton.icon(
                   onPressed: () => _showDeleteConfirmation(context),
                   icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18),
                   label: const Text(
-                    'Delete Fact',
+                    'Delete Memory',
                     style: TextStyle(color: Colors.red),
                   ),
                   style: TextButton.styleFrom(
@@ -215,10 +215,10 @@ class _MemoryDialogState extends State<MemoryDialog> {
 
   void _saveFact(String value) {
     if (value.trim().isNotEmpty) {
-      if (widget.fact != null) {
-        widget.provider.editMemory(widget.fact!, value);
-        if (widget.fact!.visibility != selectedVisibility) {
-          widget.provider.updateMemoryVisibility(widget.fact!, selectedVisibility);
+      if (widget.memory != null) {
+        widget.provider.editMemory(widget.memory!, value);
+        if (widget.memory!.visibility != selectedVisibility) {
+          widget.provider.updateMemoryVisibility(widget.memory!, selectedVisibility);
         }
         MixpanelManager().factsPageEditedFact();
       } else {
@@ -230,18 +230,18 @@ class _MemoryDialogState extends State<MemoryDialog> {
   }
 
   Future<void> _showDeleteConfirmation(BuildContext context) async {
-    if (widget.fact == null) return;
+    if (widget.memory == null) return;
 
     final shouldDelete = await DeleteConfirmation.show(context);
     if (shouldDelete) {
-      widget.provider.deleteMemory(widget.fact!);
+      widget.provider.deleteMemory(widget.memory!);
       Navigator.pop(context); // Close edit sheet
     }
   }
 }
 
-// Helper function to show the fact dialog
-Future<void> showMemoryDialog(BuildContext context, MemoriesProvider provider, {Memory? fact}) async {
+// Helper function to show the memory dialog
+Future<void> showMemoryDialog(BuildContext context, MemoriesProvider provider, {Memory? memory}) async {
   final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
   if (!connectivityProvider.isConnected) {
     ConnectivityProvider.showNoInternetDialog(context);
@@ -252,6 +252,6 @@ Future<void> showMemoryDialog(BuildContext context, MemoriesProvider provider, {
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
-    builder: (context) => MemoryDialog(provider: provider, fact: fact),
+    builder: (context) => MemoryDialog(provider: provider, memory: memory),
   );
 }

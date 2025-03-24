@@ -151,10 +151,10 @@ class MixpanelManager {
   void factsPageCategoryOpened(MemoryCategory category) =>
       track('Fact Page Category Opened', properties: {'category': category.toString().split('.').last});
 
-  void factsPageDeletedFact(Memory fact) => track(
+  void factsPageDeletedFact(Memory memory) => track(
         'Fact Page Deleted Fact',
         properties: {
-          'fact_category': fact.category.toString().split('.').last,
+          'fact_category': memory.category.toString().split('.').last,
         },
       );
 
