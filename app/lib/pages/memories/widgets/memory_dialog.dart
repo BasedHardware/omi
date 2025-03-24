@@ -1,30 +1,30 @@
 import 'package:flutter/material.dart';
-import 'package:omi/backend/schema/fact.dart';
+import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/connectivity_provider.dart';
-import 'package:omi/providers/facts_provider.dart';
+import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:provider/provider.dart';
 
 import 'delete_confirmation.dart';
 
-class FactDialog extends StatefulWidget {
-  final FactsProvider provider;
-  final Fact? fact;
+class MemoryDialog extends StatefulWidget {
+  final MemoriesProvider provider;
+  final Memory? fact;
 
-  const FactDialog({
+  const MemoryDialog({
     super.key,
     required this.provider,
     this.fact,
   });
 
   @override
-  State<FactDialog> createState() => _FactDialogState();
+  State<MemoryDialog> createState() => _MemoryDialogState();
 }
 
-class _FactDialogState extends State<FactDialog> {
+class _MemoryDialogState extends State<MemoryDialog> {
   late TextEditingController contentController;
-  late FactCategory selectedCategory;
-  late FactVisibility selectedVisibility;
+  late MemoryCategory selectedCategory;
+  late MemoryVisibility selectedVisibility;
 
   @override
   void initState() {
@@ -33,8 +33,8 @@ class _FactDialogState extends State<FactDialog> {
     contentController.selection = TextSelection.fromPosition(
       TextPosition(offset: contentController.text.length),
     );
-    selectedCategory = widget.fact?.category ?? FactCategory.values.first;
-    selectedVisibility = widget.fact?.visibility ?? FactVisibility.public;
+    selectedCategory = widget.fact?.category ?? MemoryCategory.values.first;
+    selectedVisibility = widget.fact?.visibility ?? MemoryVisibility.public;
   }
 
   @override
@@ -117,7 +117,7 @@ class _FactDialogState extends State<FactDialog> {
                 ),
                 const SizedBox(height: 8),
                 Row(
-                  children: FactVisibility.values.map((visibility) {
+                  children: MemoryVisibility.values.map((visibility) {
                     final isSelected = visibility == selectedVisibility;
                     return Padding(
                       padding: const EdgeInsets.only(right: 8),
@@ -126,13 +126,13 @@ class _FactDialogState extends State<FactDialog> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
-                              visibility == FactVisibility.private ? Icons.lock_outline : Icons.public,
+                              visibility == MemoryVisibility.private ? Icons.lock_outline : Icons.public,
                               size: 16,
                               color: isSelected ? Colors.black : Colors.white70,
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              visibility == FactVisibility.private ? 'Private' : 'Public',
+                              visibility == MemoryVisibility.private ? 'Private' : 'Public',
                               style: TextStyle(
                                 color: isSelected ? Colors.black : Colors.white70,
                                 fontSize: 13,
@@ -216,14 +216,14 @@ class _FactDialogState extends State<FactDialog> {
   void _saveFact(String value) {
     if (value.trim().isNotEmpty) {
       if (widget.fact != null) {
-        widget.provider.editFact(widget.fact!, value);
+        widget.provider.editMemory(widget.fact!, value);
         if (widget.fact!.visibility != selectedVisibility) {
-          widget.provider.updateFactVisibility(widget.fact!, selectedVisibility);
+          widget.provider.updateMemoryVisibility(widget.fact!, selectedVisibility);
         }
         MixpanelManager().factsPageEditedFact();
       } else {
-        widget.provider.createFact(value, selectedVisibility);
-        MixpanelManager().factsPageCreatedFact(FactCategory.values.first);
+        widget.provider.createMemory(value, selectedVisibility);
+        MixpanelManager().factsPageCreatedFact(MemoryCategory.values.first);
       }
       Navigator.pop(context);
     }
@@ -234,14 +234,14 @@ class _FactDialogState extends State<FactDialog> {
 
     final shouldDelete = await DeleteConfirmation.show(context);
     if (shouldDelete) {
-      widget.provider.deleteFact(widget.fact!);
+      widget.provider.deleteMemory(widget.fact!);
       Navigator.pop(context); // Close edit sheet
     }
   }
 }
 
 // Helper function to show the fact dialog
-Future<void> showFactDialog(BuildContext context, FactsProvider provider, {Fact? fact}) async {
+Future<void> showMemoryDialog(BuildContext context, MemoriesProvider provider, {Memory? fact}) async {
   final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
   if (!connectivityProvider.isConnected) {
     ConnectivityProvider.showNoInternetDialog(context);
@@ -252,6 +252,6 @@ Future<void> showFactDialog(BuildContext context, FactsProvider provider, {Fact?
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
-    builder: (context) => FactDialog(provider: provider, fact: fact),
+    builder: (context) => MemoryDialog(provider: provider, fact: fact),
   );
 }

@@ -1,49 +1,50 @@
 import 'package:flutter/material.dart';
-import 'package:omi/backend/schema/fact.dart';
-import 'package:omi/providers/facts_provider.dart';
+import 'package:omi/backend/schema/memory.dart';
+import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
 import 'widgets/category_chip.dart';
 
-class FactReviewPage extends StatefulWidget {
-  final List<Fact> facts;
+class MemoriesReviewPage extends StatefulWidget {
+  final List<Memory> memories;
 
-  const FactReviewPage({
+  const MemoriesReviewPage({
     super.key,
-    required this.facts,
+    required this.memories,
   });
 
   @override
-  State<FactReviewPage> createState() => _FactReviewPageState();
+  State<MemoriesReviewPage> createState() => _MemoriesReviewPageState();
 }
 
-class _FactReviewPageState extends State<FactReviewPage> {
-  late List<Fact> remainingFacts;
-  late List<Fact> displayedFacts;
-  FactCategory? selectedCategory;
+class _MemoriesReviewPageState extends State<MemoriesReviewPage> {
+  late List<Memory> remainingMemories;
+  late List<Memory> displayedMemories;
+  MemoryCategory? selectedCategory;
   bool isReviewing = false;
   bool _isProcessing = false;
 
   @override
   void initState() {
     super.initState();
-    remainingFacts = List.from(widget.facts);
-    displayedFacts = List.from(remainingFacts);
+    remainingMemories = List.from(widget.memories);
+    displayedMemories = List.from(remainingMemories);
   }
 
-  void _filterByCategory(FactCategory? category) {
+  void _filterByCategory(MemoryCategory? category) {
     setState(() {
       selectedCategory = category;
-      displayedFacts =
-          category == null ? List.from(remainingFacts) : remainingFacts.where((f) => f.category == category).toList();
+      displayedMemories = category == null
+          ? List.from(remainingMemories)
+          : remainingMemories.where((f) => f.category == category).toList();
     });
   }
 
-  Map<FactCategory, int> get categoryCounts {
-    var counts = <FactCategory, int>{};
-    for (var fact in remainingFacts) {
-      counts[fact.category] = (counts[fact.category] ?? 0) + 1;
+  Map<MemoryCategory, int> get categoryCounts {
+    var counts = <MemoryCategory, int>{};
+    for (var memory in remainingMemories) {
+      counts[memory.category] = (counts[memory.category] ?? 0) + 1;
     }
     return counts;
   }
@@ -53,23 +54,23 @@ class _FactReviewPageState extends State<FactReviewPage> {
 
     setState(() => _isProcessing = true);
 
-    List<Fact> factsToProcess = selectedCategory == null
-        ? List.from(remainingFacts)
-        : remainingFacts.where((f) => f.category == selectedCategory).toList();
+    List<Memory> memoriesToProcess = selectedCategory == null
+        ? List.from(remainingMemories)
+        : remainingMemories.where((f) => f.category == selectedCategory).toList();
 
-    final count = factsToProcess.length;
+    final count = memoriesToProcess.length;
 
     // Process facts with a small delay to allow UI to update
-    for (var fact in factsToProcess) {
+    for (var memory in memoriesToProcess) {
       await Future.delayed(const Duration(milliseconds: 20));
-      context.read<FactsProvider>().reviewFact(fact, approve);
+      context.read<MemoriesProvider>().reviewMemory(memory, approve);
     }
 
     setState(() {
-      remainingFacts.removeWhere((f) => factsToProcess.contains(f));
-      displayedFacts = selectedCategory == null
-          ? List.from(remainingFacts)
-          : remainingFacts.where((f) => f.category == selectedCategory).toList();
+      remainingMemories.removeWhere((f) => memoriesToProcess.contains(f));
+      displayedMemories = selectedCategory == null
+          ? List.from(remainingMemories)
+          : remainingMemories.where((f) => f.category == selectedCategory).toList();
       _isProcessing = false;
     });
 
@@ -79,7 +80,7 @@ class _FactReviewPageState extends State<FactReviewPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          approve ? 'Saved $count facts' : 'Discarded $count facts',
+          approve ? 'Saved $count memories' : 'Discarded $count memories',
           style: const TextStyle(color: Colors.white),
         ),
         backgroundColor: Colors.grey.shade800,
@@ -92,14 +93,14 @@ class _FactReviewPageState extends State<FactReviewPage> {
       ),
     );
 
-    if (remainingFacts.isEmpty) {
+    if (remainingMemories.isEmpty) {
       Navigator.pop(context);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<FactsProvider>(builder: (context, provider, child) {
+    return Consumer<MemoriesProvider>(builder: (context, provider, child) {
       return Scaffold(
         backgroundColor: Theme.of(context).colorScheme.primary,
         appBar: AppBar(
@@ -107,9 +108,9 @@ class _FactReviewPageState extends State<FactReviewPage> {
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const Text('Review Facts'),
+              const Text('Review Memories'),
               Text(
-                '${displayedFacts.length} ${selectedCategory != null ? "in ${selectedCategory.toString().split('.').last}" : "total"}',
+                '${displayedMemories.length} ${selectedCategory != null ? "in ${selectedCategory.toString().split('.').last}" : "total"}',
                 style: TextStyle(
                   fontSize: 14,
                   color: Colors.grey.shade400,
@@ -132,7 +133,7 @@ class _FactReviewPageState extends State<FactReviewPage> {
                     padding: const EdgeInsets.only(right: 8),
                     child: FilterChip(
                       label: Text(
-                        'All (${remainingFacts.length})',
+                        'All (${remainingMemories.length})',
                         style: TextStyle(
                           color: selectedCategory == null ? Colors.black : Colors.white70,
                           fontWeight: selectedCategory == null ? FontWeight.w600 : FontWeight.normal,
@@ -174,7 +175,7 @@ class _FactReviewPageState extends State<FactReviewPage> {
               ),
             ),
             Expanded(
-              child: displayedFacts.isEmpty
+              child: displayedMemories.isEmpty
                   ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -183,8 +184,8 @@ class _FactReviewPageState extends State<FactReviewPage> {
                           const SizedBox(height: 16),
                           Text(
                             selectedCategory == null
-                                ? 'All facts have been reviewed'
-                                : 'No facts to review in this category',
+                                ? 'All memories have been reviewed'
+                                : 'No memories to review in this category',
                             style: TextStyle(
                               color: Colors.grey.shade400,
                               fontSize: 18,
@@ -195,9 +196,9 @@ class _FactReviewPageState extends State<FactReviewPage> {
                     )
                   : ListView.builder(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
-                      itemCount: displayedFacts.length,
+                      itemCount: displayedMemories.length,
                       itemBuilder: (context, index) {
-                        final fact = displayedFacts[index];
+                        final memory = displayedMemories[index];
                         return Container(
                           margin: const EdgeInsets.only(bottom: 12),
                           decoration: BoxDecoration(
@@ -213,12 +214,12 @@ class _FactReviewPageState extends State<FactReviewPage> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     CategoryChip(
-                                      category: fact.category,
+                                      category: memory.category,
                                       showIcon: true,
                                     ),
                                     const SizedBox(height: 12),
                                     Text(
-                                      fact.content.decodeString,
+                                      memory.content.decodeString,
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 16,
@@ -243,12 +244,12 @@ class _FactReviewPageState extends State<FactReviewPage> {
                                       onPressed: _isProcessing
                                           ? null
                                           : () {
-                                              provider.reviewFact(fact, false);
+                                              provider.reviewMemory(memory, false);
                                               setState(() {
-                                                remainingFacts.remove(fact);
-                                                displayedFacts.remove(fact);
+                                                remainingMemories.remove(memory);
+                                                displayedMemories.remove(memory);
                                               });
-                                              if (remainingFacts.isEmpty) {
+                                              if (remainingMemories.isEmpty) {
                                                 Navigator.pop(context);
                                               }
                                             },
@@ -289,12 +290,12 @@ class _FactReviewPageState extends State<FactReviewPage> {
                                       onPressed: _isProcessing
                                           ? null
                                           : () {
-                                              provider.reviewFact(fact, true);
+                                              provider.reviewMemory(memory, true);
                                               setState(() {
-                                                remainingFacts.remove(fact);
-                                                displayedFacts.remove(fact);
+                                                remainingMemories.remove(memory);
+                                                displayedMemories.remove(memory);
                                               });
-                                              if (remainingFacts.isEmpty) {
+                                              if (remainingMemories.isEmpty) {
                                                 Navigator.pop(context);
                                               }
                                             },
@@ -325,7 +326,7 @@ class _FactReviewPageState extends State<FactReviewPage> {
                       },
                     ),
             ),
-            if (displayedFacts.isNotEmpty)
+            if (displayedMemories.isNotEmpty)
               Container(
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.primary,
