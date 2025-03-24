@@ -9,7 +9,7 @@ RUN echo "deps: $(pwd)"
 RUN ls -la
 
 # Install dependencies based on the preferred package manager
-COPY frontend/package.json frontend/yarn.lock* frontend/package-lock.json* frontend/pnpm-lock.yaml* ./
+COPY web/frontend/package.json web/frontend/yarn.lock* web/frontend/package-lock.json* web/frontend/pnpm-lock.yaml* ./
 
 RUN \
   if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
