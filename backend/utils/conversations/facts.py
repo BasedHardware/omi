@@ -1,6 +1,6 @@
 from typing import List, Tuple, Optional
 
-import database.facts as facts_db
+import database.memories as memories_db
 from models.facts import FactDB, Fact, CategoryEnum
 from models.integrations import ExternalIntegrationCreateFact
 from utils.llm import extract_facts_from_text
@@ -43,7 +43,7 @@ def process_external_integration_fact(uid: str, fact_data: ExternalIntegrationCr
 
     # Save all facts to the database if any were created
     if saved_facts:
-        facts_db.save_facts(uid, [fact_db.dict() for fact_db in saved_facts])
+        memories_db.save_memories(uid, [fact_db.dict() for fact_db in saved_facts])
 
     return saved_facts
 
@@ -67,7 +67,7 @@ def process_twitter_facts(uid: str, tweets_text: str, persona_id: str) -> List[F
         fact_db.app_id = persona_id
         saved_facts.append(fact_db)
 
-    # Save all facts in batch
-    facts_db.save_facts(uid, [fact_db.dict() for fact_db in saved_facts])
+    # Save all memories in batch
+    memories_db.save_memories(uid, [fact_db.dict() for fact_db in saved_facts])
 
     return saved_facts

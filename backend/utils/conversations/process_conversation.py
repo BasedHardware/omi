@@ -7,7 +7,7 @@ from typing import Union, Tuple, List
 
 from fastapi import HTTPException
 
-import database.facts as facts_db
+import database.memories as memories_db
 import database.conversations as conversations_db
 import database.notifications as notification_db
 import database.tasks as tasks_db
@@ -134,7 +134,7 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
 
 def _extract_facts(uid: str, conversation: Conversation):
     # TODO: maybe instead (once they can edit them) we should not tie it this hard
-    facts_db.delete_facts_for_memory(uid, conversation.id)
+    memories_db.delete_memories_for_conversation(uid, conversation.id)
 
     new_facts: List[Fact] = []
 
@@ -158,7 +158,7 @@ def _extract_facts(uid: str, conversation: Conversation):
         return
 
     print(f"Saving {len(parsed_facts)} facts for conversation {conversation.id}")
-    facts_db.save_facts(uid, [fact.dict() for fact in parsed_facts])
+    memories_db.save_memories(uid, [fact.dict() for fact in parsed_facts])
 
 
 def send_new_facts_notification(token: str, facts: [FactDB]):
