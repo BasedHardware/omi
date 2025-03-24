@@ -60,7 +60,7 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> {
 
     final count = memoriesToProcess.length;
 
-    // Process facts with a small delay to allow UI to update
+    // Process memories with a small delay to allow UI to update
     for (var memory in memoriesToProcess) {
       await Future.delayed(const Duration(milliseconds: 20));
       context.read<MemoriesProvider>().reviewMemory(memory, approve);

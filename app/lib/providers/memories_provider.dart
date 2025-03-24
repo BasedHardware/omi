@@ -1,5 +1,5 @@
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:omi/backend/http/api/facts.dart';
+import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/base_provider.dart';
@@ -32,7 +32,7 @@ class MemoriesProvider extends BaseProvider {
   void _filterMemories() {
     if (searchQuery.isNotEmpty) {
       filteredMemories =
-          memories.where((fact) => fact.content.decodeString.toLowerCase().contains(searchQuery)).toList();
+          memories.where((memory) => memory.content.decodeString.toLowerCase().contains(searchQuery)).toList();
     } else {
       filteredMemories = memories;
     }
@@ -41,7 +41,7 @@ class MemoriesProvider extends BaseProvider {
 
   void _setCategories() {
     categories = MemoryCategory.values.map((category) {
-      final count = memories.where((fact) => fact.category == category).length;
+      final count = memories.where((memory) => memory.category == category).length;
       return Tuple2(category, count);
     }).toList();
     _filterMemories();
@@ -96,39 +96,39 @@ class MemoriesProvider extends BaseProvider {
     _setCategories();
   }
 
-  void updateMemoryVisibility(Memory fact, MemoryVisibility visibility) async {
-    var idx = memories.indexWhere((f) => f.id == fact.id);
-    updateMemoryVisibilityServer(fact.id, visibility.name);
-    fact.visibility = visibility;
-    memories[idx] = fact;
+  void updateMemoryVisibility(Memory memory, MemoryVisibility visibility) async {
+    var idx = memories.indexWhere((f) => f.id == memory.id);
+    updateMemoryVisibilityServer(memory.id, visibility.name);
+    memory.visibility = visibility;
+    memories[idx] = memory;
     _setCategories();
   }
 
-  void editMemory(Memory fact, String value, [MemoryCategory? category]) async {
-    var idx = memories.indexWhere((f) => f.id == fact.id);
-    editMemoryServer(fact.id, value);
-    fact.content = value;
+  void editMemory(Memory memory, String value, [MemoryCategory? category]) async {
+    var idx = memories.indexWhere((f) => f.id == memory.id);
+    editMemoryServer(memory.id, value);
+    memory.content = value;
     if (category != null) {
-      fact.category = category;
+      memory.category = category;
     }
-    fact.updatedAt = DateTime.now();
-    fact.edited = true;
-    memories[idx] = fact;
+    memory.updatedAt = DateTime.now();
+    memory.edited = true;
+    memories[idx] = memory;
     _setCategories();
   }
 
-  void reviewMemory(Memory fact, bool approved) async {
-    var idx = memories.indexWhere((f) => f.id == fact.id);
+  void reviewMemory(Memory memory, bool approved) async {
+    var idx = memories.indexWhere((f) => f.id == memory.id);
     if (idx != -1) {
-      fact.reviewed = true;
-      fact.userReview = approved;
+      memory.reviewed = true;
+      memory.userReview = approved;
       if (!approved) {
-        fact.deleted = true;
+        memory.deleted = true;
         memories.removeAt(idx);
-        deleteMemory(fact);
+        deleteMemory(memory);
       } else {
-        memories[idx] = fact;
-        reviewMemoryServer(fact.id, approved);
+        memories[idx] = memory;
+        reviewMemoryServer(memory.id, approved);
       }
       _setCategories();
       notifyListeners();

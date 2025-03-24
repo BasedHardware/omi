@@ -30,7 +30,7 @@ class CategoryMemoriesPage extends StatelessWidget {
                 category.toString().split('.').last[0].toUpperCase() + category.toString().split('.').last.substring(1),
               ),
               Text(
-                '${provider.filteredMemories.length} facts',
+                '${provider.filteredMemories.length} memories',
                 style: TextStyle(
                   fontSize: 14,
                   color: Colors.grey.shade400,
@@ -57,7 +57,7 @@ class CategoryMemoriesPage extends StatelessWidget {
                     Icon(Icons.note_add, size: 48, color: Colors.grey.shade600),
                     const SizedBox(height: 16),
                     Text(
-                      'No facts in this category yet',
+                      'No memories in this category yet',
                       style: TextStyle(
                         color: Colors.grey.shade400,
                         fontSize: 18,
@@ -66,7 +66,7 @@ class CategoryMemoriesPage extends StatelessWidget {
                     const SizedBox(height: 8),
                     TextButton(
                       onPressed: () => showMemoryDialog(context, provider),
-                      child: const Text('Add your first fact'),
+                      child: const Text('Add your first memory'),
                     ),
                   ],
                 ),
@@ -75,9 +75,9 @@ class CategoryMemoriesPage extends StatelessWidget {
                 padding: const EdgeInsets.all(16),
                 itemCount: provider.filteredMemories.length,
                 itemBuilder: (context, index) {
-                  final fact = provider.filteredMemories[index];
+                  final memory = provider.filteredMemories[index];
                   return MemoryItem(
-                    memory: fact,
+                    memory: memory,
                     provider: provider,
                     onTap: _showQuickEditSheet,
                   );
@@ -87,13 +87,13 @@ class CategoryMemoriesPage extends StatelessWidget {
     });
   }
 
-  void _showQuickEditSheet(BuildContext context, Memory fact, MemoriesProvider provider) {
+  void _showQuickEditSheet(BuildContext context, Memory memory, MemoriesProvider provider) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (context) => MemoryEditSheet(
-        memory: fact,
+        memory: memory,
         provider: provider,
         onDelete: (_, __, ___) {},
       ),
