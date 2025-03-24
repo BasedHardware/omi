@@ -1,3 +1,9 @@
+# Memories are now conversations, and the models are now in the models/conversation.py file
+
+# MIGRATE: This file is deprecated and will be removed in the future.
+# Please refer to the models/conversation.py file for the latest models.
+# This file is only used by the current /v1/memories and /v2/memories endpoints, which will be deprecated soon.
+
 from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional, Dict

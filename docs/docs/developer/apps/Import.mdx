@@ -1,34 +1,34 @@
 ---
-title: Integration with Actions
-description: 'Building apps that perform actions in the OMI ecosystem'
+title: Import Apps
+description: 'Building apps that import data in the OMI ecosystem'
 ---
 
-# Integration with Actions
+# Import Integrations
 
-Integration apps with actions allow your app to not just receive data from OMI but also perform specific actions within the OMI ecosystem. This guide will walk you through creating apps that can perform actions like creating memories, adding facts, and more.
+Integration apps with Imports allow your app to not just receive data from OMI but also perform specific Imports within the OMI ecosystem. This guide will walk you through creating apps that can perform Imports like creating memories, adding memories, and more.
 
-## What Are Integration Actions?
+## What Are Integration Imports?
 
-Integration actions are predefined capabilities that your app can perform within the OMI ecosystem. Unlike triggers (which respond to events), actions allow your app to proactively create or modify data in OMI.
+Integration Imports are predefined capabilities that your app can perform within the OMI ecosystem. Unlike triggers (which respond to events), Imports allow your app to proactively create or modify data in OMI.
 
-Currently supported actions include:
+Currently supported Imports include:
 - **Create Conversation**: Generate new conversations in the user's OMI account
-- **Create Facts**: Add specific facts to the user's knowledge base
+- **Create Memories(Facts)**: Add specific memories (previously called facts) to the user's knowledge base
 
 ## Prerequisites
 
-Before building an integration with actions, you should:
+Before building an integration with Imports, you should:
 1. Understand the [basics of OMI app development](https://docs.omi.me/docs/developer/apps/Introduction/)
 2. Be familiar with [integration apps](https://docs.omi.me/docs/developer/apps/Integrations/)
 3. Have a server or endpoint that can make API requests to OMI
 
-## Setting Up an Integration with Actions
+## Setting Up an Integration with Imports
 
 ### Step 1: Define Your App's Purpose 🎯
 
-Decide what actions your app will perform and when. For example:
+Decide what Imports your app will perform and when. For example:
 - Will your app create conversations based on external events?
-- Will it respond to user interactions in your own service?
+- Will it respond to user interImports in your own service?
 - Will it run on a schedule to create periodic conversations?
 
 ### Step 2: Create Your App in OMI
@@ -37,8 +37,8 @@ Decide what actions your app will perform and when. For example:
 2. Go to the Apps section and select "Create App"
 3. Fill in the basic app information (name, description, etc.)
 4. Under "App Capabilities", select "External Integration"
-5. In the External Integration section, select "Actions"
-6. Choose the specific actions your app will perform (e.g., "Create conversations")
+5. In the External Integration section, select "Imports"
+6. Choose the specific Imports your app will perform (e.g., "Create conversations", "Create memories")
 
 ### Step 3: Generate API Keys
 
@@ -49,9 +49,9 @@ After creating your app, you'll need to generate API keys to authenticate your r
 3. Click "Create Key"
 4. Copy and securely store the generated key - you won't be able to see it again!
 
-## Implementing the Create Conversation Action
+## Implementing the Create Conversation Import
 
-The Create Conversation action allows your app to programmatically create new conversations in a user's OMI account.
+The Create Conversation Import allows your app to programmatically create new conversations in a user's OMI account.
 
 ### API Endpoint
 
@@ -129,16 +129,16 @@ Common error responses include:
 - `404 Not Found`: App not found
 - `429 Too Many Requests`: Rate limit exceeded
 
-## Implementing the Create Facts Action
+## Implementing the Create Memories Import
 
-The Create Facts action allows your app to programmatically add facts to a user's knowledge base in OMI.
+The Create Memories Import allows your app to programmatically add memories to a user's knowledge base in OMI.
 
 ### API Endpoint
 
-To create facts, make a POST request to:
+To create memories, make a POST request to:
 
 ```
-POST https://api.omi.me/v2/integrations/{app_id}/user/facts?uid={user_id}
+POST https://api.omi.me/v2/integrations/{app_id}/user/memories?uid={user_id}
 ```
 
 Where:
@@ -161,20 +161,35 @@ The request body should be a JSON object with the following structure:
 
 ```json
 {
-  "text": "The text from which facts will be extracted. This could be information about preferences, important dates, or other factual information.",
+  "text": "The text from which memories will be extracted. This could be information about preferences, important dates, or other factual information.",
   "text_source": "email",
-  "text_source_spec": "newsletter"
+  "text_source_spec": "newsletter",
+  "memories": [
+    {
+      "content": "User prefers vegetarian food options",
+      "tags": ["preferences", "food"]
+    },
+    {
+      "content": "User's anniversary is on June 12th",
+      "tags": ["dates", "personal"]
+    }
+  ]
 }
 ```
 
 #### Required Fields:
 
-- `text`: The text content from which facts will be extracted
+Either `text` or `memories` must be provided:
+- `text`: The text content from which memories will be extracted
+- `memories`: An array of explicit memory objects to be created directly
 
 #### Optional Fields:
 
 - `text_source`: Source of the text content (options: "email", "social_post", "other") - defaults to "other"
 - `text_source_spec`: Additional specification about the source (optional)
+- For each memory in the `memories` array:
+  - `content`: The content of the memory (required)
+  - `tags`: Array of tags associated with the memory (optional)
 
 ### Response
 
@@ -184,7 +199,7 @@ A successful request will return a 200 OK status with an empty response body:
 {}
 ```
 
-The facts will be extracted and saved asynchronously in the user's account.
+The memories will be extracted and saved asynchronously in the user's account.
 
 ### Error Handling
 
@@ -192,14 +207,14 @@ Common error responses include:
 
 - `400 Bad Request`: Invalid request format
 - `401 Unauthorized`: Missing or invalid Authorization header
-- `403 Forbidden`: Invalid API key, app not enabled for user, or app lacks create_facts capability
+- `403 Forbidden`: Invalid API key, app not enabled for user, or app lacks create_memories capability
 - `404 Not Found`: App not found
-- `422 Unprocessable Entity`: Text is required and cannot be empty
+- `422 Unprocessable Entity`: Either text or explicit memories are required and cannot be empty
 - `429 Too Many Requests`: Rate limit exceeded
 
 ## Best Practices
 
-1. **User Consent**: Always ensure you have user consent before creating memories or facts on their behalf
+1. **User Consent**: Always ensure you have user consent before creating conversations or memories on their behalf
 2. **Rate Limiting**: Implement rate limiting in your app to avoid hitting API limits
 3. **Error Handling**: Implement robust error handling for API requests
 4. **Data Quality**: Ensure the content is well-formatted and contains meaningful information
@@ -466,11 +481,11 @@ curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/conversat
   }'
 ```
 
-### Creating Facts
+### Creating Memories
 
-#### Example: Creating Facts from Different Sources
+#### Example: Creating Memories from Different Sources
 
-##### Python Example - Email Facts
+##### Python Example - Email Memories
 
 ```python
 import requests
@@ -480,10 +495,10 @@ import json
 APP_ID = "your_app_id_here"
 API_KEY = "sk_your_api_key_here"
 USER_ID = "user_123"
-API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/facts"
+API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/memories"
 
-# Facts data from email
-facts_data = {
+# Memories data from email
+memories_data = {
     "text": "Your flight to Paris has been confirmed for May 15th, 2024. Departure: JFK at 9:30 PM. Arrival: CDG at 11:00 AM local time. Confirmation code: ABC123. Your hotel reservation at Hotel de Paris is confirmed for May 16-20, 2024.",
     "text_source": "email",
     "text_source_spec": "travel_confirmation"
@@ -498,21 +513,21 @@ headers = {
 response = requests.post(
     f"{API_URL}?uid={USER_ID}",
     headers=headers,
-    data=json.dumps(facts_data)
+    data=json.dumps(memories_data)
 )
 
 # Handle the response
 if response.status_code == 200:
-    print("Facts created successfully")
+    print("Memories created successfully")
 else:
-    print(f"Error creating facts: {response.status_code}")
+    print(f"Error creating memories: {response.status_code}")
     print(response.text)
 ```
 
-##### cURL Example - Email Facts
+##### cURL Example - Email Memories
 
 ```bash
-curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/facts?uid=user_123" \
+curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/memories?uid=user_123" \
   -H "Authorization: Bearer sk_your_api_key_here" \
   -H "Content-Type: application/json" \
   -d '{
@@ -522,7 +537,7 @@ curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/facts?uid
   }'
 ```
 
-##### Python Example - Social Post Facts
+##### Python Example - Social Post Memories
 
 ```python
 import requests
@@ -532,10 +547,10 @@ import json
 APP_ID = "your_app_id_here"
 API_KEY = "sk_your_api_key_here"
 USER_ID = "user_123"
-API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/facts"
+API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/memories"
 
-# Facts data from social post
-facts_data = {
+# Memories data from social post
+memories_data = {
     "text": "I'm excited to announce that I've accepted a new position as Senior Software Engineer at TechCorp starting next month! Looking forward to this new chapter in my career. #newjob #softwareengineering #career",
     "text_source": "social_post",
     "text_source_spec": "linkedin"
@@ -550,21 +565,21 @@ headers = {
 response = requests.post(
     f"{API_URL}?uid={USER_ID}",
     headers=headers,
-    data=json.dumps(facts_data)
+    data=json.dumps(memories_data)
 )
 
 # Handle the response
 if response.status_code == 200:
-    print("Facts created successfully")
+    print("Memories created successfully")
 else:
-    print(f"Error creating facts: {response.status_code}")
+    print(f"Error creating memories: {response.status_code}")
     print(response.text)
 ```
 
-##### cURL Example - Social Post Facts
+##### cURL Example - Social Post Memories
 
 ```bash
-curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/facts?uid=user_123" \
+curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/memories?uid=user_123" \
   -H "Authorization: Bearer sk_your_api_key_here" \
   -H "Content-Type: application/json" \
   -d '{
@@ -574,7 +589,7 @@ curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/facts?uid
   }'
 ```
 
-##### Python Example - Other Facts
+##### Python Example - Other Memories
 
 ```python
 import requests
@@ -584,10 +599,10 @@ import json
 APP_ID = "your_app_id_here"
 API_KEY = "sk_your_api_key_here"
 USER_ID = "user_123"
-API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/facts"
+API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/memories"
 
-# Facts data from other source
-facts_data = {
+# Memories data from other source
+memories_data = {
     "text": "Dr. Smith's contact information: Phone: (555) 123-4567, Email: dr.smith@hospital.org. Next appointment scheduled for April 3rd at 2:30 PM. Remember to bring your insurance card and list of current medications.",
     "text_source": "other",
     "text_source_spec": "health_app"
@@ -602,27 +617,105 @@ headers = {
 response = requests.post(
     f"{API_URL}?uid={USER_ID}",
     headers=headers,
-    data=json.dumps(facts_data)
+    data=json.dumps(memories_data)
 )
 
 # Handle the response
 if response.status_code == 200:
-    print("Facts created successfully")
+    print("Memories created successfully")
 else:
-    print(f"Error creating facts: {response.status_code}")
+    print(f"Error creating memories: {response.status_code}")
     print(response.text)
 ```
 
-##### cURL Example - Other Facts
+##### Python Example - Explicit Memories
+
+```python
+import requests
+import json
+
+# API configuration
+APP_ID = "your_app_id_here"
+API_KEY = "sk_your_api_key_here"
+USER_ID = "user_123"
+API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/memories"
+
+# Explicit memories data
+memories_data = {
+    "memories": [
+        {
+            "content": "User is allergic to peanuts and shellfish",
+            "tags": ["health", "allergies", "important"]
+        },
+        {
+            "content": "User's mother's birthday is on August 15th",
+            "tags": ["family", "dates", "birthday"]
+        },
+        {
+            "content": "User prefers window seats when flying",
+            "tags": ["preferences", "travel"]
+        }
+    ],
+    "text_source": "other",
+    "text_source_spec": "user_profile"
+}
+
+# Make the API request
+headers = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json"
+}
+
+response = requests.post(
+    f"{API_URL}?uid={USER_ID}",
+    headers=headers,
+    data=json.dumps(memories_data)
+)
+
+# Handle the response
+if response.status_code == 200:
+    print("Explicit memories created successfully")
+else:
+    print(f"Error creating memories: {response.status_code}")
+    print(response.text)
+```
+
+##### cURL Example - Other Memories
 
 ```bash
-curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/facts?uid=user_123" \
+curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/memories?uid=user_123" \
   -H "Authorization: Bearer sk_your_api_key_here" \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Dr. Smith'\''s contact information: Phone: (555) 123-4567, Email: dr.smith@hospital.org. Next appointment scheduled for April 3rd at 2:30 PM. Remember to bring your insurance card and list of current medications.",
     "text_source": "other",
     "text_source_spec": "health_app"
+  }'
+```
+
+##### cURL Example - Explicit Memories
+
+```bash
+curl -X POST "https://api.omi.me/v2/integrations/your_app_id_here/user/memories?uid=user_123" \
+  -H "Authorization: Bearer sk_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "memories": [
+      {
+        "content": "User is allergic to peanuts and shellfish",
+        "tags": ["health", "allergies", "important"]
+      },
+      {
+        "content": "User'\''s mother'\''s birthday is on August 15th",
+        "tags": ["family", "dates", "birthday"]
+      },
+      {
+        "content": "User prefers window seats when flying",
+        "tags": ["preferences", "travel"]
+      }
+    ],
+    "text_source": "other",
+    "text_source_spec": "user_profile"
   }'
 ```
 
@@ -634,7 +727,7 @@ To test your integration:
 1. Use a development API key
 2. Create test conversations with clearly marked test content
 3. Verify the conversations appear in the user's OMI app
-4. Check that the structured data (title, overview, action items) appears correctly
+4. Check that the structured data (title, overview, Import items) appears correctly
 
 ## Troubleshooting
 
@@ -647,13 +740,13 @@ Common issues and solutions:
 - **Rate Limiting**: If you receive a 429 error, implement exponential backoff in your requests
 - **Missing Required Fields**: Ensure you're providing `text`, `text_source`
 
-## Prerequisites for Using Integration Actions
+## Prerequisites for Using Integration Imports
 
-Before your app can use integration actions, several conditions must be met:
+Before your app can use integration Imports, several conditions must be met:
 
-1. **App Configuration**: Your app must be configured with the "External Integration" capability and specifically have the appropriate action enabled:
-   - For creating conversations: the "create_conversation" action
-   - For creating facts: the "create_facts" action
+1. **App Configuration**: Your app must be configured with the "External Integration" capability and specifically have the appropriate Import enabled:
+   - For creating conversations: the "create_conversation" Import
+   - For creating memories: the "create_memories" Import
 
 2. **API Key**: You must generate an API key for your app through the app management interface.
 
@@ -663,39 +756,39 @@ Before your app can use integration actions, several conditions must be met:
 
 If any of these conditions are not met, the API will return appropriate error responses.
 
-## Future Actions
+## Future Imports
 
-The OMI team is continuously working to expand the available actions. Future actions may include:
+The OMI team is continuously working to expand the available Imports. Future Imports may include:
 - Updating existing conversations
-- Updating existing facts
+- Updating existing memories
 - Setting reminders
 - Accessing and updating user preferences
 - And more!
 
-Stay tuned to the documentation for updates on new action capabilities.
+Stay tuned to the documentation for updates on new Import capabilities.
 
 ## Submitting Your App
 
-Once your integration with actions is ready:
+Once your integration with Imports is ready:
 
 1. Test thoroughly with real-world scenarios
 2. Create clear setup instructions for users
 3. Submit your app through the OMI mobile app
-4. Include details about what actions your app performs and when
+4. Include details about what Imports your app performs and when
 
 For more details on the submission process, see the [Submitting Apps](https://docs.omi.me/docs/developer/apps/Submitting/) guide.
 
 ## Example Use Cases
 
-Here are some inspiring examples of what you can build with integration actions:
+Here are some inspiring examples of what you can build with integration Imports:
 
 1. **Journal Creator**: Automatically create conversation entries based on data from a journaling app
 2. **Meeting Summarizer**: Create conversations with structured summaries after calendar meetings
 3. **Health Tracker**: Generate conversations with health insights based on fitness tracker data
-4. **Social Media Archiver**: Create conversations from important social media interactions
+4. **Social Media Archiver**: Create conversations from important social media interImports
 5. **Learning Assistant**: Create structured conversations from educational content consumption
-6. **Preference Tracker**: Extract facts about user preferences from emails or messages
-7. **Knowledge Base Builder**: Create facts from educational content or research materials
-8. **Contact Information Manager**: Extract contact details as facts from emails or messages
+6. **Preference Tracker**: Extract memories about user preferences from emails or messages
+7. **Knowledge Base Builder**: Create memories from educational content or research materials
+8. **Contact Information Manager**: Extract contact details as memories from emails or messages
 
-We can't wait to see what you build with OMI integration actions!
+We can't wait to see what you build with OMI integration Imports!

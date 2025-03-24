@@ -188,12 +188,12 @@ class BackgroundService {
     Function()? onStop,
     Function()? onInitializing,
   }) {
-    // tracking service events
-    _service.on('recorder.ui.audioBytes').listen((event) {
+    StreamSubscription? recordAudioByteStream = _service.on('recorder.ui.audioBytes').listen((event) {
       Uint8List bytes = Uint8List.fromList(event!['data'].cast<int>());
       onByteReceived(bytes);
     });
-    _service.on('recorder.ui.stateUpdate').listen((event) {
+    StreamSubscription? recordStateStream;
+    recordStateStream = _service.on('recorder.ui.stateUpdate').listen((event) {
       if (event!['state'] == 'recording') {
         if (onRecording != null) {
           onRecording();
@@ -203,6 +203,11 @@ class BackgroundService {
           onInitializing();
         }
       } else if (event['state'] == 'stopped') {
+        // Close streams
+        recordAudioByteStream.cancel();
+        recordStateStream?.cancel();
+
+        // Callback
         if (onStop != null) {
           onStop();
         }

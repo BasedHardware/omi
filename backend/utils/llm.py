@@ -19,7 +19,7 @@ from database.redis_db import add_filter_category_item
 from models.app import App
 from models.chat import Message, MessageSender
 from models.facts import Fact, FactCategory
-from models.memory import Structured, MemoryPhoto, CategoryEnum, Memory
+from models.conversation import Structured, ConversationPhoto, CategoryEnum, Conversation
 from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment
 from models.trend import TrendEnum, ceo_options, company_options, software_product_options, hardware_product_options, \
@@ -65,22 +65,22 @@ def num_tokens_from_string(string: str) -> int:
 
 
 # **********************************************
-# ************* MEMORY PROCESSING **************
+# ********** CONVERSATION PROCESSING ***********
 # **********************************************
 
-class DiscardMemory(BaseModel):
-    discard: bool = Field(description="If the memory should be discarded or not")
+class DiscardConversation(BaseModel):
+    discard: bool = Field(description="If the conversation should be discarded or not")
 
 
 class SpeakerIdMatch(BaseModel):
     speaker_id: int = Field(description="The speaker id assigned to the segment")
 
 
-def should_discard_memory(transcript: str) -> bool:
+def should_discard_conversation(transcript: str) -> bool:
     if len(transcript.split(' ')) > 100:
         return False
 
-    parser = PydanticOutputParser(pydantic_object=DiscardMemory)
+    parser = PydanticOutputParser(pydantic_object=DiscardConversation)
     prompt = ChatPromptTemplate.from_messages([
         '''
     You will be given a conversation transcript, and your task is to determine if the conversation is worth storing as a memory or not.
@@ -92,7 +92,7 @@ def should_discard_memory(transcript: str) -> bool:
     ])
     chain = prompt | llm_mini | parser
     try:
-        response: DiscardMemory = chain.invoke({
+        response: DiscardConversation = chain.invoke({
             'transcript': transcript.strip(),
             'format_instructions': parser.get_format_instructions(),
         })
@@ -161,7 +161,7 @@ def get_plugin_result(transcript: str, plugin: Plugin) -> str:
 # ************* OPENGLASS **************
 # **************************************
 
-def summarize_open_glass(photos: List[MemoryPhoto]) -> Structured:
+def summarize_open_glass(photos: List[ConversationPhoto]) -> Structured:
     photos_str = ''
     for i, photo in enumerate(photos):
         photos_str += f'{i + 1}. "{photo.description}"\n'
@@ -213,7 +213,9 @@ def get_email_structure(text: str, started_at: datetime, language_code: str, tz:
         event.created = False
     return response
 
-def get_post_structure(text: str, started_at: datetime, language_code: str, tz: str, text_source_spec: str = None) -> Structured:
+
+def get_post_structure(text: str, started_at: datetime, language_code: str, tz: str,
+                       text_source_spec: str = None) -> Structured:
     prompt_text = '''
     You are an expert social media post analyzer. Your task is to analyze the post content and provide structure and clarity.
     The post language is {language_code}. Use the same language {language_code} for your response.
@@ -247,7 +249,9 @@ def get_post_structure(text: str, started_at: datetime, language_code: str, tz: 
         event.created = False
     return response
 
-def get_message_structure(text: str, started_at: datetime, language_code: str, tz: str, text_source_spec: str = None) -> Structured:
+
+def get_message_structure(text: str, started_at: datetime, language_code: str, tz: str,
+                          text_source_spec: str = None) -> Structured:
     prompt_text = '''
     You are an expert message analyzer. Your task is to analyze the message content and provide structure and clarity.
     The message language is {language_code}. Use the same language {language_code} for your response.
@@ -281,6 +285,7 @@ def get_message_structure(text: str, started_at: datetime, language_code: str, t
         event.created = False
     return response
 
+
 def summarize_experience_text(text: str, text_source_spec: str = None) -> Structured:
     source_context = f"Source: {text_source_spec}" if text_source_spec else "their own experiences or thoughts"
     prompt = f'''The user sent a text of {source_context}, and wants to create a memory from it.
@@ -295,10 +300,10 @@ def summarize_experience_text(text: str, text_source_spec: str = None) -> Struct
     return llm_mini.with_structured_output(Structured).invoke(prompt)
 
 
-def get_memory_summary(uid: str, memories: List[Memory]) -> str:
+def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
     user_name, facts_str = get_prompt_facts(uid)
 
-    conversation_history = Memory.memories_to_string(memories)
+    conversation_history = Conversation.conversations_to_string(memories)
 
     prompt = f"""
     You are an experienced mentor, that helps people achieve their goals and improve their lives.
@@ -358,7 +363,8 @@ def initial_persona_chat_message(uid: str, app: Optional[App] = None, messages: 
             chat_messages.append(AIMessage(content=msg.text))
         else:
             chat_messages.append(HumanMessage(content=msg.text))
-    chat_messages.append(HumanMessage(content='lets begin. you write the first message, one short provocative question relevant to your identity. never respond with **. while continuing the convo, always respond w short msgs, lowercase.'))
+    chat_messages.append(HumanMessage(
+        content='lets begin. you write the first message, one short provocative question relevant to your identity. never respond with **. while continuing the convo, always respond w short msgs, lowercase.'))
     llm_call = llm_persona_mini_stream
     if app.is_influencer:
         llm_call = llm_persona_medium_stream
@@ -793,7 +799,7 @@ def answer_persona_question_stream(app: App, messages: List[Message], callbacks:
     llm_call = llm_persona_mini_stream
     if app.is_influencer:
         llm_call = llm_persona_medium_stream
-    return llm_call.invoke(chat_messages, {'callbacks':callbacks}).content
+    return llm_call.invoke(chat_messages, {'callbacks': callbacks}).content
 
 
 def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
@@ -1267,7 +1273,7 @@ def qa_rag_v1(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
 # ************* RETRIEVAL (EMOTIONAL) **************
 # **************************************************
 
-def retrieve_memory_context_params(memory: Memory) -> List[str]:
+def retrieve_memory_context_params(memory: Conversation) -> List[str]:
     transcript = memory.get_transcript(False)
     if len(transcript) == 0:
         return []
@@ -1291,7 +1297,7 @@ def retrieve_memory_context_params(memory: Memory) -> List[str]:
         return []
 
 
-def obtain_emotional_message(uid: str, memory: Memory, context: str, emotion: str) -> str:
+def obtain_emotional_message(uid: str, memory: Conversation, context: str, emotion: str) -> str:
     user_name, facts_str = get_prompt_facts(uid)
     transcript = memory.get_transcript(False)
     prompt = f"""
@@ -1331,6 +1337,11 @@ class Facts(BaseModel):
         default=[],
     )
 
+class FactsByTexts(BaseModel):
+    facts: List[Fact] = Field(
+        description="List of **new** facts. If any",
+        default=[],
+    )
 
 def new_facts_extractor(
         uid: str, segments: List[TranscriptSegment], user_name: Optional[str] = None, facts_str: Optional[str] = None
@@ -1375,7 +1386,7 @@ def extract_facts_from_text(
         return []
 
     try:
-        parser = PydanticOutputParser(pydantic_object=Facts)
+        parser = PydanticOutputParser(pydantic_object=FactsByTexts)
         chain = extract_facts_text_content_prompt | llm_mini | parser
         response: Facts = chain.invoke({
             'user_name': user_name,
@@ -1440,7 +1451,7 @@ class ExpectedOutput(BaseModel):
     items: List[Item] = Field(default=[], description="List of items.")
 
 
-def trends_extractor(memory: Memory) -> List[Item]:
+def trends_extractor(memory: Conversation) -> List[Item]:
     transcript = memory.get_transcript(False)
     if len(transcript) == 0:
         return []
@@ -2023,7 +2034,8 @@ def retrieve_metadata_from_email(uid: str, created_at: datetime, email_text: str
     return _process_extracted_metadata(uid, prompt)
 
 
-def retrieve_metadata_from_post(uid: str, created_at: datetime, post_text: str, tz: str, source_spec: str = None) -> ExtractedInformation:
+def retrieve_metadata_from_post(uid: str, created_at: datetime, post_text: str, tz: str,
+                                source_spec: str = None) -> ExtractedInformation:
     """Extract metadata from social media post content"""
     source_context = f"from {source_spec}" if source_spec else "from a social media platform"
 
@@ -2055,7 +2067,8 @@ def retrieve_metadata_from_post(uid: str, created_at: datetime, post_text: str, 
     return _process_extracted_metadata(uid, prompt)
 
 
-def retrieve_metadata_from_message(uid: str, created_at: datetime, message_text: str, tz: str, source_spec: str = None) -> ExtractedInformation:
+def retrieve_metadata_from_message(uid: str, created_at: datetime, message_text: str, tz: str,
+                                   source_spec: str = None) -> ExtractedInformation:
     """Extract metadata from messaging app content"""
     source_context = f"from {source_spec}" if source_spec else "from a messaging application"
 
@@ -2087,7 +2100,8 @@ def retrieve_metadata_from_message(uid: str, created_at: datetime, message_text:
     return _process_extracted_metadata(uid, prompt)
 
 
-def retrieve_metadata_from_text(uid: str, created_at: datetime, text: str, tz: str, source_spec: str = None) -> ExtractedInformation:
+def retrieve_metadata_from_text(uid: str, created_at: datetime, text: str, tz: str,
+                                source_spec: str = None) -> ExtractedInformation:
     """Extract metadata from generic text content"""
     source_context = f"from {source_spec}" if source_spec else "from a text document"
 
@@ -2477,8 +2491,30 @@ Tweets:
 def generate_persona_intro_message(prompt: str, name: str):
     messages = [
         {"role": "system", "content": prompt},
-        {"role": "user", "content": f"Generate a short, funny 5-8 word message that would make someone want to chat with you. Be casual and witty, but don't mention being AI or a clone. Just be {name}. The message should feel natural and make people curious to chat with you."}
+        {"role": "user",
+         "content": f"Generate a short, funny 5-8 word message that would make someone want to chat with you. Be casual and witty, but don't mention being AI or a clone. Just be {name}. The message should feel natural and make people curious to chat with you."}
     ]
 
     response = llm_medium.invoke(messages)
     return response.content.strip('"').strip()
+
+
+# **************************************************
+# ***************** FACT/MEMORY ********************
+# **************************************************
+
+def identify_category_for_fact(fact: str, categories: List) -> str:
+    categories_str = ', '.join(categories)
+    prompt = f"""
+    You are an AI tasked with identifying the category of a fact from a list of predefined categories. 
+
+    Your task is to determine the most relevant category for the given fact. 
+    
+    Respond only with the category name.
+    
+    The categories are: {categories_str}
+
+    Fact: {fact}
+    """
+    response = llm_mini.invoke(prompt)
+    return response.content
