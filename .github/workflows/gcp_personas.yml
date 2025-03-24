@@ -2,7 +2,7 @@ name: Deploy Personas to Cloud RUN
 
 on:
   push:
-    branches: [ "main", "development" , "moving-folders"]
+    branches: [ "main", "development" ]
     paths:
       - 'web/personas-open-source/**'
   workflow_dispatch:
@@ -19,7 +19,7 @@ env:
 
 jobs:
   deploy:
-    environment: ${{ (github.ref == 'refs/heads/development' && 'development') || (github.ref == 'refs/heads/main' && 'prod') || (github.ref == 'refs/heads/moving-folders' && 'prod')}}
+    environment: ${{ (github.ref == 'refs/heads/development' && 'development') || (github.ref == 'refs/heads/main' && 'prod') }}
     permissions:
       contents: 'read'
       id-token: 'write'
