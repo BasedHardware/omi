@@ -4,7 +4,7 @@ class TypingIndicator extends StatefulWidget {
   const TypingIndicator({super.key});
 
   @override
-  _TypingIndicatorState createState() => _TypingIndicatorState();
+  State<TypingIndicator> createState() => _TypingIndicatorState();
 }
 
 class _TypingIndicatorState extends State<TypingIndicator> with SingleTickerProviderStateMixin {

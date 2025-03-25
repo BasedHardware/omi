@@ -10,11 +10,10 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
-import 'package:friend_private/backend/http/api/notifications.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/main.dart';
-import 'package:friend_private/pages/home/page.dart';
+import 'package:omi/backend/http/api/notifications.dart';
+import 'package:omi/backend/schema/message.dart';
+import 'package:omi/main.dart';
+import 'package:omi/pages/home/page.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 
 class NotificationService {
@@ -27,8 +26,8 @@ class NotificationService {
   final channel = NotificationChannel(
     channelGroupKey: 'channel_group_key',
     channelKey: 'channel',
-    channelName: 'Friend Notifications',
-    channelDescription: 'Notification channel for Friend',
+    channelName: 'Omi Notifications',
+    channelDescription: 'Notification channel for Omi',
     defaultColor: const Color(0xFF9D50DD),
     ledColor: Colors.white,
   );
@@ -109,8 +108,8 @@ class NotificationService {
       await platform.invokeMethod(
         'setNotificationOnKillService',
         {
-          'title': "Friend Device Disconnected",
-          'description': "Please keep your app opened to continue using your Friend.",
+          'title': "Your Omi Device Disconnected",
+          'description': "Please keep your app opened to continue using your Omi.",
         },
       );
     } catch (e) {
@@ -159,47 +158,40 @@ class NotificationService {
   }
 
   clearNotification(int id) => _awesomeNotifications.cancel(id);
-  Future<void> onNotificationTap() async {
-    final message = await FirebaseMessaging.instance.getInitialMessage();
-    if (message != null) {
-      _handleOnTap(message);
-    }
-    FirebaseMessaging.onMessageOpenedApp.listen(_handleOnTap);
-  }
 
-  void _handleOnTap(RemoteMessage message) {
-    final data = message.data;
-    if (data.isNotEmpty) {
-      if (message.data['notification_type'] == 'daily_summary') {
-        SharedPreferencesUtil().pageToShowFromNotification = 1;
-        MyApp.navigatorKey.currentState
-            ?.pushReplacement(MaterialPageRoute(builder: (context) => const HomePageWrapper()));
-      }
-    }
+  // FIXME: Causes the different behavior on android and iOS
+  bool _shouldShowForegroundNotificationOnFCMMessageReceived() {
+    return Platform.isAndroid;
   }
 
   Future<void> listenForMessages() async {
-    onNotificationTap();
-
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       final data = message.data;
       final noti = message.notification;
 
       // Plugin
       if (data.isNotEmpty) {
-        if (noti != null) {
-          _showForegroundNotification(noti: noti);
-        }
+        late Map<String, String> payload = <String, String>{};
+        payload.addAll({
+          "navigate_to": data['navigate_to'] ?? "",
+        });
+
+        // plugin, daily summary
         final notificationType = data['notification_type'];
         if (notificationType == 'plugin' || notificationType == 'daily_summary') {
           data['from_integration'] = data['from_integration'] == 'true';
           _serverMessageStreamController.add(ServerMessage.fromJson(data));
         }
+        if (noti != null && _shouldShowForegroundNotificationOnFCMMessageReceived()) {
+          _showForegroundNotification(noti: noti, payload: payload);
+        }
+        return;
       }
 
       // Announcement likes
-      if (noti != null) {
+      if (noti != null && _shouldShowForegroundNotificationOnFCMMessageReceived()) {
         _showForegroundNotification(noti: noti, layout: NotificationLayout.BigText);
+        return;
       }
     });
   }
@@ -209,9 +201,11 @@ class NotificationService {
   Stream<ServerMessage> get listenForServerMessages => _serverMessageStreamController.stream;
 
   Future<void> _showForegroundNotification(
-      {required RemoteNotification noti, NotificationLayout layout = NotificationLayout.Default}) async {
+      {required RemoteNotification noti,
+      NotificationLayout layout = NotificationLayout.Default,
+      Map<String, String?>? payload}) async {
     final id = Random().nextInt(10000);
-    showNotification(id: id, title: noti.title!, body: noti.body!, layout: layout);
+    showNotification(id: id, title: noti.title!, body: noti.body!, layout: layout, payload: payload);
   }
 }
 
@@ -253,22 +247,27 @@ class NotificationUtil {
   }
 
   static Future<void> onActionReceivedMethodImpl(ReceivedAction receivedAction) async {
-    final Map<String, int> screensWithRespectToPath = {
-      '/chat': 2,
-      '/capture': 1,
-      '/memories': 0,
-    };
-    var message = 'Action ${receivedAction.actionType?.name} received on ${receivedAction.actionLifeCycle?.name}';
-    debugPrint(message);
-    debugPrint(receivedAction.toMap().toString());
-
-    // Always ensure that all plugins was initialized
-    WidgetsFlutterBinding.ensureInitialized();
-    final payload = receivedAction.payload;
-    if (payload?.containsKey('navigateTo') ?? false) {
-      SharedPreferencesUtil().subPageToShowFromNotification = payload?['navigateTo'] ?? '';
+    if (receivedAction.payload == null || receivedAction.payload!.isEmpty) {
+      return;
     }
-    SharedPreferencesUtil().pageToShowFromNotification = screensWithRespectToPath[payload?['path']] ?? 1;
-    MyApp.navigatorKey.currentState?.pushReplacement(MaterialPageRoute(builder: (context) => const HomePageWrapper()));
+    _handleAppLinkOrDeepLink(receivedAction.payload!);
+  }
+
+  static void _handleAppLinkOrDeepLink(Map<String, dynamic> payload) async {
+    // Always ensure that all plugins was initialized
+    // TODO: for what?
+    WidgetsFlutterBinding.ensureInitialized();
+
+    String? navigateTo;
+    if (payload.containsKey('navigate_to')) {
+      navigateTo = payload['navigate_to'];
+    }
+    if (navigateTo == null) {
+      debugPrint("Navigate To is null");
+      return;
+    }
+
+    MyApp.navigatorKey.currentState
+        ?.pushReplacement(MaterialPageRoute(builder: (context) => HomePageWrapper(navigateToRoute: navigateTo)));
   }
 }

@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/backend/schema/transcript_segment.dart';
-import 'package:friend_private/pages/speech_profile/page.dart';
-import 'package:friend_private/providers/capture_provider.dart';
-import 'package:friend_private/providers/device_provider.dart';
-import 'package:friend_private/providers/home_provider.dart';
-import 'package:friend_private/utils/analytics/intercom.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/enums.dart';
-import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/photos_grid.dart';
-import 'package:friend_private/widgets/transcript.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/pages/home/firmware_update.dart';
+import 'package:omi/pages/speech_profile/page.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/photos_grid.dart';
+import 'package:omi/widgets/transcript.dart';
 import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
 
@@ -66,19 +66,15 @@ class SpeechProfileCardWidget extends StatelessWidget {
                                 ],
                               ),
                             ),
-                            Icon(Icons.arrow_forward_ios)
+                            Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
                           ],
                         ),
                       ),
                     ),
-                    Positioned(
-                      top: 12,
+                    const Positioned(
+                      top: 6,
                       right: 24,
-                      child: Container(
-                        width: 12,
-                        height: 12,
-                        decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                      ),
+                      child: Icon(Icons.fiber_manual_record, color: Colors.red, size: 16.0),
                     ),
                   ],
                 );
@@ -95,67 +91,56 @@ class UpdateFirmwareCardWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<DeviceProvider>(
       builder: (context, provider, child) {
-        return (provider.pairedDevice == null || !provider.isConnected)
+        return (!provider.havingNewFirmware)
             ? const SizedBox()
-            : (provider.pairedDevice?.firmwareRevision != '1.0.2')
-                ? const SizedBox()
-                : Stack(
-                    children: [
-                      GestureDetector(
-                        onTap: () {
-                          MixpanelManager().pageOpened('Update Firmware Memories');
-                          IntercomManager.instance.displayFirmwareUpdateArticle();
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade900,
-                            borderRadius: const BorderRadius.all(Radius.circular(12)),
-                          ),
-                          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                          padding: const EdgeInsets.all(16),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.upload),
-                                    SizedBox(width: 16),
-                                    Text(
-                                      'Update your Firmware',
-                                      style: TextStyle(color: Colors.white, fontSize: 16),
-                                    ),
-                                  ],
+            : Stack(
+                children: [
+                  GestureDetector(
+                    onTap: () {
+                      MixpanelManager().pageOpened('Update Firmware Memories');
+                      routeToPage(context, FirmwareUpdate(device: provider.pairedDevice));
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade900,
+                        borderRadius: const BorderRadius.all(Radius.circular(12)),
+                      ),
+                      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      padding: const EdgeInsets.all(16),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Icon(Icons.upload),
+                                SizedBox(width: 16),
+                                Text(
+                                  'Update omi firmware',
+                                  style: TextStyle(color: Colors.white, fontSize: 16),
                                 ),
-                              ),
-                              Icon(Icons.arrow_forward_ios)
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
+                          Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                        ],
                       ),
-                      Positioned(
-                        top: 12,
-                        right: 24,
-                        child: Container(
-                          width: 12,
-                          height: 12,
-                          decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                        ),
-                      ),
-                    ],
-                  );
+                    ),
+                  ),
+                ],
+              );
       },
     );
   }
 }
 
 getTranscriptWidget(
-  bool memoryCreating,
+  bool conversationCreating,
   List<TranscriptSegment> segments,
   List<Tuple2<String, String>> photos,
   BtDevice? btDevice,
 ) {
-  if (memoryCreating) {
+  if (conversationCreating) {
     return const Padding(
       padding: EdgeInsets.only(top: 80),
       child: Center(child: CircularProgressIndicator(color: Colors.white)),

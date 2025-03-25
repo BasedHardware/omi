@@ -2,25 +2,23 @@ import 'dart:math';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/auth.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/pages/home/page.dart';
-import 'package:friend_private/pages/onboarding/auth.dart';
-import 'package:friend_private/pages/onboarding/find_device/page.dart';
-import 'package:friend_private/pages/onboarding/memory_created_widget.dart';
-import 'package:friend_private/pages/onboarding/name/name_widget.dart';
-import 'package:friend_private/pages/onboarding/permissions/permissions_widget.dart';
-import 'package:friend_private/pages/onboarding/speech_profile_widget.dart';
-import 'package:friend_private/pages/onboarding/welcome/page.dart';
-import 'package:friend_private/providers/home_provider.dart';
-import 'package:friend_private/providers/onboarding_provider.dart';
-import 'package:friend_private/providers/speech_profile_provider.dart';
-import 'package:friend_private/services/services.dart';
-import 'package:friend_private/utils/analytics/intercom.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/device_widget.dart';
+import 'package:omi/backend/auth.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/pages/home/page.dart';
+import 'package:omi/pages/onboarding/auth.dart';
+import 'package:omi/pages/onboarding/find_device/page.dart';
+import 'package:omi/pages/onboarding/name/name_widget.dart';
+import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
+import 'package:omi/pages/onboarding/speech_profile_widget.dart';
+import 'package:omi/pages/onboarding/welcome/page.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/services/services.dart';
+import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/device_widget.dart';
 import 'package:provider/provider.dart';
 
 class OnboardingWrapper extends StatefulWidget {
@@ -37,13 +35,15 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   @override
   void initState() {
     //TODO: Change from tab controller to default controller and use provider (part of instabug cleanup) @mdmohsin7
-    _controller = TabController(length: hasSpeechProfile ? 5 : 7, vsync: this);
+    _controller = TabController(length: hasSpeechProfile ? 5 : 6, vsync: this);
     _controller!.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (isSignedIn()) {
         // && !SharedPreferencesUtil().onboardingCompleted
-        context.read<HomeProvider>().setupHasSpeakerProfile();
-        _goNext();
+        if (mounted) {
+          context.read<HomeProvider>().setupHasSpeakerProfile();
+          _goNext();
+        }
       }
     });
     super.initState();
@@ -79,15 +79,15 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       // TODO: if connected already, stop animation and display battery
       AuthComponent(
         onSignIn: () {
+          SharedPreferencesUtil().hasOmiDevice = true;
+          SharedPreferencesUtil().verifiedPersonaId = null;
           MixpanelManager().onboardingStepCompleted('Auth');
           context.read<HomeProvider>().setupHasSpeakerProfile();
           IntercomManager.instance.intercom.loginIdentifiedUser(
-            userId: FirebaseAuth.instance.currentUser!.uid,
+            userId: SharedPreferencesUtil().uid,
           );
           if (SharedPreferencesUtil().onboardingCompleted) {
-            // previous users
-            // Not needed anymore, because AuthProvider already does this
-            // routeToPage(context, const HomePageWrapper(), replace: true);
+            routeToPage(context, const HomePageWrapper(), replace: true);
           } else {
             _goNext();
           }
@@ -146,23 +146,23 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       pages.addAll([
         SpeechProfileWidget(
           goNext: () {
-            if (context.read<SpeechProfileProvider>().memory == null) {
-              routeToPage(context, const HomePageWrapper(), replace: true);
-            } else {
-              _goNext();
-            }
+            routeToPage(context, const HomePageWrapper(), replace: true);
+            // if (context.read<SpeechProfileProvider>().memory == null) {
+            // } else {
+            //   _goNext();
+            // }
             MixpanelManager().onboardingStepCompleted('Speech Profile');
           },
           onSkip: () {
             routeToPage(context, const HomePageWrapper(), replace: true);
           },
         ),
-        MemoryCreatedWidget(
-          goNext: () {
-            // _goNext();
-            MixpanelManager().onboardingStepCompleted('Memory Created');
-          },
-        ),
+        // MemoryCreatedWidget(
+        //   goNext: () {
+        //     // _goNext();
+        //     MixpanelManager().onboardingStepCompleted('Memory Created');
+        //   },
+        // ),
       ]);
     }
 
@@ -180,17 +180,17 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                   physics: const NeverScrollableScrollPhysics(),
                   children: [
                     DeviceAnimationWidget(animatedBackground: _controller!.index != -1),
-                    _controller!.index == 6 || _controller!.index == 7
-                        ? const SizedBox()
-                        : Center(
-                            child: Text(
-                              'Omi',
-                              style: TextStyle(
-                                  color: Colors.grey.shade200,
-                                  fontSize: _controller!.index == _controller!.length - 1 ? 28 : 40,
-                                  fontWeight: FontWeight.w500),
-                            ),
-                          ),
+                    // _controller!.index == 6 || _controller!.index == 7
+                    //     ? const SizedBox()
+                    //     : Center(
+                    //         child: Text(
+                    //           'Omi',
+                    //           style: TextStyle(
+                    //               color: Colors.grey.shade200,
+                    //               fontSize: _controller!.index == _controller!.length - 1 ? 28 : 40,
+                    //               fontWeight: FontWeight.w500),
+                    //         ),
+                    //       ),
                     const SizedBox(height: 24),
                     [-1, 5, 6, 7].contains(_controller?.index)
                         ? const SizedBox(
@@ -202,14 +202,16 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                               _controller!.index == _controller!.length - 1
                                   ? 'Your personal growth journey with AI that listens to your every word.'
                                   : 'Your personal growth journey with AI that listens to your every word.',
-                              style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                              style: TextStyle(color: Colors.grey.shade300, fontSize: 24),
                               textAlign: TextAlign.center,
                             ),
                           ),
                     SizedBox(
                       height: (_controller!.index == 5 || _controller!.index == 6 || _controller!.index == 7)
-                          ? max(MediaQuery.of(context).size.height - 500 - 10, maxHeightWithTextScale(context))
-                          : max(MediaQuery.of(context).size.height - 500 - 30, maxHeightWithTextScale(context)),
+                          ? max(MediaQuery.of(context).size.height - 500 - 10,
+                              maxHeightWithTextScale(context, _controller!.index))
+                          : max(MediaQuery.of(context).size.height - 500 - 30,
+                              maxHeightWithTextScale(context, _controller!.index)),
                       child: Padding(
                         padding: EdgeInsets.only(bottom: MediaQuery.sizeOf(context).height <= 700 ? 10 : 64),
                         child: TabBarView(
@@ -291,10 +293,14 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   }
 }
 
-double maxHeightWithTextScale(BuildContext context) {
+double maxHeightWithTextScale(BuildContext context, int index) {
   double textScaleFactor = MediaQuery.of(context).textScaleFactor;
   if (textScaleFactor > 1.0) {
-    return 405;
+    if (index == 0) {
+      return 200;
+    } else {
+      return 405;
+    }
   } else {
     return 305;
   }

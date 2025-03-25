@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/main.dart';
+import 'package:omi/main.dart';
 
 class AppSnackbar {
   static void showSnackbar(String message, {Color? color, Duration? duration}) {
@@ -16,6 +16,14 @@ class AppSnackbar {
     showSnackbar(
       message,
       color: Colors.red,
+      duration: duration,
+    );
+  }
+
+  static void showSnackbarSuccess(String message, {Duration? duration}) {
+    showSnackbar(
+      message,
+      color: Colors.green,
       duration: duration,
     );
   }

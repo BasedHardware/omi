@@ -1,11 +1,11 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/api/users.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/main.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/main.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 
 class DeleteAccount extends StatefulWidget {
@@ -31,9 +31,9 @@ class _DeleteAccountState extends State<DeleteAccount> {
     });
     MixpanelManager().deleteAccountConfirmed();
     MixpanelManager().deleteUser();
-    SharedPreferencesUtil().clear();
     await deleteAccount();
     await FirebaseAuth.instance.signOut();
+    SharedPreferencesUtil().clear();
     setState(() {
       isDeleteing = false;
     });
@@ -83,7 +83,7 @@ class _DeleteAccountState extends State<DeleteAccount> {
               ),
               const ListTile(
                 leading: Icon(Icons.person_pin_outlined),
-                title: Text("Your plugins and integrations will be disconnected effectively immediately."),
+                title: Text("Your Apps and Integrations will be disconnected effectively immediately."),
               ),
               const ListTile(
                 leading: Icon(Icons.upload_file_outlined),

@@ -1,4 +1,5 @@
 import 'package:collection/collection.dart';
+import 'package:uuid/uuid.dart';
 
 enum MessageSender { ai, human }
 
@@ -8,6 +9,7 @@ enum MessageType {
   ;
 
   final String value;
+
   const MessageType(this.value);
 
   static MessageType valuesFromString(String value) {
@@ -15,14 +17,14 @@ enum MessageType {
   }
 }
 
-class MessageMemoryStructured {
+class MessageConversationStructured {
   String title;
   String emoji;
 
-  MessageMemoryStructured(this.title, this.emoji);
+  MessageConversationStructured(this.title, this.emoji);
 
-  static MessageMemoryStructured fromJson(Map<String, dynamic> json) {
-    return MessageMemoryStructured(json['title'], json['emoji']);
+  static MessageConversationStructured fromJson(Map<String, dynamic> json) {
+    return MessageConversationStructured(json['title'], json['emoji']);
   }
 
   Map<String, dynamic> toJson() {
@@ -33,18 +35,18 @@ class MessageMemoryStructured {
   }
 }
 
-class MessageMemory {
+class MessageConversation {
   String id;
   DateTime createdAt;
-  MessageMemoryStructured structured;
+  MessageConversationStructured structured;
 
-  MessageMemory(this.id, this.createdAt, this.structured);
+  MessageConversation(this.id, this.createdAt, this.structured);
 
-  static MessageMemory fromJson(Map<String, dynamic> json) {
-    return MessageMemory(
+  static MessageConversation fromJson(Map<String, dynamic> json) {
+    return MessageConversation(
       json['id'],
       DateTime.parse(json['created_at']).toLocal(),
-      MessageMemoryStructured.fromJson(json['structured']),
+      MessageConversationStructured.fromJson(json['structured']),
     );
   }
 
@@ -57,6 +59,54 @@ class MessageMemory {
   }
 }
 
+class MessageFile {
+  String id;
+  String openaiFileId;
+  String? thumbnail;
+  String? thumbnailName;
+  String name;
+  String mimeType;
+  DateTime createdAt;
+
+  MessageFile(this.openaiFileId, this.thumbnail, this.name, this.mimeType, this.id, this.createdAt, this.thumbnailName);
+
+  static MessageFile fromJson(Map<String, dynamic> json) {
+    return MessageFile(
+      json['openai_file_id'],
+      json['thumbnail'],
+      json['name'],
+      json['mime_type'],
+      json['id'],
+      DateTime.parse(json['created_at']).toLocal(),
+      json['thumb_name'],
+    );
+  }
+
+  static List<MessageFile> fromJsonList(List<dynamic> json) {
+    return json.map((e) => MessageFile.fromJson(e)).toList();
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'openai_file_id': openaiFileId,
+      'thumbnail': thumbnail,
+      'name': name,
+      'mime_type': mimeType,
+      'id': id,
+      'created_at': createdAt.toUtc().toIso8601String(),
+      'thumb_name': thumbnailName,
+    };
+  }
+
+  String mimeTypeToFileType() {
+    if (mimeType.contains('image')) {
+      return 'image';
+    } else {
+      return 'file';
+    }
+  }
+}
+
 class ServerMessage {
   String id;
   DateTime createdAt;
@@ -64,10 +114,16 @@ class ServerMessage {
   MessageSender sender;
   MessageType type;
 
-  String? pluginId;
+  String? appId;
   bool fromIntegration;
 
-  List<MessageMemory> memories;
+  List<MessageFile> files;
+  List filesId;
+
+  List<MessageConversation> memories;
+  bool askForNps = false;
+
+  List<String> thinkings = [];
 
   ServerMessage(
     this.id,
@@ -75,10 +131,13 @@ class ServerMessage {
     this.text,
     this.sender,
     this.type,
-    this.pluginId,
+    this.appId,
     this.fromIntegration,
-    this.memories,
-  );
+    this.files,
+    this.filesId,
+    this.memories, {
+    this.askForNps = false,
+  });
 
   static ServerMessage fromJson(Map<String, dynamic> json) {
     return ServerMessage(
@@ -89,7 +148,10 @@ class ServerMessage {
       MessageType.valuesFromString(json['type']),
       json['plugin_id'],
       json['from_integration'] ?? false,
-      ((json['memories'] ?? []) as List<dynamic>).map((m) => MessageMemory.fromJson(m)).toList(),
+      ((json['files'] ?? []) as List<dynamic>).map((m) => MessageFile.fromJson(m)).toList(),
+      (json['files_id'] ?? []).map((m) => m.toString()).toList(),
+      ((json['memories'] ?? []) as List<dynamic>).map((m) => MessageConversation.fromJson(m)).toList(),
+      askForNps: json['ask_for_nps'] ?? false,
     );
   }
 
@@ -100,24 +162,87 @@ class ServerMessage {
       'text': text,
       'sender': sender.toString().split('.').last,
       'type': type.toString().split('.').last,
-      'plugin_id': pluginId,
+      'plugin_id': appId,
       'from_integration': fromIntegration,
       'memories': memories.map((m) => m.toJson()).toList(),
+      'ask_for_nps': askForNps,
+      'files': files.map((m) => m.toJson()).toList(),
     };
   }
 
-  static ServerMessage empty() {
+  bool areFilesOfSameType() {
+    if (files.isEmpty) {
+      return true;
+    }
+
+    final firstType = files.first.mimeTypeToFileType();
+    return files.every((element) => element.mimeTypeToFileType() == firstType);
+  }
+
+  static ServerMessage empty({String? appId}) {
     return ServerMessage(
       '0000',
       DateTime.now(),
       '',
       MessageSender.ai,
       MessageType.text,
+      appId,
+      false,
+      [],
+      [],
+      [],
+    );
+  }
+
+  static ServerMessage failedMessage() {
+    return ServerMessage(
+      const Uuid().v4(),
+      DateTime.now(),
+      'Looks like we are having issues with the server. Please try again later.',
+      MessageSender.ai,
+      MessageType.text,
       null,
       false,
+      [],
+      [],
       [],
     );
   }
 
   bool get isEmpty => id == '0000';
+}
+
+enum MessageChunkType {
+  think('think'),
+  data('data'),
+  done('done'),
+  error('error'),
+  message('message'),
+  ;
+
+  final String value;
+
+  const MessageChunkType(this.value);
+}
+
+class ServerMessageChunk {
+  String messageId;
+  MessageChunkType type;
+  String text;
+  ServerMessage? message;
+
+  ServerMessageChunk(
+    this.messageId,
+    this.text,
+    this.type, {
+    this.message,
+  });
+
+  static ServerMessageChunk failedMessage() {
+    return ServerMessageChunk(
+      const Uuid().v4(),
+      'Looks like we are having issues with the server. Please try again later.',
+      MessageChunkType.error,
+    );
+  }
 }

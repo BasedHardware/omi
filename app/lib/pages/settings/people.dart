@@ -3,11 +3,11 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/person.dart';
-import 'package:friend_private/providers/people_provider.dart';
-import 'package:friend_private/providers/connectivity_provider.dart';
-import 'package:friend_private/widgets/dialog.dart';
-import 'package:friend_private/widgets/extensions/functions.dart';
+import 'package:omi/backend/schema/person.dart';
+import 'package:omi/providers/people_provider.dart';
+import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/widgets/dialog.dart';
+import 'package:omi/widgets/extensions/functions.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
 
@@ -222,7 +222,7 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                             () => Navigator.pop(context),
                             singleButton: true,
                             'How it works?',
-                            'Once a person is created, you can go to a memory transcript, and assign them their corresponding segments, that way Omi will be able to recognize their speech too!',
+                            'Once a person is created, you can go to a conversation transcript, and assign them their corresponding segments, that way Omi will be able to recognize their speech too!',
                             okButtonText: 'Got it',
                           ),
                         );
@@ -264,7 +264,7 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                             ListTile(
                               title: Text(
                                 person.name,
-                                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
                               ),
                               onTap: () => _showPersonDialog(context, provider, person: person),
                               trailing: IconButton(

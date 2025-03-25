@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/providers/onboarding_provider.dart';
-import 'package:friend_private/utils/analytics/intercom.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
@@ -91,7 +91,7 @@ class _WelcomePageState extends State<WelcomePage> with SingleTickerProviderStat
                     height: 45, // Fixed height for the button
                     alignment: Alignment.center,
                     child: const Text(
-                      'Connect My Friend',
+                      'Connect My Omi',
                       style: TextStyle(
                         fontWeight: FontWeight.w400,
                         fontSize: 18,

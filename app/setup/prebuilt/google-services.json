@@ -1,0 +1,106 @@
+{
+  "project_info": {
+    "project_number": "1031333818730",
+    "project_id": "based-hardware-dev",
+    "storage_bucket": "based-hardware-dev.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1031333818730:android:761c9ab77a5d6e14afb513",
+        "android_client_info": {
+          "package_name": "com.friend.ios"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1031333818730-l9meebge7tpc0qmquvq6t5qpoe09o1ra.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCz33hNRKsSsWT_Kaxi5Q_9uB7EWGn3Dq0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1031333818730-l9meebge7tpc0qmquvq6t5qpoe09o1ra.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1031333818730-038eovd7osl3dlho0hp8fl87nq07nnna.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.friend-app-with-wearable.ios12"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1031333818730:android:de181b5b4681b7a1afb513",
+        "android_client_info": {
+          "package_name": "com.friend.ios.dev"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1031333818730-1cgqp3jc5p8n2rk467pl4t56qc4lnnbr.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.friend.ios.dev",
+            "certificate_hash": "48d4762a97ab7f055b3ba13f99bfe5f653c28324"
+          }
+        },
+        {
+          "client_id": "1031333818730-cbduoo2lqhk7ufs8m39h32p1rv9db9o6.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.friend.ios.dev",
+            "certificate_hash": "50f87a68e0496a85d6644d54426406866dab3598"
+          }
+        },
+        {
+          "client_id": "1031333818730-ggn7f5j6ei0rcsspo3nmg6bgl424nrvm.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.friend.ios.dev",
+            "certificate_hash": "f3d94e7b846fbd450c4cc60b7edce63a75c1406b"
+          }
+        },
+        {
+          "client_id": "1031333818730-l9meebge7tpc0qmquvq6t5qpoe09o1ra.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCz33hNRKsSsWT_Kaxi5Q_9uB7EWGn3Dq0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1031333818730-l9meebge7tpc0qmquvq6t5qpoe09o1ra.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1031333818730-038eovd7osl3dlho0hp8fl87nq07nnna.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.friend-app-with-wearable.ios12"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

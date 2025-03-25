@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 
 class ExpandableTextWidget extends StatefulWidget {
   final String text;
@@ -35,19 +36,47 @@ class _ExpandableTextWidgetState extends State<ExpandableTextWidget> {
       maxLines: widget.maxLines,
       textDirection: TextDirection.ltr,
     );
-    tp.layout(maxWidth: MediaQuery.of(context).size.width);
+    var width = MediaQuery.of(context).size.width;
+    tp.layout(maxWidth: width);
     final isOverflowing = tp.didExceedMaxLines;
+    final maxChars = tp.getPositionForOffset(Offset(width, 0)).offset * widget.maxLines;
 
     return SelectionArea(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            widget.text,
-            style: widget.style,
-            maxLines: widget.isExpanded ? 10000 : widget.maxLines,
-            overflow: TextOverflow.ellipsis,
+          MarkdownBody(
+            shrinkWrap: true,
+            styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+              a: widget.style,
+              p: widget.style,
+              blockquote: widget.style.copyWith(
+                backgroundColor: Colors.transparent,
+                color: Colors.black,
+              ),
+              blockquoteDecoration: BoxDecoration(
+                color: Colors.grey.shade800,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              code: widget.style.copyWith(
+                backgroundColor: Colors.transparent,
+                decoration: TextDecoration.none,
+                color: Colors.white,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            data: widget.isExpanded
+                ? widget.text
+                : widget.text.length > maxChars
+                    ? widget.text.substring(0, maxChars)
+                    : widget.text,
           ),
+          // Text(
+          //   widget.text,
+          //   style: widget.style,
+          //   maxLines: widget.isExpanded ? 10000 : widget.maxLines,
+          //   overflow: TextOverflow.ellipsis,
+          // ),
           if (isOverflowing)
             InkWell(
               onTap: () => widget.toggleExpand(),

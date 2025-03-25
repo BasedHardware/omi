@@ -1,0 +1,9 @@
+[{
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.friend.ios",
+      "sha256_cert_fingerprints":
+      ["48:D8:FB:58:91:C4:11:66:00:A6:7F:6D:9F:2D:0B:04:41:3A:58:06:ED:DD:A2:8E:9F:CD:FE:58:CE:16:67:BB"]
+    }
+  }]

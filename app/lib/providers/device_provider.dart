@@ -1,13 +1,18 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/providers/capture_provider.dart';
-import 'package:friend_private/services/devices.dart';
-import 'package:friend_private/services/notifications.dart';
-import 'package:friend_private/services/services.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/http/api/device.dart';
+import 'package:omi/main.dart';
+import 'package:omi/pages/home/firmware_update.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/devices.dart';
+import 'package:omi/services/notifications.dart';
+import 'package:omi/services/services.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/device.dart';
+import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
 class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption {
@@ -15,12 +20,22 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   bool isConnecting = false;
   bool isConnected = false;
+  bool isDeviceV2Connected = false;
   BtDevice? connectedDevice;
   BtDevice? pairedDevice;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
   int batteryLevel = -1;
+  bool _hasLowBatteryAlerted = false;
   Timer? _reconnectionTimer;
   int connectionCheckSeconds = 4;
+
+  bool _havingNewFirmware = false;
+  bool get havingNewFirmware => _havingNewFirmware && pairedDevice != null && isConnected;
+
+  // Current and latest firmware versions for UI display
+  String get currentFirmwareVersion => pairedDevice?.firmwareRevision ?? 'Unknown';
+  String _latestFirmwareVersion = '';
+  String get latestFirmwareVersion => _latestFirmwareVersion;
 
   Timer? _disconnectNotificationTimer;
 
@@ -43,6 +58,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   Future getDeviceInfo() async {
     if (connectedDevice != null) {
+      if (pairedDevice?.firmwareRevision != null && pairedDevice?.firmwareRevision != 'Unknown') {
+        return;
+      }
       var connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
       pairedDevice = await connectedDevice!.getDeviceInfo(connection);
       SharedPreferencesUtil().btDevice = pairedDevice!;
@@ -70,6 +88,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
   }
 
+  Future<List<int>> _getStorageList(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return [];
+    }
+    return connection.getStorageList();
+  }
+
   Future<BtDevice?> _getConnectedDevice() async {
     var deviceId = SharedPreferencesUtil().btDevice.id;
     if (deviceId.isEmpty) {
@@ -80,12 +106,24 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   initiateBleBatteryListener() async {
-    if (_bleBatteryLevelListener != null) return;
+    if (connectedDevice == null) {
+      return;
+    }
     _bleBatteryLevelListener?.cancel();
     _bleBatteryLevelListener = await _getBleBatteryLevelListener(
       connectedDevice!.id,
       onBatteryLevelChange: (int value) {
         batteryLevel = value;
+        if (batteryLevel < 20 && !_hasLowBatteryAlerted) {
+          _hasLowBatteryAlerted = true;
+          NotificationService.instance.createNotification(
+            title: "Low Battery Alert",
+            body: "Your device is running low on battery. Time for a recharge! 🔋",
+          );
+        } else if (batteryLevel > 20) {
+          _hasLowBatteryAlerted = true;
+        }
+        notifyListeners();
       },
     );
     notifyListeners();
@@ -96,11 +134,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _reconnectionTimer?.cancel();
     _reconnectionTimer = Timer.periodic(Duration(seconds: connectionCheckSeconds), (t) async {
       debugPrint("period connect...");
-      print(printer);
       print('seconds: $connectionCheckSeconds');
       print('triggered timer at ${DateTime.now()}');
-
       if (SharedPreferencesUtil().btDevice.id.isEmpty) {
+        t.cancel();
         return;
       }
       print("isConnected: $isConnected, isConnecting: $isConnecting, connectedDevice: $connectedDevice");
@@ -124,7 +161,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     int timeoutCounter = 0;
     while (true) {
       if (timeout && timeoutCounter >= 10) return null;
-      await ServiceManager.instance().device.discover();
+      await ServiceManager.instance().device.discover(desirableDeviceId: SharedPreferencesUtil().btDevice.id);
       if (connectedDevice != null) {
         return connectedDevice;
       }
@@ -154,6 +191,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         var cDevice = await _getConnectedDevice();
         if (cDevice != null) {
           setConnectedDevice(cDevice);
+          setIsDeviceV2Connected();
           // SharedPreferencesUtil().btDevice = cDevice;
           SharedPreferencesUtil().deviceName = cDevice.name;
           MixpanelManager().deviceConnected();
@@ -162,9 +200,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         print('device is not null $cDevice');
       }
       updateConnectingStatus(false);
-    }
-    if (isConnected) {
-      await initiateBleBatteryListener();
     }
 
     notifyListeners();
@@ -196,19 +231,25 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   void onDeviceDisconnected() async {
     debugPrint('onDisconnected inside: $connectedDevice');
+    _havingNewFirmware = false;
     setConnectedDevice(null);
+    setIsDeviceV2Connected();
     setIsConnected(false);
     updateConnectingStatus(false);
-    await captureProvider?.stopStreamDeviceRecording(cleanDevice: true);
-    captureProvider?.setAudioBytesConnected(false);
+
+    captureProvider?.updateRecordingDevice(null);
+
+    // Wals
+    ServiceManager.instance().wal.getSyncs().sdcard.setDevice(null);
+
     print('after resetState inside initiateConnectionListener');
 
-    InstabugLog.logInfo('Friend Device Disconnected');
+    InstabugLog.logInfo('Omi Device Disconnected');
     _disconnectNotificationTimer?.cancel();
     _disconnectNotificationTimer = Timer(const Duration(seconds: 30), () {
       NotificationService.instance.createNotification(
-        title: 'Friend Device Disconnected',
-        body: 'Please reconnect to continue using your Friend.',
+        title: 'Your Omi Device Disconnected',
+        body: 'Please reconnect to continue using your Omi.',
       );
     });
     MixpanelManager().deviceDisconnected();
@@ -219,21 +260,128 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     });
   }
 
-  void onDeviceReconnected(BtDevice device) async {
+  Future<(String, bool, String)> shouldUpdateFirmware() async {
+    if (pairedDevice == null || connectedDevice == null) {
+      return ('No paired device is connected', false, '');
+    }
+
+    var device = pairedDevice!;
+    var latestFirmwareDetails = await getLatestFirmwareVersion(
+      deviceModelNumber: device.modelNumber,
+      firmwareRevision: device.firmwareRevision,
+      hardwareRevision: device.hardwareRevision,
+      manufacturerName: device.manufacturerName,
+    );
+
+    return await DeviceUtils.shouldUpdateFirmware(
+        currentFirmware: device.firmwareRevision, latestFirmwareDetails: latestFirmwareDetails);
+  }
+
+  void _onDeviceConnected(BtDevice device) async {
     debugPrint('_onConnected inside: $connectedDevice');
     _disconnectNotificationTimer?.cancel();
     NotificationService.instance.clearNotification(1);
     setConnectedDevice(device);
+
+    setIsDeviceV2Connected();
     setIsConnected(true);
+    await initiateBleBatteryListener();
+    if (batteryLevel != -1 && batteryLevel < 20) {
+      _hasLowBatteryAlerted = false;
+    }
     updateConnectingStatus(false);
-    await captureProvider?.streamDeviceRecording(restartBytesProcessing: true, device: device);
-    //  initiateBleBatteryListener();
-    // The device is still disconnected for some reason
-    if (connectedDevice != null) {
-      MixpanelManager().deviceConnected();
-      await getDeviceInfo();
-      // SharedPreferencesUtil().btDevice = connectedDevice!;
-      SharedPreferencesUtil().deviceName = connectedDevice!.name;
+    await captureProvider?.streamDeviceRecording(device: device);
+
+    await getDeviceInfo();
+    SharedPreferencesUtil().deviceName = device.name;
+
+    // Wals
+    ServiceManager.instance().wal.getSyncs().sdcard.setDevice(device);
+
+    notifyListeners();
+
+    // Check firmware updates
+    _checkFirmwareUpdates();
+  }
+
+  void _checkFirmwareUpdates() async {
+    await checkFirmwareUpdates();
+
+    // Show firmware update dialog if needed
+    if (_havingNewFirmware) {
+      // Use a small delay to ensure the UI is ready
+      Future.delayed(const Duration(milliseconds: 500), () {
+        final context = MyApp.navigatorKey.currentContext;
+        if (context != null) {
+          showFirmwareUpdateDialog(context);
+        }
+      });
+    }
+  }
+
+  Future checkFirmwareUpdates() async {
+    int retryCount = 0;
+    const maxRetries = 3;
+    const retryDelay = Duration(seconds: 3);
+
+    while (retryCount < maxRetries) {
+      try {
+        var (message, hasUpdate, version) = await shouldUpdateFirmware();
+        _havingNewFirmware = hasUpdate;
+        _latestFirmwareVersion = version.isNotEmpty ? version : message;
+        notifyListeners();
+        return hasUpdate; // Return whether there's an update
+      } catch (e) {
+        retryCount++;
+        debugPrint('Error checking firmware update (attempt $retryCount): $e');
+
+        if (retryCount == maxRetries) {
+          debugPrint('Max retries reached, giving up');
+          _havingNewFirmware = false;
+          notifyListeners();
+          break;
+        }
+
+        await Future.delayed(retryDelay);
+      }
+    }
+    return;
+  }
+
+  void showFirmwareUpdateDialog(BuildContext context) {
+    if (!_havingNewFirmware || !SharedPreferencesUtil().showFirmwareUpdateDialog) {
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => ConfirmationDialog(
+        title: 'Firmware Update Available',
+        description:
+            'A new firmware update (${_latestFirmwareVersion}) is available for your Omi device. Would you like to update now?',
+        confirmText: 'Update',
+        cancelText: 'Later',
+        onConfirm: () {
+          Navigator.of(context).pop();
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => FirmwareUpdate(device: pairedDevice),
+            ),
+          );
+        },
+        onCancel: () {
+          Navigator.of(context).pop();
+        },
+      ),
+    );
+  }
+
+  Future setIsDeviceV2Connected() async {
+    if (connectedDevice == null) {
+      isDeviceV2Connected = false;
+    } else {
+      var storageFiles = await _getStorageList(connectedDevice!.id);
+      isDeviceV2Connected = storageFiles.isNotEmpty;
     }
     notifyListeners();
   }
@@ -247,7 +395,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         if (connection == null) {
           return;
         }
-        onDeviceReconnected(connection.device);
+        _onDeviceConnected(connection.device);
         break;
       case DeviceConnectionState.disconnected:
         if (deviceId == connectedDevice?.id) {
@@ -259,26 +407,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   @override
-  void onDevices(List<BtDevice> devices) async {
-    if (connectedDevice != null) {
-      return;
-    }
-
-    if (devices.length <= 0) {
-      return;
-    }
-
-    // Connect to first founded device
-    var force = devices.first.id == SharedPreferencesUtil().btDevice.id;
-    var connection = await ServiceManager.instance().device.ensureConnection(devices.first.id, force: force);
-    if (connection == null) {
-      return;
-    }
-    connectedDevice = connection.device;
-  }
+  void onDevices(List<BtDevice> devices) async {}
 
   @override
-  void onStatusChanged(DeviceServiceStatus status) {
-    // TODO: implement onStatusChanged
-  }
+  void onStatusChanged(DeviceServiceStatus status) {}
 }

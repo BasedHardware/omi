@@ -4,11 +4,11 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/services/devices.dart';
-import 'package:friend_private/services/devices/frame_connection.dart';
-import 'package:friend_private/services/devices/friend_connection.dart';
-import 'package:friend_private/services/notifications.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/frame_connection.dart';
+import 'package:omi/services/devices/omi_connection.dart';
+import 'package:omi/services/notifications.dart';
 
 class DeviceConnectionFactory {
   static DeviceConnection? create(
@@ -19,16 +19,21 @@ class DeviceConnectionFactory {
       return null;
     }
     switch (device.type!) {
-      case DeviceType.friend:
-        return FriendDeviceConnection(device, bleDevice);
+      case DeviceType.omi:
+        return OmiDeviceConnection(device, bleDevice);
       case DeviceType.openglass:
-        return FriendDeviceConnection(device, bleDevice);
+        return OmiDeviceConnection(device, bleDevice);
       case DeviceType.frame:
         return FrameDeviceConnection(device, bleDevice);
       default:
         return null;
     }
   }
+}
+
+class DeviceConnectionException implements Exception {
+  String cause;
+  DeviceConnectionException(this.cause);
 }
 
 abstract class DeviceConnection {
@@ -59,7 +64,7 @@ abstract class DeviceConnection {
     Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
   }) async {
     if (_connectionState == DeviceConnectionState.connected) {
-      throw Exception("Connection already established, please disconnect before start new connection");
+      throw DeviceConnectionException("Connection already established, please disconnect before start new connection");
     }
 
     // Connect
@@ -68,9 +73,13 @@ abstract class DeviceConnection {
       _onBleConnectionStateChanged(state);
     });
 
-    await FlutterBluePlus.adapterState.where((val) => val == BluetoothAdapterState.on).first;
-    await bleDevice.connect();
-    await bleDevice.connectionState.where((val) => val == BluetoothConnectionState.connected).first;
+    try {
+      await FlutterBluePlus.adapterState.where((val) => val == BluetoothAdapterState.on).first;
+      await bleDevice.connect();
+      await bleDevice.connectionState.where((val) => val == BluetoothConnectionState.connected).first;
+    } on FlutterBluePlusException catch (e) {
+      throw DeviceConnectionException("FlutterBluePlusException: ${e.toString()}");
+    }
 
     // Mtu
     if (Platform.isAndroid && bleDevice.mtuNow < 512) {
@@ -174,8 +183,32 @@ abstract class DeviceConnection {
     return null;
   }
 
+  Future<List<int>> getBleButtonState() async {
+    if (await isConnected()) {
+      debugPrint('button state called');
+      return await performGetButtonState();
+    }
+    debugPrint('button state error');
+    return Future.value(<int>[]);
+  }
+
+  Future<List<int>> performGetButtonState();
+
+  Future<StreamSubscription?> getBleButtonListener({
+    required void Function(List<int>) onButtonReceived,
+  }) async {
+    if (await isConnected()) {
+      return await performGetBleButtonListener(onButtonReceived: onButtonReceived);
+    }
+    return null;
+  }
+
   Future<StreamSubscription?> performGetBleAudioBytesListener({
     required void Function(List<int>) onAudioBytesReceived,
+  });
+
+  Future<StreamSubscription?> performGetBleButtonListener({
+    required void Function(List<int>) onButtonReceived,
   });
 
   Future<BleAudioCodec> getAudioCodec() async {
@@ -187,7 +220,10 @@ abstract class DeviceConnection {
   }
 
   Future<BleAudioCodec> performGetAudioCodec();
-//storage here
+
+  Future<bool> performPlayToSpeakerHaptic(int mode);
+
+  // storage here
 
   Future<List<int>> getStorageList() async {
     if (await isConnected()) {
@@ -199,11 +235,11 @@ abstract class DeviceConnection {
 
   Future<List<int>> performGetStorageList();
 
-  Future<bool> performWriteToStorage(int numFile, int command,int offset);
+  Future<bool> performWriteToStorage(int numFile, int command, int offset);
 
-  Future<bool> writeToStorage(int numFile, int command,int offset) async {
+  Future<bool> writeToStorage(int numFile, int command, int offset) async {
     if (await isConnected()) {
-      return await performWriteToStorage(numFile, command,offset);
+      return await performWriteToStorage(numFile, command, offset);
     }
     _showDeviceDisconnectedNotification();
     return Future.value(false);

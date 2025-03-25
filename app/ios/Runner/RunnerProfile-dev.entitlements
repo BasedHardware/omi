@@ -8,5 +8,10 @@
 	<array>
 		<string>Default</string>
 	</array>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:h.omi.me</string>
+		<string>applinks:try.omi.me</string>
+	</array>
 </dict>
 </plist>

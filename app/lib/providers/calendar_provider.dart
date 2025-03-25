@@ -1,9 +1,9 @@
 // import 'package:device_calendar/device_calendar.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/utils/alerts/app_snackbar.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/features/calendar.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/features/calendar.dart';
 import 'package:manage_calendar_events/manage_calendar_events.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -45,23 +45,20 @@ class CalenderProvider extends ChangeNotifier {
         setLoading(true);
 
         await _getCalendars();
-
-        if (calendars.isEmpty) {
-          // try to get calendars again
+        // try to get calendars again after 3 seconds
+        // Delay is necessary because the calendar plugin does not return the calendars immediately
+        // While testing, on first call I got only 1 calendar, but on the second call I got all the calendars
+        await Future.delayed(const Duration(seconds: 3), () async {
           await _getCalendars();
-          setLoading(false);
-          if (calendars.isEmpty) {
-            AppSnackbar.showSnackbar(
-              'No calendars found. Please check your device settings.',
-              duration: const Duration(seconds: 5),
-            );
-            calendarEnabled = false;
-          } else {
-            calendarEnabled = true;
-            _mixpanelManager.calendarEnabled();
-          }
+        });
+        setLoading(false);
+        if (calendars.isEmpty) {
+          AppSnackbar.showSnackbar(
+            'No calendars found. Please check your device settings.',
+            duration: const Duration(seconds: 5),
+          );
+          calendarEnabled = false;
         } else {
-          setLoading(false);
           calendarEnabled = true;
           _mixpanelManager.calendarEnabled();
         }

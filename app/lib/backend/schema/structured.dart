@@ -49,7 +49,9 @@ class Structured {
         if (event.isEmpty) continue;
         structured.events.add(Event(
           event['title'],
-          DateTime.parse(event['startsAt'] ?? event['start']),
+          (event['startsAt'] ?? event['start']) is int
+              ? DateTime.fromMillisecondsSinceEpoch((event['startsAt'] ?? event['start']) * 1000).toLocal()
+              : DateTime.parse(event['startsAt'] ?? event['start']).toLocal(),
           event['duration'],
           description: event['description'] ?? '',
           created: event['created'] ?? false,
@@ -95,28 +97,29 @@ class ActionItem {
 
   String description;
   bool completed = false;
+  bool deleted = false;
 
-  ActionItem(this.description, {this.id = 0, this.completed = false});
+  ActionItem(this.description, {this.id = 0, this.completed = false, this.deleted = false});
 
   static fromJson(Map<String, dynamic> json) {
-    return ActionItem(json['description'], completed: json['completed'] ?? false);
+    return ActionItem(json['description'], completed: json['completed'] ?? false, deleted: json['deleted'] ?? false);
   }
 
-  toJson() => {'description': description, 'completed': completed};
+  toJson() => {'description': description, 'completed': completed, 'deleted': deleted};
 }
 
-class PluginResponse {
+class AppResponse {
   int id = 0;
 
-  String? pluginId;
+  String? appId;
   String content;
 
-  PluginResponse(this.content, {this.id = 0, this.pluginId});
+  AppResponse(this.content, {this.id = 0, this.appId});
 
-  toJson() => {'pluginId': pluginId, 'content': content};
+  toJson() => {'pluginId': appId, 'content': content};
 
-  factory PluginResponse.fromJson(Map<String, dynamic> json) {
-    return PluginResponse(json['content'], pluginId: json['pluginId'] ?? json['plugin_id']);
+  factory AppResponse.fromJson(Map<String, dynamic> json) {
+    return AppResponse(json['content'], appId: json['pluginId'] ?? json['plugin_id']);
   }
 }
 
@@ -143,16 +146,16 @@ class Event {
   }
 }
 
-class MemoryPhoto {
+class ConversationPhoto {
   int id = 0;
 
   String base64;
   String description;
 
-  MemoryPhoto(this.base64, this.description, {this.id = 0});
+  ConversationPhoto(this.base64, this.description, {this.id = 0});
 
-  factory MemoryPhoto.fromJson(Map<String, dynamic> json) {
-    return MemoryPhoto(json['base64'], json['description']);
+  factory ConversationPhoto.fromJson(Map<String, dynamic> json) {
+    return ConversationPhoto(json['base64'], json['description']);
   }
 
   toJson() {

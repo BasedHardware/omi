@@ -6,9 +6,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:frame_sdk/bluetooth.dart';
 import 'package:frame_sdk/frame_sdk.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/services/devices.dart';
-import 'package:friend_private/services/devices/device_connection.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/device_connection.dart';
 
 const String _photoHeader =
     "/9j/4AAQSkZJRgABAgAAZABkAAD/2wBDACAWGBwYFCAcGhwkIiAmMFA0MCwsMGJGSjpQdGZ6eHJmcG6AkLicgIiuim5woNqirr7EztDOfJri8uDI8LjKzsb/2wBDASIkJDAqMF40NF7GhHCExsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsb/wAARCAIAAgADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwA=";
@@ -61,7 +62,7 @@ class FrameDeviceConnection extends DeviceConnection {
   }
 
   Future<void> sendHeartbeat() async {
-    print("Sending heartbeat to frame");
+    debugPrint("Sending heartbeat to frame");
     final heartbeatBytes = Uint8List.fromList(utf8.encode("HEARTBEAT"));
     await _frame?.bluetooth.sendData(heartbeatBytes);
   }
@@ -110,28 +111,27 @@ class FrameDeviceConnection extends DeviceConnection {
       throw Exception("Frame is not initialised");
     }
     if (_frame!.isConnected == false) {
-      print("Frame is not connected in afterConnect!");
+      debugPrint("Frame is not connected in afterConnect!");
       return;
     }
     if (_debugSubscription != null) {
       _debugSubscription!.cancel();
     }
     _debugSubscription = _frame!.bluetooth.stringResponse.listen((data) {
-      print("Frame printed: $data");
+      debugPrint("Frame printed: $data");
     });
     await setTimeOnFrame();
     bool isLoaded = false;
     bool isRunning = false;
-    final String mainLuaContent = (await rootBundle.loadString('assets/device_assets/frame_lib.lua'))
-        .replaceAll("\t", "")
-        .replaceAll("\n\n", "\n");
+    final String mainLuaContent =
+        (await rootBundle.loadString(Assets.deviceAssets.frameLib)).replaceAll("\t", "").replaceAll("\n\n", "\n");
     final int frameLibHash = mainLuaContent.hashCode;
 
     if (_isLooping == false) {
       final deviceframeLibHash = await _frame!.evaluate("frameLibHash");
       isLoaded = deviceframeLibHash == frameLibHash.toString();
       isRunning = false;
-      print(
+      debugPrint(
           "A deviceframeLibHash: $deviceframeLibHash, frameLibHash: $frameLibHash, isLoaded: $isLoaded, isRunning: $isRunning");
     } else if (_isLooping == true) {
       final deviceframeLibHash = await getFromLoop("frameLibHash");
@@ -168,20 +168,20 @@ class FrameDeviceConnection extends DeviceConnection {
       await sendUntilEchoed("CAMERA START");
     } else if (!isLoaded) {
       await _frame!.bluetooth.sendBreakSignal();
-      print("About to send main.lua to frame, length = ${mainLuaContent.length}");
+      debugPrint("About to send main.lua to frame, length = ${mainLuaContent.length}");
       try {
         await _frame!.files.writeFile("main.lua", utf8.encode("$mainLuaContent\nframeLibHash = $frameLibHash\nstart()"),
             checked: true);
-        print("Sent main.lua to frame");
+        debugPrint("Sent main.lua to frame");
         await _frame!.bluetooth.sendResetSignal();
       } catch (e) {
-        print("Error sending main.lua to frame: $e");
+        debugPrint("Error sending main.lua to frame: $e");
       }
 
       await setTimeOnFrame();
     } else if (isLoaded && !isRunning) {
       await _frame!.bluetooth.sendBreakSignal();
-      print("Frame already loaded, running start()");
+      debugPrint("Frame already loaded, running start()");
       await setTimeOnFrame();
       await _frame!.runLua("start()");
     }
@@ -212,9 +212,9 @@ class FrameDeviceConnection extends DeviceConnection {
         return true;
       } catch (e) {
         if (e is TimeoutException) {
-          print("Timeout occurred while waiting for echo of $data. Attempt $attempt of $maxAttempts");
+          debugPrint("Timeout occurred while waiting for echo of $data. Attempt $attempt of $maxAttempts");
           if (attempt == maxAttempts) {
-            print("Failed to receive echo for $data after $maxAttempts attempts");
+            debugPrint("Failed to receive echo for $data after $maxAttempts attempts");
             //await disconnectDevice();
             return false;
           }
@@ -224,7 +224,7 @@ class FrameDeviceConnection extends DeviceConnection {
               await init();
             }
           } else {
-            print("Error sending $data to frame: $e");
+            debugPrint("Error sending $data to frame: $e");
             return false;
           }
         }
@@ -258,12 +258,20 @@ class FrameDeviceConnection extends DeviceConnection {
   }
 
   @override
+  Future<List<int>> performGetButtonState() async {
+    return Future.value(<int>[]);
+  }
+
+  @override
+  Future<StreamSubscription?> performGetBleButtonListener({required void Function(List<int>) onButtonReceived}) async {}
+
+  @override
   Future<StreamSubscription?> performGetBleAudioBytesListener(
       {required void Function(List<int>) onAudioBytesReceived}) async {
     if (_frame == null || _frame!.isConnected == false) {
       await init();
       await Future.doWhile(() async {
-        await Future.delayed(Duration(milliseconds: 250));
+        await Future.delayed(const Duration(milliseconds: 250));
         return !(_frame?.isConnected ?? false);
       });
     }
@@ -299,7 +307,7 @@ class FrameDeviceConnection extends DeviceConnection {
     if (_frame == null || _frame!.isConnected == false) {
       await init();
       await Future.doWhile(() async {
-        await Future.delayed(Duration(milliseconds: 100));
+        await Future.delayed(const Duration(milliseconds: 100));
         return !(_frame?.isConnected ?? false);
       });
     }
@@ -381,7 +389,7 @@ class FrameDeviceConnection extends DeviceConnection {
     if (_frame == null || _frame!.isConnected == false) {
       await init();
       await Future.doWhile(() async {
-        await Future.delayed(Duration(milliseconds: 100));
+        await Future.delayed(const Duration(milliseconds: 100));
         return !(_frame?.isConnected ?? false);
       });
     }
@@ -392,7 +400,7 @@ class FrameDeviceConnection extends DeviceConnection {
   Future<StreamSubscription?> performGetImageListener({required void Function(Uint8List p1) onImageReceived}) async {
     if (_frame == null || _frame!.isConnected == false) {
       await Future.doWhile(() async {
-        await Future.delayed(Duration(milliseconds: 100));
+        await Future.delayed(const Duration(milliseconds: 100));
         return !(_frame?.isConnected ?? false);
       });
     }
@@ -400,10 +408,10 @@ class FrameDeviceConnection extends DeviceConnection {
     StreamSubscription<Uint8List> subscription =
         _frame!.bluetooth.getDataOfType(FrameDataTypePrefixes.photoData).listen((value) {
       if (value.isNotEmpty) {
-        print("Received photo data from frame, length = ${value.length}");
+        debugPrint("Received photo data from frame, length = ${value.length}");
         final header = base64.decode(_photoHeader);
         final combinedData = Uint8List.fromList([...header, ...value]);
-        print("Processed photo data from frame, length = ${combinedData.length}");
+        debugPrint("Processed photo data from frame, length = ${combinedData.length}");
         onImageReceived(combinedData);
       }
     });
@@ -426,6 +434,11 @@ class FrameDeviceConnection extends DeviceConnection {
   }
 
   @override
+  Future<bool> performPlayToSpeakerHaptic(int mode) async {
+    return false;
+  }
+
+  @override
   Future<List<int>> performGetStorageList() {
     return Future.value(<int>[]);
   }
@@ -443,7 +456,7 @@ class FrameDeviceConnection extends DeviceConnection {
   }
 
   @override
-  Future<bool> performWriteToStorage(int numFile, int command,int offset) {
+  Future<bool> performWriteToStorage(int numFile, int command, int offset) {
     return Future.value(false);
   }
 }

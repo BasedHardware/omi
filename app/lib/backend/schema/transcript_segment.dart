@@ -1,4 +1,4 @@
-import 'package:friend_private/backend/preferences.dart';
+import 'package:omi/backend/preferences.dart';
 
 class TranscriptSegment {
   int id = 0;
@@ -40,8 +40,8 @@ class TranscriptSegment {
       speaker: (json['speaker'] ?? 'SPEAKER_00') as String,
       isUser: (json['is_user'] ?? false) as bool,
       personId: json['person_id'],
-      start: json['start'] as double,
-      end: json['end'] as double,
+      start: double.tryParse(json['start'].toString()) ?? 0.0,
+      end: double.tryParse(json['end'].toString()) ?? 0.0,
     );
   }
 

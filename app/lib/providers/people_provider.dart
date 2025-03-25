@@ -1,9 +1,9 @@
 import 'package:flutter/cupertino.dart';
-import 'package:friend_private/backend/http/api/speech_profile.dart';
-import 'package:friend_private/backend/http/api/users.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/person.dart';
-import 'package:friend_private/providers/base_provider.dart';
+import 'package:omi/backend/http/api/speech_profile.dart';
+import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/person.dart';
+import 'package:omi/providers/base_provider.dart';
 import 'package:just_audio/just_audio.dart';
 
 class PeopleProvider extends BaseProvider {
@@ -106,9 +106,9 @@ class PeopleProvider extends BaseProvider {
   void deletePersonSample(int personIdx, String url) {
     String name = _getFileNameFromUrl(url);
     var parts = name.split('_segment_');
-    String memoryId = parts[0];
+    String conversationId = parts[0];
     int segmentIdx = int.parse(parts[1]);
-    deleteProfileSample(memoryId, segmentIdx, personId: people[personIdx].id);
+    deleteProfileSample(conversationId, segmentIdx, personId: people[personIdx].id);
     people[personIdx].speechSamples!.remove(url);
     SharedPreferencesUtil().replaceCachedPerson(people[personIdx]);
     notifyListeners();

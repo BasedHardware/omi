@@ -1,17 +1,17 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/pages/home/firmware_update.dart';
-import 'package:friend_private/pages/sdcard/page.dart';
-import 'package:friend_private/providers/device_provider.dart';
-import 'package:friend_private/providers/onboarding_provider.dart';
-import 'package:friend_private/services/services.dart';
-import 'package:friend_private/utils/analytics/intercom.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/pages/home/firmware_update.dart';
+import 'package:omi/pages/conversations/sync_page.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/services/services.dart';
+import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
 
@@ -34,10 +34,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   @override
   void initState() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (context.read<DeviceProvider>().connectedDevice!.modelNumber == 'Unknown') {
-        context.read<DeviceProvider>().getDeviceInfo();
-      }
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await context.read<DeviceProvider>().getDeviceInfo();
     });
     super.initState();
   }
@@ -100,7 +98,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               ),
               GestureDetector(
                 onTap: () async {
-                  await IntercomManager().displayChargingArticle();
+                  await IntercomManager().displayChargingArticle(provider.pairedDevice?.name ?? 'DevKit1');
                 },
                 child: const ListTile(
                   title: Text('Issues charging the device?'),
@@ -130,7 +128,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                   child: TextButton(
                     onPressed: () async {
                       await SharedPreferencesUtil()
-                          .btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.friend, rssi: 0));
+                          .btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
                       SharedPreferencesUtil().deviceName = '';
                       if (provider.connectedDevice != null) {
                         await _bleDisconnectDevice(provider.connectedDevice!);
@@ -138,12 +136,12 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       provider.setIsConnected(false);
                       provider.setConnectedDevice(null);
                       provider.updateConnectingStatus(false);
-                      context.read<OnboardingProvider>().stopFindDeviceTimer();
+                      context.read<OnboardingProvider>().stopScanDevices();
                       Navigator.of(context).pop();
                       Navigator.of(context).pop();
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content: Text(
-                            'Your Friend is ${provider.connectedDevice == null ? "unpaired" : "disconnected"}  😔'),
+                        content:
+                            Text('Your Omi is ${provider.connectedDevice == null ? "unpaired" : "disconnected"}  😔'),
                       ));
                       MixpanelManager().disconnectFriendClicked();
                     },
@@ -161,10 +159,12 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 }
 
 List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
+  var provider = Provider.of<DeviceProvider>(context, listen: true);
+
   return [
     ListTile(
       title: const Text('Device Name'),
-      subtitle: Text(device?.name ?? 'Friend'),
+      subtitle: Text(device?.name ?? 'Omi DevKit'),
     ),
     ListTile(
       title: const Text('Device ID'),
@@ -183,43 +183,41 @@ List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
         ),
       ),
     ),
-  GestureDetector(
-    onTap: () {
-      if (!SharedPreferencesUtil().deviceIsV2) {
-        showDialog(
-          context: context,
-          builder: (c) => getDialog(
-            context,
-            () => Navigator.of(context).pop(),
-            () => {},
-            'V2 undetected',
-            'We see that you either have a V1 device or your device is not connected. SD Card functionality is available only for V2 devices.',
+    GestureDetector(
+      onTap: () {
+        if (!provider.isDeviceV2Connected) {
+          showDialog(
+            context: context,
+            builder: (c) => getDialog(
+              context,
+              () => Navigator.of(context).pop(),
+              () => {},
+              'V2 undetected',
+              'We see that you either have a V1 device or your device is not connected. SD Card functionality is available only for V2 devices.',
               singleButton: true,
             ),
           );
-      }
-      else {
-            var page = const SdCardCapturePage();
-            routeToPage(context, page);
-      }
-  },
-    child: ListTile(
-    title: const Text('SD Card Import'),
-    subtitle: Text(''),
-    trailing: const Icon(
-      Icons.arrow_forward_ios,
-      size: 16,
+        } else {
+          var page = const SyncPage();
+          routeToPage(context, page);
+        }
+      },
+      child: const ListTile(
+        title: Text('SD Card Sync'),
+        subtitle: Text('Import audio files from SD Card'),
+        trailing: Icon(
+          Icons.arrow_forward_ios,
+          size: 16,
+        ),
+      ),
     ),
-  ),
-  ),
-
     ListTile(
       title: const Text('Hardware Revision'),
       subtitle: Text(device?.hardwareRevision ?? 'XIAO'),
     ),
     ListTile(
       title: const Text('Model Number'),
-      subtitle: Text(device?.modelNumber ?? 'Friend'),
+      subtitle: Text(device?.modelNumber ?? 'Omi DevKit'),
     ),
     ListTile(
       title: const Text('Manufacturer Name'),

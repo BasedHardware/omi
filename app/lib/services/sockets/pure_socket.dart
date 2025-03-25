@@ -8,6 +8,7 @@ import 'package:internet_connection_checker_plus/internet_connection_checker_plu
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/status.dart' as socket_channel_status;
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:omi/backend/http/shared.dart';
 
 enum PureSocketStatus { notConnected, connecting, connected, disconnected }
 
@@ -49,20 +50,26 @@ class PureCore {
 
   PureCore.createInstance() {
     internetConnection = InternetConnection.createInstance(
-        /*
+      useDefaultOptions: false,
       customCheckOptions: [
         InternetCheckOption(
-          uri: Uri.parse(Env.apiBaseUrl!),
-          timeout: const Duration(
-            seconds: 30,
-          ),
-          responseStatusFn: (resp) {
-            return resp.statusCode < 500;
-          },
+          uri: Uri.parse('https://one.one.one.one'),
+          timeout: const Duration(seconds: 12),
+        ),
+        InternetCheckOption(
+          uri: Uri.parse('https://icanhazip.com/'),
+          timeout: const Duration(seconds: 12),
+        ),
+        InternetCheckOption(
+          uri: Uri.parse('https://jsonplaceholder.typicode.com/todos/1'),
+          timeout: const Duration(seconds: 12),
+        ),
+        InternetCheckOption(
+          uri: Uri.parse('https://reqres.in/api/users/1'),
+          timeout: const Duration(seconds: 12),
         ),
       ],
-		*/
-        );
+    );
   }
 }
 
@@ -108,9 +115,13 @@ class PureSocket implements IPureSocket {
       return false;
     }
 
+    debugPrint("request wss ${url}");
     _channel = IOWebSocketChannel.connect(
       url,
-      pingInterval: const Duration(seconds: 10),
+      headers: {
+        'Authorization': await getAuthHeader(),
+      },
+      pingInterval: const Duration(seconds: 20),
       connectTimeout: const Duration(seconds: 30),
     );
     if (_channel?.ready == null) {
@@ -139,12 +150,19 @@ class PureSocket implements IPureSocket {
 
     _channel?.stream.listen(
       (message) {
+        if (message == "ping") {
+          debugPrint(message);
+          // Pong frame added manually https://www.rfc-editor.org/rfc/rfc6455#section-5.5.2
+          _channel?.sink.add([0x8A, 0x00]);
+          return;
+        }
         that.onMessage(message);
       },
       onError: (err, trace) {
         that.onError(err, trace);
       },
       onDone: () {
+        debugPrint("onDone");
         that.onClosed();
       },
       cancelOnError: true,
@@ -160,6 +178,7 @@ class PureSocket implements IPureSocket {
       _channel?.sink.close(socket_channel_status.normalClosure);
     }
     _status = PureSocketStatus.disconnected;
+    debugPrint("disconnect");
     onClosed();
   }
 
