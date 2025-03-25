@@ -120,10 +120,37 @@
             position: relative;
             word-break: break-all;
             overflow-wrap: break-word;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .uid-text {
+            flex: 1;
+        }
+        
+        .visibility-toggle {
+            background: none;
+            border: none;
+            color: var(--chatgpt-secondary-text);
+            cursor: pointer;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: 8px;
+        }
+        
+        .visibility-toggle:hover {
+            color: var(--chatgpt-text);
+        }
+        
+        .material-icons {
+            font-size: 20px;
         }
         
         .copy-button {
-            padding: 10px 16px;
+            padding: 12px 16px;
             background-color: var(--chatgpt-accent);
             color: white;
             border: none;
@@ -133,6 +160,7 @@
             font-weight: 500;
             margin-bottom: 0;
             width: 100%;
+            font-size: 16px;
         }
         
         .copy-button:hover {
@@ -229,7 +257,10 @@
                     <span>Copy Your User ID</span>
                 </div>
                 <div class="uid-value" id="uid-display" data-uid="{{ uid }}">
-                    <span>{{ uid }}</span>
+                    <span class="uid-text" id="uid-text">••••••••••••••••</span>
+                    <button class="visibility-toggle" id="visibility-toggle" aria-label="Toggle UID visibility">
+                        <span class="material-icons">visibility</span>
+                    </button>
                 </div>
                 <button class="copy-button" onclick="copyUID()">Copy ID</button>
             </div>
@@ -253,9 +284,42 @@
     <div id="notification" class="notification">User ID copied to clipboard!</div>
 
     <script>
+        let uidVisible = false;
+        const toggleVisibility = document.getElementById('visibility-toggle');
+        const toggleIcon = toggleVisibility.querySelector('.material-icons');
+        const uidTextElement = document.getElementById('uid-text');
+        const uidElement = document.getElementById('uid-display');
+        const originalUid = uidElement.getAttribute('data-uid');
+        
+        // Function to mask UID
+        function maskUID(uid) {
+            if (!uid || uid.includes('No User ID provided')) return uid;
+            
+            // Show first 3 and last 3 characters, mask the rest
+            const length = uid.length;
+            if (length <= 6) return '•'.repeat(length);
+            
+            return uid.substring(0, 3) + '•'.repeat(length - 6) + uid.substring(length - 3);
+        }
+        
+        // Initialize with masked UID
+        uidTextElement.textContent = maskUID(originalUid);
+        
+        // Toggle visibility handler
+        toggleVisibility.addEventListener('click', function() {
+            uidVisible = !uidVisible;
+            
+            if (uidVisible) {
+                uidTextElement.textContent = originalUid;
+                toggleIcon.textContent = 'visibility_off';
+            } else {
+                uidTextElement.textContent = maskUID(originalUid);
+                toggleIcon.textContent = 'visibility';
+            }
+        });
+        
         function copyUID() {
-            const uidElement = document.getElementById('uid-display');
-            const uidText = uidElement.getAttribute('data-uid') || uidElement.textContent;
+            const uidText = originalUid;
             
             if (uidText.includes('No User ID provided')) {
                 showNotification('No valid User ID to copy', 'error');
@@ -319,15 +383,15 @@
         
         // Check if UID is empty and show appropriate message
         document.addEventListener('DOMContentLoaded', function() {
-            const uidDisplay = document.getElementById('uid-display');
-            const uidTextElement = document.querySelector('#uid-display > span');
-            const uidValue = uidDisplay.getAttribute('data-uid');
+            const uidValue = originalUid;
             
             if (!uidValue || !uidValue.trim()) {
                 uidTextElement.textContent = 'No User ID provided. Please log in first.';
                 uidTextElement.style.color = '#999';
                 // Also update the data attribute to match the error message
-                uidDisplay.setAttribute('data-uid', 'No User ID provided. Please log in first.');
+                uidElement.setAttribute('data-uid', 'No User ID provided. Please log in first.');
+                // Hide the visibility toggle
+                toggleVisibility.style.display = 'none';
             }
         });
     </script>
