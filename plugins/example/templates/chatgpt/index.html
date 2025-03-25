@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title|default("Omi for ChatGPT") }}</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            background-color: #f8f9fa;
+            color: #333;
+        }
+        /* Eye icon styles */
+        .eye-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: #6c757d;
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+        }
+        .eye-icon:hover {
+            background-color: #5a6268;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .header {
+            background-color: #ffffff;
+            padding: 15px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-bottom: 1px solid #e1e4e8;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .header h2 {
+            margin: 0;
+            color: #333;
+        }
+        .card {
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            padding: 30px;
+            text-align: center;
+        }
+        .uid-container {
+            margin-bottom: 30px;
+        }
+        .uid-header {
+            font-weight: bold;
+            margin-bottom: 12px;
+            color: #555;
+            font-size: 16px;
+        }
+        .uid-value {
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background-color: #fff;
+            font-family: monospace;
+            color: #333;
+            font-size: 16px;
+            margin-bottom: 15px;
+            text-align: center;
+            letter-spacing: 1px;
+            position: relative;
+        }
+        .uid-actions {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            gap: 8px;
+        }
+        .icon-button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #6c757d;
+            padding: 4px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        .icon-button:hover {
+            background-color: rgba(108, 117, 125, 0.1);
+            color: #5a6268;
+        }
+        .material-icons {
+            font-size: 20px;
+        }
+        .copy-button {
+            padding: 10px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 600;
+            margin-bottom: 30px;
+        }
+        .copy-button:hover {
+            background-color: #45a049;
+            transform: translateY(-1px);
+        }
+        .cta-button {
+            display: inline-block;
+            padding: 14px 28px;
+            background-color: #10a37f;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: bold;
+            transition: all 0.3s;
+            text-align: center;
+            font-size: 16px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .cta-button:hover {
+            background-color: #0d8c6d;
+            transform: translateY(-2px);
+        }
+        .step-container {
+            margin-bottom: 20px;
+            border: 1px solid #e1e4e8;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 24px;
+            background-color: #4CAF50;
+            color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            opacity: 0;
+            transform: translateY(-10px);
+            transition: opacity 0.3s, transform 0.3s;
+            font-weight: 500;
+        }
+        .notification.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2>omi</h2>
+    </div>
+    
+    <div class="container">
+        <div class="card">
+            <h3 style="margin-top: 0; margin-bottom: 20px; color: #333;">Connect Omi with ChatGPT in 2 Steps</h3>
+            
+            <div class="uid-container" style="border: 1px solid #e1e4e8; border-radius: 8px; padding: 20px; margin-bottom: 30px;">
+                <div class="uid-header" style="display: flex; align-items: center; justify-content: center;">
+                    <span style="background-color: #10a37f; color: white; border-radius: 50%; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; margin-right: 10px;">1</span>
+                    <span>Copy Your User ID</span>
+                </div>
+                <div class="uid-value" id="uid-display" data-uid="{{ uid }}">
+                    <span>{{ uid }}</span>
+                </div>
+                <button class="copy-button" onclick="copyUID()">Copy ID</button>
+            </div>
+            
+            <div style="border: 1px solid #e1e4e8; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+                <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 15px;">
+                    <span style="background-color: #10a37f; color: white; border-radius: 50%; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; margin-right: 10px;">2</span>
+                    <span style="font-weight: bold; color: #555;">Open Omi in ChatGPT</span>
+                </div>
+                <a href="/chatgpt/redirect?uid={{ uid }}" class="cta-button">
+                    Launch ChatGPT with Omi
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="footer">
+        © 2025 Omi • <a href="https://omi.me" target="_blank" style="color: #10a37f; text-decoration: none;">omi.me</a>
+    </div>
+
+    <div id="notification" class="notification">User ID copied to clipboard!</div>
+
+    <script>
+        function copyUID() {
+            const uidElement = document.getElementById('uid-display');
+            const uidText = uidElement.getAttribute('data-uid') || uidElement.textContent;
+            
+            if (uidText.includes('No User ID provided')) {
+                showNotification('No valid User ID to copy', 'error');
+                return;
+            }
+            
+            // Create a temporary textarea element to handle the copy operation
+            // This is more compatible across browsers and mobile devices
+            const textarea = document.createElement('textarea');
+            textarea.value = uidText;
+            textarea.setAttribute('readonly', ''); // Make it readonly to avoid keyboard opening on mobile
+            textarea.style.position = 'absolute';
+            textarea.style.left = '-9999px'; // Move outside the screen
+            document.body.appendChild(textarea);
+            
+            // For mobile devices
+            textarea.focus();
+            textarea.select();
+            textarea.setSelectionRange(0, textarea.value.length); // For mobile devices
+            
+            let successful = false;
+            try {
+                successful = document.execCommand('copy');
+                if (successful) {
+                    showNotification('User ID copied to clipboard!');
+                } else {
+                    throw new Error('Copy command was unsuccessful');
+                }
+            } catch (err) {
+                console.error('Failed to copy with execCommand: ', err);
+                
+                // Fallback to clipboard API
+                navigator.clipboard.writeText(uidText)
+                    .then(() => {
+                        showNotification('User ID copied to clipboard!');
+                    })
+                    .catch(err => {
+                        console.error('All copy methods failed: ', err);
+                        showNotification('Failed to copy User ID. Please try again.', 'error');
+                    });
+            } finally {
+                document.body.removeChild(textarea);
+            }
+        }
+        
+
+        function showNotification(message, type = 'success') {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            
+            if (type === 'error') {
+                notification.style.backgroundColor = '#dc3545';
+            } else {
+                notification.style.backgroundColor = '#4CAF50';
+            }
+            
+            notification.classList.add('show');
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+        
+        // Check if UID is empty and show appropriate message
+        document.addEventListener('DOMContentLoaded', function() {
+            const uidDisplay = document.getElementById('uid-display');
+            const uidTextElement = document.querySelector('#uid-display > span');
+            const uidValue = uidDisplay.getAttribute('data-uid');
+            
+            if (!uidValue || !uidValue.trim()) {
+                uidTextElement.textContent = 'No User ID provided. Please log in first.';
+                uidTextElement.style.color = '#999';
+                // Also update the data attribute to match the error message
+                uidDisplay.setAttribute('data-uid', 'No User ID provided. Please log in first.');
+            }
+        });
+    </script>
+</body>
+</html>
