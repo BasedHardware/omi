@@ -1,8 +1,6 @@
 import 'dart:async';
-import 'dart:io';
 // import 'dart:isolate';
 import 'dart:math';
-import 'dart:ui';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -15,6 +13,7 @@ import 'package:omi/backend/schema/message.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
+import 'package:omi/utils/platform_check.dart';
 
 class NotificationService {
   NotificationService._();
@@ -133,7 +132,7 @@ class NotificationService {
   }
 
   void saveNotificationToken() async {
-    if (Platform.isIOS) {
+    if (ExecutionGuard.isIOS) {
       await _firebaseMessaging.getAPNSToken();
     }
     String? token = await _firebaseMessaging.getToken();
@@ -162,7 +161,7 @@ class NotificationService {
 
   // FIXME: Causes the different behavior on android and iOS
   bool _shouldShowForegroundNotificationOnFCMMessageReceived() {
-    return Platform.isAndroid;
+    return ExecutionGuard.isAndroid;
   }
 
   Future<void> listenForMessages() async {

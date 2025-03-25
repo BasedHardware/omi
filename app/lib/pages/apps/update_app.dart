@@ -14,7 +14,6 @@ import 'widgets/capabilities_chips_widget.dart';
 import 'widgets/external_trigger_fields_widget.dart';
 import 'widgets/payment_details_widget.dart';
 import 'widgets/prompt_text_field.dart';
-import 'widgets/action_fields_widget.dart';
 
 class UpdateAppPage extends StatefulWidget {
   final App app;

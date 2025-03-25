@@ -75,7 +75,7 @@
 //       await FlutterForegroundTask.requestNotificationPermission();
 //     }
 
-//     if (Platform.isAndroid) {
+//     if (ExecutionGuard.isAndroid) {
 //       // if (!await FlutterForegroundTask.canDrawOverlays) {
 //       //   await FlutterForegroundTask.openSystemAlertWindowSettings();
 //       // }

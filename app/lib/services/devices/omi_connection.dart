@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
@@ -13,6 +12,7 @@ import 'package:omi/services/devices/errors.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform_check.dart';
 
 class OmiDeviceConnection extends DeviceConnection {
   BluetoothService? _batteryService;
@@ -166,7 +166,7 @@ class OmiDeviceConnection extends DeviceConnection {
       // https://github.com/chipweinberger/flutter_blue_plus/issues/612
       final device = bleDevice;
       if (device.isConnected) {
-        if (Platform.isAndroid && device.mtuNow < 512) {
+        if (ExecutionGuard.isAndroid && device.mtuNow < 512) {
           await device.requestMtu(512); // This might fix the code 133 error
         }
         if (device.isConnected) {
@@ -197,7 +197,7 @@ class OmiDeviceConnection extends DeviceConnection {
     // This will cause a crash in OpenGlass devices
     // due to a race with discoverServices() that triggers
     // a bug in the device firmware.
-    if (Platform.isAndroid && device.isConnected) await device.requestMtu(512);
+    if (ExecutionGuard.isAndroid && device.isConnected) await device.requestMtu(512);
 
     return listener;
   }
@@ -223,7 +223,7 @@ class OmiDeviceConnection extends DeviceConnection {
       // https://github.com/chipweinberger/flutter_blue_plus/issues/612
       final device = bleDevice;
       if (device.isConnected) {
-        if (Platform.isAndroid && device.mtuNow < 512) {
+        if (ExecutionGuard.isAndroid && device.mtuNow < 512) {
           await device.requestMtu(512); // This might fix the code 133 error
         }
         if (device.isConnected) {
@@ -253,7 +253,7 @@ class OmiDeviceConnection extends DeviceConnection {
     // This will cause a crash in OpenGlass devices
     // due to a race with discoverServices() that triggers
     // a bug in the device firmware.
-    if (Platform.isAndroid && device.isConnected) await device.requestMtu(512);
+    if (ExecutionGuard.isAndroid && device.isConnected) await device.requestMtu(512);
 
     return listener;
   }
@@ -384,7 +384,7 @@ class OmiDeviceConnection extends DeviceConnection {
     // This will cause a crash in OpenGlass devices
     // due to a race with discoverServices() that triggers
     // a bug in the device firmware.
-    if (Platform.isAndroid) await device.requestMtu(512);
+    if (ExecutionGuard.isAndroid) await device.requestMtu(512);
 
     return listener;
   }
@@ -518,7 +518,7 @@ class OmiDeviceConnection extends DeviceConnection {
     // This will cause a crash in OpenGlass devices
     // due to a race with discoverServices() that triggers
     // a bug in the device firmware.
-    // if (Platform.isAndroid) await device.requestMtu(512);
+    // if (ExecutionGuard.isAndroid) await device.requestMtu(512);
 
     return listener;
   }
