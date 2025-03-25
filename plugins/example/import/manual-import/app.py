@@ -15,7 +15,7 @@ app = Flask(__name__)
 
 # API configuration from fact.py
 APP_ID = "01JPP8Y2PA2YWQPTMDAFHXWX8E"
-API_KEY = "get_this_api_key_in_omi_app"
+API_KEY = "get_this_api_key_in_omi_app
 # USER_ID is now extracted dynamically from requests rather than being hardcoded
 API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/facts"
 

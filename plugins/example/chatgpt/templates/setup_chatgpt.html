@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup ChatGPT Integration</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .container {
+            margin-top: 40px;
+        }
+        .error-message {
+            color: #dc3545;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Connect OMI to ChatGPT</h1>
+        <p class="lead">Connect your OMI account to access your conversations in ChatGPT.</p>
+        
+        {% if error_message %}
+        <div class="alert alert-danger" role="alert">
+            {{ error_message }}
+        </div>
+        {% endif %}
+        
+        <div class="card mt-4">
+            <div class="card-body">
+                <h5 class="card-title">Connect your OMI account to ChatGPT</h5>
+                <p class="card-text">
+                    By connecting, you'll be able to access your OMI conversations directly in ChatGPT.
+                    This integration allows you to:
+                </p>
+                <ul>
+                    <li>View conversation summaries</li>
+                    <li>Access full conversation transcripts</li>
+                    <li>Search and reference past conversations</li>
+                </ul>
+                
+                <a href="{{ oauth_url }}" class="btn btn-primary">Connect to ChatGPT</a>
+            </div>
+        </div>
+        
+        <div class="mt-4">
+            <h5>How it works</h5>
+            <ol>
+                <li>Click the "Connect to ChatGPT" button above</li>
+                <li>Log in to your ChatGPT account (if not already logged in)</li>
+                <li>Review and approve the permissions</li>
+                <li>After approval, you'll be redirected back to OMI</li>
+            </ol>
+        </div>
+    </div>
+</body>
+</html> 
