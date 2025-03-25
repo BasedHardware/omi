@@ -137,8 +137,33 @@ def connect_to_deepgram_with_backoff(on_message, on_error, language: str, sample
 
 def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, channels: int):
     # 'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=8000&language=$recordingsLanguage&model=nova-2-general&no_delay=true&endpointing=100&interim_results=false&smart_format=true&diarize=true'
+    
+# Languages that should use the beta API
+    beta_languages = ['en', 'es', 'fr', 'de', 'hi', 'ru', 'pt', 'ja', 'it', 'nl']
+    
     try:
-        dg_connection = deepgram.listen.websocket.v("1")
+        # Create a client instance based on whether the language is in the beta list
+        if language in beta_languages:
+            # Create a beta-specific client just for this connection
+            beta_options = DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"})
+            beta_options.url = "https://api.beta.deepgram.com"
+            client = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), beta_options)
+            print(f"Using beta Deepgram API (api.beta.deepgram.com) for language: {language}")
+            
+            # Use nova-3 model and multi language for beta languages
+            model_name = "nova-3"
+            # Store the original language parameter
+            original_language = language
+            # Set language to "multi" for beta languages
+            language = "multi"
+            print(f"Using nova-3 model with multi-language support for {original_language}")
+        else:
+            # Use the standard client and settings
+            client = deepgram
+            model_name = "nova-2-general"
+            print(f"Using standard Deepgram API for language: {language}")
+        
+        dg_connection = client.listen.websocket.v("1")
         dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
         dg_connection.on(LiveTranscriptionEvents.Error, on_error)
 
@@ -178,7 +203,7 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
             filler_words=False,
             channels=channels,
             multichannel=channels > 1,
-            model='nova-2-general',
+            model=model_name,
             sample_rate=sample_rate,
             encoding='linear16'
         )
