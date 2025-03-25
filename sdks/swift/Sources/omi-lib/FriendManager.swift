@@ -354,7 +354,7 @@ class BluetoothScanner: NSObject, CBCentralManagerDelegate {
 
     // This is called when a new peripheral (device) is discovered during scanning
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
-        if let name = peripheral.name, name == "Friend" || name == "Friend DevKit 2 || name == "Omi DevKit 2" {
+        if let name = peripheral.name, name == "Friend" || name == "Friend DevKit 2" || name == "Omi DevKit 2" {
             self.delegate?.deviceFound(device: peripheral)
         }
     }
