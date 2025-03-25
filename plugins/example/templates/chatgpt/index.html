@@ -5,174 +5,212 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ page_title|default("Omi for ChatGPT") }}</title>
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Söhne:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --chatgpt-bg: #343541;
+            --chatgpt-text: #ECECF1;
+            --chatgpt-secondary-text: #C5C5D2;
+            --chatgpt-accent: #19C37D;
+            --chatgpt-accent-hover: #0DA26B;
+            --chatgpt-border: #565869;
+            --chatgpt-card-bg: #444654;
+            --chatgpt-input-bg: #40414F;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            font-family: 'Söhne', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
             margin: 0;
             padding: 0;
             display: flex;
             flex-direction: column;
             min-height: 100vh;
-            background-color: #f8f9fa;
-            color: #333;
+            background-color: var(--chatgpt-bg);
+            color: var(--chatgpt-text);
         }
-        /* Eye icon styles */
-        .eye-icon {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background-color: #6c757d;
-            color: white;
-            cursor: pointer;
-            transition: all 0.2s;
-            border: none;
-        }
-        .eye-icon:hover {
-            background-color: #5a6268;
-        }
+        
         .container {
+            width: 100%;
             max-width: 600px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 16px;
             flex: 1;
             display: flex;
             flex-direction: column;
             justify-content: center;
         }
+        
+        @media (max-width: 640px) {
+            .container {
+                padding: 16px;
+            }
+        }
+        
         .header {
-            background-color: #ffffff;
-            padding: 15px 20px;
+            background-color: var(--chatgpt-bg);
+            padding: 16px;
             display: flex;
             align-items: center;
             justify-content: center;
-            border-bottom: 1px solid #e1e4e8;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border-bottom: 1px solid var(--chatgpt-border);
         }
+        
         .header h2 {
             margin: 0;
-            color: #333;
+            color: var(--chatgpt-text);
+            font-weight: 600;
+            font-size: 20px;
         }
+        
         .card {
-            background-color: white;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-            padding: 30px;
+            background-color: var(--chatgpt-card-bg);
+            border-radius: 8px;
+            padding: 24px;
             text-align: center;
+            border: 1px solid var(--chatgpt-border);
         }
+        
         .uid-container {
-            margin-bottom: 30px;
+            margin-bottom: 24px;
+            border: 1px solid var(--chatgpt-border);
+            border-radius: 8px;
+            padding: 16px;
         }
+        
         .uid-header {
-            font-weight: bold;
+            font-weight: 500;
             margin-bottom: 12px;
-            color: #555;
+            color: var(--chatgpt-secondary-text);
             font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
+        
+        .step-number {
+            background-color: var(--chatgpt-accent);
+            color: #fff;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 8px;
+            font-size: 14px;
+        }
+        
         .uid-value {
             padding: 12px;
-            border: 1px solid #ddd;
+            border: 1px solid var(--chatgpt-border);
             border-radius: 6px;
-            background-color: #fff;
+            background-color: var(--chatgpt-input-bg);
             font-family: monospace;
-            color: #333;
+            color: var(--chatgpt-text);
             font-size: 16px;
             margin-bottom: 15px;
             text-align: center;
             letter-spacing: 1px;
             position: relative;
+            word-break: break-all;
+            overflow-wrap: break-word;
         }
-        .uid-actions {
-            position: absolute;
-            right: 8px;
-            top: 50%;
-            transform: translateY(-50%);
-            display: flex;
-            gap: 8px;
-        }
-        .icon-button {
-            background: none;
-            border: none;
-            cursor: pointer;
-            color: #6c757d;
-            padding: 4px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s;
-        }
-        .icon-button:hover {
-            background-color: rgba(108, 117, 125, 0.1);
-            color: #5a6268;
-        }
-        .material-icons {
-            font-size: 20px;
-        }
+        
         .copy-button {
             padding: 10px 16px;
-            background-color: #4CAF50;
+            background-color: var(--chatgpt-accent);
             color: white;
             border: none;
-            border-radius: 6px;
+            border-radius: 4px;
             cursor: pointer;
             transition: all 0.2s;
-            font-weight: 600;
-            margin-bottom: 30px;
+            font-weight: 500;
+            margin-bottom: 0;
+            width: 100%;
         }
+        
         .copy-button:hover {
-            background-color: #45a049;
-            transform: translateY(-1px);
+            background-color: var(--chatgpt-accent-hover);
         }
+        
+        .cta-container {
+            border: 1px solid var(--chatgpt-border);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        
         .cta-button {
             display: inline-block;
-            padding: 14px 28px;
-            background-color: #10a37f;
+            padding: 12px 16px;
+            background-color: var(--chatgpt-accent);
             color: white;
             text-decoration: none;
-            border-radius: 8px;
-            font-weight: bold;
-            transition: all 0.3s;
+            border-radius: 4px;
+            font-weight: 500;
+            transition: all 0.2s;
             text-align: center;
             font-size: 16px;
             width: 100%;
             box-sizing: border-box;
         }
+        
         .cta-button:hover {
-            background-color: #0d8c6d;
-            transform: translateY(-2px);
+            background-color: var(--chatgpt-accent-hover);
         }
-        .step-container {
-            margin-bottom: 20px;
-            border: 1px solid #e1e4e8;
-            border-radius: 8px;
-            padding: 20px;
-        }
+        
         .notification {
             position: fixed;
-            top: 20px;
-            right: 20px;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(10px);
             padding: 12px 24px;
-            background-color: #4CAF50;
+            background-color: var(--chatgpt-accent);
             color: white;
             border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
             opacity: 0;
-            transform: translateY(-10px);
             transition: opacity 0.3s, transform 0.3s;
             font-weight: 500;
+            text-align: center;
+            max-width: 90%;
+            z-index: 1000;
         }
+        
         .notification.show {
             opacity: 1;
-            transform: translateY(0);
+            transform: translateX(-50%) translateY(0);
         }
+        
         .footer {
             text-align: center;
             padding: 20px;
-            color: #666;
+            color: var(--chatgpt-secondary-text);
             font-size: 14px;
+            border-top: 1px solid var(--chatgpt-border);
+            margin-top: 20px;
+        }
+        
+        h3 {
+            margin-top: 0;
+            margin-bottom: 20px;
+            color: var(--chatgpt-text);
+            font-weight: 600;
+        }
+        
+        a {
+            color: var(--chatgpt-accent);
+            text-decoration: none;
+        }
+        
+        a:hover {
+            text-decoration: underline;
         }
     </style>
 </head>
@@ -183,11 +221,11 @@
     
     <div class="container">
         <div class="card">
-            <h3 style="margin-top: 0; margin-bottom: 20px; color: #333;">Connect Omi with ChatGPT in 2 Steps</h3>
+            <h3>Connect Omi with ChatGPT in 2 Steps</h3>
             
-            <div class="uid-container" style="border: 1px solid #e1e4e8; border-radius: 8px; padding: 20px; margin-bottom: 30px;">
-                <div class="uid-header" style="display: flex; align-items: center; justify-content: center;">
-                    <span style="background-color: #10a37f; color: white; border-radius: 50%; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; margin-right: 10px;">1</span>
+            <div class="uid-container">
+                <div class="uid-header">
+                    <span class="step-number">1</span>
                     <span>Copy Your User ID</span>
                 </div>
                 <div class="uid-value" id="uid-display" data-uid="{{ uid }}">
@@ -196,10 +234,10 @@
                 <button class="copy-button" onclick="copyUID()">Copy ID</button>
             </div>
             
-            <div style="border: 1px solid #e1e4e8; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
-                <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 15px;">
-                    <span style="background-color: #10a37f; color: white; border-radius: 50%; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; margin-right: 10px;">2</span>
-                    <span style="font-weight: bold; color: #555;">Open Omi in ChatGPT</span>
+            <div class="cta-container">
+                <div class="uid-header">
+                    <span class="step-number">2</span>
+                    <span>Open Omi in ChatGPT</span>
                 </div>
                 <a href="/chatgpt/redirect?uid={{ uid }}" class="cta-button">
                     Launch ChatGPT with Omi
@@ -209,7 +247,7 @@
     </div>
     
     <div class="footer">
-        © 2025 Omi • <a href="https://omi.me" target="_blank" style="color: #10a37f; text-decoration: none;">omi.me</a>
+        © 2025 Omi • <a href="https://omi.me" target="_blank">omi.me</a>
     </div>
 
     <div id="notification" class="notification">User ID copied to clipboard!</div>
@@ -263,15 +301,14 @@
             }
         }
         
-
         function showNotification(message, type = 'success') {
             const notification = document.getElementById('notification');
             notification.textContent = message;
             
             if (type === 'error') {
-                notification.style.backgroundColor = '#dc3545';
+                notification.style.backgroundColor = '#E34747';
             } else {
-                notification.style.backgroundColor = '#4CAF50';
+                notification.style.backgroundColor = '#19C37D';
             }
             
             notification.classList.add('show');
