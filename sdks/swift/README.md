@@ -101,7 +101,6 @@ Speak. You will not see any UI on the mobile app, but you should see transcripti
 
 ![CleanShot 2025-03-25 at 16 00 43@2x](https://github.com/user-attachments/assets/636b33ac-7ea7-4e1c-b490-8ec99b1feef8)
 
-"omi_lib
 
 
 ## Other Usage
