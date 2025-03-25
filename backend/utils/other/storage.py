@@ -5,6 +5,7 @@ from typing import List
 
 from google.cloud import storage
 from google.oauth2 import service_account
+from google.cloud.storage import transfer_manager
 
 from database.redis_db import cache_signed_url, get_cached_signed_url
 
@@ -18,7 +19,10 @@ else:
 speech_profiles_bucket = os.getenv('BUCKET_SPEECH_PROFILES')
 postprocessing_audio_bucket = os.getenv('BUCKET_POSTPROCESSING')
 memories_recordings_bucket = os.getenv('BUCKET_MEMORIES_RECORDINGS')
-
+syncing_local_bucket = os.getenv('BUCKET_TEMPORAL_SYNC_LOCAL')
+omi_plugins_bucket = os.getenv('BUCKET_PLUGINS_LOGOS')
+app_thumbnails_bucket = os.getenv('BUCKET_APP_THUMBNAILS')
+chat_files_bucket = os.getenv('BUCKET_CHAT_FILES')
 
 # *******************************************
 # ************* SPEECH PROFILE **************
@@ -150,18 +154,9 @@ def delete_postprocessing_audio(file_path: str):
     blob.delete()
 
 
-def create_signed_postprocessing_audio_url(file_path: str):
-    bucket = storage_client.bucket(postprocessing_audio_bucket)
-    blob = bucket.blob(file_path)
-    return _get_signed_url(blob, 15)
-
-
-def upload_postprocessing_audio_bytes(file_path: str, audio_buffer: bytes):
-    bucket = storage_client.bucket(postprocessing_audio_bucket)
-    blob = bucket.blob(file_path)
-    blob.upload_from_string(audio_buffer)
-    return f'https://storage.googleapis.com/{postprocessing_audio_bucket}/{file_path}'
-
+# ***********************************
+# ************* SDCARD **************
+# ***********************************
 
 def upload_sdcard_audio(file_path: str):
     bucket = storage_client.bucket(postprocessing_audio_bucket)
@@ -177,19 +172,19 @@ def download_postprocessing_audio(file_path: str, destination_file_path: str):
 
 
 # ************************************************
-# ************* MEMORIES RECORDINGS **************
+# *********** CONVERSATIONS RECORDINGS ***********
 # ************************************************
 
-def upload_memory_recording(file_path: str, uid: str, memory_id: str):
+def upload_conversation_recording(file_path: str, uid: str, conversation_id: str):
     bucket = storage_client.bucket(memories_recordings_bucket)
-    path = f'{uid}/{memory_id}.wav'
+    path = f'{uid}/{conversation_id}.wav'
     blob = bucket.blob(path)
     blob.upload_from_filename(file_path)
     return f'https://storage.googleapis.com/{memories_recordings_bucket}/{path}'
 
 
-def get_memory_recording_if_exists(uid: str, memory_id: str) -> str:
-    print('get_memory_recording_if_exists', uid, memory_id)
+def get_conversation_recording_if_exists(uid: str, memory_id: str) -> str:
+    print('get_conversation_recording_if_exists', uid, memory_id)
     bucket = storage_client.bucket(memories_recordings_bucket)
     path = f'{uid}/{memory_id}.wav'
     blob = bucket.blob(path)
@@ -200,7 +195,7 @@ def get_memory_recording_if_exists(uid: str, memory_id: str) -> str:
     return None
 
 
-def delete_all_memory_recordings(uid: str):
+def delete_all_conversation_recordings(uid: str):
     if not uid:
         return
     bucket = storage_client.bucket(memories_recordings_bucket)
@@ -209,6 +204,32 @@ def delete_all_memory_recordings(uid: str):
         blob.delete()
 
 
+# ********************************************
+# ************* SYNCING FILES **************
+# ********************************************
+def get_syncing_file_temporal_url(file_path: str):
+    bucket = storage_client.bucket(syncing_local_bucket)
+    blob = bucket.blob(file_path)
+    blob.upload_from_filename(file_path)
+    return f'https://storage.googleapis.com/{syncing_local_bucket}/{file_path}'
+
+def get_syncing_file_temporal_signed_url(file_path: str):
+    bucket = storage_client.bucket(syncing_local_bucket)
+    blob = bucket.blob(file_path)
+    blob.upload_from_filename(file_path)
+    return _get_signed_url(blob, 15)
+
+
+def delete_syncing_temporal_file(file_path: str):
+    bucket = storage_client.bucket(syncing_local_bucket)
+    blob = bucket.blob(file_path)
+    blob.delete()
+
+
+# **********************************
+# ************* UTILS **************
+# **********************************
+
 def _get_signed_url(blob, minutes):
     if cached := get_cached_signed_url(blob.name):
         return cached
@@ -216,3 +237,54 @@ def _get_signed_url(blob, minutes):
     signed_url = blob.generate_signed_url(version="v4", expiration=datetime.timedelta(minutes=minutes), method="GET")
     cache_signed_url(blob.name, signed_url, minutes * 60)
     return signed_url
+
+
+def upload_plugin_logo(file_path: str, plugin_id: str):
+    bucket = storage_client.bucket(omi_plugins_bucket)
+    path = f'{plugin_id}.png'
+    blob = bucket.blob(path)
+    blob.upload_from_filename(file_path)
+    return f'https://storage.googleapis.com/{omi_plugins_bucket}/{path}'
+
+
+def delete_plugin_logo(img_url: str):
+    bucket = storage_client.bucket(omi_plugins_bucket)
+    path = img_url.split(f'https://storage.googleapis.com/{omi_plugins_bucket}/')[1]
+    print('delete_plugin_logo', path)
+    blob = bucket.blob(path)
+    blob.delete()
+
+def upload_app_thumbnail(file_path: str, thumbnail_id: str) -> str:
+    bucket = storage_client.bucket(app_thumbnails_bucket)
+    path = f'{thumbnail_id}.jpg'
+    blob = bucket.blob(path)
+    blob.upload_from_filename(file_path)
+    return f'https://storage.googleapis.com/{app_thumbnails_bucket}/{path}'
+
+def get_app_thumbnail_url(thumbnail_id: str) -> str:
+    path = f'{thumbnail_id}.jpg'
+    return f'https://storage.googleapis.com/{app_thumbnails_bucket}/{path}'
+
+# **********************************
+# ************* CHAT FILES **************
+# **********************************
+def upload_multi_chat_files(files_name: List[str], uid: str) -> dict:
+    """
+    Upload multiple files to Google Cloud Storage in the chat files bucket.
+
+    Args:
+        files_name: List of file paths to upload
+        uid: User ID to use as part of the storage path
+
+    Returns:
+        dict: A dictionary mapping original filenames to their Google Cloud Storage URLs
+    """
+    bucket = storage_client.bucket(chat_files_bucket)
+    result = transfer_manager.upload_many_from_filenames(bucket, files_name, source_directory="./", blob_name_prefix=f'{uid}/')
+    dictFiles = {}
+    for name, result in zip(files_name, result):
+        if isinstance(result, Exception):
+            print("Failed to upload {} due to exception: {}".format(name, result))
+        else:
+            dictFiles[name] = f'https://storage.googleapis.com/{chat_files_bucket}/{uid}/{name}'
+    return dictFiles

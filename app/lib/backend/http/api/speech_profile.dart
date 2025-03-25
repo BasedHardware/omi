@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/env/env.dart';
+import 'package:omi/backend/http/shared.dart';
+import 'package:omi/env/env.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 
@@ -79,12 +79,13 @@ Future<List<String>> getExpandedProfileSamples() async {
 }
 
 Future<bool> deleteProfileSample(
-  String memoryId,
+  String conversationId,
   int segmentIdx, {
   String? personId,
 }) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v3/speech-profile/expand?memory_id=$memoryId&segment_idx=$segmentIdx&person_id=$personId',
+    url:
+        '${Env.apiBaseUrl}v3/speech-profile/expand?memory_id=$conversationId&segment_idx=$segmentIdx&person_id=$personId',
     headers: {},
     method: 'DELETE',
     body: '',

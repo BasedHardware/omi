@@ -134,7 +134,7 @@ def endpoint(uid: str, audio_file: UploadFile = File(...), segments: str = Form(
     people = []
     try:
         result = classify_segments(audio_file.filename, profile_path, people, transcript_segments)
-        print(result)
+        # print(result)
         return result
     except:
         return default

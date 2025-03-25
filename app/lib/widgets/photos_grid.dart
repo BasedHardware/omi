@@ -1,8 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
 
@@ -11,7 +11,7 @@ class PhotosGridComponent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Selector<MemoryDetailProvider, List<Tuple2<String, String>>>(
+    return Selector<ConversationDetailProvider, List<Tuple2<String, String>>>(
         selector: (context, provider) => provider.photosData,
         builder: (context, photos, child) {
           return GridView.builder(

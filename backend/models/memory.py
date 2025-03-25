@@ -1,4 +1,10 @@
-from datetime import datetime
+# Memories are now conversations, and the models are now in the models/conversation.py file
+
+# MIGRATE: This file is deprecated and will be removed in the future.
+# Please refer to the models/conversation.py file for the latest models.
+# This file is only used by the current /v1/memories and /v2/memories endpoints, which will be deprecated soon.
+
+from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional, Dict
 
@@ -31,6 +37,17 @@ class CategoryEnum(str, Enum):
     literature = 'literature'
     history = 'history'
     architecture = 'architecture'
+    # Added at 2024-01-23
+    music = 'music'
+    weather = 'weather'
+    news = 'news'
+    entertainment = 'entertainment'
+    psychology = 'psychology'
+    real = 'real'
+    design = 'design'
+    family = 'family'
+    economics = 'economics'
+    environment = 'environment'
     other = 'other'
 
 
@@ -52,6 +69,7 @@ class PluginResult(BaseModel):
 class ActionItem(BaseModel):
     description: str = Field(description="The action item to be completed")
     completed: bool = False  # IGNORE ME from the model parser
+    deleted: bool = False
 
 
 class Event(BaseModel):
@@ -60,6 +78,11 @@ class Event(BaseModel):
     start: datetime = Field(description="The start date and time of the event")
     duration: int = Field(description="The duration of the event in minutes", default=30)
     created: bool = False
+
+    def as_dict_cleaned_dates(self):
+        event_dict = self.dict()
+        event_dict['start'] = event_dict['start'].isoformat()
+        return event_dict
 
 
 class Structured(BaseModel):
@@ -102,10 +125,12 @@ class Geolocation(BaseModel):
 
 class MemorySource(str, Enum):
     friend = 'friend'
+    omi = 'omi'
     openglass = 'openglass'
     screenpipe = 'screenpipe'
     workflow = 'workflow'
     sdcard = 'sdcard'
+    external_integration = 'external_integration'
 
 
 class MemoryVisibility(str, Enum):
@@ -119,6 +144,13 @@ class PostProcessingStatus(str, Enum):
     in_progress = 'in_progress'
     completed = 'completed'
     canceled = 'canceled'
+    failed = 'failed'
+
+
+class MemoryStatus(str, Enum):
+    in_progress = 'in_progress'
+    processing = 'processing'
+    completed = 'completed'
     failed = 'failed'
 
 
@@ -138,7 +170,7 @@ class Memory(BaseModel):
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
 
-    source: Optional[MemorySource] = MemorySource.friend  # TODO: once released migrate db to include this field
+    source: Optional[MemorySource] = MemorySource.omi  # TODO: once released migrate db to include this field
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
 
     structured: Structured
@@ -149,20 +181,22 @@ class Memory(BaseModel):
     plugins_results: List[PluginResult] = []
 
     external_data: Optional[Dict] = None
+    app_id: Optional[str] = None
 
     discarded: bool = False
     deleted: bool = False
     visibility: MemoryVisibility = MemoryVisibility.private
 
     processing_memory_id: Optional[str] = None
+    status: Optional[MemoryStatus] = MemoryStatus.completed
 
     @staticmethod
-    def memories_to_string(memories: List['Memory']) -> str:
+    def memories_to_string(memories: List['Memory'], use_transcript: bool = False) -> str:
         result = []
         for i, memory in enumerate(memories):
             if isinstance(memory, dict):
                 memory = Memory(**memory)
-            formatted_date = memory.created_at.strftime("%d %b, at %H:%M")
+            formatted_date = memory.created_at.astimezone(timezone.utc).strftime("%d %b %Y at %H:%M") + " UTC"
             memory_str = (f"Memory #{i + 1}\n"
                           f"{formatted_date} ({str(memory.structured.category.value).capitalize()})\n"
                           f"{str(memory.structured.title).capitalize()}\n"
@@ -172,13 +206,32 @@ class Memory(BaseModel):
                 memory_str += "Action Items:\n"
                 for item in memory.structured.action_items:
                     memory_str += f"- {item.description}\n"
+
+            if memory.structured.events:
+                memory_str += "Events:\n"
+                for event in memory.structured.events:
+                    memory_str += f"- {event.title} ({event.start} - {event.duration} minutes)\n"
+
+            if use_transcript:
+                memory_str += (f"\nTranscript:\n{memory.get_transcript(include_timestamps=False)}\n")
+
             result.append(memory_str.strip())
 
         return "\n\n---------------------\n\n".join(result).strip()
 
     def get_transcript(self, include_timestamps: bool) -> str:
-        # Warn: missing transcript for workflow source
+        # Warn: missing transcript for workflow source, external integration source
         return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
+
+    def as_dict_cleaned_dates(self):
+        memory_dict = self.dict()
+        memory_dict['structured']['events'] = [
+            {**event, 'start': event['start'].isoformat()} for event in memory_dict['structured']['events']
+        ]
+        memory_dict['created_at'] = memory_dict['created_at'].isoformat()
+        memory_dict['started_at'] = memory_dict['started_at'].isoformat() if memory_dict['started_at'] else None
+        memory_dict['finished_at'] = memory_dict['finished_at'].isoformat() if memory_dict['finished_at'] else None
+        return memory_dict
 
 
 class CreateMemory(BaseModel):
@@ -189,7 +242,7 @@ class CreateMemory(BaseModel):
 
     photos: List[MemoryPhoto] = []
 
-    source: MemorySource = MemorySource.friend
+    source: MemorySource = MemorySource.omi
     language: Optional[str] = None
 
     processing_memory_id: Optional[str] = None
@@ -198,20 +251,24 @@ class CreateMemory(BaseModel):
         return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
 
 
-class WorkflowMemorySource(str, Enum):
+class ExternalIntegrationMemorySource(str, Enum):
     audio = 'audio_transcript'
+    message = 'message'
     other = 'other_text'
 
 
-class WorkflowCreateMemory(BaseModel):
+class ExternalIntegrationCreateMemory(BaseModel):
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     text: str
-    text_source: WorkflowMemorySource = WorkflowMemorySource.audio
+    text_source: ExternalIntegrationMemorySource = ExternalIntegrationMemorySource.audio
+    text_source_spec: Optional[str] = None
     geolocation: Optional[Geolocation] = None
 
     source: MemorySource = MemorySource.workflow
     language: Optional[str] = None
+
+    app_id: Optional[str] = None
 
     def get_transcript(self, include_timestamps: bool) -> str:
         return self.text
@@ -225,3 +282,20 @@ class CreateMemoryResponse(BaseModel):
 class SetMemoryEventsStateRequest(BaseModel):
     events_idx: List[int]
     values: List[bool]
+
+
+class SetMemoryActionItemsStateRequest(BaseModel):
+    items_idx: List[int]
+    values: List[bool]
+
+
+class DeleteActionItemRequest(BaseModel):
+    description: str
+    completed: bool
+
+
+class SearchRequest(BaseModel):
+    query: str
+    page: Optional[int] = 1
+    per_page: Optional[int] = 10
+    include_discarded: Optional[bool] = True

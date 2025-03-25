@@ -104,7 +104,7 @@ from utils.other.storage import get_profile_audio_if_exists
 #
 #
 # def short_transcript(file_path: str, language: str, uid: str, has_speech_profile: bool, sample_rate=8000):
-#     is_english = language == 'en'  # TODO: when will they fix this? Test in bee
+#     is_english = language == 'en'
 #     with SpeechClient() as client:
 #         return transcribe_file_short(
 #             file_path,
@@ -233,11 +233,14 @@ def _create_user_speech_profile(uid: str):
 
 
 def _remove_user_speech_profile(uid: str):
-    result = subprocess.run(['python', '-m', 'soniox.manage_speakers', '--remove_speaker', '--speaker_name', uid])
-    completed = result.returncode == 0
-    print('_remove_user_speech_profile successful:', completed)
-    return completed
-
+    try:
+        result = subprocess.run(['python', '-m', 'soniox.manage_speakers', '--remove_speaker', '--speaker_name', uid])
+        completed = result.returncode == 0
+        print('_remove_user_speech_profile successful:', completed)
+        return completed
+    except Exception as e:
+        print(f'_remove_user_speech_profile failed: {e}')
+        return False
 
 @timeit
 def create_user_speech_profile(uid: str):

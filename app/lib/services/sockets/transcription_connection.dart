@@ -2,30 +2,34 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/backend/schema/message_event.dart';
-import 'package:friend_private/backend/schema/transcript_segment.dart';
-import 'package:friend_private/env/env.dart';
-import 'package:friend_private/services/notifications.dart';
-import 'package:friend_private/services/sockets/pure_socket.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/message_event.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/env/env.dart';
+import 'package:omi/services/notifications.dart';
+import 'package:omi/services/sockets/pure_socket.dart';
 
 abstract interface class ITransctipSegmentSocketServiceListener {
   void onMessageEventReceived(ServerMessageEvent event);
+
   void onSegmentReceived(List<TranscriptSegment> segments);
+
   void onError(Object err);
+
   void onConnected();
+
   void onClosed();
 }
 
-class SpeechProfileTranscriptSegmentSocketService extends TranscripSegmentSocketService {
-  SpeechProfileTranscriptSegmentSocketService.create(super.sampleRate, super.codec)
-      : super.create(includeSpeechProfile: false, newMemoryWatch: false);
+class SpeechProfileTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
+  SpeechProfileTranscriptSegmentSocketService.create(super.sampleRate, super.codec, super.language)
+      : super.create(includeSpeechProfile: false);
 }
 
-class MemoryTranscripSegmentSocketService extends TranscripSegmentSocketService {
-  MemoryTranscripSegmentSocketService.create(super.sampleRate, super.codec)
-      : super.create(includeSpeechProfile: true, newMemoryWatch: true);
+class ConversationTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
+  ConversationTranscriptSegmentSocketService.create(super.sampleRate, super.codec, super.language)
+      : super.create(includeSpeechProfile: true);
 }
 
 enum SocketServiceState {
@@ -33,7 +37,7 @@ enum SocketServiceState {
   disconnected,
 }
 
-class TranscripSegmentSocketService implements IPureSocketListener {
+class TranscriptSegmentSocketService implements IPureSocketListener {
   late PureSocket _socket;
   final Map<Object, ITransctipSegmentSocketServiceListener> _listeners = {};
 
@@ -42,19 +46,18 @@ class TranscripSegmentSocketService implements IPureSocketListener {
 
   int sampleRate;
   BleAudioCodec codec;
+  String language;
   bool includeSpeechProfile;
-  bool newMemoryWatch;
 
-  TranscripSegmentSocketService.create(
+  TranscriptSegmentSocketService.create(
     this.sampleRate,
-    this.codec, {
+    this.codec,
+    this.language, {
     this.includeSpeechProfile = false,
-    this.newMemoryWatch = true,
   }) {
-    final recordingsLanguage = SharedPreferencesUtil().recordingsLanguage;
-    var params = '?language=$recordingsLanguage&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
-        '&include_speech_profile=$includeSpeechProfile&new_memory_watch=$newMemoryWatch&stt_service=${SharedPreferencesUtil().transcriptionModel}';
-    String url = '${Env.apiBaseUrl!.replaceAll('https', 'wss')}listen$params';
+    var params = '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
+        '&include_speech_profile=$includeSpeechProfile&stt_service=${SharedPreferencesUtil().transcriptionModel}';
+    String url = '${Env.apiBaseUrl!.replaceAll('https', 'wss')}v3/listen$params';
 
     _socket = PureSocket(url);
     _socket.setListener(this);
@@ -106,8 +109,6 @@ class TranscripSegmentSocketService implements IPureSocketListener {
 
   @override
   void onMessage(event) {
-    if (event == 'ping') return;
-
     // Decode json
     dynamic jsonEvent;
     try {

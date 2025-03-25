@@ -3,29 +3,25 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/backend/schema/structured.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/plugin.dart';
-import 'package:friend_private/env/env.dart';
+import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/env/env.dart';
 import 'package:tuple/tuple.dart';
 
 class SummaryResult {
   final Structured structured;
-  final List<Tuple2<Plugin, String>> pluginsResponse;
+  final List<Tuple2<App, String>> appsResponse;
 
-  SummaryResult(this.structured, this.pluginsResponse);
+  SummaryResult(this.structured, this.appsResponse);
 }
 
-Future<String> triggerTestMemoryPrompt(String prompt, String transcript) async {
+Future<String> triggerTestConversationPrompt(String prompt, String transcript) async {
   return await executeGptPrompt('''
-        Your are an AI with the following characteristics:
-        Task: $prompt
+        Your task is: $prompt
         
-        Note: It is possible that the conversation you are given, has nothing to do with your task, \
-        in that case, output an empty string. (For example, you are given a business conversation, but your task is medical analysis)
-        
-        Conversation: ```${transcript.trim()}```,
+        Current Conversation: ```${transcript.trim()}```,
        
         Output your response in plain text, without markdown.
         Make sure to be concise and clear.

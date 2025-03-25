@@ -14,7 +14,7 @@
 // Uncomment to switch the codec
 // Opus is still under development
 // Mulaw is used with the web app
-// PCM is used with the Friend app
+// PCM is used with the Omi app
 
 // To use with the web app, comment CODEC_PCM and
 // uncomment CODEC_MULAW
@@ -35,6 +35,7 @@ OpusEncoder *opus_encoder = nullptr;
 #define CHANNELS 1
 #define MAX_PACKET_SIZE 1000
 
+#define FRAME_SIZE 160
 #define SAMPLE_RATE 16000
 #define SAMPLE_BITS 16
 
@@ -68,7 +69,7 @@ OpusEncoder *opus_encoder = nullptr;
 #define BATTERY_SERVICE_UUID (uint16_t)0x180F
 #define BATTERY_LEVEL_CHAR_UUID (uint16_t)0x2A19
 
-// Main Friend Service
+// Main Omi Service
 static BLEUUID serviceUUID("19B10000-E8F2-537E-4F6C-D104768A1214");
 static BLEUUID audioDataUUID("19B10001-E8F2-537E-4F6C-D104768A1214");
 static BLEUUID audioCodecUUID("19B10002-E8F2-537E-4F6C-D104768A1214");

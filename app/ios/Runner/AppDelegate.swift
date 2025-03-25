@@ -1,6 +1,7 @@
 import UIKit
 import Flutter
 import UserNotifications
+import app_links
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -14,6 +15,13 @@ import UserNotifications
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     GeneratedPluginRegistrant.register(with: self)
+
+      // Retrieve the link from parameters
+    if let url = AppLinks.shared.getLink(launchOptions: launchOptions) {
+      // We have a link, propagate it to your Flutter app or not
+      AppLinks.shared.handleLink(url: url)
+      return true // Returning true will stop the propagation to other packages
+    }
     //Creates a method channel to handle notifications on kill
     let controller = window?.rootViewController as? FlutterViewController
     methodChannel = FlutterMethodChannel(name: "com.friend.ios/notifyOnKill", binaryMessenger: controller!.binaryMessenger)

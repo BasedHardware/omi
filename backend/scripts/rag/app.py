@@ -19,7 +19,7 @@ if project_root not in sys.path:
 from current import *
 from _shared import *
 from models.chat import Message
-from models.memory import Memory
+from models.conversation import Conversation
 from models.transcript_segment import TranscriptSegment
 from utils.llm import qa_rag
 from utils.retrieval.rag import retrieve_rag_context
@@ -33,7 +33,7 @@ class CustomEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, datetime):
             return {'__datetime__': obj.isoformat()}
-        if isinstance(obj, Memory):
+        if isinstance(obj, Conversation):
             return {'__memory__': obj.dict()}
         return super().default(obj)
 
@@ -48,7 +48,7 @@ class CustomDecoder(json.JSONDecoder):
         if '__datetime__' in dct:
             return datetime.fromisoformat(dct['__datetime__'])
         if '__memory__' in dct:
-            return Memory(**dct['__memory__'])
+            return Conversation(**dct['__memory__'])
         return dct
 
 

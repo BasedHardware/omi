@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/providers/device_provider.dart';
-import 'package:friend_private/services/services.dart';
-import 'package:friend_private/utils/analytics/intercom.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/widgets/device_widget.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/services/services.dart';
+import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/widgets/device_widget.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
+
+import '../settings/device_settings.dart';
 
 class ConnectedDevice extends StatefulWidget {
   const ConnectedDevice({super.key});
@@ -27,6 +29,14 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
   }
 
   @override
+  void initState() {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await context.read<DeviceProvider>().getDeviceInfo();
+    });
+    super.initState();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Consumer<DeviceProvider>(builder: (context, provider, child) {
       return Scaffold(
@@ -34,6 +44,18 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
         appBar: AppBar(
           title: Text(provider.connectedDevice != null ? 'Connected Device' : 'Paired Device'),
           backgroundColor: Theme.of(context).colorScheme.primary,
+          actions: [
+            IconButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const DeviceSettings(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.settings),
+            )
+          ],
         ),
         body: Column(
           children: [
@@ -54,33 +76,34 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
-                if (provider.pairedDevice != null)
-                  Column(
-                    children: [
-                      Text(
-                        '${provider.pairedDevice?.modelNumber}, firmware ${provider.pairedDevice?.firmwareRevision}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10.0,
-                          fontWeight: FontWeight.w500,
-                          height: 1,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'by ${provider.pairedDevice?.manufacturerName}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10.0,
-                          fontWeight: FontWeight.w500,
-                          height: 1,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                  ),
+                provider.pairedDevice != null && provider.pairedDevice?.modelNumber != "Unknown"
+                    ? Column(
+                        children: [
+                          Text(
+                            '${provider.pairedDevice?.modelNumber}, firmware ${provider.pairedDevice?.firmwareRevision}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10.0,
+                              fontWeight: FontWeight.w500,
+                              height: 1,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'by ${provider.pairedDevice?.manufacturerName}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10.0,
+                              fontWeight: FontWeight.w500,
+                              height: 1,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                      )
+                    : const SizedBox.shrink(),
                 provider.connectedDevice != null
                     ? Container(
                         decoration: BoxDecoration(
@@ -108,12 +131,19 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 14,
-                                fontWeight: FontWeight.w600,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ],
                         ))
-                    : const SizedBox.shrink()
+                    : const Text(
+                        "Offline",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      )
               ],
             ),
             const SizedBox(height: 32),
@@ -133,8 +163,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               ),
               child: TextButton(
                 onPressed: () async {
-                  await SharedPreferencesUtil()
-                      .btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.friend, rssi: 0));
+                  await SharedPreferencesUtil().btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
                   SharedPreferencesUtil().deviceName = '';
                   if (provider.connectedDevice != null) {
                     await _bleDisconnectDevice(provider.connectedDevice!);
@@ -154,7 +183,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             const SizedBox(height: 8),
             TextButton(
               onPressed: () async {
-                await IntercomManager.instance.displayChargingArticle();
+                await IntercomManager.instance.displayChargingArticle(provider.pairedDevice?.name ?? 'DevKit1');
               },
               child: const Text(
                 'Issues charging?',

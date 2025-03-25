@@ -28,7 +28,7 @@ class PrivacyInfoPage extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             const Text(
-              'At Friend, we take your privacy very seriously. We want to be transparent about the data we collect and how we use it to improve our product for you. Here\'s what you need to know:',
+              'At Omi, we take your privacy very seriously. We want to be transparent about the data we collect and how we use it to improve our product for you. Here\'s what you need to know:',
               style: TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 16),
@@ -44,32 +44,31 @@ class PrivacyInfoPage extends StatelessWidget {
                 'Onboarding Events: We track when you connect your device and complete the onboarding process.'),
             _buildBulletPoint(
                 'Settings Interactions: We track when you open and save settings, and when you enable or disable developer mode.'),
-            _buildBulletPoint(
-                'Plugins Interactions: We track when you open plugins, and when you enable or disable them.'),
+            _buildBulletPoint('Apps Interactions: We track when you open apps, and when you enable or disable them.'),
             _buildBulletPoint('Device Status: We track when your device connects or disconnects.'),
             _buildBulletPoint('Language Changes: We track changes to your recording language.'),
             _buildBulletPoint('Navigation: We track clicks on different tabs in the bottom navigation.'),
             _buildBulletPoint(
-                'Transcript and Memory Data: We track the length, word count, and number of speakers in your transcripts. For memories, we track their creation, editing, sharing, and deletion.'),
+                'Transcript and Conversation Data: We track the length, word count, and number of speakers in your transcripts. For memories, we track their creation, editing, sharing, and deletion.'),
             _buildBulletPoint('Feedback: We track feedback given to the Coach Advisor.'),
             _buildBulletPoint('Chat Interactions: We track messages sent and interactions with memories through chat.'),
             _buildBulletPoint(
                 'Speech Profile: We track the capture, start, onboarding, and completion of your speech profile.'),
             _buildBulletPoint(
-                'Show Discarded Memories: We track when you toggle the option to show discarded memories.'),
+                'Show Discarded Conversations: We track when you toggle the option to show discarded conversations.'),
             _buildBulletPoint('Manual Memories: We track when you add or create manual memories.'),
             _buildBulletPoint(
                 'User Properties: We track user properties such as occupation, usage location, and age range.'),
-            _buildBulletPoint('Memory Re-processing: We track when you re-process a memory.'),
+            _buildBulletPoint('Conversation Re-processing: We track when you re-process a conversation.'),
             _buildBulletPoint(
                 'Backups: We track when backups are enabled or disabled, and when a backups password is set.'),
             _buildBulletPoint('Support: We track when you contact support.'),
             _buildBulletPoint('Privacy Page: We track when you open the privacy details page.'),
             _buildBulletPoint('Join Discord: We track when you click to join our Discord.'),
-            _buildBulletPoint('Copy Memory Details: We track when you copy memory details.'),
+            _buildBulletPoint('Copy Conversation Details: We track when you copy conversation details.'),
             _buildBulletPoint('Upgrade Modal: We track when the upgrade modal is dismissed or clicked.'),
-            _buildBulletPoint('Get/Connect Friend: We track when you click to get or connect your Friend device.'),
-            _buildBulletPoint('Disconnect Friend: We track when you disconnect your Friend device.'),
+            _buildBulletPoint('Get/Connect Device: We track when you click to get or connect your device.'),
+            _buildBulletPoint('Disconnect Device: We track when you disconnect your device.'),
             _buildBulletPoint('Battery Indicator: We track when you click the battery indicator.'),
             _buildBulletPoint('Advanced Mode: We track interactions with the advanced mode documentation.'),
             _buildBulletPoint('Use Without Device: We track interactions with the use without device onboarding.'),
@@ -109,12 +108,12 @@ class PrivacyInfoPage extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              'We are committed to using the data we collect only to make Friend a better product for you. Your privacy and trust are paramount to us.',
+              'We are committed to using the data we collect only to make Omi a better product for you. Your privacy and trust are paramount to us.',
               style: TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 16),
             const Text(
-              'Thank you for being a valued user of Friend. If you have any questions or concerns, feel free to reach out to us to team@basedhardware.com.',
+              'Thank you for being a valued user of Omi. If you have any questions or concerns, feel free to reach out to us to team@basedhardware.com.',
               style: TextStyle(fontSize: 16),
             ),
           ],

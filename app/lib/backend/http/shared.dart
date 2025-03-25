@@ -1,24 +1,26 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/auth.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/env/env.dart';
-import 'package:friend_private/utils/logger.dart';
+import 'package:omi/backend/auth.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/env.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
-import 'package:instabug_http_client/instabug_http_client.dart';
-import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 
 Future<String> getAuthHeader() async {
   DateTime? expiry = DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
-  if (SharedPreferencesUtil().authToken == '' ||
-      expiry.isBefore(DateTime.now()) ||
+  bool hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
+
+  bool isExpirationDateValid = !(expiry.isBefore(DateTime.now()) ||
       expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
-      (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now()))) {
+      (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
+
+  if (!hasAuthToken || !isExpirationDateValid) {
     SharedPreferencesUtil().authToken = await getIdToken() ?? '';
   }
-  if (SharedPreferencesUtil().authToken == '') {
+
+  if (!hasAuthToken) {
     if (isSignedIn()) {
       // should only throw if the user is signed in but the token is not found
       // if the user is not signed in, the token will always be empty
@@ -35,19 +37,12 @@ Future<http.Response?> makeApiCall({
   required String method,
 }) async {
   try {
-    // var startTime = DateTime.now();
-    bool result = await InternetConnection().hasInternetAccess; // 600 ms on avg
-    // debugPrint('Internet connection check took: ${DateTime.now().difference(startTime).inMilliseconds} ms');
-    if (!result) {
-      debugPrint('No internet connection, aborting $method $url');
-      return null;
-    }
     if (url.contains(Env.apiBaseUrl!)) {
       headers['Authorization'] = await getAuthHeader();
       // headers['Authorization'] = ''; // set admin key + uid here for testing
     }
 
-    final client = InstabugHttpClient();
+    final client = http.Client();
 
     http.Response? response = await _performRequest(client, url, headers, body, method);
     if (response.statusCode == 401) {
@@ -88,7 +83,7 @@ Future<http.Response?> makeApiCall({
 }
 
 Future<http.Response> _performRequest(
-  InstabugHttpClient client,
+  http.Client client,
   String url,
   Map<String, String> headers,
   String body,
@@ -101,7 +96,8 @@ Future<http.Response> _performRequest(
     case 'GET':
       return await client.get(Uri.parse(url), headers: headers);
     case 'DELETE':
-      return await client.delete(Uri.parse(url), headers: headers);
+      headers['Content-Type'] = 'application/json';
+      return await client.delete(Uri.parse(url), headers: headers, body: body);
     case 'PATCH':
       headers['Content-Type'] = 'application/json';
       return await client.patch(Uri.parse(url), headers: headers, body: body);

@@ -2,14 +2,17 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/api/memories.dart';
-import 'package:friend_private/backend/schema/memory.dart';
-import 'package:friend_private/providers/developer_mode_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/providers/developer_mode_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+import 'widgets/appbar_with_banner.dart';
+import 'widgets/toggle_section_widget.dart';
 
 class DeveloperSettingsPage extends StatefulWidget {
   const DeveloperSettingsPage({super.key});
@@ -20,26 +23,9 @@ class DeveloperSettingsPage extends StatefulWidget {
 
 class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
   @override
-  Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => DeveloperModeProvider(),
-      child: const _DeveloperSettingsPage(),
-    );
-  }
-}
-
-class _DeveloperSettingsPage extends StatefulWidget {
-  const _DeveloperSettingsPage();
-
-  @override
-  State<_DeveloperSettingsPage> createState() => __DeveloperSettingsPageState();
-}
-
-class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
-  @override
   void initState() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<DeveloperModeProvider>(context, listen: false).initialize();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Provider.of<DeveloperModeProvider>(context, listen: false).initialize();
     });
     super.initState();
   }
@@ -52,26 +38,40 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
         builder: (context, provider, child) {
           return Scaffold(
             backgroundColor: Theme.of(context).colorScheme.primary,
-            appBar: AppBar(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              title: const Text('Developer Settings'),
-              actions: [
-                TextButton(
-                  onPressed: provider.savingSettingsLoading ? null : provider.saveSettings,
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 4.0),
-                    child: Text(
-                      'Save',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16),
+            appBar: AppBarWithBanner(
+              appBar: AppBar(
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                title: const Text('Developer Settings'),
+                actions: [
+                  TextButton(
+                    onPressed: provider.savingSettingsLoading ? null : provider.saveSettings,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 4.0),
+                      child: Text(
+                        'Save',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
+                      ),
                     ),
+                  )
+                ],
+              ),
+              showAppBar: provider.savingSettingsLoading,
+              child: Container(
+                color: Colors.green,
+                child: const Center(
+                  child: Text(
+                    'Syncing Developer Settings...',
+                    style: TextStyle(color: Colors.white, fontSize: 12),
                   ),
-                )
-              ],
+                ),
+              ),
             ),
             body: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: ListView(
+                shrinkWrap: true,
                 children: [
+                  //TODO: Model selection commented out because Soniox model is no longer being used
                   // const SizedBox(height: 32),
                   // const Padding(
                   //   padding: EdgeInsets.symmetric(horizontal: 0),
@@ -83,68 +83,65 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                   //     ),
                   //   ),
                   // ),
-                  // F.env == Environment.dev ?const SizedBox(height: 12): const SizedBox(height: 0),
-                  // F.env == Environment.dev
-                  //     ? Center(
-                  //         child: Container(
-                  //           height: 60,
-                  //           decoration: BoxDecoration(
-                  //             border: Border.all(color: Colors.white),
-                  //             borderRadius: BorderRadius.circular(14),
+                  // const SizedBox(height: 14),
+                  // Center(
+                  //   child: Container(
+                  //     height: 60,
+                  //     decoration: BoxDecoration(
+                  //       border: Border.all(color: Colors.white),
+                  //       borderRadius: BorderRadius.circular(14),
+                  //     ),
+                  //     padding: const EdgeInsets.only(left: 16, right: 12, top: 8, bottom: 10),
+                  //     child: DropdownButton<String>(
+                  //       menuMaxHeight: 350,
+                  //       value: SharedPreferencesUtil().transcriptionModel,
+                  //       onChanged: (newValue) {
+                  //         if (newValue == null) return;
+                  //         if (newValue == SharedPreferencesUtil().transcriptionModel) return;
+                  //         setState(() => SharedPreferencesUtil().transcriptionModel = newValue);
+                  //         if (newValue == 'soniox') {
+                  //           showDialog(
+                  //             context: context,
+                  //             barrierDismissible: false,
+                  //             builder: (c) => getDialog(
+                  //               context,
+                  //               () => Navigator.of(context).pop(),
+                  //               () => {},
+                  //               'Model Limitations',
+                  //               'Soniox model is only available for English, and with devices with latest firmware version 1.0.4. '
+                  //                   'If you use a different configuration, it will fallback to deepgram.',
+                  //               singleButton: true,
+                  //             ),
+                  //           );
+                  //         }
+                  //       },
+                  //       dropdownColor: Colors.black,
+                  //       style: const TextStyle(color: Colors.white, fontSize: 16),
+                  //       underline: Container(height: 0, color: Colors.white),
+                  //       isExpanded: true,
+                  //       itemHeight: 48,
+                  //       items: ['deepgram', 'soniox'].map<DropdownMenuItem<String>>((String value) {
+                  //         // 'speechmatics'
+                  //         return DropdownMenuItem<String>(
+                  //           value: value,
+                  //           child: Text(
+                  //             value == 'deepgram'
+                  //                 ? 'Deepgram (faster)'
+                  //                 : value == 'speechmatics'
+                  //                     ? 'Speechmatics (Experimental)'
+                  //                     : 'Soniox (better quality)',
+                  //             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                   //           ),
-                  //           padding: const EdgeInsets.only(left: 16, right: 12, top: 8, bottom: 10),
-                  //           child: DropdownButton<String>(
-                  //             menuMaxHeight: 350,
-                  //             value: SharedPreferencesUtil().transcriptionModel,
-                  //             onChanged: (newValue) {
-                  //               if (newValue == null) return;
-                  //               if (newValue == SharedPreferencesUtil().transcriptionModel) return;
-                  //               setState(() => SharedPreferencesUtil().transcriptionModel = newValue);
-                  //
-                  //               if (newValue == 'soniox') {
-                  //                 showDialog(
-                  //                   context: context,
-                  //                   barrierDismissible: false,
-                  //                   builder: (c) => getDialog(
-                  //                     context,
-                  //                     () => Navigator.of(context).pop(),
-                  //                     () => {},
-                  //                     'Model Limitations',
-                  //                     'Soniox model is only available for English, and with devices with latest firmware version 1.0.4. '
-                  //                         'If you use a different configuration, it will fallback to deepgram.',
-                  //                     singleButton: true,
-                  //                   ),
-                  //                 );
-                  //               }
-                  //               // setState(() => _selectedLanguage = newValue);
-                  //               // SharedPreferencesUtil().recordingsLanguage = _selectedLanguage;
-                  //               // MixpanelManager().recordingLanguageChanged(_selectedLanguage);
-                  //             },
-                  //             dropdownColor: Colors.black,
-                  //             style: const TextStyle(color: Colors.white, fontSize: 16),
-                  //             underline: Container(height: 0, color: Colors.white),
-                  //             isExpanded: true,
-                  //             itemHeight: 48,
-                  //             items:
-                  //                 ['deepgram', 'soniox', 'speechmatics'].map<DropdownMenuItem<String>>((String value) {
-                  //               return DropdownMenuItem<String>(
-                  //                 value: value,
-                  //                 child: Text(
-                  //                   value,
-                  //                   style:
-                  //                       const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
-                  //                 ),
-                  //               );
-                  //             }).toList(),
-                  //           ),
-                  //         ),
-                  //       )
-                  //     : const SizedBox(),
+                  //         );
+                  //       }).toList(),
+                  //     ),
+                  //   ),
+                  // ),
                   const SizedBox(height: 32.0),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Export Memories'),
-                    subtitle: const Text('Export all your memories to a JSON file.'),
+                    title: const Text('Export Conversations'),
+                    subtitle: const Text('Export all your conversations to a JSON file.'),
                     trailing: provider.loadingExportMemories
                         ? const SizedBox(
                             height: 16,
@@ -162,55 +159,26 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                             setState(() => provider.loadingExportMemories = true);
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('Memories Export Started. This may take a few seconds, please wait.'),
+                                content:
+                                    Text('Conversations Export Started. This may take a few seconds, please wait.'),
                                 duration: Duration(seconds: 3),
                               ),
                             );
-                            List<ServerMemory> memories = await getMemories(limit: 10000, offset: 0); // 10k for now
+                            List<ServerConversation> memories =
+                                await getConversations(limit: 10000, offset: 0); // 10k for now
                             String json = const JsonEncoder.withIndent("     ").convert(memories);
                             final directory = await getApplicationDocumentsDirectory();
-                            final file = File('${directory.path}/memories.json');
+                            final file = File('${directory.path}/conversations.json');
                             await file.writeAsString(json);
 
                             final result =
-                                await Share.shareXFiles([XFile(file.path)], text: 'Exported Memories from Friend');
+                                await Share.shareXFiles([XFile(file.path)], text: 'Exported Conversations from Omi');
                             if (result.status == ShareResultStatus.success) {
                               debugPrint('Thank you for sharing the picture!');
                             }
                             MixpanelManager().exportMemories();
                             setState(() => provider.loadingExportMemories = false);
                           },
-                  ),
-                  const SizedBox(height: 16),
-                  Divider(color: Colors.grey.shade500),
-                  const SizedBox(height: 32),
-                  const Text(
-                    'Google Cloud Bucket',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Export new memories audio to Google Cloud Storage.',
-                    style: TextStyle(color: Colors.grey.shade200, fontSize: 14),
-                  ),
-                  const SizedBox(height: 16.0),
-                  TextField(
-                    controller: provider.gcpCredentialsController,
-                    obscureText: false,
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    enabled: true,
-                    decoration: _getTextFieldDecoration('GCP Credentials (Base64)'),
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  TextField(
-                    controller: provider.gcpBucketNameController,
-                    obscureText: false,
-                    autocorrect: false,
-                    enabled: true,
-                    enableSuggestions: false,
-                    decoration: _getTextFieldDecoration('GCP Bucket Name'),
-                    style: const TextStyle(color: Colors.white),
                   ),
                   // KEEP ME?
                   // ListTile(
@@ -266,18 +234,17 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                   // ),
                   const SizedBox(height: 16),
                   Divider(color: Colors.grey.shade500),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 16),
                   Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
-                        'Events Webhooks',
-                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                        'Webhooks',
+                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
                       ),
+                      Spacer(),
                       GestureDetector(
                         onTap: () {
-                          launchUrl(Uri.parse('https://docs.omi.me/developer/plugins/Integrations/'));
+                          launchUrl(Uri.parse('https://docs.omi.me/docs/developer/apps/Introduction'));
                           MixpanelManager().pageOpened('Advanced Mode Docs');
                         },
                         child: const Padding(
@@ -294,45 +261,159 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'On memory created:',
-                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  const SizedBox(
+                    height: 10,
                   ),
-                  // const SizedBox(height: 4),
+                  ToggleSectionWidget(
+                    isSectionEnabled: provider.conversationEventsToggled,
+                    sectionTitle: 'Conversation Events',
+                    sectionDescription: 'Triggers when a new conversation is created.',
+                    options: [
+                      TextField(
+                        controller: provider.webhookOnConversationCreated,
+                        obscureText: false,
+                        autocorrect: false,
+                        enabled: true,
+                        enableSuggestions: false,
+                        decoration: _getTextFieldDecoration('Endpoint URL'),
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    onSectionEnabledChanged: provider.onConversationEventsToggled,
+                  ),
+                  ToggleSectionWidget(
+                      isSectionEnabled: provider.transcriptsToggled,
+                      sectionTitle: 'Real-time Transcript',
+                      sectionDescription: 'Triggers when a new transcript is received.',
+                      options: [
+                        TextField(
+                          controller: provider.webhookOnTranscriptReceived,
+                          obscureText: false,
+                          autocorrect: false,
+                          enabled: true,
+                          enableSuggestions: false,
+                          decoration: _getTextFieldDecoration('Endpoint URL'),
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      onSectionEnabledChanged: provider.onTranscriptsToggled),
+                  ToggleSectionWidget(
+                      isSectionEnabled: provider.audioBytesToggled,
+                      sectionTitle: 'Realtime Audio Bytes',
+                      sectionDescription: 'Triggers when audio bytes are received.',
+                      options: [
+                        TextField(
+                          controller: provider.webhookAudioBytes,
+                          obscureText: false,
+                          autocorrect: false,
+                          enabled: true,
+                          enableSuggestions: false,
+                          decoration: _getTextFieldDecoration('Endpoint URL'),
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        TextField(
+                          controller: provider.webhookAudioBytesDelay,
+                          obscureText: false,
+                          autocorrect: false,
+                          enabled: true,
+                          enableSuggestions: false,
+                          keyboardType: TextInputType.number,
+                          decoration: _getTextFieldDecoration('Every x seconds'),
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      onSectionEnabledChanged: provider.onAudioBytesToggled),
+                  ToggleSectionWidget(
+                    isSectionEnabled: provider.daySummaryToggled,
+                    sectionTitle: 'Day Summary',
+                    sectionDescription: 'Triggers when day summary is generated.',
+                    options: [
+                      TextField(
+                        controller: provider.webhookDaySummary,
+                        obscureText: false,
+                        autocorrect: false,
+                        enabled: true,
+                        enableSuggestions: false,
+                        decoration: _getTextFieldDecoration('Endpoint URL'),
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    onSectionEnabledChanged: provider.onDaySummaryToggled,
+                  ),
+
                   // const Text(
-                  //   'Triggered when FRIEND creates a new memory.',
-                  //   style: TextStyle(color: Colors.white, fontSize: 14),
+                  //   'Websocket Real-time audio bytes:',
+                  //   style: TextStyle(color: Colors.white, fontSize: 16),
                   // ),
-                  TextField(
-                    controller: provider.webhookOnMemoryCreated,
-                    obscureText: false,
-                    autocorrect: false,
-                    enabled: true,
-                    enableSuggestions: false,
-                    decoration: _getTextFieldDecoration('Endpoint URL'),
-                    style: const TextStyle(color: Colors.white),
-                  ),
+                  // TextField(
+                  //   controller: provider.webhookAudioBytes,
+                  //   obscureText: false,
+                  //   autocorrect: false,
+                  //   enabled: true,
+                  //   enableSuggestions: false,
+                  //   decoration: _getTextFieldDecoration('Endpoint URL'),
+                  //   style: const TextStyle(color: Colors.white),
+                  // ),
                   const SizedBox(height: 16),
+                  Divider(color: Colors.grey.shade500),
+                  const SizedBox(height: 32),
                   const Text(
-                    'Real-time transcript received:',
-                    style: TextStyle(color: Colors.white, fontSize: 16),
+                    'Experimental',
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
                   ),
-                  // const SizedBox(height: 4),
-                  // const Text(
-                  //   'Triggered as the transcript is being received.',
-                  //   style: TextStyle(color: Colors.white, fontSize: 14),
-                  // ),
-                  TextField(
-                    controller: provider.webhookOnTranscriptReceived,
-                    obscureText: false,
-                    autocorrect: false,
-                    enabled: true,
-                    enableSuggestions: false,
-                    decoration: _getTextFieldDecoration('Endpoint URL'),
-                    style: const TextStyle(color: Colors.white),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Try the latest experimental features from Omi Team.',
+                    style: TextStyle(color: Colors.grey.shade200, fontSize: 14),
                   ),
-                  const SizedBox(height: 64),
+                  const SizedBox(height: 16.0),
+                  CheckboxListTile(
+                    contentPadding: const EdgeInsets.all(0),
+                    title: const Text(
+                      'Transcription service diagnostic status',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    subtitle: const Text(
+                      'Enable detailed diagnostic messages from the transcription service',
+                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                    value: provider.transcriptionDiagnosticEnabled,
+                    onChanged: provider.onTranscriptionDiagnosticChanged,
+                  ),
+                  const SizedBox(height: 16.0),
+                  CheckboxListTile(
+                    contentPadding: const EdgeInsets.all(0),
+                    title: const Text(
+                      'Local Sync',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    value: provider.localSyncEnabled,
+                    onChanged: provider.onLocalSyncEnabledChanged,
+                  ),
+                  const SizedBox(height: 36),
+                  const Text(
+                    'Pilot Features',
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'These features are tests and no support is guaranteed.',
+                    style: TextStyle(color: Colors.grey.shade200, fontSize: 14),
+                  ),
+                  const SizedBox(height: 16.0),
+                  CheckboxListTile(
+                    contentPadding: const EdgeInsets.all(0),
+                    title: const Text(
+                      'Suggest follow up question',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    value: provider.followUpQuestionEnabled,
+                    onChanged: provider.onFollowUpQuestionChanged,
+                  ),
                 ],
               ),
             ),

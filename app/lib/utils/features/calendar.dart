@@ -1,5 +1,5 @@
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/utils/logger.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:manage_calendar_events/manage_calendar_events.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -53,9 +53,10 @@ class CalendarUtil {
     DateTime startDate = startsAt.toLocal();
     DateTime endDate = startDate.add(Duration(minutes: durationMinutes));
     String calendarId = SharedPreferencesUtil().calendarId;
-    Duration utcOffset = DateTime.now().timeZoneOffset;
-    startDate = startDate.subtract(utcOffset);
-    endDate = endDate.subtract(utcOffset);
+    // utcOffset is not needed. Previously sometimes OpenAI was returning in UTC and sometimes in local time.
+    // Duration utcOffset = DateTime.now().timeZoneOffset;
+    // startDate = startDate.subtract(utcOffset);
+    // endDate = endDate.subtract(utcOffset);
     CalendarEvent newEvent = CalendarEvent(
       title: title,
       description: description,

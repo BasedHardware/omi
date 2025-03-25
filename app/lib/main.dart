@@ -1,53 +1,62 @@
 import 'dart:async';
 
+import 'package:app_links/app_links.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:friend_private/backend/auth.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/env/dev_env.dart';
-import 'package:friend_private/env/env.dart';
-import 'package:friend_private/env/prod_env.dart';
-import 'package:friend_private/firebase_options_dev.dart' as dev;
-import 'package:friend_private/firebase_options_prod.dart' as prod;
-import 'package:friend_private/flavors.dart';
-import 'package:friend_private/pages/home/page.dart';
-import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
-import 'package:friend_private/pages/onboarding/wrapper.dart';
-import 'package:friend_private/providers/auth_provider.dart';
-import 'package:friend_private/providers/calendar_provider.dart';
-import 'package:friend_private/providers/capture_provider.dart';
-import 'package:friend_private/providers/connectivity_provider.dart';
-import 'package:friend_private/providers/device_provider.dart';
-import 'package:friend_private/providers/home_provider.dart';
-import 'package:friend_private/providers/memory_provider.dart';
-import 'package:friend_private/providers/message_provider.dart';
-import 'package:friend_private/providers/onboarding_provider.dart';
-import 'package:friend_private/providers/plugin_provider.dart';
-import 'package:friend_private/providers/speech_profile_provider.dart';
-import 'package:friend_private/services/notifications.dart';
-import 'package:friend_private/services/services.dart';
-import 'package:friend_private/utils/analytics/growthbook.dart';
-import 'package:friend_private/utils/analytics/intercom.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/features/calendar.dart';
-import 'package:friend_private/utils/logger.dart';
+import 'package:omi/backend/auth.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/dev_env.dart';
+import 'package:omi/env/env.dart';
+import 'package:omi/env/prod_env.dart';
+import 'package:omi/firebase_options_dev.dart' as dev;
+import 'package:omi/firebase_options_prod.dart' as prod;
+import 'package:omi/flavors.dart';
+import 'package:omi/pages/apps/app_detail/app_detail.dart';
+import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/pages/home/page.dart';
+import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/pages/onboarding/device_selection.dart';
+import 'package:omi/pages/onboarding/wrapper.dart';
+import 'package:omi/pages/persona/persona_profile.dart';
+import 'package:omi/pages/persona/persona_provider.dart';
+import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/auth_provider.dart';
+import 'package:omi/providers/calendar_provider.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/providers/developer_mode_provider.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/facts_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/pages/payments/payment_method_provider.dart';
+import 'package:omi/providers/speech_profile_provider.dart';
+import 'package:omi/services/notifications.dart';
+import 'package:omi/services/services.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/analytics/growthbook.dart';
+import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/features/calendar.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
+import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
 Future<bool> _init() async {
   // Service manager
   ServiceManager.init();
-
-  // TODO: thinh, move to app start
-  await ServiceManager.instance().start();
 
   // Firebase
   if (F.env == Environment.prod) {
@@ -60,11 +69,11 @@ Future<bool> _init() async {
   await NotificationService.instance.initialize();
   await SharedPreferencesUtil.init();
   await MixpanelManager.init();
-  bool isAuth = false;
-  try {
-    isAuth = (await getIdToken()) != null;
-  } catch (e) {} // if no connect this will fail
 
+  // TODO: thinh, move to app start
+  await ServiceManager.instance().start();
+
+  bool isAuth = (await getIdToken()) != null;
   if (isAuth) MixpanelManager().identify();
   initOpus(await opus_flutter.load());
 
@@ -72,6 +81,14 @@ Future<bool> _init() async {
   CalendarUtil.init();
   ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   return isAuth;
+}
+
+Future<void> initPostHog() async {
+  final config = PostHogConfig(Env.posthogApiKey!);
+  config.debug = true;
+  config.captureApplicationLifecycleEvents = true;
+  config.host = 'https://us.i.posthog.com';
+  await Posthog().setup(config);
 }
 
 void main() async {
@@ -82,16 +99,18 @@ void main() async {
     Env.init(DevEnv());
   }
   FlutterForegroundTask.initCommunicationPort();
+  if (Env.posthogApiKey != null) {
+    await initPostHog();
+  }
   // _setupAudioSession();
   bool isAuth = await _init();
   if (Env.instabugApiKey != null) {
-    Instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
+    await Instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
     runZonedGuarded(
       () async {
         Instabug.init(
           token: Env.instabugApiKey!,
-          invocationEvents: [InvocationEvent.shake, InvocationEvent.screenshot],
-          // invocationEvents: [],
+          invocationEvents: [InvocationEvent.none],
         );
         if (isAuth) {
           Instabug.identifyUser(
@@ -131,7 +150,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     NotificationUtil.initializeNotificationsEventListeners();
     NotificationUtil.initializeIsolateReceivePort();
     WidgetsBinding.instance.addObserver(this);
-
     super.initState();
   }
 
@@ -154,17 +172,17 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         providers: [
           ListenableProvider(create: (context) => ConnectivityProvider()),
           ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
-          ChangeNotifierProvider(create: (context) => MemoryProvider()),
-          ListenableProvider(create: (context) => PluginProvider()),
-          ChangeNotifierProxyProvider<PluginProvider, MessageProvider>(
+          ChangeNotifierProvider(create: (context) => ConversationProvider()),
+          ListenableProvider(create: (context) => AppProvider()),
+          ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
             create: (context) => MessageProvider(),
             update: (BuildContext context, value, MessageProvider? previous) =>
-                (previous?..updatePluginProvider(value)) ?? MessageProvider(),
+                (previous?..updateAppProvider(value)) ?? MessageProvider(),
           ),
-          ChangeNotifierProxyProvider2<MemoryProvider, MessageProvider, CaptureProvider>(
+          ChangeNotifierProxyProvider2<ConversationProvider, MessageProvider, CaptureProvider>(
             create: (context) => CaptureProvider(),
-            update: (BuildContext context, memory, message, CaptureProvider? previous) =>
-                (previous?..updateProviderInstances(memory, message)) ?? CaptureProvider(),
+            update: (BuildContext context, conversation, message, CaptureProvider? previous) =>
+                (previous?..updateProviderInstances(conversation, message)) ?? CaptureProvider(),
           ),
           ChangeNotifierProxyProvider<CaptureProvider, DeviceProvider>(
             create: (context) => DeviceProvider(),
@@ -182,18 +200,28 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             update: (BuildContext context, device, SpeechProfileProvider? previous) =>
                 (previous?..setProviders(device)) ?? SpeechProfileProvider(),
           ),
-          ChangeNotifierProxyProvider2<PluginProvider, MemoryProvider, MemoryDetailProvider>(
-            create: (context) => MemoryDetailProvider(),
-            update: (BuildContext context, plugin, memory, MemoryDetailProvider? previous) =>
-                (previous?..setProviders(plugin, memory)) ?? MemoryDetailProvider(),
+          ChangeNotifierProxyProvider2<AppProvider, ConversationProvider, ConversationDetailProvider>(
+            create: (context) => ConversationDetailProvider(),
+            update: (BuildContext context, app, conversation, ConversationDetailProvider? previous) =>
+                (previous?..setProviders(app, conversation)) ?? ConversationDetailProvider(),
           ),
           ChangeNotifierProvider(create: (context) => CalenderProvider()),
+          ChangeNotifierProvider(create: (context) => DeveloperModeProvider()),
+          ChangeNotifierProxyProvider<AppProvider, AddAppProvider>(
+            create: (context) => AddAppProvider(),
+            update: (BuildContext context, value, AddAppProvider? previous) =>
+                (previous?..setAppProvider(value)) ?? AddAppProvider(),
+          ),
+          ChangeNotifierProvider(create: (context) => PaymentMethodProvider()),
+          ChangeNotifierProvider(create: (context) => PersonaProvider()),
+          ChangeNotifierProvider(create: (context) => FactsProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(
             child: MaterialApp(
               navigatorObservers: [
                 if (Env.instabugApiKey != null) InstabugNavigatorObserver(),
+                if (Env.posthogApiKey != null) PosthogObserver(),
               ],
               debugShowCheckedModeBanner: F.env == Environment.dev,
               title: F.title,
@@ -224,6 +252,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   textSelectionTheme: const TextSelectionThemeData(
                     cursorColor: Colors.white,
                     selectionColor: Colors.deepPurple,
+                    selectionHandleColor: Colors.white,
+                  ),
+                  cupertinoOverrideTheme: const CupertinoThemeData(
+                    primaryColor: Colors.white, // Controls the selection handles on iOS
                   )),
               themeMode: ThemeMode.dark,
               builder: (context, child) {
@@ -265,20 +297,58 @@ class DeciderWidget extends StatefulWidget {
 }
 
 class _DeciderWidgetState extends State<DeciderWidget> {
+  late AppLinks _appLinks;
+  StreamSubscription<Uri>? _linkSubscription;
+
+  Future<void> initDeepLinks() async {
+    _appLinks = AppLinks();
+
+    // Handle links
+    _linkSubscription = _appLinks.uriLinkStream.distinct().listen((uri) {
+      debugPrint('onAppLink: $uri');
+      openAppLink(uri);
+    });
+  }
+
+  void openAppLink(Uri uri) async {
+    if (uri.pathSegments.first == 'apps') {
+      if (mounted) {
+        var app = await context.read<AppProvider>().getAppFromId(uri.pathSegments[1]);
+        if (app != null) {
+          MixpanelManager().track('App Opened From DeepLink', properties: {'appId': app.id});
+          if (mounted) {
+            Navigator.of(context).push(MaterialPageRoute(builder: (context) => AppDetailPage(app: app)));
+          }
+        } else {
+          debugPrint('App not found: ${uri.pathSegments[1]}');
+          AppSnackbar.showSnackbarError('Oops! Looks like the app you are looking for is not available.');
+        }
+      }
+    } else {
+      debugPrint('Unknown link: $uri');
+    }
+  }
+
   @override
   void initState() {
+    initDeepLinks();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (context.read<ConnectivityProvider>().isConnected) {
         NotificationService.instance.saveNotificationToken();
       }
 
-      if (context.read<AuthenticationProvider>().user != null) {
+      if (context.read<AuthenticationProvider>().isSignedIn()) {
         context.read<HomeProvider>().setupHasSpeakerProfile();
-        await IntercomManager.instance.intercom.loginIdentifiedUser(
-          userId: FirebaseAuth.instance.currentUser!.uid,
-        );
+        try {
+          await IntercomManager.instance.intercom.loginIdentifiedUser(
+            userId: SharedPreferencesUtil().uid,
+          );
+        } catch (e) {
+          debugPrint('Failed to login to Intercom: $e');
+        }
+
         context.read<MessageProvider>().setMessagesFromCache();
-        context.read<PluginProvider>().setPluginsFromCache();
+        context.read<AppProvider>().setAppsFromCache();
         context.read<MessageProvider>().refreshMessages();
       } else {
         await IntercomManager.instance.intercom.loginUnidentifiedUser();
@@ -292,10 +362,18 @@ class _DeciderWidgetState extends State<DeciderWidget> {
   Widget build(BuildContext context) {
     return Consumer<AuthenticationProvider>(
       builder: (context, authProvider, child) {
-        if (SharedPreferencesUtil().onboardingCompleted && authProvider.user != null) {
-          return const HomePageWrapper();
+        if (authProvider.isSignedIn()) {
+          if (SharedPreferencesUtil().onboardingCompleted) {
+            return const HomePageWrapper();
+          } else {
+            return const OnboardingWrapper();
+          }
+        } else if (SharedPreferencesUtil().hasOmiDevice == false &&
+            SharedPreferencesUtil().hasPersonaCreated &&
+            SharedPreferencesUtil().verifiedPersonaId != null) {
+          return const PersonaProfilePage();
         } else {
-          return const OnboardingWrapper();
+          return const DeviceSelectionPage();
         }
       },
     );
@@ -305,7 +383,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
 class CustomErrorWidget extends StatelessWidget {
   final String errorMessage;
 
-  CustomErrorWidget({required this.errorMessage});
+  const CustomErrorWidget({super.key, required this.errorMessage});
 
   @override
   Widget build(BuildContext context) {

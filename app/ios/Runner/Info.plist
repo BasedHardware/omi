@@ -36,17 +36,27 @@
 				<key>CFBundleTypeRole</key>
 				<string>Editor</string>
 				<key>CFBundleURLName</key>
-				<string>friendprivate.com</string>
+				<string>h.omi.me</string>
 				<key>CFBundleURLSchemes</key>
 				<array>
-					<string>friendprivate</string>
+					<string>https</string>
+				</array>
+			</dict>
+			<dict>
+				<key>CFBundleTypeRole</key>
+				<string>Editor</string>
+				<key>CFBundleURLName</key>
+				<string>h.omi.me</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>$(GOOGLE_REVERSE_CLIENT_ID)</string>
 				</array>
 			</dict>
 		</array>
 		<key>CFBundleVersion</key>
 		<string>$(FLUTTER_BUILD_NUMBER)</string>
 		<key>FlutterDeepLinkingEnabled</key>
-		<true/>
+		<false/>
 		<key>LSApplicationQueriesSchemes</key>
 		<array>
 			<string>comgooglemaps</string>
@@ -55,9 +65,9 @@
 		<key>LSRequiresIPhoneOS</key>
 		<true/>
 		<key>NSBluetoothAlwaysUsageDescription</key>
-		<string>Bluetooth permission is required to connect with your Friend Wearable.</string>
+		<string>Bluetooth permission is required to connect with your Omi.</string>
 		<key>NSBluetoothPeripheralUsageDescription</key>
-		<string>Bluetooth permission is required to connect with your Friend Wearable.</string>
+		<string>Bluetooth permission is required to connect with your Omi.</string>
 		<key>NSCalendarsFullAccessUsageDescription</key>
 		<string>Access most functions for calendar viewing and editing.</string>
 		<key>NSCalendarsUsageDescription</key>
@@ -113,5 +123,7 @@
 		</array>
 		<key>UIViewControllerBasedStatusBarAppearance</key>
 		<false/>
+		<key>com.posthog.posthog.AUTO_INIT</key>
+    	<false/>
 	</dict>
 </plist>

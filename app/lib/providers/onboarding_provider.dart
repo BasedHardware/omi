@@ -7,15 +7,16 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/providers/base_provider.dart';
-import 'package:friend_private/providers/device_provider.dart';
-import 'package:friend_private/services/devices.dart';
-import 'package:friend_private/services/notifications.dart';
-import 'package:friend_private/services/services.dart';
-import 'package:friend_private/utils/analytics/analytics_manager.dart';
-import 'package:friend_private/utils/audio/foreground.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/providers/base_provider.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/services/devices.dart';
+import 'package:omi/services/notifications.dart';
+import 'package:omi/services/services.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/audio/foreground.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class OnboardingProvider extends BaseProvider with MessageNotifierMixin implements IDeviceServiceSubsciption {
@@ -26,7 +27,6 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   String deviceName = '';
   String deviceId = '';
   String? connectingToDeviceId;
-  Timer? connectionStateTimer;
   List<BtDevice> deviceList = [];
   late Timer _didNotMakeItTimer;
   Timer? _findDevicesTimer;
@@ -122,7 +122,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
   Future<(bool, PermissionStatus)> askForLocationPermissions() async {
     if (await Permission.location.serviceStatus.isDisabled) {
-      print('Location service is disabled');
+      debugPrint('Location service is disabled');
       return (false, PermissionStatus.permanentlyDenied);
     } else {
       var res = await Permission.locationWhenInUse.request();
@@ -132,28 +132,15 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
   Future<bool> alwaysAllowLocation() async {
     PermissionStatus locationStatus = await Permission.locationAlways.request();
-    print('alwaysAllowLocation permission status: $locationStatus');
+    debugPrint('alwaysAllowLocation permission status: $locationStatus');
     updateLocationPermission(locationStatus.isGranted);
     return locationStatus.isGranted;
   }
   //----------------- Onboarding Permissions -----------------
 
-  void stopFindDeviceTimer() {
-    if (_findDevicesTimer != null && (_findDevicesTimer?.isActive ?? false)) {
-      _findDevicesTimer!.cancel();
-    }
-    if (connectionStateTimer?.isActive ?? false) {
-      connectionStateTimer?.cancel();
-    }
-    notifyListeners();
-  }
-
   void setDeviceProvider(DeviceProvider provider) {
     deviceProvider = provider;
   }
-
-  // TODO: improve this and find_device page.
-  // TODO: include speech profile, once it's well tested, in a few days, rn current version works
 
   // Method to handle taps on devices
   Future<void> handleTap({
@@ -162,7 +149,9 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     VoidCallback? goNext,
   }) async {
     if (device.name.toLowerCase() == 'openglass' || device.type == DeviceType.openglass) {
-      notifyInfo('OPENGLASS_NOT_SUPPORTED');
+      // notifyInfo('OPENGLASS_NOT_SUPPORTED');
+      AppSnackbar.showSnackbarError(
+          'OpenGlass is not supported at the moment. Support will be added in a future update');
       return;
     }
     try {
@@ -171,7 +160,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       connectingToDeviceId = device.id; // Mark this device as being connected to
       notifyListeners();
       var c = await ServiceManager.instance().device.ensureConnection(device.id, force: true);
-      print('Connected to device: ${device.name}');
+      debugPrint('Connected to device: ${device.name}');
       deviceId = device.id;
       //  device = await device.getDeviceInfo(c);
       await SharedPreferencesUtil().btDeviceSet(device);
@@ -183,10 +172,6 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         SharedPreferencesUtil().deviceName = cDevice.name;
         deviceProvider!.setIsConnected(true);
       }
-      //TODO: should'nt update codec here, becaause then the prev connection codec and the current codec will
-      // become same and the app won't transcribe at all because inherently there's a mismatch in the
-      //codec for websocket and the codec for the device
-      // await getAudioCodec(deviceId).then((codec) => SharedPreferencesUtil().deviceCodec = codec);
       await deviceProvider?.scanAndConnectToDevice();
       var connectedDevice = deviceProvider!.connectedDevice;
       batteryPercentage = deviceProvider!.batteryLevel;
@@ -194,7 +179,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       isClicked = false; // Allow clicks again after finishing the operation
       connectingToDeviceId = null; // Reset the connecting device
       notifyListeners();
-      stopFindDeviceTimer();
+      stopScanDevices();
       await Future.delayed(const Duration(seconds: 2));
       SharedPreferencesUtil().btDevice = connectedDevice!;
       SharedPreferencesUtil().deviceName = connectedDevice.name;
@@ -206,7 +191,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         notifyInfo('DEVICE_CONNECTED');
       }
     } catch (e) {
-      print('Error connecting to device: $e');
+      debugPrint('Error connecting to device: $e');
       foundDevicesMap.remove(device.id);
       deviceList.removeWhere((element) => element.id == device.id);
       isClicked = false; // Allow clicks again after finishing the operation
@@ -224,6 +209,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     deviceName = '';
     deviceId = '';
     notifyListeners();
+  }
+
+  void stopScanDevices() {
+    _findDevicesTimer?.cancel();
   }
 
   Future<void> scanDevices({
@@ -248,7 +237,13 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
     ServiceManager.instance().device.subscribe(this, this);
 
-    _findDevicesTimer = Timer.periodic(const Duration(seconds: 4), (timer) async {
+    _findDevicesTimer?.cancel();
+    _findDevicesTimer = Timer.periodic(const Duration(seconds: 4), (t) async {
+      if (deviceProvider?.isConnected ?? false) {
+        t.cancel();
+        return;
+      }
+
       ServiceManager.instance().device.discover();
     });
   }
@@ -262,20 +257,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     return connection?.device;
   }
 
-  Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (connection == null) {
-      return BleAudioCodec.pcm8;
-    }
-    return connection.getAudioCodec();
-  }
-
   @override
   void dispose() {
-    //TODO: This does not get called when the page is popped
     _findDevicesTimer?.cancel();
     _didNotMakeItTimer.cancel();
-    connectionStateTimer?.cancel();
     ServiceManager.instance().device.unsubscribe(this);
     super.dispose();
   }

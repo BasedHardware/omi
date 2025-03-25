@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:friend_private/providers/home_provider.dart';
-import 'package:friend_private/providers/onboarding_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -25,9 +25,13 @@ class FindDevicesPage extends StatefulWidget {
 }
 
 class _FindDevicesPageState extends State<FindDevicesPage> {
+  OnboardingProvider? _provider;
+
   @override
   void initState() {
     super.initState();
+    _provider = Provider.of<OnboardingProvider>(context, listen: false);
+
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (widget.isFromOnboarding) {
         context.read<HomeProvider>().setupHasSpeakerProfile();
@@ -38,12 +42,14 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
 
   @override
   dispose() {
-    // context.read<OnboardingProvider>().dispose();
+    _provider?.stopScanDevices();
+    _provider = null;
+
     super.dispose();
   }
 
   Future<void> _scanDevices() async {
-    Provider.of<OnboardingProvider>(context, listen: false).scanDevices(
+    _provider?.scanDevices(
       onShowDialog: () {
         if (mounted) {
           showDialog(
@@ -55,7 +61,7 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
               },
               () {},
               'Enable Bluetooth',
-              'Friend needs Bluetooth to connect to your wearable. Please enable Bluetooth and try again.',
+              'Omi needs Bluetooth to connect to your wearable. Please enable Bluetooth and try again.',
               singleButton: true,
             ),
           );

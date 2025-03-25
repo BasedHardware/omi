@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/pages/settings/webview.dart';
-import 'package:friend_private/utils/analytics/intercom.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
+import 'package:omi/pages/settings/webview.dart';
+import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class AboutOmiPage extends StatefulWidget {
@@ -60,11 +60,11 @@ class _AboutOmiPageState extends State<AboutOmiPage> {
             ListTile(
               contentPadding: const EdgeInsets.fromLTRB(4, 0, 24, 0),
               title: const Text('Join the community!', style: TextStyle(color: Colors.white)),
-              subtitle: const Text('2300+ members and counting.'),
+              subtitle: const Text('4900+ members and counting.'),
               trailing: const Icon(Icons.discord, color: Colors.purple, size: 20),
               onTap: () {
                 MixpanelManager().pageOpened('About Join Discord');
-                launchUrl(Uri.parse('https://discord.gg/ZutWMTJnwA'));
+                launchUrl(Uri.parse('https://discord.gg/omi'));
               },
             ),
           ],

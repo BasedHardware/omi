@@ -3,12 +3,12 @@ import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-class ConfirmationDialog extends StatelessWidget {
+class ConfirmationDialog extends StatefulWidget {
   final String title;
   final String description;
-  final String checkboxText;
-  final bool checkboxValue;
-  final void Function(bool? value) updateCheckboxValue;
+  final String? checkboxText;
+  final bool? checkboxValue;
+  final void Function(bool value)? onCheckboxChanged;
   final String? cancelText;
   final String? confirmText;
   final void Function() onConfirm;
@@ -18,9 +18,9 @@ class ConfirmationDialog extends StatelessWidget {
     super.key,
     required this.title,
     required this.description,
-    required this.checkboxText,
-    required this.checkboxValue,
-    required this.updateCheckboxValue,
+    this.checkboxText,
+    this.checkboxValue,
+    this.onCheckboxChanged,
     this.cancelText,
     this.confirmText,
     required this.onConfirm,
@@ -28,87 +28,190 @@ class ConfirmationDialog extends StatelessWidget {
   });
 
   @override
+  State<ConfirmationDialog> createState() => _ConfirmationDialogState();
+}
+
+class _ConfirmationDialogState extends State<ConfirmationDialog> {
+  bool _checkboxValue = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkboxValue = widget.checkboxValue ?? false;
+  }
+
+  void _updateCheckboxValue(bool? value) {
+    if (value != null) {
+      setState(() {
+        _checkboxValue = value;
+      });
+      if (widget.onCheckboxChanged != null) {
+        widget.onCheckboxChanged!(value);
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     if (Platform.isAndroid) {
       return AlertDialog(
-        contentPadding: const EdgeInsets.only(top: 10, left: 24, right: 24, bottom: 10),
-        title: Text(title),
+        backgroundColor: Colors.grey.shade900,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        contentPadding: const EdgeInsets.only(top: 20, left: 24, right: 24, bottom: 10),
+        title: Text(
+          widget.title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 16),
             Text(
-              description,
+              widget.description,
               textAlign: TextAlign.start,
+              style: TextStyle(
+                color: Colors.grey.shade200,
+                fontSize: 14,
+              ),
             ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: Checkbox(
-                    value: checkboxValue,
-                    onChanged: updateCheckboxValue,
+            if (widget.checkboxText != null && widget.checkboxText!.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Theme(
+                    data: Theme.of(context).copyWith(
+                      checkboxTheme: CheckboxThemeData(
+                        fillColor: MaterialStateProperty.resolveWith<Color>(
+                          (Set<MaterialState> states) {
+                            if (states.contains(MaterialState.selected)) {
+                              return Colors.deepPurple;
+                            }
+                            return Colors.grey.shade700;
+                          },
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                    child: Checkbox(
+                      value: _checkboxValue,
+                      onChanged: _updateCheckboxValue,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Text(checkboxText),
-              ],
-            ),
+                  const SizedBox(width: 8),
+                  Text(
+                    widget.checkboxText!,
+                    style: TextStyle(
+                      color: Colors.grey.shade300,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
         actions: [
           TextButton(
-            onPressed: onCancel,
-            child: Text(cancelText ?? "Cancel", style: const TextStyle(color: Colors.white)),
+            onPressed: widget.onCancel,
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.grey.shade300,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            ),
+            child: Text(widget.cancelText ?? "Cancel"),
           ),
           TextButton(
-            onPressed: onConfirm,
-            child: Text(confirmText ?? "Confirm", style: const TextStyle(color: Colors.white)),
+            onPressed: widget.onConfirm,
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.white,
+              backgroundColor: Colors.deepPurple,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: Text(widget.confirmText ?? "Confirm"),
           ),
         ],
       );
     } else {
       return CupertinoAlertDialog(
-        title: Text(title),
+        title: Text(
+          widget.title,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 16),
             Text(
-              description,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 14),
+              widget.description,
+              textAlign: TextAlign.start,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade200,
+              ),
             ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CupertinoCheckbox(
-                    value: checkboxValue,
-                    onChanged: updateCheckboxValue,
+            if (widget.checkboxText != null && widget.checkboxText!.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  CupertinoCheckbox(
+                    value: _checkboxValue,
+                    onChanged: _updateCheckboxValue,
+                    activeColor: Colors.deepPurple,
                   ),
-                ),
-                const SizedBox(width: 8),
-                Text(checkboxText),
-              ],
-            ),
+                  const SizedBox(width: 8),
+                  Text(
+                    widget.checkboxText!,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey.shade300,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
         actions: [
           CupertinoDialogAction(
-            onPressed: onCancel,
-            child: Text(cancelText ?? "Cancel", style: const TextStyle(color: Colors.white, fontSize: 14)),
+            onPressed: widget.onCancel,
+            isDestructiveAction: false,
+            child: Text(
+              widget.cancelText ?? "Cancel",
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey.shade300,
+              ),
+            ),
           ),
           CupertinoDialogAction(
-            onPressed: onConfirm,
-            child: Text(confirmText ?? "Confirm", style: const TextStyle(color: Colors.white, fontSize: 14)),
+            onPressed: widget.onConfirm,
+            isDefaultAction: true,
+            child: Text(
+              widget.confirmText ?? "Confirm",
+              style: const TextStyle(
+                fontSize: 16,
+                color: Colors.deepPurple,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       );

@@ -1,7 +1,7 @@
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/fact.dart';
-import 'package:friend_private/backend/schema/memory.dart';
-import 'package:friend_private/env/env.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/fact.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/env/env.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 
 class MixpanelManager {
@@ -30,16 +30,12 @@ class MixpanelManager {
   setPeopleValues() {
     setUserProperty('Notifications Enabled', _preferences.notificationsEnabled);
     setUserProperty('Location Enabled', _preferences.locationEnabled);
-    setUserProperty('Plugins Enabled Count', _preferences.enabledPluginsCount);
-    setUserProperty('Plugins Integrations Enabled Count', _preferences.enabledPluginsIntegrationsCount);
+    setUserProperty('Apps Enabled Count', _preferences.enabledAppsCount);
+    setUserProperty('Apps Integrations Enabled Count', _preferences.enabledAppsIntegrationsCount);
     setUserProperty('Speaker Profile', _preferences.hasSpeakerProfile);
     setUserProperty('Calendar Enabled', _preferences.calendarEnabled);
     setUserProperty('Recordings Language', _preferences.recordingsLanguage);
     setUserProperty('Authorized Storing Recordings', _preferences.permissionStoreRecordingsEnabled);
-    setUserProperty(
-      'GCP Integration Set',
-      _preferences.gcpCredentials.isNotEmpty && _preferences.gcpBucketName.isNotEmpty,
-    );
   }
 
   setUserProperty(String key, dynamic value) => _mixpanel?.getPeople().set(key, value);
@@ -83,40 +79,44 @@ class MixpanelManager {
   void onboardingStepCompleted(String step) => track('Onboarding Step $step Completed');
 
   void settingsSaved({
-    bool hasGCPCredentials = false,
-    bool hasGCPBucketName = false,
-    bool hasWebhookMemoryCreated = false,
+    bool hasWebhookConversationCreated = false,
     bool hasWebhookTranscriptReceived = false,
   }) =>
       track('Developer Settings Saved', properties: {
-        'has_gcp_credentials': hasGCPCredentials,
-        'has_gcp_bucket_name': hasGCPBucketName,
-        'has_webhook_memory_created': hasWebhookMemoryCreated,
+        'has_webhook_memory_created': hasWebhookConversationCreated,
         'has_webhook_transcript_received': hasWebhookTranscriptReceived,
       });
 
   void pageOpened(String name) => track('$name Opened');
 
-  void pluginEnabled(String pluginId) {
-    track('Plugin Enabled', properties: {'plugin_id': pluginId});
-    setUserProperty('Plugins Enabled Count', _preferences.enabledPluginsCount);
+  void appEnabled(String appId) {
+    track('App Enabled', properties: {'app_id': appId});
+    setUserProperty('Apps Enabled Count', _preferences.enabledAppsCount);
   }
 
-  void pluginDisabled(String pluginId) {
-    track('Plugin Disabled', properties: {'plugin_id': pluginId});
-    setUserProperty('Plugins Enabled Count', _preferences.enabledPluginsCount);
+  void appPurchaseStarted(String appId) => track('App Purchase Started', properties: {'app_id': appId});
+
+  void appPurchaseCompleted(String appId) => track('App Purchase Completed', properties: {'app_id': appId});
+
+  void privateAppSubmitted(Map<String, dynamic> properties) => track('Private App Submitted', properties: properties);
+
+  void publicAppSubmitted(Map<String, dynamic> properties) => track('Public App Submitted', properties: properties);
+
+  void appDisabled(String appId) {
+    track('App Disabled', properties: {'app_id': appId});
+    setUserProperty('Apps Enabled Count', _preferences.enabledAppsCount);
   }
 
-  void pluginRated(String pluginId, double rating) {
-    track('Plugin Rated', properties: {'plugin_id': pluginId, 'rating': rating});
+  void appRated(String appId, double rating) {
+    track('App Rated', properties: {'app_id': appId, 'rating': rating});
   }
 
   void phoneMicRecordingStarted() => track('Phone Mic Recording Started');
 
   void phoneMicRecordingStopped() => track('Phone Mic Recording Stopped');
 
-  void pluginResultExpanded(ServerMemory memory, String pluginId) {
-    track('Plugin Result Expanded', properties: getMemoryEventProperties(memory)..['plugin_id'] = pluginId);
+  void appResultExpanded(ServerConversation conversation, String appId) {
+    track('App Result Expanded', properties: getConversationEventProperties(conversation)..['app_id'] = appId);
   }
 
   void recordingLanguageChanged(String language) {
@@ -180,30 +180,31 @@ class MixpanelManager {
     };
   }
 
-  Map<String, dynamic> getMemoryEventProperties(ServerMemory memory) {
-    var properties = _getTranscriptProperties(memory.getTranscript());
-    int hoursAgo = DateTime.now().difference(memory.createdAt).inHours;
+  Map<String, dynamic> getConversationEventProperties(ServerConversation convo) {
+    var properties = _getTranscriptProperties(convo.getTranscript());
+    int hoursAgo = DateTime.now().difference(convo.createdAt).inHours;
     properties['memory_hours_since_creation'] = hoursAgo;
-    properties['memory_id'] = memory.id;
-    properties['memory_discarded'] = memory.discarded;
+    properties['memory_id'] = convo.id;
+    properties['memory_discarded'] = convo.discarded;
     return properties;
   }
 
-  void memoryCreated(ServerMemory memory) {
-    var properties = getMemoryEventProperties(memory);
-    properties['memory_result'] = memory.discarded ? 'discarded' : 'saved';
-    properties['action_items_count'] = memory.structured.actionItems.length;
+  void conversationCreated(ServerConversation conversation) {
+    var properties = getConversationEventProperties(conversation);
+    properties['memory_result'] = conversation.discarded ? 'discarded' : 'saved';
+    properties['action_items_count'] = conversation.structured.actionItems.length;
     properties['transcript_language'] = _preferences.recordingsLanguage;
     track('Memory Created', properties: properties);
   }
 
-  void memoryListItemClicked(ServerMemory memory, int idx) =>
-      track('Memory List Item Clicked', properties: getMemoryEventProperties(memory));
+  void conversationListItemClicked(ServerConversation conversation, int idx) =>
+      track('Memory List Item Clicked', properties: getConversationEventProperties(conversation));
 
-  void memoryShareButtonClick(ServerMemory memory) =>
-      track('Memory Share Button Clicked', properties: getMemoryEventProperties(memory));
+  void conversationShareButtonClick(ServerConversation conversation) =>
+      track('Memory Share Button Clicked', properties: getConversationEventProperties(conversation));
 
-  void memoryDeleted(ServerMemory memory) => track('Memory Deleted', properties: getMemoryEventProperties(memory));
+  void conversationDeleted(ServerConversation conversation) =>
+      track('Memory Deleted', properties: getConversationEventProperties(conversation));
 
   void chatMessageSent(String message) => track('Chat Message Sent',
       properties: {'message_length': message.length, 'message_word_count': message.split(' ').length});
@@ -213,21 +214,22 @@ class MixpanelManager {
   void showDiscardedMemoriesToggled(bool showDiscarded) =>
       track('Show Discarded Memories Toggled', properties: {'show_discarded': showDiscarded});
 
-  void chatMessageMemoryClicked(ServerMemory memory) =>
-      track('Chat Message Memory Clicked', properties: getMemoryEventProperties(memory));
+  void chatMessageConversationClicked(ServerConversation conversation) =>
+      track('Chat Message Memory Clicked', properties: getConversationEventProperties(conversation));
 
-  void addManualMemoryClicked() => track('Add Manual Memory Clicked');
+  void addManualConversationClicked() => track('Add Manual Memory Clicked');
 
-  void manualMemoryCreated(ServerMemory memory) =>
-      track('Manual Memory Created', properties: getMemoryEventProperties(memory));
+  void manualConversationCreated(ServerConversation conversation) =>
+      track('Manual Memory Created', properties: getConversationEventProperties(conversation));
 
   void setUserProperties(String whatDoYouDo, String whereDoYouPlanToUseYourFriend, String ageRange) {
     setUserProperty('What the user does', whatDoYouDo);
-    setUserProperty('Using Friend At', whereDoYouPlanToUseYourFriend);
+    setUserProperty('Using Omi At', whereDoYouPlanToUseYourFriend);
     setUserProperty('Age Range', ageRange);
   }
 
-  void reProcessMemory(ServerMemory memory) => track('Re-process Memory', properties: getMemoryEventProperties(memory));
+  void reProcessConversation(ServerConversation conversation) =>
+      track('Re-process Memory', properties: getConversationEventProperties(conversation));
 
   void developerModeEnabled() {
     track('Developer Mode Enabled');
@@ -249,8 +251,17 @@ class MixpanelManager {
 
   void supportContacted() => track('Support Contacted');
 
-  void copiedMemoryDetails(ServerMemory memory, {String source = ''}) =>
-      track('Copied Memory Detail $source'.trim(), properties: getMemoryEventProperties(memory));
+  void copiedConversationDetails(ServerConversation conversation, {String source = ''}) =>
+      track('Copied Memory Detail $source'.trim(), properties: getConversationEventProperties(conversation));
+
+  void checkedActionItem(ServerConversation conversation, int idx) =>
+      track('Checked Action Item', properties: getConversationEventProperties(conversation));
+
+  void uncheckedActionItem(ServerConversation conversation, int idx) =>
+      track('Unchecked Action Item', properties: getConversationEventProperties(conversation));
+
+  void deletedActionItem(ServerConversation conversation) =>
+      track('Deleted Action Item', properties: getConversationEventProperties(conversation));
 
   void upgradeModalDismissed() => track('Upgrade Modal Dismissed');
 

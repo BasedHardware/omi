@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/providers/calendar_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/widgets/extensions/functions.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/providers/calendar_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/widgets/extensions/functions.dart';
 import 'package:provider/provider.dart';
 
 class CalendarPage extends StatefulWidget {
@@ -104,7 +104,8 @@ class _CalendarPageState extends State<CalendarPage> {
 
                 RadioListTile(
                   title: const Text('Manual'),
-                  subtitle: const Text('Your memories will contain the discussed events, and you can decide to schedule them.'),
+                  subtitle: const Text(
+                      'Your memories will contain the discussed events, and you can decide to schedule them.'),
                   value: 'manual',
                   groupValue: SharedPreferencesUtil().calendarType,
                   onChanged: provider.onCalendarTypeChanged,

@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/env/env.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/env.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 
 class IntercomManager {
@@ -26,12 +26,20 @@ class IntercomManager {
     );
   }
 
-  Future displayChargingArticle() async {
-    return await intercom.displayArticle('9907475-how-to-charge-the-device');
+  Future displayChargingArticle(String device) async {
+    if (device == 'Omi DevKit 2') {
+      return await intercom.displayArticle('10003257-how-to-charge-devkit2');
+    } else {
+      return await intercom.displayArticle('9907475-how-to-charge-the-device');
+    }
+  }
+
+  Future displayEarnMoneyArticle() async {
+    return await intercom.displayArticle('10401566-build-publish-and-earn-with-omi-apps');
   }
 
   Future displayFirmwareUpdateArticle() async {
-    return await intercom.displayArticle('9918118-updating-your-friend-device-firmware');
+    return await intercom.displayArticle('9995941-updating-your-devkit2-firmware');
   }
 
   Future logEvent(String eventName, {Map<String, dynamic>? metaData}) async {
@@ -54,13 +62,12 @@ class IntercomManager {
     await updateCustomAttributes({
       'Notifications Enabled': _preferences.notificationsEnabled,
       'Location Enabled': _preferences.locationEnabled,
-      'Plugins Enabled Count': _preferences.enabledPluginsCount,
-      'Plugins Integrations Enabled Count': _preferences.enabledPluginsIntegrationsCount,
+      'Apps Enabled Count': _preferences.enabledAppsCount,
+      'Apps Integrations Enabled Count': _preferences.enabledAppsIntegrationsCount,
       'Speaker Profile': _preferences.hasSpeakerProfile,
       'Calendar Enabled': _preferences.calendarEnabled,
       'Recordings Language': _preferences.recordingsLanguage,
       'Authorized Storing Recordings': _preferences.permissionStoreRecordingsEnabled,
-      'GCP Integration Set': _preferences.gcpCredentials.isNotEmpty && _preferences.gcpBucketName.isNotEmpty,
     });
   }
 }
