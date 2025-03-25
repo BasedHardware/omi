@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated, Optional, List, Tuple, Dict, Any
 
 from fastapi import APIRouter, Header, HTTPException, Depends, Query
+import database.conversations as conversations_db
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
@@ -252,6 +253,57 @@ async def get_memories_via_integration(
     memory_items = [integration_models.MemoryItem(**fact) for fact in facts]
 
     return {"memories": memory_items}
+
+
+@router.get('/v2/integrations/{app_id}/conversations', response_model=integration_models.ConversationsResponse,
+            tags=['integration', 'conversations'])
+async def get_conversations_via_integration(
+    request: Request,
+    app_id: str,
+    uid: str,
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    include_discarded: bool = Query(False),
+    statuses: List[str] = Query([]),
+    authorization: Optional[str] = Header(None)
+):
+    """
+    Get all conversations for a user via integration API.
+    Authentication is required via API key in the Authorization header.
+    """
+    # Verify API key from Authorization header
+    if not authorization or not authorization.startswith('Bearer '):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'")
+
+    api_key = authorization.replace('Bearer ', '')
+    if not verify_api_key(app_id, api_key):
+        raise HTTPException(status_code=403, detail="Invalid API key")
+
+    # Verify if the app exists
+    app = apps_db.get_app_by_id_db(app_id)
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+
+    # Verify if the uid has enabled the app
+    enabled_plugins = redis_db.get_enabled_plugins(uid)
+    if app_id not in enabled_plugins:
+        raise HTTPException(status_code=403, detail="App is not enabled for this user")
+
+    # Check if the app has the capability to read conversations
+    if not apps_utils.app_has_action(app, 'create_conversation'):
+        raise HTTPException(status_code=403, detail="App does not have the capability to read conversations")
+
+    conversations_data = conversations_db.get_conversations(
+        uid,
+        limit=limit,
+        offset=offset,
+        include_discarded=include_discarded,
+        statuses=statuses
+    )
+
+    conversation_items = [integration_models.ConversationItem(**conv) for conv in conversations_data]
+
+    return {"conversations": conversation_items}
 
 
 @router.post('/v2/integrations/{app_id}/notification', response_model=integration_models.EmptyResponse,
