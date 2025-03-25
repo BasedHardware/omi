@@ -1,14 +1,12 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:app_links/app_links.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
+// import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 // import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:omi/backend/auth.dart';
@@ -50,6 +48,7 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/features/calendar.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:omi/utils/platform_check.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'package:posthog_flutter/posthog_flutter.dart';
@@ -68,7 +67,7 @@ Future<bool> _init() async {
     await Firebase.initializeApp(
         options: dev.DefaultFirebaseOptions.currentPlatform);
   }
-   // TODO: intercom[fix]web
+  // TODO: intercom[fix]web
   // await IntercomManager().initIntercom();
   await NotificationService.instance.initialize();
   await SharedPreferencesUtil.init();
@@ -83,8 +82,8 @@ Future<bool> _init() async {
 
   await GrowthbookUtil.init();
   CalendarUtil.init();
-    // TODO:flutter_blue_plus!web    
-    // ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
+  // TODO:flutter_blue_plus!web
+  // ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   return isAuth;
 }
 
@@ -330,7 +329,6 @@ class _DeciderWidgetState extends State<DeciderWidget> {
   StreamSubscription<Uri>? _linkSubscription;
 
   Future<void> initDeepLinks() async {
-    if (kIsWeb) return;
     _appLinks = AppLinks();
 
     // Handle links
@@ -365,7 +363,9 @@ class _DeciderWidgetState extends State<DeciderWidget> {
 
   @override
   void initState() {
-    initDeepLinks();
+    if (!ExecutionGuard.isWeb) {
+      initDeepLinks();
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (context.read<ConnectivityProvider>().isConnected) {
         NotificationService.instance.saveNotificationToken();

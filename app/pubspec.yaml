@@ -102,6 +102,7 @@ dependencies:
   photo_view: ^0.15.0
   flutter_custom_tabs: ^2.2.1
 
+  vector_graphics: any
 dependency_overrides:
   http: ^1.2.1
   uuid: ^4.4.0
