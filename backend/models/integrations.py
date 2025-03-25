@@ -1,8 +1,8 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from enum import Enum
 
-from models.facts import FactCategory
+from models.facts import FactCategory, FactDB
 
 
 class ConversationTimestampRange(BaseModel):
@@ -38,3 +38,15 @@ class ExternalIntegrationCreateFact(BaseModel):
 
 class EmptyResponse(BaseModel):
     pass
+
+
+class MemoryItem(FactDB):
+    """
+    Memory item model that extends FactDB for API responses
+    """
+
+    class Config:
+        exclude_none = True
+
+class MemoriesResponse(BaseModel):
+    memories: List[MemoryItem] = Field(description="List of user memories (facts)")
