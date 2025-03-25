@@ -11,8 +11,7 @@ An easy to install package to get started with the omi dev kit 1 in seconds.
 3. Paste the repository URL (https://github.com/BasedHardware/omi) and click Next.
 4. install Requirement
 
-## Requirements
-iOS requires you to include Bluetooth permissions in the info.plist. Go to info.pliist file and add this permission: 
+Go to "Targets => your project => Info"  and add this permission: 
 ```xml
 <key>NSBluetoothAlwaysUsageDescription</key>
 <string>This app needs Bluetooth access to connect to BLE devices.</string>
