@@ -168,8 +168,3 @@ func listenToLiveAudio(device: Device) {
 
 Omi's Swift SDK is available under MIT License
 
-### Third-Party Code
-
-An excerpt of code from the PAL project, licensed under the MIT License, is used in this project. The original code can be found at: [nelcea/PAL](https://github.com/nelcea/PAL).
-
-- Copyright (c) 2024 Nelcea
