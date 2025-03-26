@@ -9,7 +9,7 @@ from langchain_core.prompts import ChatPromptTemplate
 
 # - **world**:  Clever world facts that {user_name} can share to others so it makes him look smarter.
 # - "{user_name} learned that second Notion cofounder joined 5 years after." (**world**)
-extract_facts_prompt = ChatPromptTemplate.from_messages([
+extract_memories_prompt = ChatPromptTemplate.from_messages([
     '''
     You are an experienced detective tasked with creating a detailed profile of {user_name} based on conversations.
 
