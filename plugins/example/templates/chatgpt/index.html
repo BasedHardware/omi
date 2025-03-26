@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title|default("Redirecting to Omi for ChatGPT") }}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Söhne:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --chatgpt-bg: #343541;
+            --chatgpt-text: #ECECF1;
+            --chatgpt-accent: #19C37D;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Söhne', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: var(--chatgpt-bg);
+            color: var(--chatgpt-text);
+            text-align: center;
+        }
+        
+        .loader {
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            border-top: 4px solid var(--chatgpt-accent);
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        h1 {
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+        
+        p {
+            margin-bottom: 10px;
+            font-size: 16px;
+            max-width: 600px;
+        }
+        
+        .footer {
+            position: fixed;
+            bottom: 20px;
+            text-align: center;
+            font-size: 14px;
+            opacity: 0.7;
+        }
+        
+        a {
+            color: var(--chatgpt-accent);
+            text-decoration: none;
+        }
+        
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+    <meta http-equiv="refresh" content="2;url=https://chatgpt.com/g/g-67e2772d0af081919a5baddf4a12aacf-omi?prompt=my%20omi%20uid%20is%20{{ uid }}">
+</head>
+<body>
+    <div class="loader"></div>
+    <h1>Connecting Omi with ChatGPT</h1>
+    <p>Redirecting you to ChatGPT with your Omi ID...</p>
+    <p>If you are not redirected automatically, <a href="https://chatgpt.com/g/g-67e2772d0af081919a5baddf4a12aacf-omi?prompt=my%20omi%20uid%20is%20{{ uid }}">click here</a>.</p>
+    
+    <div class="footer">
+        © 2025 Omi • <a href="https://omi.me" target="_blank">omi.me</a>
+    </div>
+</body>
+</html>

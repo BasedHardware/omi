@@ -64,6 +64,14 @@ const sidebars = {
             'developer/Compile_firmware',
           ]
         },
+             {
+          type: 'category',
+          label: 'SDK',
+          items: [
+            'developer/sdk/python',
+           'developer/sdk/swift'
+          ]
+        },
         
         'developer/Protocol',
         'developer/Contribution',

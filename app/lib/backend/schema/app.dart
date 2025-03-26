@@ -492,11 +492,13 @@ class CapacityAction {
   String title;
   String id;
   String? docUrl;
+  String? description;
 
   CapacityAction({
     required this.title,
     required this.id,
     this.docUrl,
+    this.description,
   });
 
   factory CapacityAction.fromJson(Map<String, dynamic> json) {
@@ -504,6 +506,7 @@ class CapacityAction {
       title: json['title'],
       id: json['id'],
       docUrl: json['doc_url'],
+      description: json['description'],
     );
   }
 
@@ -512,6 +515,7 @@ class CapacityAction {
       'title': title,
       'id': id,
       'doc_url': docUrl,
+      'description': description,
     };
   }
 

@@ -4,7 +4,7 @@ on:
   push:
     branches: [ "main", "development" ]
     paths:
-      - 'frontend/**'
+      - 'web/frontend/**'
   workflow_dispatch:
     inputs:
       branch:
@@ -36,7 +36,7 @@ jobs:
       - run: gcloud auth configure-docker
       - name: Build and Push Docker image
         run: |
-          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} -f frontend/Dockerfile.datadog .
+          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} -f web/frontend/Dockerfile.datadog .
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
       - name: Deploy to Cloud Run
         id: deploy
