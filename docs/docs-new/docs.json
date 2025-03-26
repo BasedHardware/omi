@@ -1,0 +1,55 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Docs",
+  "colors": {
+    "primary": "#0D9373",
+    "light": "#55D799",
+    "dark": "#0D9373"
+  },
+  "favicon": "/favicon.svg",
+  "navigation": {
+    "groups": [
+      {
+        "group": "Get Started",
+        "pages": [
+          "docs/get_started/introduction",
+          "docs/get_started/Flash_device"
+        ]
+      },
+      {
+        "group": "Developer",
+        "pages": [
+          "docs/developer/AppSetup",
+          "docs/developer/Protocol",
+          "docs/developer/Contribution"
+        ]
+      },
+      {
+        "group": "Hardware",
+        "pages": [
+          "docs/hardware/DevKit1",
+          "docs/hardware/DevKit2",
+          "docs/hardware/OpenGlass"
+        ]
+      },
+      {
+        "group": "DIY Guide",
+        "pages": [
+          "docs/assembly/introduction",
+          "docs/assembly/Buying_Guide",
+          "docs/assembly/Build_the_device"
+        ]
+      },
+      {
+        "group": "Info",
+        "pages": [
+          "docs/info/Support",
+          "docs/info/License",
+          "docs/info/Disclaimer",
+          "docs/info/Privacy"
+        ]
+      }
+    ]
+  }
+}

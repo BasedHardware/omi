@@ -1,0 +1,46 @@
+{
+  "name": "omi-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@radix-ui/react-avatar": "^1.1.1",
+    "@radix-ui/react-dialog": "^1.1.2",
+    "@radix-ui/react-scroll-area": "^1.2.1",
+    "@radix-ui/react-slot": "^1.1.0",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.1",
+    "eventsource-parser": "^3.0.0",
+    "firebase": "^11.0.2",
+    "lucide-react": "^0.460.0",
+    "mixpanel-browser": "^2.56.0",
+    "next": "15.0.3",
+    "openai": "^4.73.1",
+    "react": "19.0.0-rc-66855b96-20241106",
+    "react-dom": "19.0.0-rc-66855b96-20241106",
+    "react-icons": "^5.3.0",
+    "react-infinite-scroll-component": "^6.1.0",
+    "react-intersection-observer": "^9.13.1",
+    "sonner": "^1.7.0",
+    "tailwind-merge": "^2.5.4",
+    "tailwindcss-animate": "^1.0.7",
+    "ulid": "^2.3.0",
+    "uuid": "^11.0.3"
+  },
+  "devDependencies": {
+    "@types/mixpanel-browser": "^2.50.2",
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "@types/uuid": "^10.0.0",
+    "postcss": "^8",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5"
+  }
+}
