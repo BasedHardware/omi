@@ -245,9 +245,9 @@ async def get_memories_via_integration(
     if app_id not in enabled_plugins:
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
-    # Check if the app has the capability to read facts
-    if not apps_utils.app_has_action(app, 'create_facts'):
-        raise HTTPException(status_code=403, detail="App does not have the capability to read facts")
+    # Check if the app has the capability to read memories
+    if not apps_utils.app_has_action(app, 'read_memories'):
+        raise HTTPException(status_code=403, detail="App does not have the capability to read memories")
 
     facts = facts_db.get_facts(uid, limit=limit, offset=offset)
     memory_items = [integration_models.MemoryItem(**fact) for fact in facts]
@@ -290,7 +290,7 @@ async def get_conversations_via_integration(
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
     # Check if the app has the capability to read conversations
-    if not apps_utils.app_has_action(app, 'create_conversation'):
+    if not apps_utils.app_has_action(app, 'read_conversations'):
         raise HTTPException(status_code=403, detail="App does not have the capability to read conversations")
 
     conversations_data = conversations_db.get_conversations(
