@@ -7,7 +7,7 @@
     "light": "#55D799",
     "dark": "#0D9373"
   },
-  "favicon": "/favicon.svg",
+  "favicon": "/favicon.ico",
   "navigation": {
     "groups": [
       {
@@ -20,9 +20,52 @@
       {
         "group": "Developer",
         "pages": [
+          {
+            "group": "Apps",
+            "pages": [
+              "docs/developer/apps/Introduction",
+              "docs/developer/apps/PromptBased",
+              "docs/developer/apps/Integrations",
+              "docs/developer/apps/AudioStreaming",
+              "docs/developer/apps/Import",
+              "docs/developer/apps/Submitting"
+            ]
+          },
           "docs/developer/AppSetup",
+          {
+            "group": "Backend",
+            "pages": [
+              "docs/developer/backend/Backend_Setup",
+              "docs/developer/backend/backend_deepdive",
+              "docs/developer/backend/StoringMemory",
+              "docs/developer/backend/transcription",
+              "docs/developer/backend/memory_embeddings",
+              "docs/developer/backend/postprocessing"
+            ]
+          },
+          {
+            "group": "Firmware",
+            "pages": [
+              "docs/developer/firmware/Compile_firmware"
+            ]
+          },
+          {
+            "group": "SDK",
+            "pages": [
+              "docs/developer/sdk/python",
+              "docs/developer/sdk/swift"
+            ]
+          },
           "docs/developer/Protocol",
-          "docs/developer/Contribution"
+          "docs/developer/Contribution",
+          {
+            "group": "Audio & Testing",
+            "pages": [
+              "docs/developer/savingaudio",
+              "docs/developer/AudioStreaming",
+              "docs/developer/DevKit2Testing"
+            ]
+          }
         ]
       },
       {
@@ -51,5 +94,14 @@
         ]
       }
     ]
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/BasedHardware/omi",
+      "discord": "https://discord.com/invite/omi",
+      "x": "https://x.com/omedotme",
+      "linkedin": "https://www.linkedin.com/company/omi-ai/",
+      "instagram": "https://www.instagram.com/based_hardware/"
+    }
   }
 }
