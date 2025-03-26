@@ -22,7 +22,7 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/platform_check.dart';
-
+import 'dart:html';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -363,15 +363,16 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                           scrollDirection: Axis.horizontal,
                                           shrinkWrap: true,
                                           itemBuilder: (ctx, idx) {
+                                            String fileName = provider.selectedFiles.keys.elementAt(idx);
                                             return Container(
                                               margin: const EdgeInsets.only(bottom: 10, top: 10, left: 10),
                                               height: MediaQuery.sizeOf(context).width * 0.2,
                                               width: MediaQuery.sizeOf(context).width * 0.2,
                                               decoration: BoxDecoration(
                                                 color: Colors.grey[800],
-                                                image: provider.selectedFileTypes[idx] == 'image'
+                                                image: provider.selectedFileTypes[idx] == 'image' && provider.selectedFiles[fileName] != null  
                                                     ? DecorationImage(
-                                                        image: FileImage(provider.selectedFiles[idx]),
+                                                        image: MemoryImage(provider.selectedFiles[fileName]!),
                                                         fit: BoxFit.cover,
                                                       )
                                                     : null,
@@ -388,7 +389,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                           ),
                                                         )
                                                       : Container(),
-                                                  if (provider.isFileUploading(provider.selectedFiles[idx].path))
+                                                  if (provider.isFileUploading(fileName))
                                                     Container(
                                                       color: Colors.black.withOpacity(0.5),
                                                       child: const Center(

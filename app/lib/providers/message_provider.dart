@@ -27,7 +27,7 @@ class MessageProvider extends ChangeNotifier {
 
   String firstTimeLoadingText = '';
 
-  List<File> selectedFiles = [];
+  Map<String, Uint8List> selectedFiles = {};
   List<String> selectedFileTypes = [];
   List<MessageFile> uploadedFiles = [];
   bool isUploadingFiles = false;
@@ -86,10 +86,9 @@ class MessageProvider extends ChangeNotifier {
   void captureImage() async {
     var res = await ImagePicker().pickImage(source: ImageSource.camera);
     if (res != null) {
-      selectedFiles.add(File(res.path));
+      selectedFiles[res.name] = await res.readAsBytes();
       selectedFileTypes.add('image');
-      var index = selectedFiles.length - 1;
-      await uploadFiles([selectedFiles[index]], appProvider?.selectedChatAppId);
+      await uploadFiles(selectedFiles, appProvider?.selectedChatAppId);
       notifyListeners();
     }
   }
@@ -99,22 +98,19 @@ class MessageProvider extends ChangeNotifier {
       AppSnackbar.showSnackbarError('You can only select up to 4 images');
       return;
     }
-    List res = [];
+    List<XFile?> res = [];
     if (4 - selectedFiles.length == 1) {
       res = [await ImagePicker().pickImage(source: ImageSource.gallery)];
     } else {
       res = await ImagePicker().pickMultiImage(limit: 4 - selectedFiles.length);
     }
     if (res.isNotEmpty) {
-      List<File> files = [];
-      for (var r in res) {
-        files.add(File(r.path));
+      for (var xFile in res) {
+        if (xFile == null) continue;
+        selectedFiles[xFile.name] = await xFile.readAsBytes();
+        selectedFileTypes.add('image');
       }
-      if (files.isNotEmpty) {
-        selectedFiles.addAll(files);
-        selectedFileTypes.addAll(res.map((e) => 'image'));
-        await uploadFiles(files, appProvider?.selectedChatAppId);
-      }
+      await uploadFiles(selectedFiles, appProvider?.selectedChatAppId);
       notifyListeners();
     }
   }
@@ -123,24 +119,32 @@ class MessageProvider extends ChangeNotifier {
     var res = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowMultiple: true,
-        allowedExtensions: ['jpeg', 'md', 'pdf', 'gif', 'doc', 'png', 'pptx', 'txt', 'xlsx', 'webp']);
+        allowedExtensions: [
+          'jpeg',
+          'md',
+          'pdf',
+          'gif',
+          'doc',
+          'png',
+          'pptx',
+          'txt',
+          'xlsx',
+          'webp'
+        ]);
     if (res != null) {
-      List<File> files = [];
-      for (var r in res.files) {
-        files.add(File(r.path!));
+      for (var file in res.files) {
+        if (file.bytes == null) continue;
+        selectedFiles[file.name] = file.bytes!;
+        selectedFileTypes.add('file');
       }
-      if (files.isNotEmpty) {
-        selectedFiles.addAll(files);
-        selectedFileTypes.addAll(res.files.map((e) => 'file'));
-        await uploadFiles(files, appProvider?.selectedChatAppId);
-      }
+      await uploadFiles(selectedFiles, appProvider?.selectedChatAppId);
 
       notifyListeners();
     }
   }
 
   void clearSelectedFile(int index) {
-    selectedFiles.removeAt(index);
+    selectedFiles.remove(selectedFiles.keys.elementAt(index));
     selectedFileTypes.removeAt(index);
     uploadedFiles.removeAt(index);
     notifyListeners();
@@ -157,17 +161,18 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> uploadFiles(List<File> files, String? appId) async {
+  Future<void> uploadFiles(Map<String, Uint8List> files, String? appId) async {
     if (files.isNotEmpty) {
-      setMultiUploadingFileStatus(files.map((e) => e.path).toList(), true);
+      setMultiUploadingFileStatus(files.keys.map((e) => e).toList(), true);
       var res = await uploadFilesServer(files, appId: appId);
       if (res != null) {
         uploadedFiles.addAll(res);
       } else {
         clearSelectedFiles();
-        AppSnackbar.showSnackbarError('Failed to upload file, please try again later');
+        AppSnackbar.showSnackbarError(
+            'Failed to upload file, please try again later');
       }
-      setMultiUploadingFileStatus(files.map((e) => e.path).toList(), false);
+      setMultiUploadingFileStatus(files.keys.map((e) => e).toList(), false);
       notifyListeners();
     }
   }
@@ -201,7 +206,8 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<List<ServerMessage>> getMessagesFromServer({bool dropdownSelected = false}) async {
+  Future<List<ServerMessage>> getMessagesFromServer(
+      {bool dropdownSelected = false}) async {
     if (!hasCachedMessages) {
       firstTimeLoadingText = 'Reading your memories...';
       notifyListeners();
@@ -268,10 +274,12 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future sendVoiceMessageStreamToServer(List<List<int>> audioBytes, {Function? onFirstChunkRecived}) async {
+  Future sendVoiceMessageStreamToServer(List<List<int>> audioBytes,
+      {Function? onFirstChunkRecived}) async {
     var file = await FileUtils.saveAudioBytesToTempFile(
       audioBytes,
-      DateTime.now().millisecondsSinceEpoch ~/ 1000 - (audioBytes.length / 100).ceil(),
+      DateTime.now().millisecondsSinceEpoch ~/ 1000 -
+          (audioBytes.length / 100).ceil(),
     );
 
     setShowTypingIndicator(true);
@@ -282,7 +290,9 @@ class MessageProvider extends ChangeNotifier {
     try {
       bool firstChunkRecieved = false;
       await for (var chunk in sendVoiceMessageStreamServer([file])) {
-        if (!firstChunkRecieved && [MessageChunkType.data, MessageChunkType.done].contains(chunk.type)) {
+        if (!firstChunkRecieved &&
+            [MessageChunkType.data, MessageChunkType.done]
+                .contains(chunk.type)) {
           firstChunkRecieved = true;
           if (onFirstChunkRecived != null) {
             onFirstChunkRecived();
@@ -341,7 +351,8 @@ class MessageProvider extends ChangeNotifier {
     clearSelectedFiles();
     clearUploadedFiles();
     try {
-      await for (var chunk in sendMessageStreamServer(text, appId: appProvider?.selectedChatAppId, filesId: fileIds)) {
+      await for (var chunk in sendMessageStreamServer(text,
+          appId: appProvider?.selectedChatAppId, filesId: fileIds)) {
         if (chunk.type == MessageChunkType.think) {
           message.thinkings.add(chunk.text);
           notifyListeners();

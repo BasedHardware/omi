@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/message.dart';
@@ -9,6 +10,7 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/string_utils.dart';
 import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:http_parser/http_parser.dart';
 import 'package:path/path.dart';
 
 Future<List<ServerMessage>> getMessagesServer({
@@ -18,7 +20,8 @@ Future<List<ServerMessage>> getMessagesServer({
   if (pluginId == 'no_selected') pluginId = null;
   // TODO: Add pagination
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v2/messages?plugin_id=${pluginId ?? ''}&dropdown_selected=$dropdownSelected',
+    url:
+        '${Env.apiBaseUrl}v2/messages?plugin_id=${pluginId ?? ''}&dropdown_selected=$dropdownSelected',
     headers: {},
     method: 'GET',
     body: '',
@@ -30,7 +33,9 @@ Future<List<ServerMessage>> getMessagesServer({
     if (decodedBody.isEmpty) {
       return [];
     }
-    var messages = decodedBody.map((conversation) => ServerMessage.fromJson(conversation)).toList();
+    var messages = decodedBody
+        .map((conversation) => ServerMessage.fromJson(conversation))
+        .toList();
     debugPrint('getMessages length: ${messages.length}');
     return messages;
   }
@@ -53,9 +58,13 @@ Future<List<ServerMessage>> clearChatServer({String? pluginId}) async {
   }
 }
 
-Future<ServerMessage> sendMessageServer(String text, {String? appId, List<String>? fileIds}) {
+Future<ServerMessage> sendMessageServer(String text,
+    {String? appId, List<String>? fileIds}) {
   var url = '${Env.apiBaseUrl}v1/messages?plugin_id=$appId';
-  if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
+  if (appId == null ||
+      appId.isEmpty ||
+      appId == 'null' ||
+      appId == 'no_selected') {
     url = '${Env.apiBaseUrl}v1/messages';
   }
   return makeApiCall(
@@ -81,11 +90,13 @@ Future<ServerMessage> sendMessageServer(String text, {String? appId, List<String
 
 ServerMessageChunk? parseMessageChunk(String line, String messageId) {
   if (line.startsWith('think: ')) {
-    return ServerMessageChunk(messageId, line.substring(7).replaceAll("__CRLF__", "\n"), MessageChunkType.think);
+    return ServerMessageChunk(messageId,
+        line.substring(7).replaceAll("__CRLF__", "\n"), MessageChunkType.think);
   }
 
   if (line.startsWith('data: ')) {
-    return ServerMessageChunk(messageId, line.substring(6).replaceAll("__CRLF__", "\n"), MessageChunkType.data);
+    return ServerMessageChunk(messageId,
+        line.substring(6).replaceAll("__CRLF__", "\n"), MessageChunkType.data);
   }
 
   if (line.startsWith('done: ')) {
@@ -103,9 +114,13 @@ ServerMessageChunk? parseMessageChunk(String line, String messageId) {
   return null;
 }
 
-Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId, List<String>? filesId}) async* {
+Stream<ServerMessageChunk> sendMessageStreamServer(String text,
+    {String? appId, List<String>? filesId}) async* {
   var url = '${Env.apiBaseUrl}v2/messages?plugin_id=$appId';
-  if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
+  if (appId == null ||
+      appId.isEmpty ||
+      appId == 'null' ||
+      appId == 'no_selected') {
     url = '${Env.apiBaseUrl}v2/messages';
   }
 
@@ -178,13 +193,15 @@ Future<ServerMessage> getInitialAppMessage(String? appId) {
   });
 }
 
-Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files) async* {
+Stream<ServerMessageChunk> sendVoiceMessageStreamServer(
+    List<File> files) async* {
   var request = http.MultipartRequest(
     'POST',
     Uri.parse('${Env.apiBaseUrl}v2/voice-messages'),
   );
   for (var file in files) {
-    request.files.add(await http.MultipartFile.fromPath('files', file.path, filename: basename(file.path)));
+    request.files.add(await http.MultipartFile.fromPath('files', file.path,
+        filename: basename(file.path)));
   }
   request.headers.addAll({'Authorization': await getAuthHeader()});
 
@@ -241,7 +258,8 @@ Future<List<ServerMessage>> sendVoiceMessageServer(List<File> files) async {
     Uri.parse('${Env.apiBaseUrl}v1/voice-messages'),
   );
   for (var file in files) {
-    request.files.add(await http.MultipartFile.fromPath('files', file.path, filename: basename(file.path)));
+    request.files.add(await http.MultipartFile.fromPath('files', file.path,
+        filename: basename(file.path)));
   }
   request.headers.addAll({'Authorization': await getAuthHeader()});
 
@@ -249,11 +267,16 @@ Future<List<ServerMessage>> sendVoiceMessageServer(List<File> files) async {
     var streamedResponse = await request.send();
     var response = await http.Response.fromStream(streamedResponse);
     if (response.statusCode == 200) {
-      debugPrint('sendVoiceMessageServer response body: ${jsonDecode(response.body)}');
-      return ((jsonDecode(response.body) ?? []) as List<dynamic>).map((m) => ServerMessage.fromJson(m)).toList();
+      debugPrint(
+          'sendVoiceMessageServer response body: ${jsonDecode(response.body)}');
+      return ((jsonDecode(response.body) ?? []) as List<dynamic>)
+          .map((m) => ServerMessage.fromJson(m))
+          .toList();
     } else {
-      debugPrint('Failed to upload sample. Status code: ${response.statusCode} ${response.body}');
-      throw Exception('Failed to upload sample. Status code: ${response.statusCode}');
+      debugPrint(
+          'Failed to upload sample. Status code: ${response.statusCode} ${response.body}');
+      throw Exception(
+          'Failed to upload sample. Status code: ${response.statusCode}');
     }
   } catch (e) {
     debugPrint('An error occurred uploadSample: $e');
@@ -261,37 +284,42 @@ Future<List<ServerMessage>> sendVoiceMessageServer(List<File> files) async {
   }
 }
 
-Future<List<MessageFile>?> uploadFilesServer(List<File> files, {String? appId}) async {
+Future<List<MessageFile>?> uploadFilesServer(Map<String, Uint8List> files,
+    {String? appId}) async {
   var url = '${Env.apiBaseUrl}v1/files?plugin_id=$appId';
-  if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
+  if (appId == null ||
+      appId.isEmpty ||
+      appId == 'null' ||
+      appId == 'no_selected') {
     url = '${Env.apiBaseUrl}v1/files';
   }
+  debugPrint("Uploading at $url");
   var request = http.MultipartRequest(
     'POST',
     Uri.parse(url),
   );
   request.headers.addAll({'Authorization': await getAuthHeader()});
-  for (var file in files) {
-    var stream = http.ByteStream(file.openRead());
-    var length = await file.length();
-    var multipartFile = http.MultipartFile(
+  files.forEach((key, value) {
+    var multipartFile = http.MultipartFile.fromBytes(
       'files',
-      stream,
-      length,
-      filename: basename(file.path),
+      value,
+      filename: key,
     );
     request.files.add(multipartFile);
-  }
+  });
 
   try {
     var streamedResponse = await request.send();
     var response = await http.Response.fromStream(streamedResponse);
     if (response.statusCode == 200) {
-      debugPrint('uploadFileServer response body: ${jsonDecode(response.body)}');
+      debugPrint(
+          'uploadFileServer response body: ${jsonDecode(response.body)}');
       return MessageFile.fromJsonList(jsonDecode(response.body));
     } else {
-      debugPrint('Failed to upload file. Status code: ${response.statusCode} ${response.body}');
-      throw Exception('Failed to upload file. Status code: ${response.statusCode}');
+      debugPrint(
+          'Failed to upload file. Status code: ${response.statusCode} ${response.body}');
+      throw Exception(
+          'Failed to upload file. Status code: ${response.statusCode}');
     }
   } catch (e) {
     debugPrint('An error occurred uploadFileServer: $e');
@@ -312,25 +340,26 @@ Future reportMessageServer(String messageId) async {
   }
 }
 
-
 Future<String> transcribeVoiceMessage(File audioFile) async {
   try {
     var request = http.MultipartRequest(
       'POST',
       Uri.parse('${Env.apiBaseUrl}v1/voice-message/transcribe'),
     );
-    
+
     request.headers.addAll({'Authorization': await getAuthHeader()});
-    request.files.add(await http.MultipartFile.fromPath('files', audioFile.path));
-    
+    request.files
+        .add(await http.MultipartFile.fromPath('files', audioFile.path));
+
     var streamedResponse = await request.send();
     var response = await http.Response.fromStream(streamedResponse);
-    
+
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       return data['transcript'] ?? '';
     } else {
-      debugPrint('Failed to transcribe voice message: ${response.statusCode} ${response.body}');
+      debugPrint(
+          'Failed to transcribe voice message: ${response.statusCode} ${response.body}');
       throw Exception('Failed to transcribe voice message');
     }
   } catch (e) {
