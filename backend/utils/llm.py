@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field, ValidationError
 from database.redis_db import add_filter_category_item
 from models.app import App
 from models.chat import Message, MessageSender
-from models.facts import Fact, FactCategory
+from models.memories import Memory, MemoryCategory
 from models.conversation import Structured, ConversationPhoto, CategoryEnum, Conversation
 from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment
@@ -1330,7 +1330,7 @@ def obtain_emotional_message(uid: str, memory: Conversation, context: str, emoti
 # **********************************
 
 class Facts(BaseModel):
-    facts: List[Fact] = Field(
+    facts: List[Memory] = Field(
         min_items=0,
         max_items=3,
         description="List of **new** facts. If any",
@@ -1338,14 +1338,14 @@ class Facts(BaseModel):
     )
 
 class FactsByTexts(BaseModel):
-    facts: List[Fact] = Field(
+    facts: List[Memory] = Field(
         description="List of **new** facts. If any",
         default=[],
     )
 
 def new_facts_extractor(
         uid: str, segments: List[TranscriptSegment], user_name: Optional[str] = None, facts_str: Optional[str] = None
-) -> List[Fact]:
+) -> List[Memory]:
     # print('new_facts_extractor', uid, 'segments', len(segments), user_name, 'len(facts_str)', len(facts_str))
     if user_name is None or facts_str is None:
         user_name, facts_str = get_prompt_facts(uid)
@@ -1375,10 +1375,10 @@ def new_facts_extractor(
         return []
 
 
-def extract_facts_from_text(
+def extract_memories_from_text(
         uid: str, text: str, text_source: str, user_name: Optional[str] = None, facts_str: Optional[str] = None
-) -> List[Fact]:
-    """Extract facts from external integration text sources like email, posts, messages"""
+) -> List[Memory]:
+    """Extract memories from external integration text sources like email, posts, messages"""
     if user_name is None or facts_str is None:
         user_name, facts_str = get_prompt_facts(uid)
 
@@ -1413,7 +1413,7 @@ class Learnings(BaseModel):
 def new_learnings_extractor(
         uid: str, segments: List[TranscriptSegment], user_name: Optional[str] = None,
         learnings_str: Optional[str] = None
-) -> List[Fact]:
+) -> List[Memory]:
     if user_name is None or learnings_str is None:
         user_name, facts_str = get_prompt_facts(uid)
 
@@ -1430,7 +1430,7 @@ def new_learnings_extractor(
             'learnings_str': learnings_str,
             'format_instructions': parser.get_format_instructions(),
         })
-        return list(map(lambda x: Fact(content=x, category=FactCategory.learnings), response.result))
+        return list(map(lambda x: Memory(content=x, category=MemoryCategory.learnings), response.result))
     except Exception as e:
         print(f'Error extracting new facts: {e}')
         return []
@@ -2336,8 +2336,8 @@ def generate_description(app_name: str, description: str) -> str:
 # ******************* PERSONA **********************
 # **************************************************
 
-def condense_facts(facts, name):
-    combined_facts = "\n".join(facts)
+def condense_memories(facts, name):
+    combined_memories = "\n".join(facts)
     prompt = f"""
 You are an AI tasked with condensing a detailed profile of hundreds facts about {name} to accurately replicate their personality, communication style, decision-making patterns, and contextual knowledge for 1:1 cloning.  
 
@@ -2361,7 +2361,7 @@ You are an AI tasked with condensing a detailed profile of hundreds facts about 
 The output must be as concise as possible while retaining all necessary information for 1:1 cloning. Absolutely no introductory or closing statements, explanations, or any unnecessary text. Directly present the condensed facts in the specified format. Begin condensation now.
 
 Facts:
-{combined_facts}
+{combined_memories}
     """
     response = llm_medium.invoke(prompt)
     return response.content

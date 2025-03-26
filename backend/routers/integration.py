@@ -17,7 +17,7 @@ import models.conversation as conversation_models
 from models.app import App
 from routers.conversations import process_conversation, trigger_external_integrations
 from utils.conversations.location import get_google_maps_location
-from utils.conversations.facts import process_external_integration_fact
+from utils.conversations.memories import process_external_integration_memory
 from utils.plugins import send_plugin_notification
 
 # Rate limit settings - more conservative limits to prevent notification fatigue
@@ -130,7 +130,7 @@ async def create_conversation_via_integration(
 async def create_memories_via_integration(
     request: Request,
     app_id: str,
-    fact_data: integration_models.ExternalIntegrationCreateFact,
+    fact_data: integration_models.ExternalIntegrationCreateMemory,
     uid: str,
     authorization: Optional[str] = Header(None)
 ):
@@ -161,8 +161,8 @@ async def create_memories_via_integration(
             (not fact_data.memories or len(fact_data.memories) == 0):
         raise HTTPException(status_code=422, detail="Either text or explicit memories(facts) are required and cannot be empty")
 
-    # Process and save the fact using the utility function
-    process_external_integration_fact(uid, fact_data, app_id)
+    # Process and save the memory using the utility function
+    process_external_integration_memory(uid, fact_data, app_id)
 
     # Empty response
     return {}
@@ -173,7 +173,7 @@ async def create_memories_via_integration(
 async def create_facts_via_integration(
     request: Request,
     app_id: str,
-    fact_data: integration_models.ExternalIntegrationCreateFact,
+    fact_data: integration_models.ExternalIntegrationCreateMemory,
     uid: str,
     authorization: Optional[str] = Header(None)
 ):
@@ -204,8 +204,8 @@ async def create_facts_via_integration(
             (not fact_data.memories or len(fact_data.memories) == 0):
         raise HTTPException(status_code=422, detail="Either text or explicit memories(facts) are required and cannot be empty")
 
-    # Process and save the fact using the utility function
-    process_external_integration_fact(uid, fact_data, app_id)
+    # Process and save the memory using the utility function
+    process_external_integration_memory(uid, fact_data, app_id)
 
     # Empty response
     return {}

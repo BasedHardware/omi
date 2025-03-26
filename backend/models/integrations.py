@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List
 from enum import Enum
 
-from models.facts import FactCategory
+from models.memories import MemoryCategory
 
 
 class ConversationTimestampRange(BaseModel):
@@ -28,7 +28,7 @@ class ExternalIntegrationFact(BaseModel):
     tags: Optional[List[str]] = Field(description="Tags associated with the fact", default=None)
 
 
-class ExternalIntegrationCreateFact(BaseModel):
+class ExternalIntegrationCreateMemory(BaseModel):
     text: str = Field(description="The original text from which the fact was extracted")
     text_source: ExternalIntegrationFactSource = Field(description="The source of the text", default=ExternalIntegrationFactSource.other)
     text_source_spec: Optional[str] = Field(description="Additional specification about the source", default=None)

@@ -25,7 +25,7 @@ from database.users import get_stripe_connect_account_id
 from models.app import App, UsageHistoryItem, UsageHistoryType
 from models.conversation import Conversation
 from utils import stripe
-from utils.llm import condense_conversations, condense_facts, generate_persona_description, condense_tweets
+from utils.llm import condense_conversations, condense_memories, generate_persona_description, condense_tweets
 from utils.social import get_twitter_timeline, TwitterProfile, get_twitter_profile
 
 MarketplaceAppReviewUIDs = os.getenv('MARKETPLACE_APP_REVIEWERS').split(',') if os.getenv(
@@ -399,8 +399,8 @@ async def generate_persona_prompt(uid: str, persona: dict):
         timeline = await get_twitter_timeline(persona['twitter']['username'])
         tweets = [{'tweet': tweet.text, 'posted_at': tweet.created_at} for tweet in timeline.timeline]
 
-    # Condense facts
-    facts_text = condense_facts([fact['content'] for fact in facts if not fact['deleted']], user_name)
+    # Condense memories
+    facts_text = condense_memories([fact['content'] for fact in facts if not fact['deleted']], user_name)
 
     # Generate updated chat prompt
     persona_prompt = f"""
@@ -515,8 +515,8 @@ async def update_persona_prompt(persona: dict):
         tweets = [tweet.text for tweet in timeline.timeline]
         condensed_tweets = condense_tweets(tweets, persona['name'])
 
-    # Condense facts
-    facts_text = condense_facts([fact['content'] for fact in facts if not fact['deleted']], user_name)
+    # Condense memories
+    facts_text = condense_memories([fact['content'] for fact in facts if not fact['deleted']], user_name)
 
     # Generate updated chat prompt
     persona_prompt = f"""

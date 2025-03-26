@@ -4,7 +4,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 
 import database.memories as memories_db
-from models.facts import FactDB, Fact, FactCategory
+from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.apps import update_personas_async
 from utils.llm import identify_category_for_fact
 from utils.other import endpoints as auth
@@ -12,25 +12,25 @@ from utils.other import endpoints as auth
 router = APIRouter()
 
 
-@router.post('/v1/facts', tags=['facts'], response_model=FactDB)
-def create_fact(fact: Fact, uid: str = Depends(auth.get_current_user_uid)):
-    fact_db = FactDB.from_fact(fact, uid, None, None, True)
+@router.post('/v1/facts', tags=['facts'], response_model=MemoryDB)
+def create_fact(fact: Memory, uid: str = Depends(auth.get_current_user_uid)):
+    fact_db = MemoryDB.from_memory(fact, uid, None, None, True)
     memories_db.create_memory(uid, fact_db.dict())
     threading.Thread(target=update_personas_async, args=(uid,)).start()
     return fact_db
 
 
-@router.post('/v2/facts', tags=['facts'], response_model=FactDB)
-def create_fact(fact: Fact, uid: str = Depends(auth.get_current_user_uid)):
-    categories = [category for category in FactCategory]
+@router.post('/v2/facts', tags=['facts'], response_model=MemoryDB)
+def create_fact(fact: Memory, uid: str = Depends(auth.get_current_user_uid)):
+    categories = [category for category in MemoryCategory]
     fact.category = identify_category_for_fact(fact.content, categories)
-    fact_db = FactDB.from_fact(fact, uid, None, None, True)
+    fact_db = MemoryDB.from_memory(fact, uid, None, None, True)
     memories_db.create_memory(uid, fact_db.dict())
     threading.Thread(target=update_personas_async, args=(uid,)).start()
     return fact_db
 
 
-@router.get('/v1/facts', tags=['facts'], response_model=List[FactDB])  # filters
+@router.get('/v1/facts', tags=['facts'], response_model=List[MemoryDB])  # filters
 def get_facts_v1(limit: int = 5000, offset: int = 0, uid: str = Depends(auth.get_current_user_uid)):
     facts = memories_db.get_memories(uid, limit, offset)
     # facts = list(filter(lambda x: x['category'] == 'skills', facts))
@@ -58,7 +58,7 @@ def get_facts_v1(limit: int = 5000, offset: int = 0, uid: str = Depends(auth.get
     # return facts
 
 
-@router.get('/v2/facts', tags=['facts'], response_model=List[FactDB])
+@router.get('/v2/facts', tags=['facts'], response_model=List[MemoryDB])
 def get_facts(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_current_user_uid)):
     # Use high limits for the first page
     # Warn: should remove
