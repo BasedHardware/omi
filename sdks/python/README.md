@@ -18,8 +18,8 @@ This SDK connects to an **Omi wearable device** over **Bluetooth**, decodes the 
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/your-username/omi-python-sdk.git
-cd omi-python-sdk
+git clone https://github.com/BasedHardware/omi.git
+cd sdks/python
 
 ### 2. Set up Python environment
 python3 -m venv venv
