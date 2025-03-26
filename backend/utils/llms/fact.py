@@ -4,7 +4,7 @@ import database.memories as memories_db
 from database.auth import get_user_name
 from models.memories import Memory
 
-def get_prompt_facts(uid: str) -> str:
+def get_prompt_memories(uid: str) -> str:
     user_name, user_made_facts, generated_facts = get_prompt_data(uid)
     facts_str = f'you already know the following facts about {user_name}: \n{Memory.get_memories_as_str(generated_facts)}.'
     if user_made_facts:
