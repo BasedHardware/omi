@@ -8,14 +8,14 @@ import firebase_admin
 from scripts.rag._shared import *
 from database.auth import get_user_name
 from database._client import get_users_uid
-from models.facts import Fact, FactDB
+from models.memories import Memory, MemoryDB
 
 firebase_admin.initialize_app()
 
 
 def get_facts_from_memories(
-        memories: List[dict], uid: str, user_name: str, existing_facts: List[Fact]
-) -> List[Tuple[str, List[Fact]]]:
+        memories: List[dict], uid: str, user_name: str, existing_facts: List[Memory]
+) -> List[Tuple[str, List[Memory]]]:
     print('get_facts_from_memories', len(memories), user_name, len(existing_facts))
 
     # learning_facts = list(filter(lambda x: x.category == 'learnings', existing_facts))
@@ -23,7 +23,7 @@ def get_facts_from_memories(
 
     def execute(memory):
         data = Conversation(**memory)
-        new_facts = new_facts_extractor(uid, data.transcript_segments, user_name, Fact.get_facts_as_str(existing_facts))
+        new_facts = new_facts_extractor(uid, data.transcript_segments, user_name, Memory.get_memories_as_str(existing_facts))
         # new_learnings = new_learnings_extractor(
         #     uid, data.transcript_segments, user_name,
         #     Fact.get_facts_as_str(learning_facts)
@@ -49,7 +49,7 @@ def get_facts_from_memories(
         parsed_facts = []
         response += facts
         for fact in facts:
-            parsed_facts.append(FactDB.from_fact(fact, uid, memory['id'], memory['structured']['category'],False))
+            parsed_facts.append(MemoryDB.from_memory(fact, uid, memory['id'], memory['structured']['category'], False))
         memories_db.save_memories(uid, [fact.dict() for fact in parsed_facts])
 
     return response
@@ -92,13 +92,13 @@ def migration_fact_scoring_for_user(uid: str):
     offset = 0
     while True:
         facts_data = memories_db.get_non_filtered_memories(uid, limit=400, offset=offset)
-        facts = [FactDB(**d) for d in facts_data]
+        facts = [MemoryDB(**d) for d in facts_data]
         if not facts or len(facts) == 0:
             break
 
         print('execute_for_user', uid, 'found facts', len(facts))
         for fact in facts:
-            fact.scoring = FactDB.calculate_score(fact)
+            fact.scoring = MemoryDB.calculate_score(fact)
         memories_db.save_memories(uid, [fact.dict() for fact in facts])
         offset += len(facts)
 
