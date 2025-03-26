@@ -1,6 +1,7 @@
 import 'dart:async';
-// import 'dart:isolate';
+import 'dart:isolate';
 import 'dart:math';
+import 'dart:ui';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -91,15 +92,14 @@ class NotificationService {
     );
   }
 
-  // TODO: isolate!web
-  // Future<bool> requestNotificationPermissions() async {
-  //   bool isAllowed = await _awesomeNotifications.isNotificationAllowed();
-  //   if (!isAllowed) {
-  //     isAllowed = await _awesomeNotifications.requestPermissionToSendNotifications();
-  //     register();
-  //   }
-  //   return isAllowed;
-  // }
+  Future<bool> requestNotificationPermissions() async {
+    bool isAllowed = await _awesomeNotifications.isNotificationAllowed();
+    if (!isAllowed) {
+      isAllowed = await _awesomeNotifications.requestPermissionToSendNotifications();
+      register();
+    }
+    return isAllowed;
+  }
 
   // Whereever this method is awaited, it will cause the app to not move forwared in execution due to it being a method call.
   // This was also the culprit when we had the app freeze on splash screen.
@@ -210,41 +210,41 @@ class NotificationService {
 }
 
 class NotificationUtil {
-  // static ReceivePort? receivePort;
+  static ReceivePort? receivePort;
 
-  // static Future<void> initializeNotificationsEventListeners() async {
-  //   // Only after at least the action method is set, the notification events are delivered
-  //   AwesomeNotifications().setListeners(onActionReceivedMethod: NotificationUtil.onActionReceivedMethod);
-  // }
+  static Future<void> initializeNotificationsEventListeners() async {
+    // Only after at least the action method is set, the notification events are delivered
+    AwesomeNotifications().setListeners(onActionReceivedMethod: NotificationUtil.onActionReceivedMethod);
+  }
 
-  // static Future<void> initializeIsolateReceivePort() async {
-  //   receivePort = ReceivePort('Notification action port in main isolate');
-  //   receivePort!.listen((serializedData) {
-  //     final receivedAction = ReceivedAction().fromMap(serializedData);
-  //     onActionReceivedMethodImpl(receivedAction);
-  //   });
+  static Future<void> initializeIsolateReceivePort() async {
+    receivePort = ReceivePort('Notification action port in main isolate');
+    receivePort!.listen((serializedData) {
+      final receivedAction = ReceivedAction().fromMap(serializedData);
+      onActionReceivedMethodImpl(receivedAction);
+    });
 
-  //   // This initialization only happens on main isolate
-  //   IsolateNameServer.registerPortWithName(receivePort!.sendPort, 'notification_action_port');
-  // }
+    // This initialization only happens on main isolate
+    IsolateNameServer.registerPortWithName(receivePort!.sendPort, 'notification_action_port');
+  }
 
-  /// Use this method to detect when the user taps on a notification or action button
-  // @pragma("vm:entry-point")
-  // static Future<void> onActionReceivedMethod(ReceivedAction receivedAction) async {
-  //   if (receivePort != null) {
-  //     await onActionReceivedMethodImpl(receivedAction);
-  //   } else {
-  //     print(
-  //         'onActionReceivedMethod was called inside a parallel dart isolate, where receivePort was never initialized.');
-  //     SendPort? sendPort = IsolateNameServer.lookupPortByName('notification_action_port');
+  // / Use this method to detect when the user taps on a notification or action button
+  @pragma("vm:entry-point")
+  static Future<void> onActionReceivedMethod(ReceivedAction receivedAction) async {
+    if (receivePort != null) {
+      await onActionReceivedMethodImpl(receivedAction);
+    } else {
+      debugPrint(
+          'onActionReceivedMethod was called inside a parallel dart isolate, where receivePort was never initialized.');
+      SendPort? sendPort = IsolateNameServer.lookupPortByName('notification_action_port');
 
-  //     if (sendPort != null) {
-  //       print('Redirecting the execution to main isolate process in listening...');
-  //       dynamic serializedData = receivedAction.toMap();
-  //       sendPort.send(serializedData);
-  //     }
-  //   }
-  // }
+      if (sendPort != null) {
+        debugPrint('Redirecting the execution to main isolate process in listening...');
+        dynamic serializedData = receivedAction.toMap();
+        sendPort.send(serializedData);
+      }
+    }
+  }
 
   static Future<void> onActionReceivedMethodImpl(ReceivedAction receivedAction) async {
     if (receivedAction.payload == null || receivedAction.payload!.isEmpty) {

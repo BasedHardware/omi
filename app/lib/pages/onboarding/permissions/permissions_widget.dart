@@ -32,8 +32,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                     onChanged: (s) async {
                       if (s != null) {
                         if (s) {
-                          //TODO: flutter_foreground_task!web 
-                          // await provider.askForBackgroundPermissions();
+                          if(!ExecutionGuard.isWeb)await provider.askForBackgroundPermissions();
                         } else {
                           provider.updateBackgroundPermission(false);
                         }
@@ -123,8 +122,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
               onChanged: (s) async {
                 if (s != null) {
                   if (s) {
-                    //TODO: isolate!web
-                    // await provider.askForNotificationPermissions();
+                    if (!ExecutionGuard.isWeb) await provider.askForNotificationPermissions();
                   } else {
                     provider.updateNotificationPermission(false);
                   }
@@ -166,8 +164,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                               provider.setLoading(true);
                               if (ExecutionGuard.isAndroid) {
                                 if (!provider.hasBackgroundPermission) {
-                                  //TODO: flutter_foreground_task!web
-                                  // await provider.askForBackgroundPermissions();
+                                  if(!ExecutionGuard.isWeb) await provider.askForBackgroundPermissions();
                                 }
                               }
                               await Permission.notification.request().then(

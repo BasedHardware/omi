@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 // import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/preferences.dart';
@@ -11,9 +12,11 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/platform_check.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -105,20 +108,18 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     notifyListeners();
   }
 
-  //TODO: isolate!web
-  // Future askForNotificationPermissions() async {
-  //   var isAllowed = await NotificationService.instance.requestNotificationPermissions();
-  //   updateNotificationPermission(isAllowed);
-  //   notifyListeners();
-  // }
+  Future askForNotificationPermissions() async {
+    var isAllowed = await NotificationService.instance.requestNotificationPermissions();
+    updateNotificationPermission(isAllowed);
+    notifyListeners();
+  }
 
-  //TODO: flutter_foreground_task!web
-  // Future askForBackgroundPermissions() async { 
-  //   await FlutterForegroundTask.requestIgnoreBatteryOptimization();
-  //   var isAllowed = await ForegroundUtil().isIgnoringBatteryOptimizations;
-  //   updateBackgroundPermission(isAllowed);
-  //   notifyListeners();
-  // }
+  Future askForBackgroundPermissions() async { 
+    await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+    var isAllowed = await ForegroundUtil().isIgnoringBatteryOptimizations;
+    updateBackgroundPermission(isAllowed);
+    notifyListeners();
+  }
 
   Future<(bool, PermissionStatus)> askForLocationPermissions() async {
     if (await Permission.location.serviceStatus.isDisabled) {
@@ -298,4 +299,5 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   void onStatusChanged(DeviceServiceStatus status) {
     // TODO: implement onStatusChanged
   }
+
 }
