@@ -67,6 +67,7 @@ Start speaking, you'll see Real-time transcript on [webhook.site ](https://webho
 - [omi device](https://github.com/BasedHardware/omi/tree/main/omi)
 - [mobile app](https://github.com/BasedHardware/omi/tree/main/app)
 - [ai personas (web)](https://github.com/BasedHardware/omi/tree/main/personas-open-source)
+- [SDKs](sdks)
 
 ## Documentation:
 
@@ -76,7 +77,7 @@ Start speaking, you'll see Real-time transcript on [webhook.site ](https://webho
 - [Build the device](https://docs.omi.me/docs/assembly/Build_the_device/)
 - [Install firmware](https://docs.omi.me/docs/get_started/Flash_device/)
 - [Create your own app in 1 minute](https://docs.omi.me/docs/developer/apps/Introduction).
-- [SDKs](sdks/README.md/)
+
 
 ## Contributions
 
