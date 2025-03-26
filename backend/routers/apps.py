@@ -89,7 +89,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
                 else:
                     external_integration['is_instructions_url'] = False
 
-        # Acitons
+        # Actions
         if actions := external_integration.get('actions'):
             for action in actions:
                 if not action.get('action'):
@@ -511,8 +511,30 @@ def get_plugin_capabilities():
             {'title': 'Memory Creation', 'id': 'memory_creation'},
             {'title': 'Transcript Processed', 'id': 'transcript_processed'},
         ], 'actions': [
-            {'title': 'Create conversations', 'id': 'create_conversation', 'doc_url': 'https://docs.omi.me/docs/developer/apps/IntegrationActions'},
-            {'title': 'Create memories', 'id': 'create_facts', 'doc_url': 'https://docs.omi.me/docs/developer/apps/IntegrationActions'}
+            {
+                'title': 'Create conversations', 
+                'id': 'create_conversation', 
+                'doc_url': 'https://docs.omi.me/docs/developer/apps/Import',
+                'description': 'Extend user conversations by making a POST request to the OMI System.'
+            },
+            {
+                'title': 'Create memories', 
+                'id': 'create_facts', 
+                'doc_url': 'https://docs.omi.me/docs/developer/apps/Import',
+                'description': 'Create new memories for the user through the OMI System.'
+            },
+            {
+                'title': 'Read conversations', 
+                'id': 'read_conversations', 
+                'doc_url': 'https://docs.omi.me/docs/developer/apps/Import',
+                'description': 'Access and read all user conversations through the OMI System. This gives the app access to all conversation history.'
+            },
+            {
+                'title': 'Read memories', 
+                'id': 'read_memories', 
+                'doc_url': 'https://docs.omi.me/docs/developer/apps/Import',
+                'description': 'Access and read all user memories through the OMI System. This gives the app access to all stored memories.'
+            }
         ]},
         {'title': 'Notification', 'id': 'proactive_notification', 'scopes': [
             {'title': 'User Name', 'id': 'user_name'},
