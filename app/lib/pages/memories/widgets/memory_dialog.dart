@@ -103,7 +103,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
                     contentPadding: EdgeInsets.zero,
                     isDense: true,
                   ),
-                  onSubmitted: (value) => _saveFact(value),
+                  onSubmitted: (value) => _saveMemory(value),
                 ),
               ),
               if (widget.memory == null || !widget.memory!.manuallyAdded) ...[
@@ -213,17 +213,17 @@ class _MemoryDialogState extends State<MemoryDialog> {
     );
   }
 
-  void _saveFact(String value) {
+  void _saveMemory(String value) {
     if (value.trim().isNotEmpty) {
       if (widget.memory != null) {
         widget.provider.editMemory(widget.memory!, value);
         if (widget.memory!.visibility != selectedVisibility) {
           widget.provider.updateMemoryVisibility(widget.memory!, selectedVisibility);
         }
-        MixpanelManager().factsPageEditedFact();
+        MixpanelManager().memoriesPageEditedMemory();
       } else {
         widget.provider.createMemory(value, selectedVisibility);
-        MixpanelManager().factsPageCreatedFact(MemoryCategory.values.first);
+        MixpanelManager().memoriesPageCreatedMemory(MemoryCategory.values.first);
       }
       Navigator.pop(context);
     }

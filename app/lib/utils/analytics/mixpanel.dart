@@ -148,21 +148,21 @@ class MixpanelManager {
 
   void deviceDisconnected() => track('Device Disconnected');
 
-  void factsPageCategoryOpened(MemoryCategory category) =>
+  void memoriesPageCategoryOpened(MemoryCategory category) =>
       track('Fact Page Category Opened', properties: {'category': category.toString().split('.').last});
 
-  void factsPageDeletedFact(Memory memory) => track(
+  void memoriesPageDeletedMemory(Memory memory) => track(
         'Fact Page Deleted Fact',
         properties: {
           'fact_category': memory.category.toString().split('.').last,
         },
       );
 
-  void factsPageEditedFact() => track('Fact Page Edited Fact');
+  void memoriesPageEditedMemory() => track('Fact Page Edited Fact');
 
-  void factsPageCreateFactBtn() => track('Fact Page Create Fact Button Pressed');
+  void memoriesPageCreateMemoryBtn() => track('Fact Page Create Fact Button Pressed');
 
-  void factsPageCreatedFact(MemoryCategory category) =>
+  void memoriesPageCreatedMemory(MemoryCategory category) =>
       track('Fact Page Created Fact', properties: {'fact_category': category.toString().split('.').last});
 
   Map<String, dynamic> _getTranscriptProperties(String transcript) {

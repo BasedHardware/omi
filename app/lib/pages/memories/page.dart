@@ -31,9 +31,9 @@ class MemoriesPageState extends State<MemoriesPage> {
     () async {
       await context.read<MemoriesProvider>().init();
 
-      final unreviewedFacts = context.read<MemoriesProvider>().unreviewed;
-      if (unreviewedFacts.isNotEmpty) {
-        _showReviewSheet(unreviewedFacts);
+      final unreviewedMemories = context.read<MemoriesProvider>().unreviewed;
+      if (unreviewedMemories.isNotEmpty) {
+        _showReviewSheet(unreviewedMemories);
       }
     }.withPostFrameCallback();
     super.initState();
@@ -71,7 +71,7 @@ class MemoriesPageState extends State<MemoriesPage> {
                             icon: const Icon(Icons.add),
                             onPressed: () {
                               showMemoryDialog(context, provider);
-                              MixpanelManager().factsPageCreateFactBtn();
+                              MixpanelManager().memoriesPageCreateMemoryBtn();
                             },
                           ),
                         ],
