@@ -22,7 +22,7 @@ class MemoryItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Widget factWidget = GestureDetector(
+    final Widget memoryWidget = GestureDetector(
       onTap: () => onTap(context, memory, provider),
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
@@ -50,7 +50,7 @@ class MemoryItem extends StatelessWidget {
     );
 
     if (!showDismissible) {
-      return factWidget;
+      return memoryWidget;
     }
 
     return Dismissible(
@@ -62,7 +62,7 @@ class MemoryItem extends StatelessWidget {
       },
       onDismissed: (direction) {
         provider.deleteMemory(memory);
-        MixpanelManager().factsPageDeletedFact(memory);
+        MixpanelManager().memoriesPageDeletedMemory(memory);
       },
       background: Container(
         margin: const EdgeInsets.only(bottom: 8),
@@ -74,7 +74,7 @@ class MemoryItem extends StatelessWidget {
         padding: const EdgeInsets.only(right: 20),
         child: const Icon(Icons.delete_outline, color: Colors.white),
       ),
-      child: factWidget,
+      child: memoryWidget,
     );
   }
 

@@ -44,7 +44,7 @@ class CategoryMemoriesPage extends StatelessWidget {
               icon: const Icon(Icons.add),
               onPressed: () {
                 showMemoryDialog(context, provider);
-                MixpanelManager().factsPageCreateFactBtn();
+                MixpanelManager().memoriesPageCreateMemoryBtn();
               },
             ),
           ],
