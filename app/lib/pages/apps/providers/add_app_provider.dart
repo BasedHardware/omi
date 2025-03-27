@@ -454,6 +454,7 @@ class AddAppProvider extends ChangeNotifier {
           if (conversationPromptController.text.isEmpty) {
             AppSnackbar.showSnackbarError(
                 'Please enter a memory prompt for your app');
+
             return false;
           }
         }
