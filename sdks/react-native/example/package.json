@@ -10,10 +10,10 @@
   },
   "dependencies": {
     "@deepgram/sdk": "^3.11.3",
+    "@omiai/omi-react-native": "file:..",
     "expo": "^50.0.0",
     "expo-status-bar": "~1.11.0",
     "install": "^0.13.0",
-    "omi-react-native": "file:..",
     "react": "18.2.0",
     "react-native": "0.73.2",
     "react-native-ble-plx": "^3.1.2"
