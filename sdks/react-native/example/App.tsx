@@ -16,34 +16,34 @@ export default function App() {
   const [enableTranscription, setEnableTranscription] = useState<boolean>(false);
   const [deepgramApiKey, setDeepgramApiKey] = useState<string>('');
   const [transcription, setTranscription] = useState<string>('');
-  
+
   // Transcription processing state
   const websocketRef = useRef<WebSocket | null>(null);
   const isTranscribing = useRef<boolean>(false);
   const audioBufferRef = useRef<Uint8Array[]>([]);
   const processingIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   const omiConnection = useRef(new OmiConnection()).current;
   const stopScanRef = useRef<(() => void) | null>(null);
   const bleManagerRef = useRef<BleManager | null>(null);
   const audioSubscriptionRef = useRef<Subscription | null>(null);
-  
+
   useEffect(() => {
     // Initialize BLE Manager
     const manager = new BleManager();
     bleManagerRef.current = manager;
-    
+
     // Subscribe to state changes
     const subscription = manager.onStateChange((state) => {
       console.log('Bluetooth state:', state);
       setBluetoothState(state);
-      
+
       if (state === State.PoweredOn) {
         // Bluetooth is on, now we can request permission
         requestBluetoothPermission();
       }
     }, true); // true to check the initial state
-    
+
     return () => {
       // Clean up subscription and manager when component unmounts
       subscription.remove();
@@ -52,34 +52,28 @@ export default function App() {
       }
     };
   }, []);
-  
+
   const requestBluetoothPermission = async () => {
     try {
       if (Platform.OS === 'ios') {
-        // On iOS, the scan will trigger the permission dialog
-        const subscription = bleManagerRef.current?.onStateChange((state) => {
-          if (state === State.PoweredOn) {
-            bleManagerRef.current?.startDeviceScan(null, null, (error) => {
-              if (error) {
-                console.error('Permission error:', error);
-                setPermissionGranted(false);
-                Alert.alert(
-                  'Bluetooth Permission',
-                  'Please enable Bluetooth permission in your device settings to use this feature.',
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Open Settings', onPress: () => Linking.openSettings() }
-                  ]
-                );
-              } else {
-                setPermissionGranted(true);
-              }
-              // Stop scanning immediately after permission check
-              bleManagerRef.current?.stopDeviceScan();
-              subscription?.remove();
-            });
+        bleManagerRef.current?.startDeviceScan(null, null, (error) => {
+          if (error) {
+            console.error('Permission error:', error);
+            setPermissionGranted(false);
+            Alert.alert(
+              'Bluetooth Permission',
+              'Please enable Bluetooth permission in your device settings to use this feature.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Open Settings', onPress: () => Linking.openSettings() }
+              ]
+            );
+          } else {
+            setPermissionGranted(true);
           }
-        }, false);
+          // Stop scanning immediately after permission check
+          bleManagerRef.current?.stopDeviceScan();
+        });
       } else if (Platform.OS === 'android') {
         // On Android, we need to check for location and bluetooth permissions
         try {
@@ -127,15 +121,15 @@ export default function App() {
       );
       return;
     }
-    
+
     if (!permissionGranted) {
       requestBluetoothPermission();
       return;
     }
-    
+
     // Don't clear devices list, just start scanning
     setScanning(true);
-    
+
     stopScanRef.current = omiConnection.scanForDevices(
       (device) => {
         setDevices((prev) => {
@@ -148,13 +142,13 @@ export default function App() {
       },
       30000 // 30 seconds timeout
     );
-    
+
     // Auto-stop after 30 seconds
     setTimeout(() => {
       stopScan();
     }, 30000);
   };
-  
+
   const stopScan = () => {
     if (stopScanRef.current) {
       stopScanRef.current();
@@ -162,7 +156,7 @@ export default function App() {
     }
     setScanning(false);
   };
-  
+
   const connectToDevice = async (deviceId: string) => {
     try {
       // First check if we're already connected to a device
@@ -170,25 +164,25 @@ export default function App() {
         // Disconnect from the current device first
         await disconnectFromDevice();
       }
-      
+
       // Set connecting state
       setConnected(false);
-      
+
       const success = await omiConnection.connect(deviceId, (id, state) => {
         console.log(`Device ${id} connection state: ${state}`);
         const isConnected = state === 'connected';
         setConnected(isConnected);
-        
+
         if (!isConnected) {
           setCodec(null);
         }
       });
-      
+
       // Auto-stop scanning when connected successfully
       if (success && scanning) {
         stopScan();
       }
-      
+
       if (success) {
         setConnected(true);
       } else {
@@ -201,15 +195,15 @@ export default function App() {
       Alert.alert('Connection Error', String(error));
     }
   };
-  
+
   const disconnectFromDevice = async () => {
     try {
       // Stop audio listener if active
       if (isListeningAudio) {
         await stopAudioListener();
       }
-      
-      
+
+
       await omiConnection.disconnect();
       setConnected(false);
       setCodec(null);
@@ -218,19 +212,19 @@ export default function App() {
       console.error('Disconnect error:', error);
     }
   };
-  
+
   const startAudioListener = async () => {
     try {
       if (!connected || !omiConnection.isConnected()) {
         Alert.alert('Not Connected', 'Please connect to a device first');
         return;
       }
-      
+
       // Reset counter
       setAudioPacketsReceived(0);
-      
+
       console.log('Starting audio bytes listener...');
-      
+
       // Use a counter and timer to batch UI updates
       let packetCounter = 0;
       const updateInterval = setInterval(() => {
@@ -239,37 +233,37 @@ export default function App() {
           packetCounter = 0;
         }
       }, 500); // Update UI every 500ms
-      
+
       const subscription = await omiConnection.startAudioBytesListener((bytes) => {
         // Increment local counter instead of updating state directly
         packetCounter++;
-        
+
         // If transcription is enabled and active, add to buffer for WebSocket
         if (bytes.length > 0 && isTranscribing.current) {
           audioBufferRef.current.push(new Uint8Array(bytes));
         }
       });
-      
+
       // Store interval reference for cleanup
       updateIntervalRef.current = updateInterval;
-      
+
       if (subscription) {
         audioSubscriptionRef.current = subscription;
         updateIntervalRef.current = updateInterval;
         setIsListeningAudio(true);
-        
+
         // If transcription was active, stop it when audio listener stops
         if (isTranscribing.current) {
           if (websocketRef.current) {
             websocketRef.current.close();
             websocketRef.current = null;
           }
-          
+
           if (processingIntervalRef.current) {
             clearInterval(processingIntervalRef.current);
             processingIntervalRef.current = null;
           }
-          
+
           isTranscribing.current = false;
         }
       } else {
@@ -280,7 +274,7 @@ export default function App() {
       Alert.alert('Error', `Failed to start audio listener: ${error}`);
     }
   };
-  
+
   /**
    * Initialize WebSocket transcription service with Deepgram
    */
@@ -289,24 +283,24 @@ export default function App() {
       console.error('API key is required for transcription');
       return;
     }
-    
+
     try {
       // Close any existing connection
       if (websocketRef.current) {
         websocketRef.current.close();
         websocketRef.current = null;
       }
-      
+
       // Clear any existing processing interval
       if (processingIntervalRef.current) {
         clearInterval(processingIntervalRef.current);
         processingIntervalRef.current = null;
       }
-      
+
       // Reset audio buffer
       audioBufferRef.current = [];
       isTranscribing.current = false;
-      
+
       // Create a new WebSocket connection to Deepgram with configuration in URL params
       const params = new URLSearchParams({
         sample_rate: '16000',
@@ -319,17 +313,17 @@ export default function App() {
         punctuate: 'true',
         diarize: 'true'
       });
-      
+
       const ws = new WebSocket(`wss://api.deepgram.com/v1/listen?${params.toString()}`, [], {
         headers: {
           'Authorization': `Token ${deepgramApiKey}`
         }
       });
-      
+
       ws.onopen = () => {
         console.log('Deepgram WebSocket connection established');
         isTranscribing.current = true;
-        
+
         // Start processing interval to send accumulated audio
         processingIntervalRef.current = setInterval(() => {
           if (audioBufferRef.current.length > 0 && isTranscribing.current) {
@@ -337,16 +331,16 @@ export default function App() {
           }
         }, 250); // Send audio every 250ms
       };
-      
+
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
           console.log("Transcript received:", data);
-          
+
           // Check if we have a transcript
           if (data.channel?.alternatives?.[0]?.transcript) {
             const transcript = data.channel.alternatives[0].transcript.trim();
-            
+
             // Only update UI if we have actual text
             if (transcript) {
               setTranscription((prev) => {
@@ -355,18 +349,18 @@ export default function App() {
                 if (lines.length > 4) {
                   lines.shift();
                 }
-                
+
                 // Add new transcript with a timestamp
                 const now = new Date();
                 const timestamp = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-                
+
                 // Add speaker information if available
-                const speakerInfo = data.channel.alternatives[0].words?.[0]?.speaker 
-                  ? `[Speaker ${data.channel.alternatives[0].words[0].speaker}]` 
+                const speakerInfo = data.channel.alternatives[0].words?.[0]?.speaker
+                  ? `[Speaker ${data.channel.alternatives[0].words[0].speaker}]`
                   : '';
-                
+
                 lines.push(`[${timestamp}] ${speakerInfo} ${transcript}`);
-                
+
                 return lines.join('\n');
               });
             }
@@ -375,24 +369,24 @@ export default function App() {
           console.error('Error parsing WebSocket message:', error);
         }
       };
-      
+
       ws.onerror = (error) => {
         console.error('Deepgram WebSocket error:', error);
       };
-      
+
       ws.onclose = () => {
         console.log('Deepgram WebSocket connection closed');
         isTranscribing.current = false;
       };
-      
+
       websocketRef.current = ws;
       console.log('Deepgram WebSocket transcription initialized');
-      
+
     } catch (error) {
       console.error('Error initializing Deepgram WebSocket transcription:', error);
     }
   };
-  
+
   /**
    * Send accumulated audio buffer to Deepgram WebSocket
    */
@@ -400,7 +394,7 @@ export default function App() {
     if (!websocketRef.current || !isTranscribing.current || audioBufferRef.current.length === 0) {
       return;
     }
-    
+
     try {
       // Send each audio chunk individually to Deepgram
       // This is more efficient for streaming audio
@@ -409,18 +403,18 @@ export default function App() {
           websocketRef.current.send(chunk);
         }
       }
-      
+
       // Clear the buffer after sending
       audioBufferRef.current = [];
     } catch (error) {
       console.error('Error sending audio to Deepgram WebSocket:', error);
     }
   };
-  
-  
+
+
   // Store the update interval reference
   const updateIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   const stopAudioListener = async () => {
     try {
       // Clear the UI update interval
@@ -428,12 +422,12 @@ export default function App() {
         clearInterval(updateIntervalRef.current);
         updateIntervalRef.current = null;
       }
-      
+
       if (audioSubscriptionRef.current) {
         await omiConnection.stopAudioBytesListener(audioSubscriptionRef.current);
         audioSubscriptionRef.current = null;
         setIsListeningAudio(false);
-        
+
         // Disable transcription
         if (enableTranscription) {
           // Close WebSocket connection
@@ -441,7 +435,7 @@ export default function App() {
             websocketRef.current.close();
             websocketRef.current = null;
           }
-          
+
           // Clear processing interval
           if (processingIntervalRef.current) {
             clearInterval(processingIntervalRef.current);
@@ -454,20 +448,20 @@ export default function App() {
       Alert.alert('Error', `Failed to stop audio listener: ${error}`);
     }
   };
-  
+
   const getAudioCodec = async () => {
     try {
       if (!connected || !omiConnection.isConnected()) {
         Alert.alert('Not Connected', 'Please connect to a device first');
         return;
       }
-      
+
       try {
         const codecValue = await omiConnection.getAudioCodec();
         setCodec(codecValue);
       } catch (error) {
         console.error('Get codec error:', error);
-        
+
         // If we get a connection error, update the UI state
         if (String(error).includes('not connected')) {
           setConnected(false);
@@ -481,20 +475,20 @@ export default function App() {
       Alert.alert('Error', `An unexpected error occurred: ${error}`);
     }
   };
-  
+
   const getBatteryLevel = async () => {
     try {
       if (!connected || !omiConnection.isConnected()) {
         Alert.alert('Not Connected', 'Please connect to a device first');
         return;
       }
-      
+
       try {
         const level = await omiConnection.getBatteryLevel();
         setBatteryLevel(level);
       } catch (error) {
         console.error('Get battery level error:', error);
-        
+
         // If we get a connection error, update the UI state
         if (String(error).includes('not connected')) {
           setConnected(false);
@@ -513,18 +507,18 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>Omi SDK Example</Text>
-        
+
         {/* Bluetooth Status Banner */}
         {bluetoothState !== State.PoweredOn && (
           <View style={styles.statusBanner}>
             <Text style={styles.statusText}>
-              {bluetoothState === State.PoweredOff 
-                ? 'Bluetooth is turned off. Please enable Bluetooth to use this app.' 
+              {bluetoothState === State.PoweredOff
+                ? 'Bluetooth is turned off. Please enable Bluetooth to use this app.'
                 : bluetoothState === State.Unauthorized
-                ? 'Bluetooth permission not granted. Please allow Bluetooth access in settings.'
-                : 'Bluetooth is not available or initializing...'}
+                  ? 'Bluetooth permission not granted. Please allow Bluetooth access in settings.'
+                  : 'Bluetooth is not available or initializing...'}
             </Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.statusButton}
               onPress={() => {
                 if (bluetoothState === State.PoweredOff) {
@@ -540,17 +534,17 @@ export default function App() {
             </TouchableOpacity>
           </View>
         )}
-        
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Bluetooth Connection</Text>
-          <TouchableOpacity 
-            style={[styles.button, scanning ? styles.buttonWarning : null]} 
+          <TouchableOpacity
+            style={[styles.button, scanning ? styles.buttonWarning : null]}
             onPress={scanning ? stopScan : startScan}
           >
             <Text style={styles.buttonText}>{scanning ? "Stop Scan" : "Scan for Devices"}</Text>
           </TouchableOpacity>
         </View>
-        
+
         {devices.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Found Devices</Text>
@@ -562,15 +556,15 @@ export default function App() {
                     <Text style={styles.deviceInfo}>RSSI: {device.rssi} dBm</Text>
                   </View>
                   {connected && omiConnection.connectedDeviceId === device.id ? (
-                    <TouchableOpacity 
-                      style={[styles.button, styles.smallButton, styles.buttonDanger]} 
+                    <TouchableOpacity
+                      style={[styles.button, styles.smallButton, styles.buttonDanger]}
                       onPress={disconnectFromDevice}
                     >
                       <Text style={styles.buttonText}>Disconnect</Text>
                     </TouchableOpacity>
                   ) : (
-                    <TouchableOpacity 
-                      style={[styles.button, styles.smallButton, connected ? styles.buttonDisabled : null]} 
+                    <TouchableOpacity
+                      style={[styles.button, styles.smallButton, connected ? styles.buttonDisabled : null]}
                       onPress={() => connectToDevice(device.id)}
                       disabled={connected}
                     >
@@ -582,80 +576,80 @@ export default function App() {
             </View>
           </View>
         )}
-        
+
         {connected && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Device Functions</Text>
-            <TouchableOpacity 
-              style={styles.button} 
+            <TouchableOpacity
+              style={styles.button}
               onPress={getAudioCodec}
             >
               <Text style={styles.buttonText}>Get Audio Codec</Text>
             </TouchableOpacity>
-            
+
             {codec && (
               <View style={styles.codecContainer}>
                 <Text style={styles.codecTitle}>Current Audio Codec:</Text>
                 <Text style={styles.codecValue}>{codec}</Text>
               </View>
             )}
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={[
                 styles.button,
-                {marginTop: 15}
-              ]} 
+                { marginTop: 15 }
+              ]}
               onPress={getBatteryLevel}
             >
               <Text style={styles.buttonText}>Get Battery Level</Text>
             </TouchableOpacity>
-            
+
             {batteryLevel >= 0 && (
               <View style={styles.batteryContainer}>
                 <Text style={styles.batteryTitle}>Battery Level:</Text>
                 <View style={styles.batteryLevelContainer}>
-                  <View style={[styles.batteryLevelBar, {width: `${batteryLevel}%`}]} />
+                  <View style={[styles.batteryLevelBar, { width: `${batteryLevel}%` }]} />
                   <Text style={styles.batteryLevelText}>{batteryLevel}%</Text>
                 </View>
               </View>
             )}
-            
+
             <View style={styles.audioControls}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[
-                  styles.button, 
+                  styles.button,
                   isListeningAudio ? styles.buttonWarning : null,
-                  {marginTop: 15}
-                ]} 
+                  { marginTop: 15 }
+                ]}
                 onPress={isListeningAudio ? stopAudioListener : startAudioListener}
               >
                 <Text style={styles.buttonText}>
                   {isListeningAudio ? "Stop Audio Listener" : "Start Audio Listener"}
                 </Text>
               </TouchableOpacity>
-              
+
               {isListeningAudio && (
                 <View style={styles.audioStatsContainer}>
                   <Text style={styles.audioStatsTitle}>Audio Packets Received:</Text>
                   <Text style={styles.audioStatsValue}>{audioPacketsReceived}</Text>
                 </View>
               )}
-              
+
               <View style={styles.transcriptionContainer}>
                 <Text style={styles.sectionSubtitle}>Deepgram Transcription</Text>
-                
+
                 <View style={styles.checkboxContainer}>
                   <TouchableOpacity
                     style={[styles.checkbox, enableTranscription && styles.checkboxChecked]}
                     onPress={() => {
                       const newValue = !enableTranscription;
                       setEnableTranscription(newValue);
-                      
+
                       // If disabling, close any active connections
                       if (!newValue && websocketRef.current) {
                         websocketRef.current.close();
                         websocketRef.current = null;
-                        
+
                         if (processingIntervalRef.current) {
                           clearInterval(processingIntervalRef.current);
                           processingIntervalRef.current = null;
@@ -667,7 +661,7 @@ export default function App() {
                   </TouchableOpacity>
                   <Text style={styles.checkboxLabel}>Enable Transcription</Text>
                 </View>
-                
+
                 {enableTranscription && (
                   <View style={styles.inputContainer}>
                     <Text style={styles.inputLabel}>API Key:</Text>
@@ -682,16 +676,16 @@ export default function App() {
                     />
                   </View>
                 )}
-                
-                
+
+
                 {enableTranscription && (
                   <>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={[
-                        styles.button, 
+                        styles.button,
                         isTranscribing.current ? styles.buttonWarning : null,
-                        {marginTop: 15, marginBottom: 15}
-                      ]} 
+                        { marginTop: 15, marginBottom: 15 }
+                      ]}
                       onPress={() => {
                         if (isTranscribing.current) {
                           // Stop transcription
@@ -699,12 +693,12 @@ export default function App() {
                             websocketRef.current.close();
                             websocketRef.current = null;
                           }
-                          
+
                           if (processingIntervalRef.current) {
                             clearInterval(processingIntervalRef.current);
                             processingIntervalRef.current = null;
                           }
-                          
+
                           isTranscribing.current = false;
                         } else {
                           // Start transcription
@@ -712,12 +706,12 @@ export default function App() {
                             Alert.alert('API Key Required', 'Please enter your Deepgram API key to start transcription');
                             return;
                           }
-                          
+
                           if (!isListeningAudio) {
                             Alert.alert('Audio Required', 'Please start the audio listener first');
                             return;
                           }
-                          
+
                           initializeWebSocketTranscription();
                           setTranscription(''); // Clear previous transcription
                         }
@@ -728,7 +722,7 @@ export default function App() {
                         {isTranscribing.current ? "Stop Transcription" : "Start Transcription"}
                       </Text>
                     </TouchableOpacity>
-                    
+
                     {transcription && (
                       <View style={styles.transcriptionTextContainer}>
                         <Text style={styles.transcriptionTitle}>Transcription:</Text>
