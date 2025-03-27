@@ -11,6 +11,12 @@ export class OmiConnection {
   private bleManager: BleManager;
   private device: Device | null = null;
   private isConnecting: boolean = false;
+  private _connectedDeviceId: string | null = null;
+  
+  // Public getter for the connected device ID
+  get connectedDeviceId(): string | null {
+    return this._connectedDeviceId;
+  }
 
   constructor() {
     this.bleManager = new BleManager();
@@ -91,10 +97,12 @@ export class OmiConnection {
       await device.discoverAllServicesAndCharacteristics();
       
       this.device = device;
+      this._connectedDeviceId = deviceId;
       
       // Set up disconnection listener
       device.onDisconnected((_, disconnectedDevice) => {
         this.device = null;
+        this._connectedDeviceId = null;
         if (onConnectionStateChanged) {
           onConnectionStateChanged(
             disconnectedDevice.id,
@@ -123,6 +131,7 @@ export class OmiConnection {
     if (this.device) {
       await this.device.cancelConnection();
       this.device = null;
+      this._connectedDeviceId = null;
     }
   }
 

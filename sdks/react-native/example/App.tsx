@@ -1,10 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView, Alert, Platform, Linking, TextInput } from 'react-native';
-import { echo, OmiConnection, BleAudioCodec, OmiDevice } from 'omi-react-native';
+import { OmiConnection, BleAudioCodec, OmiDevice } from 'omi-react-native';
 import { BleManager, State, Subscription } from 'react-native-ble-plx';
 
 export default function App() {
-  const [response, setResponse] = useState<string | null>(null);
   const [devices, setDevices] = useState<OmiDevice[]>([]);
   const [scanning, setScanning] = useState(false);
   const [connected, setConnected] = useState(false);
@@ -113,10 +112,6 @@ export default function App() {
     }
   };
 
-  const handlePress = () => {
-    const result = echo('Hello Omi!');
-    setResponse(result);
-  };
 
   const startScan = () => {
     // Check if Bluetooth is on and permission is granted
@@ -137,7 +132,7 @@ export default function App() {
       return;
     }
     
-    setDevices([]);
+    // Don't clear devices list, just start scanning
     setScanning(true);
     
     stopScanRef.current = omiConnection.scanForDevices(
@@ -188,9 +183,13 @@ export default function App() {
         }
       });
       
+      // Auto-stop scanning when connected successfully
+      if (success && scanning) {
+        stopScan();
+      }
+      
       if (success) {
         setConnected(true);
-        Alert.alert('Connected', 'Successfully connected to device');
       } else {
         setConnected(false);
         Alert.alert('Connection Failed', 'Could not connect to device');
@@ -270,8 +269,6 @@ export default function App() {
           
           isTranscribing.current = false;
         }
-        
-        Alert.alert('Success', 'Started listening for audio bytes');
       } else {
         Alert.alert('Error', 'Failed to start audio listener');
       }
@@ -465,7 +462,6 @@ export default function App() {
       try {
         const codecValue = await omiConnection.getAudioCodec();
         setCodec(codecValue);
-        Alert.alert('Audio Codec', `Current codec: ${codecValue}`);
       } catch (error) {
         console.error('Get codec error:', error);
         
@@ -516,23 +512,6 @@ export default function App() {
         )}
         
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Echo Test</Text>
-          <TouchableOpacity 
-            style={styles.button} 
-            onPress={handlePress}
-          >
-            <Text style={styles.buttonText}>Say Hello</Text>
-          </TouchableOpacity>
-          
-          {response && (
-            <View style={styles.responseContainer}>
-              <Text style={styles.responseTitle}>Response:</Text>
-              <Text style={styles.responseText}>{response}</Text>
-            </View>
-          )}
-        </View>
-        
-        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Bluetooth Connection</Text>
           <TouchableOpacity 
             style={[styles.button, scanning ? styles.buttonWarning : null]} 
@@ -540,15 +519,6 @@ export default function App() {
           >
             <Text style={styles.buttonText}>{scanning ? "Stop Scan" : "Scan for Devices"}</Text>
           </TouchableOpacity>
-          
-          {connected && (
-            <TouchableOpacity 
-              style={[styles.button, styles.buttonDanger, {marginTop: 10}]} 
-              onPress={disconnectFromDevice}
-            >
-              <Text style={styles.buttonText}>Disconnect</Text>
-            </TouchableOpacity>
-          )}
         </View>
         
         {devices.length > 0 && (
@@ -561,13 +531,22 @@ export default function App() {
                     <Text style={styles.deviceName}>{device.name}</Text>
                     <Text style={styles.deviceInfo}>RSSI: {device.rssi} dBm</Text>
                   </View>
-                  <TouchableOpacity 
-                    style={[styles.button, styles.smallButton, connected ? styles.buttonDisabled : null]} 
-                    onPress={() => connectToDevice(device.id)}
-                    disabled={connected}
-                  >
-                    <Text style={styles.buttonText}>Connect</Text>
-                  </TouchableOpacity>
+                  {connected && omiConnection.connectedDeviceId === device.id ? (
+                    <TouchableOpacity 
+                      style={[styles.button, styles.smallButton, styles.buttonDanger]} 
+                      onPress={disconnectFromDevice}
+                    >
+                      <Text style={styles.buttonText}>Disconnect</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity 
+                      style={[styles.button, styles.smallButton, connected ? styles.buttonDisabled : null]} 
+                      onPress={() => connectToDevice(device.id)}
+                      disabled={connected}
+                    >
+                      <Text style={styles.buttonText}>Connect</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               ))}
             </View>
