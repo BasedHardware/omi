@@ -166,8 +166,9 @@ app/lib/env/prod_env.g.dart
 /docs/.docusaurus
 
 # Additional Expo/React Native specific ignores
- .expo/
- sdks/react-native/example/.expo/
+ .expo/*
+ sdks/react-native/example/.expo/*
+ sdks/react-native/lib/
  web-build/
  *.orig.*
  .metro-health-check*
@@ -176,3 +177,4 @@ app/lib/env/prod_env.g.dart
  .watchmanconfig
  web-report/
  .metro-cache/
+.aider*

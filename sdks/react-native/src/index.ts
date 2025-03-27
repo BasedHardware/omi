@@ -12,27 +12,7 @@ export const echo = (word: string): string => {
   return `Hello from Omi SDK! You said: ${word}`;
 };
 
-/**
- * Omi device interface
- */
-export interface OmiDevice {
-  id: string;
-  name: string;
-  rssi: number;
-}
-
-/**
- * Scan for Omi devices
- * @returns Promise that resolves to an array of Omi devices
- */
-export function scanForDevices(): Promise<OmiDevice[]> {
-  // This is a placeholder implementation
-  // In a real implementation, this would use the native module to scan for devices
-  return Promise.resolve([
-    {
-      id: 'demo-device-1',
-      name: 'Omi Device',
-      rssi: -65,
-    },
-  ]);
-}
+// Export types and classes
+export { OmiConnection } from './OmiConnection';
+export { BleAudioCodec, DeviceConnectionState } from './types';
+export type { OmiDevice } from './types';
