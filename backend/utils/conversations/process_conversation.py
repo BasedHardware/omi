@@ -24,7 +24,7 @@ from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps, update_personas_async, sync_update_persona_prompt
 from utils.llm import obtain_emotional_message, retrieve_metadata_fields_from_transcript, \
     summarize_open_glass, get_transcript_structure, generate_embedding, \
-    get_plugin_result, should_discard_conversation, summarize_experience_text, new_facts_extractor, \
+    get_plugin_result, should_discard_conversation, summarize_experience_text, new_memories_extractor, \
     trends_extractor, get_email_structure, get_post_structure, get_message_structure, \
     retrieve_metadata_from_email, retrieve_metadata_from_post, retrieve_metadata_from_message, \
     retrieve_metadata_from_text, \
@@ -146,7 +146,7 @@ def _extract_facts(uid: str, conversation: Conversation):
             new_facts = extract_memories_from_text(uid, text_content, text_source)
     else:
         # For regular conversations with transcript segments
-        new_facts = new_facts_extractor(uid, conversation.transcript_segments)
+        new_facts = new_memories_extractor(uid, conversation.transcript_segments)
 
     parsed_facts = []
     for fact in new_facts:

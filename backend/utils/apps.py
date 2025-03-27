@@ -379,7 +379,7 @@ def get_omi_personas_by_uid(uid: str):
 
 
 async def generate_persona_prompt(uid: str, persona: dict):
-    """Generate a persona prompt based on user facts and conversations."""
+    """Generate a persona prompt based on user memories and conversations."""
 
     print(f"generate_persona_prompt {uid}")
 
@@ -460,10 +460,10 @@ async def generate_persona_prompt(uid: str, persona: dict):
 
 
 def generate_persona_desc(uid: str, persona_name: str):
-    """Generate a persona description based on user facts."""
-    facts = get_memories(uid, limit=250)
+    """Generate a persona description based on user memories."""
+    memories = get_memories(uid, limit=250)
 
-    persona_description = generate_persona_description(facts, persona_name)
+    persona_description = generate_persona_description(memories, persona_name)
     return persona_description
 
 
@@ -497,14 +497,14 @@ def sync_update_persona_prompt(persona: dict):
 
 
 async def update_persona_prompt(persona: dict):
-    """Update a persona's chat prompt with latest facts and conversations."""
+    """Update a persona's chat prompt with latest memories and conversations."""
     # Get latest memories and user info
-    facts = get_user_public_memories(persona['uid'], limit=250)
+    memories = get_user_public_memories(persona['uid'], limit=250)
     user_name = get_user_name(persona['uid'])
 
     # Get and condense recent conversations
-    memories = get_conversations(persona['uid'], limit=100)
-    conversation_history = Conversation.conversations_to_string(memories)
+    conversations = get_conversations(persona['uid'], limit=100)
+    conversation_history = Conversation.conversations_to_string(conversations)
     conversation_history = condense_conversations([conversation_history])
 
     condensed_tweets = None
@@ -516,7 +516,7 @@ async def update_persona_prompt(persona: dict):
         condensed_tweets = condense_tweets(tweets, persona['name'])
 
     # Condense memories
-    facts_text = condense_memories([fact['content'] for fact in facts if not fact['deleted']], user_name)
+    memories_text = condense_memories([memory['content'] for memory in memories if not memory['deleted']], user_name)
 
     # Generate updated chat prompt
     persona_prompt = f"""
@@ -563,7 +563,7 @@ You have:
 You have all the necessary condensed facts and contextual knowledge. Begin personifying {user_name} now.
 
 Personal Facts and Context:
-{facts_text}
+{memories_text}
 
 Recent Conversations:
 {conversation_history}

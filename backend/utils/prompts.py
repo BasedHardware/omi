@@ -71,7 +71,7 @@ extract_memories_prompt = ChatPromptTemplate.from_messages([
     '''.replace('    ', '').strip()
 ])
 
-extract_facts_text_content_prompt = ChatPromptTemplate.from_messages([
+extract_memories_text_content_prompt = ChatPromptTemplate.from_messages([
     '''
     You are an expert at extracting both (1) new facts about {user_name} and (2) new learnings or insights relevant to {user_name}.
 
@@ -165,7 +165,7 @@ extract_facts_text_content_prompt = ChatPromptTemplate.from_messages([
 ])
 
 
-extract_facts_text_content_prompt_v1 = ChatPromptTemplate.from_messages([
+extract_memories_text_content_prompt_v1 = ChatPromptTemplate.from_messages([
     '''
     You are an expert fact extractor. Your task is to analyze the {text_source} content and extract important facts about {user_name}.
 

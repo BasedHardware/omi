@@ -1,5 +1,5 @@
 import database.memories as memories_db
-from utils.llm import new_facts_extractor, new_learnings_extractor
+from utils.llm import new_memories_extractor, new_learnings_extractor
 import threading
 from typing import Tuple
 
@@ -13,59 +13,59 @@ from models.memories import Memory, MemoryDB
 firebase_admin.initialize_app()
 
 
-def get_facts_from_memories(
-        memories: List[dict], uid: str, user_name: str, existing_facts: List[Memory]
+def get_memories_from_conversations(
+        conversations: List[dict], uid: str, user_name: str, existing_memories: List[Memory]
 ) -> List[Tuple[str, List[Memory]]]:
-    print('get_facts_from_memories', len(memories), user_name, len(existing_facts))
+    print('get_memories_from_conversations', len(conversations), user_name, len(existing_memories))
 
     # learning_facts = list(filter(lambda x: x.category == 'learnings', existing_facts))
-    all_facts = {}
+    all_memories = {}
 
-    def execute(memory):
-        data = Conversation(**memory)
-        new_facts = new_facts_extractor(uid, data.transcript_segments, user_name, Memory.get_memories_as_str(existing_facts))
+    def execute(conversation):
+        data = Conversation(**conversation)
+        new_memories = new_memories_extractor(uid, data.transcript_segments, user_name, Memory.get_memories_as_str(existing_memories))
         # new_learnings = new_learnings_extractor(
         #     uid, data.transcript_segments, user_name,
         #     Fact.get_facts_as_str(learning_facts)
         # )
         # print('Found', len(new_facts), 'new facts and', len(new_learnings), 'new learnings')
         # new_facts += new_learnings
-        if not new_facts:
+        if not new_memories:
             return
-        all_facts[memory['id']] = new_facts
+        all_memories[conversation['id']] = new_memories
 
     threads = []
-    for memory in memories:
-        t = threading.Thread(target=execute, args=(memory,))
+    for conversation in conversations:
+        t = threading.Thread(target=execute, args=(conversation,))
         threads.append(t)
 
     [t.start() for t in threads]
     [t.join() for t in threads]
 
     response = []
-    for key, value in all_facts.items():
-        memory_id, facts = key, value
-        memory = next((m for m in memories if m['id'] == memory_id), None)
-        parsed_facts = []
-        response += facts
-        for fact in facts:
-            parsed_facts.append(MemoryDB.from_memory(fact, uid, memory['id'], memory['structured']['category'], False))
-        memories_db.save_memories(uid, [fact.dict() for fact in parsed_facts])
+    for key, value in all_memories.items():
+        conversation_id, memories = key, value
+        conversation = next((m for m in conversations if m['id'] == conversation_id), None)
+        parsed_memories = []
+        response += memories
+        for memory in memories:
+            parsed_memories.append(MemoryDB.from_memory(memory, uid, conversation['id'], conversation['structured']['category'], False))
+        memories_db.save_memories(uid, [memory.dict() for memory in parsed_memories])
 
     return response
 
 
 def execute_for_user(uid: str):
     memories_db.delete_memories(uid)
-    print('execute_for_user', uid, 'deleted facts')
-    memories = conversations_db.get_conversations(uid, limit=2000)
-    print('execute_for_user', uid, 'found conversations', len(memories))
+    print('execute_for_user', uid, 'deleted memories')
+    conversations = conversations_db.get_conversations(uid, limit=2000)
+    print('execute_for_user', uid, 'found conversations', len(conversations))
     user_name = get_user_name(uid)
-    facts = []
+    memories = []
     chunk_size = 10
-    for i in range(0, len(memories), chunk_size):
-        new_facts = get_facts_from_memories(memories[i:i + chunk_size], uid, user_name, facts)
-        facts += new_facts
+    for i in range(0, len(conversations), chunk_size):
+        new_memories = get_memories_from_conversations(conversations[i:i + chunk_size], uid, user_name, memories)
+        memories += new_memories
 
 
 def script_migrate_users():
