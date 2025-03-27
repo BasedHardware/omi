@@ -1,9 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView, Alert, Platform, Linking, TextInput } from 'react-native';
-import { echo, OmiConnection } from 'omi-react-native';
+import { OmiConnection } from 'omi-react-native';
 import { BleManager, State } from 'react-native-ble-plx';
 export default function App() {
-    const [response, setResponse] = useState(null);
     const [devices, setDevices] = useState([]);
     const [scanning, setScanning] = useState(false);
     const [connected, setConnected] = useState(false);
@@ -101,10 +100,6 @@ export default function App() {
             setPermissionGranted(false);
         }
     };
-    const handlePress = () => {
-        const result = echo('Hello Omi!');
-        setResponse(result);
-    };
     const startScan = () => {
         // Check if Bluetooth is on and permission is granted
         if (bluetoothState !== State.PoweredOn) {
@@ -118,7 +113,7 @@ export default function App() {
             requestBluetoothPermission();
             return;
         }
-        setDevices([]);
+        // Don't clear devices list, just start scanning
         setScanning(true);
         stopScanRef.current = omiConnection.scanForDevices((device) => {
             setDevices((prev) => {
@@ -159,9 +154,12 @@ export default function App() {
                     setCodec(null);
                 }
             });
+            // Auto-stop scanning when connected successfully
+            if (success && scanning) {
+                stopScan();
+            }
             if (success) {
                 setConnected(true);
-                Alert.alert('Connected', 'Successfully connected to device');
             }
             else {
                 setConnected(false);
@@ -208,8 +206,8 @@ export default function App() {
             const subscription = await omiConnection.startAudioBytesListener((bytes) => {
                 // Increment local counter instead of updating state directly
                 packetCounter++;
-                // If transcription is enabled, add to buffer for WebSocket
-                if (enableTranscription && deepgramApiKey && bytes.length > 0 && isTranscribing.current) {
+                // If transcription is enabled and active, add to buffer for WebSocket
+                if (bytes.length > 0 && isTranscribing.current) {
                     audioBufferRef.current.push(new Uint8Array(bytes));
                 }
             });
@@ -219,13 +217,18 @@ export default function App() {
                 audioSubscriptionRef.current = subscription;
                 updateIntervalRef.current = updateInterval;
                 setIsListeningAudio(true);
-                // Configure transcription if enabled
-                if (enableTranscription && deepgramApiKey) {
-                    // Initialize WebSocket transcription
-                    initializeWebSocketTranscription();
-                    setTranscription(''); // Clear previous transcription
+                // If transcription was active, stop it when audio listener stops
+                if (isTranscribing.current) {
+                    if (websocketRef.current) {
+                        websocketRef.current.close();
+                        websocketRef.current = null;
+                    }
+                    if (processingIntervalRef.current) {
+                        clearInterval(processingIntervalRef.current);
+                        processingIntervalRef.current = null;
+                    }
+                    isTranscribing.current = false;
                 }
-                Alert.alert('Success', 'Started listening for audio bytes');
             }
             else {
                 Alert.alert('Error', 'Failed to start audio listener');
@@ -258,26 +261,25 @@ export default function App() {
             // Reset audio buffer
             audioBufferRef.current = [];
             isTranscribing.current = false;
-            // Create a new WebSocket connection to Deepgram with Authorization header
-            const ws = new WebSocket('wss://api.deepgram.com/v1/listen', [], {
+            // Create a new WebSocket connection to Deepgram with configuration in URL params
+            const params = new URLSearchParams({
+                sample_rate: '16000',
+                encoding: 'opus',
+                channels: '1',
+                model: 'nova-2',
+                language: 'en-US',
+                smart_format: 'true',
+                interim_results: 'false',
+                punctuate: 'true',
+                diarize: 'true'
+            });
+            const ws = new WebSocket(`wss://api.deepgram.com/v1/listen?${params.toString()}`, [], {
                 headers: {
                     'Authorization': `Token ${deepgramApiKey}`
                 }
             });
             ws.onopen = () => {
                 console.log('Deepgram WebSocket connection established');
-                // Send configuration message
-                ws.send(JSON.stringify({
-                    sample_rate: 16000,
-                    encoding: 'opus',
-                    channels: 1,
-                    model: 'nova-2',
-                    language: 'en-US',
-                    smart_format: true,
-                    interim_results: false,
-                    punctuate: true,
-                    diarize: true
-                }));
                 isTranscribing.current = true;
                 // Start processing interval to send accumulated audio
                 processingIntervalRef.current = setInterval(() => {
@@ -396,7 +398,6 @@ export default function App() {
             try {
                 const codecValue = await omiConnection.getAudioCodec();
                 setCodec(codecValue);
-                Alert.alert('Audio Codec', `Current codec: ${codecValue}`);
             }
             catch (error) {
                 console.error('Get codec error:', error);
@@ -434,18 +435,9 @@ export default function App() {
                     } },
                     React.createElement(Text, { style: styles.statusButtonText }, bluetoothState === State.PoweredOff ? 'Open Settings' : 'Request Permission')))),
             React.createElement(View, { style: styles.section },
-                React.createElement(Text, { style: styles.sectionTitle }, "Echo Test"),
-                React.createElement(TouchableOpacity, { style: styles.button, onPress: handlePress },
-                    React.createElement(Text, { style: styles.buttonText }, "Say Hello")),
-                response && (React.createElement(View, { style: styles.responseContainer },
-                    React.createElement(Text, { style: styles.responseTitle }, "Response:"),
-                    React.createElement(Text, { style: styles.responseText }, response)))),
-            React.createElement(View, { style: styles.section },
                 React.createElement(Text, { style: styles.sectionTitle }, "Bluetooth Connection"),
                 React.createElement(TouchableOpacity, { style: [styles.button, scanning ? styles.buttonWarning : null], onPress: scanning ? stopScan : startScan },
-                    React.createElement(Text, { style: styles.buttonText }, scanning ? "Stop Scan" : "Scan for Devices")),
-                connected && (React.createElement(TouchableOpacity, { style: [styles.button, styles.buttonDanger, { marginTop: 10 }], onPress: disconnectFromDevice },
-                    React.createElement(Text, { style: styles.buttonText }, "Disconnect")))),
+                    React.createElement(Text, { style: styles.buttonText }, scanning ? "Stop Scan" : "Scan for Devices"))),
             devices.length > 0 && (React.createElement(View, { style: styles.section },
                 React.createElement(Text, { style: styles.sectionTitle }, "Found Devices"),
                 React.createElement(View, { style: styles.deviceList }, devices.map((device) => (React.createElement(View, { key: device.id, style: styles.deviceItem },
@@ -455,8 +447,9 @@ export default function App() {
                             "RSSI: ",
                             device.rssi,
                             " dBm")),
-                    React.createElement(TouchableOpacity, { style: [styles.button, styles.smallButton, connected ? styles.buttonDisabled : null], onPress: () => connectToDevice(device.id), disabled: connected },
-                        React.createElement(Text, { style: styles.buttonText }, "Connect")))))))),
+                    connected && omiConnection.connectedDeviceId === device.id ? (React.createElement(TouchableOpacity, { style: [styles.button, styles.smallButton, styles.buttonDanger], onPress: disconnectFromDevice },
+                        React.createElement(Text, { style: styles.buttonText }, "Disconnect"))) : (React.createElement(TouchableOpacity, { style: [styles.button, styles.smallButton, connected ? styles.buttonDisabled : null], onPress: () => connectToDevice(device.id), disabled: connected },
+                        React.createElement(Text, { style: styles.buttonText }, "Connect"))))))))),
             connected && (React.createElement(View, { style: styles.section },
                 React.createElement(Text, { style: styles.sectionTitle }, "Device Functions"),
                 React.createElement(TouchableOpacity, { style: styles.button, onPress: getAudioCodec },
@@ -476,38 +469,62 @@ export default function App() {
                         React.createElement(Text, { style: styles.audioStatsValue }, audioPacketsReceived))),
                     React.createElement(View, { style: styles.transcriptionContainer },
                         React.createElement(Text, { style: styles.sectionSubtitle }, "Deepgram Transcription"),
-                        React.createElement(View, { style: styles.inputContainer },
-                            React.createElement(Text, { style: styles.inputLabel }, "API Key:"),
-                            React.createElement(TextInput, { style: styles.apiKeyInput, value: deepgramApiKey, onChangeText: (text) => {
-                                    setDeepgramApiKey(text);
-                                }, placeholder: "Enter Deepgram API Key", secureTextEntry: true })),
                         React.createElement(View, { style: styles.checkboxContainer },
                             React.createElement(TouchableOpacity, { style: [styles.checkbox, enableTranscription && styles.checkboxChecked], onPress: () => {
                                     const newValue = !enableTranscription;
                                     setEnableTranscription(newValue);
-                                    // Configure transcription when toggled
-                                    if (connected && isListeningAudio) {
-                                        if (newValue) {
-                                            initializeWebSocketTranscription();
-                                        }
-                                        else {
-                                            // Close WebSocket connection
-                                            if (websocketRef.current) {
-                                                websocketRef.current.close();
-                                                websocketRef.current = null;
-                                            }
-                                            // Clear processing interval
-                                            if (processingIntervalRef.current) {
-                                                clearInterval(processingIntervalRef.current);
-                                                processingIntervalRef.current = null;
-                                            }
+                                    // If disabling, close any active connections
+                                    if (!newValue && websocketRef.current) {
+                                        websocketRef.current.close();
+                                        websocketRef.current = null;
+                                        if (processingIntervalRef.current) {
+                                            clearInterval(processingIntervalRef.current);
+                                            processingIntervalRef.current = null;
                                         }
                                     }
                                 } }, enableTranscription && React.createElement(Text, { style: styles.checkmark }, "\u2713")),
                             React.createElement(Text, { style: styles.checkboxLabel }, "Enable Transcription")),
-                        transcription && (React.createElement(View, { style: styles.transcriptionTextContainer },
-                            React.createElement(Text, { style: styles.transcriptionTitle }, "Transcription:"),
-                            React.createElement(Text, { style: styles.transcriptionText }, transcription))))))))));
+                        enableTranscription && (React.createElement(View, { style: styles.inputContainer },
+                            React.createElement(Text, { style: styles.inputLabel }, "API Key:"),
+                            React.createElement(TextInput, { style: styles.apiKeyInput, value: deepgramApiKey, onChangeText: (text) => {
+                                    setDeepgramApiKey(text);
+                                }, placeholder: "Enter Deepgram API Key", secureTextEntry: true }))),
+                        enableTranscription && (React.createElement(React.Fragment, null,
+                            React.createElement(TouchableOpacity, { style: [
+                                    styles.button,
+                                    isTranscribing.current ? styles.buttonWarning : null,
+                                    { marginTop: 15, marginBottom: 15 }
+                                ], onPress: () => {
+                                    if (isTranscribing.current) {
+                                        // Stop transcription
+                                        if (websocketRef.current) {
+                                            websocketRef.current.close();
+                                            websocketRef.current = null;
+                                        }
+                                        if (processingIntervalRef.current) {
+                                            clearInterval(processingIntervalRef.current);
+                                            processingIntervalRef.current = null;
+                                        }
+                                        isTranscribing.current = false;
+                                    }
+                                    else {
+                                        // Start transcription
+                                        if (!deepgramApiKey) {
+                                            Alert.alert('API Key Required', 'Please enter your Deepgram API key to start transcription');
+                                            return;
+                                        }
+                                        if (!isListeningAudio) {
+                                            Alert.alert('Audio Required', 'Please start the audio listener first');
+                                            return;
+                                        }
+                                        initializeWebSocketTranscription();
+                                        setTranscription(''); // Clear previous transcription
+                                    }
+                                }, disabled: !isListeningAudio },
+                                React.createElement(Text, { style: styles.buttonText }, isTranscribing.current ? "Stop Transcription" : "Start Transcription")),
+                            transcription && (React.createElement(View, { style: styles.transcriptionTextContainer },
+                                React.createElement(Text, { style: styles.transcriptionTitle }, "Transcription:"),
+                                React.createElement(Text, { style: styles.transcriptionText }, transcription))))))))))));
 }
 const styles = StyleSheet.create({
     container: {

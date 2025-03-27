@@ -33,6 +33,9 @@ export interface OmiNativeModule {
   startAudioBytesNotifications(deviceId: string): Promise<void>;
   stopAudioBytesNotifications(deviceId: string): Promise<void>;
   
+  // Battery methods
+  getBatteryLevel(deviceId: string): Promise<number>;
+  
   // Scanning methods
   startScan(): Promise<void>;
   stopScan(): Promise<void>;

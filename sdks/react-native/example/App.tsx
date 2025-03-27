@@ -12,6 +12,7 @@ export default function App() {
   const [permissionGranted, setPermissionGranted] = useState<boolean>(false);
   const [isListeningAudio, setIsListeningAudio] = useState<boolean>(false);
   const [audioPacketsReceived, setAudioPacketsReceived] = useState<number>(0);
+  const [batteryLevel, setBatteryLevel] = useState<number>(-1);
   const [enableTranscription, setEnableTranscription] = useState<boolean>(false);
   const [deepgramApiKey, setDeepgramApiKey] = useState<string>('');
   const [transcription, setTranscription] = useState<string>('');
@@ -208,9 +209,11 @@ export default function App() {
         await stopAudioListener();
       }
       
+      
       await omiConnection.disconnect();
       setConnected(false);
       setCodec(null);
+      setBatteryLevel(-1);
     } catch (error) {
       console.error('Disconnect error:', error);
     }
@@ -478,6 +481,33 @@ export default function App() {
       Alert.alert('Error', `An unexpected error occurred: ${error}`);
     }
   };
+  
+  const getBatteryLevel = async () => {
+    try {
+      if (!connected || !omiConnection.isConnected()) {
+        Alert.alert('Not Connected', 'Please connect to a device first');
+        return;
+      }
+      
+      try {
+        const level = await omiConnection.getBatteryLevel();
+        setBatteryLevel(level);
+      } catch (error) {
+        console.error('Get battery level error:', error);
+        
+        // If we get a connection error, update the UI state
+        if (String(error).includes('not connected')) {
+          setConnected(false);
+          Alert.alert('Connection Lost', 'The device appears to be disconnected. Please reconnect and try again.');
+        } else {
+          Alert.alert('Error', `Failed to get battery level: ${error}`);
+        }
+      }
+    } catch (error) {
+      console.error('Unexpected error:', error);
+      Alert.alert('Error', `An unexpected error occurred: ${error}`);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -567,6 +597,26 @@ export default function App() {
               <View style={styles.codecContainer}>
                 <Text style={styles.codecTitle}>Current Audio Codec:</Text>
                 <Text style={styles.codecValue}>{codec}</Text>
+              </View>
+            )}
+            
+            <TouchableOpacity 
+              style={[
+                styles.button,
+                {marginTop: 15}
+              ]} 
+              onPress={getBatteryLevel}
+            >
+              <Text style={styles.buttonText}>Get Battery Level</Text>
+            </TouchableOpacity>
+            
+            {batteryLevel >= 0 && (
+              <View style={styles.batteryContainer}>
+                <Text style={styles.batteryTitle}>Battery Level:</Text>
+                <View style={styles.batteryLevelContainer}>
+                  <View style={[styles.batteryLevelBar, {width: `${batteryLevel}%`}]} />
+                  <Text style={styles.batteryLevelText}>{batteryLevel}%</Text>
+                </View>
               </View>
             )}
             
@@ -866,6 +916,46 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FF9500',
     marginTop: 5,
+  },
+  batteryContainer: {
+    marginTop: 15,
+    padding: 12,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    alignItems: 'center',
+    borderLeftWidth: 4,
+    borderLeftColor: '#4CD964',
+  },
+  batteryTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#555',
+  },
+  batteryLevelContainer: {
+    width: '100%',
+    height: 24,
+    backgroundColor: '#e0e0e0',
+    borderRadius: 12,
+    marginTop: 8,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  batteryLevelBar: {
+    height: '100%',
+    backgroundColor: '#4CD964',
+    borderRadius: 12,
+    position: 'absolute',
+    left: 0,
+    top: 0,
+  },
+  batteryLevelText: {
+    position: 'absolute',
+    width: '100%',
+    textAlign: 'center',
+    lineHeight: 24,
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#333',
   },
   transcriptionContainer: {
     marginTop: 20,
