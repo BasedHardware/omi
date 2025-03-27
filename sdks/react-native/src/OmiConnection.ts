@@ -24,7 +24,6 @@ export class OmiConnection {
     onDeviceFound: (device: OmiDevice) => void,
     timeoutMs: number = 10000
   ): () => void {
-    console.log("thinh:yo");
     this.bleManager.startDeviceScan(
       null,
       null,
@@ -33,9 +32,6 @@ export class OmiConnection {
           console.error('Scan error:', error);
           return;
         }
-
-        console.log("thinh:hey");
-
         if (device && device.name) {
           onDeviceFound({
             id: device.id,

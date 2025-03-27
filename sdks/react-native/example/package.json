@@ -15,7 +15,7 @@
     "omi-react-native": "file:..",
     "react": "18.2.0",
     "react-native": "0.73.2",
-    "react-native-ble-plx": "^2.0.3"
+    "react-native-ble-plx": "^3.1.2"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
