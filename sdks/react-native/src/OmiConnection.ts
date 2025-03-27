@@ -416,7 +416,7 @@ export class OmiConnection {
         // Decode base64 to get the first byte
         const bytes = this.base64ToBytes(base64Value);
         if (bytes.length > 0) {
-          return bytes[0]; // Battery level is a percentage (0-100)
+          return bytes[0] || -1; // Battery level is a percentage (0-100), use -1 if undefined
         }
       }
 
