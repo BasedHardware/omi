@@ -5,11 +5,9 @@
   "scripts": {
     "start": "expo start",
     "android": "expo run:android --device",
-    "ios": "expo run:ios --device",
-    "web": "expo start --web"
+    "ios": "expo run:ios --device"
   },
   "dependencies": {
-    "@deepgram/sdk": "^3.11.3",
     "expo": "^50.0.0",
     "expo-status-bar": "~1.11.0",
     "install": "^0.13.0",
