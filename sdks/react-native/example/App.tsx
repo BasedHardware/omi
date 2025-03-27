@@ -1,6 +1,7 @@
-import React, { useState, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView, Alert, Platform } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView, Alert, Platform, Linking } from 'react-native';
 import { echo, OmiConnection, BleAudioCodec, OmiDevice } from 'omi-react-native';
+import { BleManager, State } from 'react-native-ble-plx';
 
 export default function App() {
   const [response, setResponse] = useState<string | null>(null);
@@ -8,9 +9,97 @@ export default function App() {
   const [scanning, setScanning] = useState(false);
   const [connected, setConnected] = useState(false);
   const [codec, setCodec] = useState<BleAudioCodec | null>(null);
+  const [bluetoothState, setBluetoothState] = useState<State>(State.Unknown);
+  const [permissionGranted, setPermissionGranted] = useState<boolean>(false);
   
   const omiConnection = useRef(new OmiConnection()).current;
   const stopScanRef = useRef<(() => void) | null>(null);
+  const bleManagerRef = useRef<BleManager | null>(null);
+  
+  useEffect(() => {
+    // Initialize BLE Manager
+    const manager = new BleManager();
+    bleManagerRef.current = manager;
+    
+    // Subscribe to state changes
+    const subscription = manager.onStateChange((state) => {
+      console.log('Bluetooth state:', state);
+      setBluetoothState(state);
+      
+      if (state === State.PoweredOn) {
+        // Bluetooth is on, now we can request permission
+        requestBluetoothPermission();
+      }
+    }, true); // true to check the initial state
+    
+    return () => {
+      // Clean up subscription and manager when component unmounts
+      subscription.remove();
+      if (bleManagerRef.current) {
+        bleManagerRef.current.destroy();
+      }
+    };
+  }, []);
+  
+  const requestBluetoothPermission = async () => {
+    try {
+      if (Platform.OS === 'ios') {
+        // On iOS, the scan will trigger the permission dialog
+        const subscription = bleManagerRef.current?.onStateChange((state) => {
+          if (state === State.PoweredOn) {
+            bleManagerRef.current?.startDeviceScan(null, null, (error) => {
+              if (error) {
+                console.error('Permission error:', error);
+                setPermissionGranted(false);
+                Alert.alert(
+                  'Bluetooth Permission',
+                  'Please enable Bluetooth permission in your device settings to use this feature.',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Open Settings', onPress: () => Linking.openSettings() }
+                  ]
+                );
+              } else {
+                setPermissionGranted(true);
+              }
+              // Stop scanning immediately after permission check
+              bleManagerRef.current?.stopDeviceScan();
+              subscription?.remove();
+            });
+          }
+        }, false);
+      } else if (Platform.OS === 'android') {
+        // On Android, we need to check for location and bluetooth permissions
+        try {
+          // This will trigger the permission dialog
+          await bleManagerRef.current?.startDeviceScan(null, null, (error) => {
+            if (error) {
+              console.error('Permission error:', error);
+              setPermissionGranted(false);
+              Alert.alert(
+                'Bluetooth Permission',
+                'Please enable Bluetooth and Location permissions in your device settings to use this feature.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Open Settings', onPress: () => Linking.openSettings() }
+                ]
+              );
+            } else {
+              setPermissionGranted(true);
+            }
+            // Stop scanning immediately after permission check
+            bleManagerRef.current?.stopDeviceScan();
+          });
+        } catch (error) {
+          console.error('Error requesting permissions:', error);
+          setPermissionGranted(false);
+        }
+      }
+    } catch (error) {
+      console.error('Error in requestBluetoothPermission:', error);
+      setPermissionGranted(false);
+    }
+  };
 
   const handlePress = () => {
     const result = echo('Hello Omi!');
@@ -18,6 +107,24 @@ export default function App() {
   };
 
   const startScan = () => {
+    // Check if Bluetooth is on and permission is granted
+    if (bluetoothState !== State.PoweredOn) {
+      Alert.alert(
+        'Bluetooth is Off',
+        'Please turn on Bluetooth to scan for devices.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => Linking.openSettings() }
+        ]
+      );
+      return;
+    }
+    
+    if (!permissionGranted) {
+      requestBluetoothPermission();
+      return;
+    }
+    
     setDevices([]);
     setScanning(true);
     
@@ -31,10 +138,10 @@ export default function App() {
           return [...prev, device];
         });
       },
-      30000 // 10 seconds timeout
+      30000 // 30 seconds timeout
     );
     
-    // Auto-stop after 10 seconds
+    // Auto-stop after 30 seconds
     setTimeout(() => {
       stopScan();
     }, 30000);
@@ -100,6 +207,33 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>Omi SDK Example</Text>
+        
+        {/* Bluetooth Status Banner */}
+        {bluetoothState !== State.PoweredOn && (
+          <View style={styles.statusBanner}>
+            <Text style={styles.statusText}>
+              {bluetoothState === State.PoweredOff 
+                ? 'Bluetooth is turned off. Please enable Bluetooth to use this app.' 
+                : bluetoothState === State.Unauthorized
+                ? 'Bluetooth permission not granted. Please allow Bluetooth access in settings.'
+                : 'Bluetooth is not available or initializing...'}
+            </Text>
+            <TouchableOpacity 
+              style={styles.statusButton}
+              onPress={() => {
+                if (bluetoothState === State.PoweredOff) {
+                  Linking.openSettings();
+                } else if (bluetoothState === State.Unauthorized) {
+                  requestBluetoothPermission();
+                }
+              }}
+            >
+              <Text style={styles.statusButtonText}>
+                {bluetoothState === State.PoweredOff ? 'Open Settings' : 'Request Permission'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
         
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Echo Test</Text>
@@ -187,6 +321,33 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+  },
+  statusBanner: {
+    backgroundColor: '#FF9500',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 15,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  statusText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
+    marginRight: 10,
+  },
+  statusButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  statusButtonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 12,
   },
   content: {
     padding: 20,
