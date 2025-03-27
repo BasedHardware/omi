@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView, Alert, Platform, Linking, TextInput } from 'react-native';
-import { OmiConnection, BleAudioCodec, OmiDevice } from 'omi-react-native';
+import { OmiConnection, BleAudioCodec, OmiDevice } from '@omiai/omi-react-native';
 import { BleManager, State, Subscription } from 'react-native-ble-plx';
 
 export default function App() {
