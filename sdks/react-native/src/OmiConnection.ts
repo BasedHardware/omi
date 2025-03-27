@@ -1,9 +1,11 @@
-import { BleManager, Device } from 'react-native-ble-plx';
+import { BleManager, Device, Subscription } from 'react-native-ble-plx';
 import { DeviceConnectionState, BleAudioCodec, OmiDevice } from './types';
+import { Platform } from 'react-native';
 
 // Service and characteristic UUIDs
 const OMI_SERVICE_UUID = '19b10000-e8f2-537e-4f6c-d104768a1214';
 const AUDIO_CODEC_CHARACTERISTIC_UUID = '19b10002-e8f2-537e-4f6c-d104768a1214';
+const AUDIO_DATA_STREAM_CHARACTERISTIC_UUID = '19b10001-e8f2-537e-4f6c-d104768a1214';
 
 export class OmiConnection {
   private bleManager: BleManager;
@@ -74,8 +76,16 @@ export class OmiConnection {
     this.isConnecting = true;
 
     try {
-      // Connect to the device
-      const device = await this.bleManager.connectToDevice(deviceId);
+      // Connect to the device with MTU request for Android
+      const connectionOptions = Platform.OS === 'android' 
+        ? { requestMTU: 512 } 
+        : undefined;
+      
+      const device = await this.bleManager.connectToDevice(deviceId, connectionOptions);
+      
+      if (Platform.OS === 'android') {
+        console.log('Requested MTU size of 512 during connection');
+      }
       
       // Discover services and characteristics
       await device.discoverAllServicesAndCharacteristics();
@@ -240,6 +250,106 @@ export class OmiConnection {
     } catch (error) {
       console.error('Error getting audio codec:', error);
       return BleAudioCodec.PCM8; // Default codec on error
+    }
+  }
+
+  /**
+   * Start listening for audio bytes from the device
+   * @param onAudioBytesReceived Callback function that receives audio bytes
+   * @returns Promise that resolves with a subscription that can be used to stop listening
+   */
+  async startAudioBytesListener(
+    onAudioBytesReceived: (bytes: number[]) => void
+  ): Promise<Subscription | null> {
+    if (!this.device) {
+      throw new Error('Device not connected');
+    }
+
+    try {
+      // Get the Omi service
+      const services = await this.device.services();
+      const omiService = services.find(
+        (service) => service.uuid.toLowerCase() === OMI_SERVICE_UUID.toLowerCase()
+      );
+
+      if (!omiService) {
+        console.error('Omi service not found');
+        return null;
+      }
+
+      // Get the audio data stream characteristic
+      const characteristics = await omiService.characteristics();
+      const audioDataStreamCharacteristic = characteristics.find(
+        (char) => char.uuid.toLowerCase() === AUDIO_DATA_STREAM_CHARACTERISTIC_UUID.toLowerCase()
+      );
+
+      if (!audioDataStreamCharacteristic) {
+        console.error('Audio data stream characteristic not found');
+        return null;
+      }
+
+      try {
+        console.log('Setting up audio bytes notification for characteristic:', 
+          audioDataStreamCharacteristic.uuid);
+        
+        // First try to read the characteristic to ensure it's accessible
+        try {
+          const initialValue = await audioDataStreamCharacteristic.read();
+          console.log('Initial audio characteristic value length:', initialValue?.value?.length || 0);
+        } catch (readError) {
+          console.log('Could not read initial value, continuing anyway:', readError);
+        }
+        
+        // Set up the monitor - this automatically enables notifications
+        const subscription = audioDataStreamCharacteristic.monitor((error, characteristic) => {
+          if (error) {
+            console.error('Audio data stream notification error:', error);
+            return;
+          }
+
+          console.log('Received audio data notification');
+          if (characteristic?.value) {
+            const base64Value = characteristic.value;
+            console.log('Received base64 value of length:', base64Value.length);
+            
+            try {
+              const bytes = this.base64ToBytes(base64Value);
+              console.log('Decoded bytes length:', bytes.length);
+              
+              if (bytes.length > 0) {
+                // Convert Uint8Array to number[]
+                const byteArray = Array.from(bytes);
+                onAudioBytesReceived(byteArray);
+              }
+            } catch (decodeError) {
+              console.error('Error decoding base64 data:', decodeError);
+            }
+          } else {
+            console.log('Received notification but no value');
+          }
+        });
+
+        console.log('Subscribed to audio bytes stream from Omi Device');
+        
+        // Return the subscription so it can be used to stop listening
+        return subscription;
+      } catch (e) {
+        console.error('Error subscribing to audio data stream:', e);
+        return null;
+      }
+    } catch (error) {
+      console.error('Error starting audio bytes listener:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Stop listening for audio bytes
+   * @param subscription The subscription returned by startAudioBytesListener
+   */
+  async stopAudioBytesListener(subscription: Subscription): Promise<void> {
+    if (subscription) {
+      subscription.remove();
     }
   }
 }
