@@ -9,14 +9,14 @@ const AUDIO_DATA_STREAM_CHARACTERISTIC_UUID = '19b10001-e8f2-537e-4f6c-d104768a1
 
 // Battery service UUIDs
 const BATTERY_SERVICE_UUID = '0000180f-0000-1000-8000-00805f9b34fb';
- const BATTERY_LEVEL_CHARACTERISTIC_UUID = '00002a19-0000-1000-8000-00805f9b34fb';
+const BATTERY_LEVEL_CHARACTERISTIC_UUID = '00002a19-0000-1000-8000-00805f9b34fb';
 
 export class OmiConnection {
   private bleManager: BleManager;
   private device: Device | null = null;
   private isConnecting: boolean = false;
   private _connectedDeviceId: string | null = null;
-  
+
   // Public getter for the connected device ID
   get connectedDeviceId(): string | null {
     return this._connectedDeviceId;
@@ -87,22 +87,22 @@ export class OmiConnection {
 
     try {
       // Connect to the device with MTU request for Android
-      const connectionOptions = Platform.OS === 'android' 
-        ? { requestMTU: 512 } 
+      const connectionOptions = Platform.OS === 'android'
+        ? { requestMTU: 512 }
         : undefined;
-      
+
       const device = await this.bleManager.connectToDevice(deviceId, connectionOptions);
-      
+
       if (Platform.OS === 'android') {
         console.log('Requested MTU size of 512 during connection');
       }
-      
+
       // Discover services and characteristics
       await device.discoverAllServicesAndCharacteristics();
-      
+
       this.device = device;
       this._connectedDeviceId = deviceId;
-      
+
       // Set up disconnection listener
       device.onDisconnected((_, disconnectedDevice) => {
         this.device = null;
@@ -159,7 +159,7 @@ export class OmiConnection {
     for (let i = 0; i < chars.length; i++) {
       lookup[chars.charCodeAt(i)] = i;
     }
-    
+
     const len = base64.length;
     let bufferLength = base64.length * 0.75;
     if (base64[len - 1] === '=') {
@@ -168,21 +168,21 @@ export class OmiConnection {
         bufferLength--;
       }
     }
-    
+
     const bytes = new Uint8Array(bufferLength);
-    
+
     let p = 0;
     let encoded1: number = 0;
     let encoded2: number = 0;
     let encoded3: number = 0;
     let encoded4: number = 0;
-    
+
     for (let i = 0; i < len; i += 4) {
       encoded1 = lookup[base64.charCodeAt(i)] || 0;
       encoded2 = lookup[base64.charCodeAt(i + 1)] || 0;
       encoded3 = lookup[base64.charCodeAt(i + 2)] || 0;
       encoded4 = lookup[base64.charCodeAt(i + 3)] || 0;
-      
+
       bytes[p++] = (encoded1 << 2) | (encoded2 >> 4);
       if (encoded3 !== 64) {
         bytes[p++] = ((encoded2 & 15) << 4) | (encoded3 >> 2);
@@ -191,7 +191,7 @@ export class OmiConnection {
         bytes[p++] = ((encoded3 & 3) << 6) | encoded4;
       }
     }
-    
+
     return bytes;
   }
 
@@ -234,7 +234,7 @@ export class OmiConnection {
       // Read the codec value
       const codecValue = await codecCharacteristic.read();
       const base64Value = codecValue.value || '';
-      
+
       if (base64Value) {
         // Decode base64 to get the first byte
         const bytes = this.base64ToBytes(base64Value);
@@ -306,9 +306,9 @@ export class OmiConnection {
       }
 
       try {
-        console.log('Setting up audio bytes notification for characteristic:', 
+        console.log('Setting up audio bytes notification for characteristic:',
           audioDataStreamCharacteristic.uuid);
-        
+
         // First try to read the characteristic to ensure it's accessible
         try {
           const initialValue = await audioDataStreamCharacteristic.read();
@@ -316,7 +316,7 @@ export class OmiConnection {
         } catch (readError) {
           console.log('Could not read initial value, continuing anyway:', readError);
         }
-        
+
         // Set up the monitor - this automatically enables notifications
         const subscription = audioDataStreamCharacteristic.monitor((error, characteristic) => {
           if (error) {
@@ -328,21 +328,21 @@ export class OmiConnection {
           if (characteristic?.value) {
             const base64Value = characteristic.value;
             // console.log('Received base64 value of length:', base64Value.length);
-            
+
             try {
               const bytes = this.base64ToBytes(base64Value);
               // console.log('Decoded bytes length:', bytes.length);
-              
+
               if (bytes.length > 0) {
                 // Convert Uint8Array to number[]
                 const byteArray = Array.from(bytes);
-                
+
                 // Trim the first 3 bytes (header) as seen in the Flutter implementation
                 const trimmedBytes = byteArray.length > 3 ? byteArray.slice(3) : byteArray;
-                
+
                 // Send to callback
                 onAudioBytesReceived(trimmedBytes);
-                
+
               }
             } catch (decodeError) {
               console.error('Error decoding base64 data:', decodeError);
@@ -353,7 +353,7 @@ export class OmiConnection {
         });
 
         console.log('Subscribed to audio bytes stream from Omi Device');
-        
+
         // Return the subscription so it can be used to stop listening
         return subscription;
       } catch (e) {
@@ -411,12 +411,12 @@ export class OmiConnection {
       // Read the battery level value
       const batteryValue = await batteryLevelCharacteristic.read();
       const base64Value = batteryValue.value || '';
-      
+
       if (base64Value) {
         // Decode base64 to get the first byte
         const bytes = this.base64ToBytes(base64Value);
         if (bytes.length > 0) {
-          return bytes[0]; // Battery level is a percentage (0-100)
+          return bytes[0] || -1; // Battery level is a percentage (0-100), use -1 if undefined
         }
       }
 
