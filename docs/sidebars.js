@@ -68,6 +68,7 @@ const sidebars = {
           type: 'category',
           label: 'SDK',
           items: [
+             'developer/sdk/sdk',
             'developer/sdk/python',
            'developer/sdk/swift'
           ]
