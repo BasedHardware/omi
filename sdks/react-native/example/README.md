@@ -13,7 +13,7 @@ This is a comprehensive example application demonstrating how to use the Omi SDK
 
 ## Prerequisites
 
-- React Native development environment
+- React Native development environment with Expo
 - An Omi device for testing
 - (Optional) Deepgram API key for transcription features
 
@@ -29,26 +29,32 @@ npm install
 yarn install
 ```
 
-3. For iOS, install pods:
-
-```bash
-cd ios
-pod install
-cd ..
-```
-
 ## Running the Example
 
-### iOS
+This example uses Expo, which simplifies the development process.
+
+### Start the development server
 
 ```bash
-npx react-native run-ios
+npm start
+# or
+yarn start
 ```
 
-### Android
+### Run on iOS device
 
 ```bash
-npx react-native run-android
+npm run ios
+# or
+yarn ios
+```
+
+### Run on Android device
+
+```bash
+npm run android
+# or
+yarn android
 ```
 
 ## Usage Guide
