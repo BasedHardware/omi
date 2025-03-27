@@ -17,23 +17,52 @@ A React Native SDK for connecting to and interacting with Omi devices via Blueto
 - Monitor battery levels
 - Handle connection state changes
 
+## Prerequisites
+
+- React Native development environment with Expo
+- An Omi device for testing
+- (Optional) Deepgram API key for transcription features
+
 ## Installation
 
-```bash
-npm install @omi/react-native-sdk
-# or
-yarn add @omi/react-native-sdk
-```
-
-### Dependencies
-
-This SDK relies on [react-native-ble-plx](https://github.com/Polidea/react-native-ble-plx) for BLE communication.
+1. Clone the repository
+2. Install dependencies:
 
 ```bash
-npm install react-native-ble-plx
+cd sdks/react-native/example
+npm install
 # or
-yarn add react-native-ble-plx
+yarn install
 ```
+
+## Running the Example
+
+This example uses Expo, which simplifies the development process.
+
+### Start the development server
+
+```bash
+npm start
+# or
+yarn start
+```
+
+### Run on iOS device
+
+```bash
+npm run ios
+# or
+yarn ios
+```
+
+### Run on Android device
+
+```bash
+npm run android
+# or
+yarn android
+```
+
 
 For iOS, you'll need to add the following to your `Info.plist`:
 
