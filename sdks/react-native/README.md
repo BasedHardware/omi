@@ -10,8 +10,65 @@ A React Native SDK for connecting to and interacting with Omi devices via Blueto
 - Stream audio data from the device
 - Monitor battery levels
 - Handle connection state changes
+- Real-time audio transcription using Deepgram
 
-## Installation
+## Development Setup
+
+### Prerequisites
+
+- Node.js and npm installed
+- Xcode (for iOS development)
+- Android Studio (for Android development)
+- CocoaPods (for iOS development)
+
+### Installation
+
+1. Clone the repository and navigate to the react-native directory:
+```bash
+cd sdks/react-native
+```
+
+2. Install dependencies:
+```bash
+npm install
+```
+
+3. Navigate to the example app directory and install its dependencies:
+```bash
+cd example
+npm install
+```
+
+4. For iOS development, install CocoaPods dependencies:
+```bash
+cd ios
+pod install
+```
+
+Note: The `pod install` step is crucial and must not be skipped for iOS development. Without it, the app will fail to build with native module errors.
+
+### Running the Example App
+
+#### iOS
+1. Make sure you've completed all installation steps above
+2. Open the example app's workspace in Xcode:
+```bash
+cd example/ios
+open OmiSDKExample.xcworkspace  # Do NOT open the .xcodeproj file
+```
+3. Select your target device (Note: Bluetooth functionality is not available in simulators)
+4. Build and run the project
+
+#### Android
+1. Connect your Android device via USB
+2. Enable USB debugging on your device
+3. Run the app:
+```bash
+cd example
+npm run android
+```
+
+## Installation in Your Project
 
 ```bash
 npm install @omiai/omi-react-native
@@ -29,7 +86,15 @@ npm install react-native-ble-plx
 yarn add react-native-ble-plx
 ```
 
-For iOS, you'll need to add the following to your `Info.plist`:
+After installing the dependencies, for iOS projects you MUST run:
+```bash
+cd ios
+pod install
+```
+
+### Platform-Specific Setup
+
+For iOS, add the following to your `Info.plist`:
 
 ```xml
 <key>NSBluetoothAlwaysUsageDescription</key>
@@ -194,19 +259,33 @@ enum BleAudioCodec {
 
 ### Common Issues
 
-1. **Device not found during scanning**
+1. **Build fails with native module errors on iOS**
+   - Ensure you've run `pod install` in the ios directory
+   - Try cleaning the build folder in Xcode (Product → Clean Build Folder)
+   - Make sure you're opening the `.xcworkspace` file, not the `.xcodeproj` file
+
+2. **Device not found during scanning**
    - Ensure Bluetooth is enabled on your device
    - Check that you have the necessary permissions
    - Make sure the Omi device is powered on and in range
+   - Note: Bluetooth scanning does not work in iOS simulators, use a physical device
 
-2. **Connection fails**
+3. **Connection fails**
    - Try restarting the Omi device
    - Ensure the device is not connected to another application
    - Check battery level of the Omi device
 
-3. **Audio data not received**
+4. **Audio data not received**
    - Verify that the device supports the audio service
    - Check that you're properly handling the audio bytes in your callback
+
+5. **Transcription not working**
+   - Ensure you have a valid Deepgram API key
+   - Check that the audio listener is started before enabling transcription
+   - Verify your internet connection is stable
+
+6. **Keyboard overlaps input fields**
+   - The example app includes padding at the bottom of the ScrollView to ensure input fields remain visible when the keyboard is open
 
 ## License
 

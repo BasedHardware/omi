@@ -775,6 +775,7 @@ const styles = StyleSheet.create({
   content: {
     padding: 20,
     paddingTop: Platform.OS === 'android' ? 40 : 0,
+    paddingBottom: 200,
   },
   title: {
     fontSize: 24,
