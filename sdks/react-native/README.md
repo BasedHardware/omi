@@ -185,8 +185,6 @@ enum DeviceConnectionState {
 enum BleAudioCodec {
   PCM16 = 'pcm16',
   PCM8 = 'pcm8',
-  MULAW16 = 'mulaw16',
-  MULAW8 = 'mulaw8',
   OPUS = 'opus',
   UNKNOWN = 'unknown'
 }
