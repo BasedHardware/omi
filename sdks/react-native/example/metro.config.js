@@ -1,15 +1,4 @@
 const path = require('path');
-
-module.exports = {
-    watchFolders: [
-        path.resolve(__dirname, '../'),
-    ],
-    resolver: {
-        extraNodeModules: {
-            'omi-react-native': path.resolve(__dirname, '../'),
-        },
-    },
-};
 const { getDefaultConfig } = require('expo/metro-config');
 
 // Find the project and workspace directories
@@ -33,6 +22,7 @@ config.resolver.disableHierarchicalLookup = true;
 // 4. Extra modules to include in the bundle
 config.resolver.extraNodeModules = {
   'omi-react-native': path.resolve(workspaceRoot),
+  'base-64': path.resolve(projectRoot, 'node_modules/base-64'),
 };
 
 module.exports = config;
