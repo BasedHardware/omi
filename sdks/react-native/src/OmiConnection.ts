@@ -7,6 +7,10 @@ const OMI_SERVICE_UUID = '19b10000-e8f2-537e-4f6c-d104768a1214';
 const AUDIO_CODEC_CHARACTERISTIC_UUID = '19b10002-e8f2-537e-4f6c-d104768a1214';
 const AUDIO_DATA_STREAM_CHARACTERISTIC_UUID = '19b10001-e8f2-537e-4f6c-d104768a1214';
 
+// Battery service UUIDs
+const BATTERY_SERVICE_UUID = '0000180f-0000-1000-8000-00805f9b34fb';
+ const BATTERY_LEVEL_CHARACTERISTIC_UUID = '00002a19-0000-1000-8000-00805f9b34fb';
+
 export class OmiConnection {
   private bleManager: BleManager;
   private device: Device | null = null;
@@ -371,4 +375,56 @@ export class OmiConnection {
       subscription.remove();
     }
   }
+
+  /**
+   * Get the current battery level from the device
+   * @returns Promise that resolves with the battery level percentage (0-100)
+   */
+  async getBatteryLevel(): Promise<number> {
+    if (!this.device) {
+      throw new Error('Device not connected');
+    }
+
+    try {
+      // Get the Battery service
+      const services = await this.device.services();
+      const batteryService = services.find(
+        (service) => service.uuid.toLowerCase() === BATTERY_SERVICE_UUID.toLowerCase()
+      );
+
+      if (!batteryService) {
+        console.error('Battery service not found');
+        return -1;
+      }
+
+      // Get the battery level characteristic
+      const characteristics = await batteryService.characteristics();
+      const batteryLevelCharacteristic = characteristics.find(
+        (char) => char.uuid.toLowerCase() === BATTERY_LEVEL_CHARACTERISTIC_UUID.toLowerCase()
+      );
+
+      if (!batteryLevelCharacteristic) {
+        console.error('Battery level characteristic not found');
+        return -1;
+      }
+
+      // Read the battery level value
+      const batteryValue = await batteryLevelCharacteristic.read();
+      const base64Value = batteryValue.value || '';
+      
+      if (base64Value) {
+        // Decode base64 to get the first byte
+        const bytes = this.base64ToBytes(base64Value);
+        if (bytes.length > 0) {
+          return bytes[0]; // Battery level is a percentage (0-100)
+        }
+      }
+
+      return -1;
+    } catch (error) {
+      console.error('Error getting battery level:', error);
+      return -1;
+    }
+  }
+
 }
