@@ -11,8 +11,8 @@ import database.apps as apps_db
 import utils.apps as apps_utils
 from utils.apps import verify_api_key
 import database.redis_db as redis_db
-import database.facts as facts_db
-from models.facts import FactDB
+import database.memories as memory_db
+from models.memories import MemoryDB
 from database.redis_db import get_enabled_plugins, r as redis_client
 import database.notifications as notification_db
 import models.integrations as integration_models
@@ -249,7 +249,7 @@ async def get_memories_via_integration(
     if not apps_utils.app_has_action(app, 'read_memories'):
         raise HTTPException(status_code=403, detail="App does not have the capability to read memories")
 
-    facts = facts_db.get_facts(uid, limit=limit, offset=offset)
+    facts = memory_db.get_memories(uid, limit=limit, offset=offset)
     memory_items = [integration_models.MemoryItem(**fact) for fact in facts]
 
     return {"memories": memory_items}
