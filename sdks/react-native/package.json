@@ -82,6 +82,9 @@
     "react-native": "*",
     "react-native-ble-plx": "^2.0.3"
   },
+  "dependencies": {
+    "react-native-ble-plx": "^2.0.3"
+  },
   "engines": {
     "node": ">= 16.0.0"
   },
