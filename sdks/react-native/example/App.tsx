@@ -157,10 +157,21 @@ export default function App() {
   
   const connectToDevice = async (deviceId: string) => {
     try {
+      // First check if we're already connected to a device
+      if (connected) {
+        // Disconnect from the current device first
+        await disconnectFromDevice();
+      }
+      
+      // Set connecting state
+      setConnected(false);
+      
       const success = await omiConnection.connect(deviceId, (id, state) => {
         console.log(`Device ${id} connection state: ${state}`);
-        setConnected(state === 'connected');
-        if (state !== 'connected') {
+        const isConnected = state === 'connected';
+        setConnected(isConnected);
+        
+        if (!isConnected) {
           setCodec(null);
         }
       });
@@ -169,10 +180,12 @@ export default function App() {
         setConnected(true);
         Alert.alert('Connected', 'Successfully connected to device');
       } else {
+        setConnected(false);
         Alert.alert('Connection Failed', 'Could not connect to device');
       }
     } catch (error) {
       console.error('Connection error:', error);
+      setConnected(false);
       Alert.alert('Connection Error', String(error));
     }
   };
@@ -189,17 +202,29 @@ export default function App() {
   
   const getAudioCodec = async () => {
     try {
-      if (!omiConnection.isConnected()) {
+      if (!connected || !omiConnection.isConnected()) {
         Alert.alert('Not Connected', 'Please connect to a device first');
         return;
       }
       
-      const codecValue = await omiConnection.getAudioCodec();
-      setCodec(codecValue);
-      Alert.alert('Audio Codec', `Current codec: ${codecValue}`);
+      try {
+        const codecValue = await omiConnection.getAudioCodec();
+        setCodec(codecValue);
+        Alert.alert('Audio Codec', `Current codec: ${codecValue}`);
+      } catch (error) {
+        console.error('Get codec error:', error);
+        
+        // If we get a connection error, update the UI state
+        if (String(error).includes('not connected')) {
+          setConnected(false);
+          Alert.alert('Connection Lost', 'The device appears to be disconnected. Please reconnect and try again.');
+        } else {
+          Alert.alert('Error', `Failed to get audio codec: ${error}`);
+        }
+      }
     } catch (error) {
-      console.error('Get codec error:', error);
-      Alert.alert('Error', `Failed to get audio codec: ${error}`);
+      console.error('Unexpected error:', error);
+      Alert.alert('Error', `An unexpected error occurred: ${error}`);
     }
   };
 

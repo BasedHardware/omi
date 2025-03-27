@@ -83,6 +83,7 @@
     "react-native-ble-plx": "^2.0.3"
   },
   "dependencies": {
+    "base-64": "^1.0.0",
     "react-native-ble-plx": "^2.0.3"
   },
   "engines": {

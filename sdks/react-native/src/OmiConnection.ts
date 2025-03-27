@@ -125,6 +125,51 @@ export class OmiConnection {
   }
 
   /**
+   * Convert base64 string to byte array
+   * @param base64 Base64 encoded string
+   * @returns Uint8Array of bytes
+   */
+  private base64ToBytes(base64: string): Uint8Array {
+    // React Native compatible base64 decoding
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    const lookup = new Uint8Array(256);
+    for (let i = 0; i < chars.length; i++) {
+      lookup[chars.charCodeAt(i)] = i;
+    }
+    
+    const len = base64.length;
+    let bufferLength = base64.length * 0.75;
+    if (base64[len - 1] === '=') {
+      bufferLength--;
+      if (base64[len - 2] === '=') {
+        bufferLength--;
+      }
+    }
+    
+    const bytes = new Uint8Array(bufferLength);
+    
+    let p = 0;
+    let encoded1, encoded2, encoded3, encoded4;
+    
+    for (let i = 0; i < len; i += 4) {
+      encoded1 = lookup[base64.charCodeAt(i)];
+      encoded2 = lookup[base64.charCodeAt(i + 1)];
+      encoded3 = lookup[base64.charCodeAt(i + 2)];
+      encoded4 = lookup[base64.charCodeAt(i + 3)];
+      
+      bytes[p++] = (encoded1 << 2) | (encoded2 >> 4);
+      if (encoded3 !== 64) {
+        bytes[p++] = ((encoded2 & 15) << 4) | (encoded3 >> 2);
+      }
+      if (encoded4 !== 64) {
+        bytes[p++] = ((encoded3 & 3) << 6) | encoded4;
+      }
+    }
+    
+    return bytes;
+  }
+
+  /**
    * Get the audio codec used by the device
    * @returns Promise that resolves with the audio codec
    */
@@ -156,32 +201,42 @@ export class OmiConnection {
         return BleAudioCodec.PCM8; // Default codec
       }
 
+      // Default codec is PCM8
+      let codecId = 1;
+      let codec = BleAudioCodec.PCM8;
+
       // Read the codec value
       const codecValue = await codecCharacteristic.read();
-      const codecBytes = Buffer.from(codecValue.value || '', 'base64');
+      const base64Value = codecValue.value || '';
       
-      if (codecBytes.length === 0) {
-        return BleAudioCodec.PCM8; // Default codec
+      if (base64Value) {
+        // Decode base64 to get the first byte
+        const bytes = this.base64ToBytes(base64Value);
+        if (bytes.length > 0) {
+          codecId = bytes[0];
+        }
       }
 
-      const codecId = codecBytes[0];
-      
-      // Map codec ID to enum
+      // Map codec ID to enum - following the same pattern as in omi_connection.dart
       switch (codecId) {
-        case 0:
-          return BleAudioCodec.PCM16;
+        // case 0:
+        //   codec = BleAudioCodec.PCM16;
         case 1:
-          return BleAudioCodec.PCM8;
-        case 10:
-          return BleAudioCodec.MULAW16;
-        case 11:
-          return BleAudioCodec.MULAW8;
+          codec = BleAudioCodec.PCM8;
+          break;
+        // case 10:
+        //   codec = BleAudioCodec.MULAW16;
+        // case 11:
+        //   codec = BleAudioCodec.MULAW8;
         case 20:
-          return BleAudioCodec.OPUS;
+          codec = BleAudioCodec.OPUS;
+          break;
         default:
-          console.warn(`Unknown codec ID: ${codecId}`);
-          return BleAudioCodec.UNKNOWN;
+          console.warn(`Unknown codec id: ${codecId}`);
+          break;
       }
+
+      return codec;
     } catch (error) {
       console.error('Error getting audio codec:', error);
       return BleAudioCodec.PCM8; // Default codec on error
