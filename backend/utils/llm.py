@@ -24,8 +24,8 @@ from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment
 from models.trend import TrendEnum, ceo_options, company_options, software_product_options, hardware_product_options, \
     ai_product_options, TrendType
-from utils.prompts import extract_memories_prompt, extract_learnings_prompt, extract_facts_text_content_prompt
-from utils.llms.fact import get_prompt_memories
+from utils.prompts import extract_memories_prompt, extract_learnings_prompt, extract_memories_text_content_prompt
+from utils.llms.memory import get_prompt_memories
 
 llm_mini = ChatOpenAI(model='gpt-4o-mini')
 llm_mini_stream = ChatOpenAI(model='gpt-4o-mini', streaming=True)
@@ -1325,11 +1325,11 @@ def obtain_emotional_message(uid: str, memory: Conversation, context: str, emoti
     return llm_mini.invoke(prompt).content
 
 
-# **********************************
-# ************* FACTS **************
-# **********************************
+# *********************************************
+# ************* MEMORIES (FACTS) **************
+# *********************************************
 
-class Facts(BaseModel):
+class Memories(BaseModel):
     facts: List[Memory] = Field(
         min_items=0,
         max_items=3,
@@ -1337,16 +1337,18 @@ class Facts(BaseModel):
         default=[],
     )
 
-class FactsByTexts(BaseModel):
+
+class MemoriesByTexts(BaseModel):
     facts: List[Memory] = Field(
         description="List of **new** facts. If any",
         default=[],
     )
 
-def new_facts_extractor(
+
+def new_memories_extractor(
         uid: str, segments: List[TranscriptSegment], user_name: Optional[str] = None, memories_str: Optional[str] = None
 ) -> List[Memory]:
-    # print('new_facts_extractor', uid, 'segments', len(segments), user_name, 'len(memories_str)', len(memories_str))
+    # print('new_memories_extractor', uid, 'segments', len(segments), user_name, 'len(memories_str)', len(memories_str))
     if user_name is None or memories_str is None:
         user_name, memories_str = get_prompt_memories(uid)
 
@@ -1358,10 +1360,10 @@ def new_facts_extractor(
     # TODO: make it more strict?
 
     try:
-        parser = PydanticOutputParser(pydantic_object=Facts)
+        parser = PydanticOutputParser(pydantic_object=Memories)
         chain = extract_memories_prompt | llm_mini | parser
         # with_parser = llm_mini.with_structured_output(Facts)
-        response: Facts = chain.invoke({
+        response: Memories = chain.invoke({
             'user_name': user_name,
             'conversation': content,
             'facts_str': memories_str,
@@ -1386,9 +1388,9 @@ def extract_memories_from_text(
         return []
 
     try:
-        parser = PydanticOutputParser(pydantic_object=FactsByTexts)
-        chain = extract_facts_text_content_prompt | llm_mini | parser
-        response: Facts = chain.invoke({
+        parser = PydanticOutputParser(pydantic_object=MemoriesByTexts)
+        chain = extract_memories_text_content_prompt | llm_mini | parser
+        response: Memories = chain.invoke({
             'user_name': user_name,
             'text_content': text,
             'text_source': text_source,
@@ -2336,8 +2338,8 @@ def generate_description(app_name: str, description: str) -> str:
 # ******************* PERSONA **********************
 # **************************************************
 
-def condense_memories(facts, name):
-    combined_memories = "\n".join(facts)
+def condense_memories(memories, name):
+    combined_memories = "\n".join(memories)
     prompt = f"""
 You are an AI tasked with condensing a detailed profile of hundreds facts about {name} to accurately replicate their personality, communication style, decision-making patterns, and contextual knowledge for 1:1 cloning.  
 
@@ -2367,13 +2369,13 @@ Facts:
     return response.content
 
 
-def generate_persona_description(facts, name):
+def generate_persona_description(memories, name):
     prompt = f"""Based on these facts about a person, create a concise, engaging description that captures their unique personality and characteristics (max 250 characters).
     
     They chose to be known as {name}.
 
 Facts:
-{facts}
+{memories}
 
 Create a natural, memorable description that captures this person's essence. Focus on the most unique and interesting aspects. Make it conversational and engaging."""
 
@@ -2503,7 +2505,7 @@ def generate_persona_intro_message(prompt: str, name: str):
 # ***************** FACT/MEMORY ********************
 # **************************************************
 
-def identify_category_for_fact(fact: str, categories: List) -> str:
+def identify_category_for_memory(memory: str, categories: List) -> str:
     categories_str = ', '.join(categories)
     prompt = f"""
     You are an AI tasked with identifying the category of a fact from a list of predefined categories. 
@@ -2514,7 +2516,7 @@ def identify_category_for_fact(fact: str, categories: List) -> str:
     
     The categories are: {categories_str}
 
-    Fact: {fact}
+    Fact: {memory}
     """
     response = llm_mini.invoke(prompt)
     return response.content
