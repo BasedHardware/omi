@@ -21,7 +21,7 @@ config.resolver.disableHierarchicalLookup = true;
 
 // 4. Extra modules to include in the bundle
 config.resolver.extraNodeModules = {
-  'omi-react-native': path.resolve(workspaceRoot),
+  '@omiai/omi-react-native': path.resolve(workspaceRoot),
   'base-64': path.resolve(projectRoot, 'node_modules/base-64'),
 };
 
