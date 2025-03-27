@@ -24,12 +24,12 @@ export default function App() {
                 }
                 return [...prev, device];
             });
-        }, 10000 // 10 seconds timeout
+        }, 30000 // 10 seconds timeout
         );
         // Auto-stop after 10 seconds
         setTimeout(() => {
             stopScan();
-        }, 10000);
+        }, 30000);
     };
     const stopScan = () => {
         if (stopScanRef.current) {

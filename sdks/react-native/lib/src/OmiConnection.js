@@ -17,12 +17,14 @@ export class OmiConnection {
      * @returns A function to stop scanning
      */
     scanForDevices(onDeviceFound, timeoutMs = 10000) {
+        console.log("thinh:yo");
         this.bleManager.startDeviceScan(null, null, (error, device) => {
             if (error) {
                 console.error('Scan error:', error);
                 return;
             }
-            if (device && device.name && device.name.includes('Omi')) {
+            console.log("thinh:hey");
+            if (device && device.name) {
                 onDeviceFound({
                     id: device.id,
                     name: device.name,
