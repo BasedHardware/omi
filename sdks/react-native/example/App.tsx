@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView, Alert, Platform, Linking } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView, Alert, Platform, Linking, TextInput } from 'react-native';
 import { echo, OmiConnection, BleAudioCodec, OmiDevice } from 'omi-react-native';
 import { BleManager, State, Subscription } from 'react-native-ble-plx';
 
@@ -13,6 +13,15 @@ export default function App() {
   const [permissionGranted, setPermissionGranted] = useState<boolean>(false);
   const [isListeningAudio, setIsListeningAudio] = useState<boolean>(false);
   const [audioPacketsReceived, setAudioPacketsReceived] = useState<number>(0);
+  const [enableTranscription, setEnableTranscription] = useState<boolean>(false);
+  const [deepgramApiKey, setDeepgramApiKey] = useState<string>('');
+  const [transcription, setTranscription] = useState<string>('');
+  
+  // Transcription processing state
+  const websocketRef = useRef<WebSocket | null>(null);
+  const isTranscribing = useRef<boolean>(false);
+  const audioBufferRef = useRef<Uint8Array[]>([]);
+  const processingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   const omiConnection = useRef(new OmiConnection()).current;
   const stopScanRef = useRef<(() => void) | null>(null);
@@ -219,20 +228,49 @@ export default function App() {
       setAudioPacketsReceived(0);
       
       console.log('Starting audio bytes listener...');
+      
+      // Use a counter and timer to batch UI updates
+      let packetCounter = 0;
+      const updateInterval = setInterval(() => {
+        if (packetCounter > 0) {
+          setAudioPacketsReceived(prev => prev + packetCounter);
+          packetCounter = 0;
+        }
+      }, 500); // Update UI every 500ms
+      
       const subscription = await omiConnection.startAudioBytesListener((bytes) => {
-        // Update the counter when we receive audio bytes
-        setAudioPacketsReceived((prev) => prev + 1);
+        // Increment local counter instead of updating state directly
+        packetCounter++;
         
-        // Log the bytes for debugging
-        if (bytes.length > 0) {
-          console.log(`Received audio packet #${audioPacketsReceived + 1}: ${bytes.length} bytes`);
-          console.log(`First few bytes: ${bytes.slice(0, 8).join(', ')}`);
+        // If transcription is enabled and active, add to buffer for WebSocket
+        if (bytes.length > 0 && isTranscribing.current) {
+          audioBufferRef.current.push(new Uint8Array(bytes));
         }
       });
       
+      // Store interval reference for cleanup
+      updateIntervalRef.current = updateInterval;
+      
       if (subscription) {
         audioSubscriptionRef.current = subscription;
+        updateIntervalRef.current = updateInterval;
         setIsListeningAudio(true);
+        
+        // If transcription was active, stop it when audio listener stops
+        if (isTranscribing.current) {
+          if (websocketRef.current) {
+            websocketRef.current.close();
+            websocketRef.current = null;
+          }
+          
+          if (processingIntervalRef.current) {
+            clearInterval(processingIntervalRef.current);
+            processingIntervalRef.current = null;
+          }
+          
+          isTranscribing.current = false;
+        }
+        
         Alert.alert('Success', 'Started listening for audio bytes');
       } else {
         Alert.alert('Error', 'Failed to start audio listener');
@@ -243,12 +281,173 @@ export default function App() {
     }
   };
   
+  /**
+   * Initialize WebSocket transcription service with Deepgram
+   */
+  const initializeWebSocketTranscription = () => {
+    if (!deepgramApiKey) {
+      console.error('API key is required for transcription');
+      return;
+    }
+    
+    try {
+      // Close any existing connection
+      if (websocketRef.current) {
+        websocketRef.current.close();
+        websocketRef.current = null;
+      }
+      
+      // Clear any existing processing interval
+      if (processingIntervalRef.current) {
+        clearInterval(processingIntervalRef.current);
+        processingIntervalRef.current = null;
+      }
+      
+      // Reset audio buffer
+      audioBufferRef.current = [];
+      isTranscribing.current = false;
+      
+      // Create a new WebSocket connection to Deepgram with configuration in URL params
+      const params = new URLSearchParams({
+        sample_rate: '16000',
+        encoding: 'opus',
+        channels: '1',
+        model: 'nova-2',
+        language: 'en-US',
+        smart_format: 'true',
+        interim_results: 'false',
+        punctuate: 'true',
+        diarize: 'true'
+      });
+      
+      const ws = new WebSocket(`wss://api.deepgram.com/v1/listen?${params.toString()}`, [], {
+        headers: {
+          'Authorization': `Token ${deepgramApiKey}`
+        }
+      });
+      
+      ws.onopen = () => {
+        console.log('Deepgram WebSocket connection established');
+        isTranscribing.current = true;
+        
+        // Start processing interval to send accumulated audio
+        processingIntervalRef.current = setInterval(() => {
+          if (audioBufferRef.current.length > 0 && isTranscribing.current) {
+            sendAudioToWebSocket();
+          }
+        }, 250); // Send audio every 250ms
+      };
+      
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log("Transcript received:", data);
+          
+          // Check if we have a transcript
+          if (data.channel?.alternatives?.[0]?.transcript) {
+            const transcript = data.channel.alternatives[0].transcript.trim();
+            
+            // Only update UI if we have actual text
+            if (transcript) {
+              setTranscription((prev) => {
+                // Limit to last 5 transcripts to avoid too much text
+                const lines = prev ? prev.split('\n') : [];
+                if (lines.length > 4) {
+                  lines.shift();
+                }
+                
+                // Add new transcript with a timestamp
+                const now = new Date();
+                const timestamp = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+                
+                // Add speaker information if available
+                const speakerInfo = data.channel.alternatives[0].words?.[0]?.speaker 
+                  ? `[Speaker ${data.channel.alternatives[0].words[0].speaker}]` 
+                  : '';
+                
+                lines.push(`[${timestamp}] ${speakerInfo} ${transcript}`);
+                
+                return lines.join('\n');
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Error parsing WebSocket message:', error);
+        }
+      };
+      
+      ws.onerror = (error) => {
+        console.error('Deepgram WebSocket error:', error);
+      };
+      
+      ws.onclose = () => {
+        console.log('Deepgram WebSocket connection closed');
+        isTranscribing.current = false;
+      };
+      
+      websocketRef.current = ws;
+      console.log('Deepgram WebSocket transcription initialized');
+      
+    } catch (error) {
+      console.error('Error initializing Deepgram WebSocket transcription:', error);
+    }
+  };
+  
+  /**
+   * Send accumulated audio buffer to Deepgram WebSocket
+   */
+  const sendAudioToWebSocket = () => {
+    if (!websocketRef.current || !isTranscribing.current || audioBufferRef.current.length === 0) {
+      return;
+    }
+    
+    try {
+      // Send each audio chunk individually to Deepgram
+      // This is more efficient for streaming audio
+      for (const chunk of audioBufferRef.current) {
+        if (websocketRef.current.readyState === WebSocket.OPEN) {
+          websocketRef.current.send(chunk);
+        }
+      }
+      
+      // Clear the buffer after sending
+      audioBufferRef.current = [];
+    } catch (error) {
+      console.error('Error sending audio to Deepgram WebSocket:', error);
+    }
+  };
+  
+  
+  // Store the update interval reference
+  const updateIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
   const stopAudioListener = async () => {
     try {
+      // Clear the UI update interval
+      if (updateIntervalRef.current) {
+        clearInterval(updateIntervalRef.current);
+        updateIntervalRef.current = null;
+      }
+      
       if (audioSubscriptionRef.current) {
         await omiConnection.stopAudioBytesListener(audioSubscriptionRef.current);
         audioSubscriptionRef.current = null;
         setIsListeningAudio(false);
+        
+        // Disable transcription
+        if (enableTranscription) {
+          // Close WebSocket connection
+          if (websocketRef.current) {
+            websocketRef.current.close();
+            websocketRef.current = null;
+          }
+          
+          // Clear processing interval
+          if (processingIntervalRef.current) {
+            clearInterval(processingIntervalRef.current);
+            processingIntervalRef.current = null;
+          }
+        }
       }
     } catch (error) {
       console.error('Stop audio listener error:', error);
@@ -412,6 +611,104 @@ export default function App() {
                   <Text style={styles.audioStatsValue}>{audioPacketsReceived}</Text>
                 </View>
               )}
+              
+              <View style={styles.transcriptionContainer}>
+                <Text style={styles.sectionSubtitle}>Deepgram Transcription</Text>
+                
+                <View style={styles.checkboxContainer}>
+                  <TouchableOpacity
+                    style={[styles.checkbox, enableTranscription && styles.checkboxChecked]}
+                    onPress={() => {
+                      const newValue = !enableTranscription;
+                      setEnableTranscription(newValue);
+                      
+                      // If disabling, close any active connections
+                      if (!newValue && websocketRef.current) {
+                        websocketRef.current.close();
+                        websocketRef.current = null;
+                        
+                        if (processingIntervalRef.current) {
+                          clearInterval(processingIntervalRef.current);
+                          processingIntervalRef.current = null;
+                        }
+                      }
+                    }}
+                  >
+                    {enableTranscription && <Text style={styles.checkmark}>✓</Text>}
+                  </TouchableOpacity>
+                  <Text style={styles.checkboxLabel}>Enable Transcription</Text>
+                </View>
+                
+                {enableTranscription && (
+                  <View style={styles.inputContainer}>
+                    <Text style={styles.inputLabel}>API Key:</Text>
+                    <TextInput
+                      style={styles.apiKeyInput}
+                      value={deepgramApiKey}
+                      onChangeText={(text) => {
+                        setDeepgramApiKey(text);
+                      }}
+                      placeholder="Enter Deepgram API Key"
+                      secureTextEntry={true}
+                    />
+                  </View>
+                )}
+                
+                
+                {enableTranscription && (
+                  <>
+                    <TouchableOpacity 
+                      style={[
+                        styles.button, 
+                        isTranscribing.current ? styles.buttonWarning : null,
+                        {marginTop: 15, marginBottom: 15}
+                      ]} 
+                      onPress={() => {
+                        if (isTranscribing.current) {
+                          // Stop transcription
+                          if (websocketRef.current) {
+                            websocketRef.current.close();
+                            websocketRef.current = null;
+                          }
+                          
+                          if (processingIntervalRef.current) {
+                            clearInterval(processingIntervalRef.current);
+                            processingIntervalRef.current = null;
+                          }
+                          
+                          isTranscribing.current = false;
+                        } else {
+                          // Start transcription
+                          if (!deepgramApiKey) {
+                            Alert.alert('API Key Required', 'Please enter your Deepgram API key to start transcription');
+                            return;
+                          }
+                          
+                          if (!isListeningAudio) {
+                            Alert.alert('Audio Required', 'Please start the audio listener first');
+                            return;
+                          }
+                          
+                          initializeWebSocketTranscription();
+                          setTranscription(''); // Clear previous transcription
+                        }
+                      }}
+                      disabled={!isListeningAudio}
+                    >
+                      <Text style={styles.buttonText}>
+                        {isTranscribing.current ? "Stop Transcription" : "Start Transcription"}
+                      </Text>
+                    </TouchableOpacity>
+                    
+                    {transcription && (
+                      <View style={styles.transcriptionTextContainer}>
+                        <Text style={styles.transcriptionTitle}>Transcription:</Text>
+                        <Text style={styles.transcriptionText}>{transcription}</Text>
+                      </View>
+                    )}
+                  </>
+                )}
+              </View>
             </View>
           </View>
         )}
@@ -590,5 +887,82 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FF9500',
     marginTop: 5,
+  },
+  transcriptionContainer: {
+    marginTop: 20,
+    padding: 15,
+    backgroundColor: '#f8f8f8',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  sectionSubtitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
+    color: '#333',
+  },
+  inputContainer: {
+    marginBottom: 12,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 6,
+    color: '#555',
+  },
+  apiKeyInput: {
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 6,
+    padding: 10,
+    fontSize: 14,
+  },
+  checkboxContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderWidth: 1,
+    borderColor: '#007AFF',
+    borderRadius: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  checkboxChecked: {
+    backgroundColor: '#007AFF',
+  },
+  checkmark: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  checkboxLabel: {
+    fontSize: 14,
+    color: '#333',
+  },
+  transcriptionTextContainer: {
+    marginTop: 12,
+    padding: 10,
+    backgroundColor: 'white',
+    borderRadius: 6,
+    borderLeftWidth: 3,
+    borderLeftColor: '#007AFF',
+  },
+  transcriptionTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 6,
+    color: '#555',
+  },
+  transcriptionText: {
+    fontSize: 14,
+    color: '#333',
+    lineHeight: 20,
   },
 });

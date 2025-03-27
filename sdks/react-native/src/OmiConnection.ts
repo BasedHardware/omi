@@ -159,13 +159,16 @@ export class OmiConnection {
     const bytes = new Uint8Array(bufferLength);
     
     let p = 0;
-    let encoded1, encoded2, encoded3, encoded4;
+    let encoded1: number = 0;
+    let encoded2: number = 0;
+    let encoded3: number = 0;
+    let encoded4: number = 0;
     
     for (let i = 0; i < len; i += 4) {
-      encoded1 = lookup[base64.charCodeAt(i)];
-      encoded2 = lookup[base64.charCodeAt(i + 1)];
-      encoded3 = lookup[base64.charCodeAt(i + 2)];
-      encoded4 = lookup[base64.charCodeAt(i + 3)];
+      encoded1 = lookup[base64.charCodeAt(i)] || 0;
+      encoded2 = lookup[base64.charCodeAt(i + 1)] || 0;
+      encoded3 = lookup[base64.charCodeAt(i + 2)] || 0;
+      encoded4 = lookup[base64.charCodeAt(i + 3)] || 0;
       
       bytes[p++] = (encoded1 << 2) | (encoded2 >> 4);
       if (encoded3 !== 64) {
@@ -223,7 +226,7 @@ export class OmiConnection {
         // Decode base64 to get the first byte
         const bytes = this.base64ToBytes(base64Value);
         if (bytes.length > 0) {
-          codecId = bytes[0];
+          codecId = bytes[0] || 1; // Default to 1 if undefined
         }
       }
 
@@ -252,6 +255,7 @@ export class OmiConnection {
       return BleAudioCodec.PCM8; // Default codec on error
     }
   }
+
 
   /**
    * Start listening for audio bytes from the device
@@ -307,19 +311,25 @@ export class OmiConnection {
             return;
           }
 
-          console.log('Received audio data notification');
+          // console.log('Received audio data notification');
           if (characteristic?.value) {
             const base64Value = characteristic.value;
-            console.log('Received base64 value of length:', base64Value.length);
+            // console.log('Received base64 value of length:', base64Value.length);
             
             try {
               const bytes = this.base64ToBytes(base64Value);
-              console.log('Decoded bytes length:', bytes.length);
+              // console.log('Decoded bytes length:', bytes.length);
               
               if (bytes.length > 0) {
                 // Convert Uint8Array to number[]
                 const byteArray = Array.from(bytes);
-                onAudioBytesReceived(byteArray);
+                
+                // Trim the first 3 bytes (header) as seen in the Flutter implementation
+                const trimmedBytes = byteArray.length > 3 ? byteArray.slice(3) : byteArray;
+                
+                // Send to callback
+                onAudioBytesReceived(trimmedBytes);
+                
               }
             } catch (decodeError) {
               console.error('Error decoding base64 data:', decodeError);
