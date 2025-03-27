@@ -14,9 +14,9 @@ A React Native SDK for connecting to and interacting with Omi devices via Blueto
 ## Installation
 
 ```bash
-npm install @omi/react-native-sdk
+npm install @omiai/omi-react-native
 # or
-yarn add @omi/react-native-sdk
+yarn add @omiai/omi-react-native
 ```
 
 ### Dependencies
@@ -54,7 +54,7 @@ For Android, add the following permissions to your `AndroidManifest.xml`:
 ### Basic Example
 
 ```javascript
-import { OmiConnection, DeviceConnectionState, BleAudioCodec } from '@omi/react-native-sdk';
+import { OmiConnection, DeviceConnectionState, BleAudioCodec } from '@omiai/omi-react-native';
 
 // Create an instance of OmiConnection
 const omiConnection = new OmiConnection();

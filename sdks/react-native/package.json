@@ -1,6 +1,6 @@
 {
-  "name": "omi-react-native",
-  "version": "0.1.0",
+  "name": "@omiai/omi-react-native",
+  "version": "1.0.1",
   "description": "React Native SDK for Omi devices",
   "main": "lib/commonjs/index",
   "module": "lib/module/index",
@@ -43,7 +43,7 @@
     "omi"
   ],
   "repository": "https://github.com/BasedHardware/omi",
-  "author": "Omi Team <support@omi.com> (https://github.com/BasedHardware)",
+  "author": "Omi Team <team@omi.me> (https://github.com/BasedHardware)",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/BasedHardware/omi/issues"
