@@ -1,0 +1,1 @@
+{"version":3,"names":["echo","word","console","log","exports"],"sourceRoot":"../../src","sources":["omi.ts"],"mappings":";;;;;;AAAA;AACA;AACA;;AAEA;AACA;AACA;AACA;AACA;AACO,MAAMA,IAAI,GAAIC,IAAY,IAAa;EAC5CC,OAAO,CAACC,GAAG,CAAC,+BAA+B,CAAC;EAC5C,OAAO,iCAAiCF,IAAI,EAAE;AAChD,CAAC;AAACG,OAAA,CAAAJ,IAAA,GAAAA,IAAA","ignoreList":[]}

@@ -164,3 +164,15 @@ app/lib/env/prod_env.g.dart
 /backend/scripts/stt/results
 /backend/scripts/stt/diarization.json
 /docs/.docusaurus
+
+# Additional Expo/React Native specific ignores
+ .expo/
+ sdks/react-native/example/.expo/
+ web-build/
+ *.orig.*
+ .metro-health-check*
+ .eas/
+ .rn-cli.config.js
+ .watchmanconfig
+ web-report/
+ .metro-cache/
