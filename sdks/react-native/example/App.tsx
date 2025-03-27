@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView, Alert, Platform, Linking } from 'react-native';
 import { echo, OmiConnection, BleAudioCodec, OmiDevice } from 'omi-react-native';
-import { BleManager, State } from 'react-native-ble-plx';
+import { BleManager, State, Subscription } from 'react-native-ble-plx';
 
 export default function App() {
   const [response, setResponse] = useState<string | null>(null);
@@ -11,10 +11,13 @@ export default function App() {
   const [codec, setCodec] = useState<BleAudioCodec | null>(null);
   const [bluetoothState, setBluetoothState] = useState<State>(State.Unknown);
   const [permissionGranted, setPermissionGranted] = useState<boolean>(false);
+  const [isListeningAudio, setIsListeningAudio] = useState<boolean>(false);
+  const [audioPacketsReceived, setAudioPacketsReceived] = useState<number>(0);
   
   const omiConnection = useRef(new OmiConnection()).current;
   const stopScanRef = useRef<(() => void) | null>(null);
   const bleManagerRef = useRef<BleManager | null>(null);
+  const audioSubscriptionRef = useRef<Subscription | null>(null);
   
   useEffect(() => {
     // Initialize BLE Manager
@@ -192,11 +195,64 @@ export default function App() {
   
   const disconnectFromDevice = async () => {
     try {
+      // Stop audio listener if active
+      if (isListeningAudio) {
+        await stopAudioListener();
+      }
+      
       await omiConnection.disconnect();
       setConnected(false);
       setCodec(null);
     } catch (error) {
       console.error('Disconnect error:', error);
+    }
+  };
+  
+  const startAudioListener = async () => {
+    try {
+      if (!connected || !omiConnection.isConnected()) {
+        Alert.alert('Not Connected', 'Please connect to a device first');
+        return;
+      }
+      
+      // Reset counter
+      setAudioPacketsReceived(0);
+      
+      console.log('Starting audio bytes listener...');
+      const subscription = await omiConnection.startAudioBytesListener((bytes) => {
+        // Update the counter when we receive audio bytes
+        setAudioPacketsReceived((prev) => prev + 1);
+        
+        // Log the bytes for debugging
+        if (bytes.length > 0) {
+          console.log(`Received audio packet #${audioPacketsReceived + 1}: ${bytes.length} bytes`);
+          console.log(`First few bytes: ${bytes.slice(0, 8).join(', ')}`);
+        }
+      });
+      
+      if (subscription) {
+        audioSubscriptionRef.current = subscription;
+        setIsListeningAudio(true);
+        Alert.alert('Success', 'Started listening for audio bytes');
+      } else {
+        Alert.alert('Error', 'Failed to start audio listener');
+      }
+    } catch (error) {
+      console.error('Start audio listener error:', error);
+      Alert.alert('Error', `Failed to start audio listener: ${error}`);
+    }
+  };
+  
+  const stopAudioListener = async () => {
+    try {
+      if (audioSubscriptionRef.current) {
+        await omiConnection.stopAudioBytesListener(audioSubscriptionRef.current);
+        audioSubscriptionRef.current = null;
+        setIsListeningAudio(false);
+      }
+    } catch (error) {
+      console.error('Stop audio listener error:', error);
+      Alert.alert('Error', `Failed to stop audio listener: ${error}`);
     }
   };
   
@@ -335,6 +391,28 @@ export default function App() {
                 <Text style={styles.codecValue}>{codec}</Text>
               </View>
             )}
+            
+            <View style={styles.audioControls}>
+              <TouchableOpacity 
+                style={[
+                  styles.button, 
+                  isListeningAudio ? styles.buttonWarning : null,
+                  {marginTop: 15}
+                ]} 
+                onPress={isListeningAudio ? stopAudioListener : startAudioListener}
+              >
+                <Text style={styles.buttonText}>
+                  {isListeningAudio ? "Stop Audio Listener" : "Start Audio Listener"}
+                </Text>
+              </TouchableOpacity>
+              
+              {isListeningAudio && (
+                <View style={styles.audioStatsContainer}>
+                  <Text style={styles.audioStatsTitle}>Audio Packets Received:</Text>
+                  <Text style={styles.audioStatsValue}>{audioPacketsReceived}</Text>
+                </View>
+              )}
+            </View>
           </View>
         )}
       </ScrollView>
@@ -488,6 +566,29 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#007AFF',
+    marginTop: 5,
+  },
+  audioControls: {
+    marginTop: 10,
+  },
+  audioStatsContainer: {
+    marginTop: 15,
+    padding: 12,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    alignItems: 'center',
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF9500',
+  },
+  audioStatsTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#555',
+  },
+  audioStatsValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FF9500',
     marginTop: 5,
   },
 });
