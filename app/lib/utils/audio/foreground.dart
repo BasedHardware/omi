@@ -65,6 +65,7 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
 
 class ForegroundUtil {
   static Future<void> requestPermissions() async {
+    if(Platform.isMacOS) return;
     // Android 13+, you need to allow notification permission to display foreground service notification.
     //
     // iOS: If you need notification, ask for permission.
@@ -87,7 +88,7 @@ class ForegroundUtil {
   Future<bool> get isIgnoringBatteryOptimizations async => await FlutterForegroundTask.isIgnoringBatteryOptimizations;
 
   static Future<void> initializeForegroundService() async {
-    if (await FlutterForegroundTask.isRunningService) return;
+    if (await FlutterForegroundTask.isRunningService || Platform.isMacOS) return;
     debugPrint('initializeForegroundService');
     // await Location().requestPermission();
     FlutterForegroundTask.init(

@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:app_links/app_links.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
@@ -65,17 +67,21 @@ Future<bool> _init() async {
     await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform, name: 'dev');
   }
 
-  await IntercomManager().initIntercom();
+  if(!Platform.isMacOS) {
+    await IntercomManager().initIntercom();
+    await MixpanelManager.init();
+  }
   await NotificationService.instance.initialize();
   await SharedPreferencesUtil.init();
-  await MixpanelManager.init();
 
   // TODO: thinh, move to app start
   await ServiceManager.instance().start();
 
   bool isAuth = (await getIdToken()) != null;
-  if (isAuth) MixpanelManager().identify();
-  initOpus(await opus_flutter.load());
+  if (isAuth && !Platform.isMacOS) MixpanelManager().identify();
+  if(!Platform.isMacOS) {
+    initOpus(await opus_flutter.load());
+  }
 
   await GrowthbookUtil.init();
   CalendarUtil.init();
@@ -104,7 +110,7 @@ void main() async {
   }
   // _setupAudioSession();
   bool isAuth = await _init();
-  if (Env.instabugApiKey != null) {
+  if (Env.instabugApiKey != null && !Platform.isMacOS) {
     await Instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
     runZonedGuarded(
       () async {
@@ -351,7 +357,9 @@ class _DeciderWidgetState extends State<DeciderWidget> {
         context.read<AppProvider>().setAppsFromCache();
         context.read<MessageProvider>().refreshMessages();
       } else {
-        await IntercomManager.instance.intercom.loginUnidentifiedUser();
+        if(!kIsWeb) {
+          await IntercomManager.instance.intercom.loginUnidentifiedUser();
+        }
       }
       IntercomManager.instance.setUserAttributes();
     });
