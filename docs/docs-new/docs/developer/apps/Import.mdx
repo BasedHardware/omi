@@ -13,6 +13,8 @@ Integration Imports are predefined capabilities that your app can perform within
 Currently supported Imports include:
 - **Create Conversation**: Generate new conversations in the user's OMI account
 - **Create Memories(Facts)**: Add specific memories (previously called facts) to the user's knowledge base
+- **Read Conversations**: Access and read all conversations in the user's OMI account
+- **Read Memories**: Access and read all memories in the user's knowledge base
 
 ## Prerequisites
 
@@ -144,6 +146,150 @@ Where:
 - `{app_id}` is your app's unique identifier
 - `{user_id}` is the OMI user ID for whom you're creating the facts
 
+## Implementing the Read Conversations Import
+
+The Read Conversations Import allows your app to programmatically access and read all conversations in a user's OMI account.
+
+### API Endpoint
+
+To read conversations, make a GET request to:
+
+```
+GET https://api.omi.me/v2/integrations/{app_id}/conversations?uid={user_id}
+```
+
+Where:
+- `{app_id}` is your app's unique identifier
+- `{user_id}` is the OMI user ID whose conversations you want to access
+
+### Authentication
+
+Include your API key in the request headers:
+
+```
+Authorization: Bearer sk_your_api_key_here
+```
+
+> **Important**: The API key must be associated with the app specified in the URL path.
+
+### Query Parameters
+
+The endpoint supports the following optional query parameters:
+
+- `limit`: Maximum number of conversations to return (default: 100, max: 1000)
+- `offset`: Number of conversations to skip (for pagination)
+- `include_discarded`: Whether to include discarded conversations (default: false)
+- `statuses`: Filter by conversation statuses (comma-separated list)
+
+### Response
+
+A successful request will return a 200 OK status with a JSON response containing an array of conversations:
+
+```json
+{
+  "conversations": [
+    {
+      "id": "conversation_id_1",
+      "created_at": "2024-03-15T12:00:00Z",
+      "started_at": "2024-03-15T12:00:00Z",
+      "finished_at": "2024-03-15T12:05:00Z",
+      "text": "Full conversation text content...",
+      "structured": {
+        "title": "Conversation Title",
+        "overview": "Brief overview of the conversation"
+      },
+      "transcript_segments": [
+        {
+          "text": "Segment text...",
+          "start_time": 0,
+          "end_time": 10
+        }
+      ],
+      "geolocation": {
+        "latitude": 37.7749,
+        "longitude": -122.4194
+      }
+    }
+  ]
+}
+```
+
+### Error Handling
+
+Common error responses include:
+
+- `400 Bad Request`: Invalid request format
+- `401 Unauthorized`: Missing or invalid Authorization header
+- `403 Forbidden`: Invalid API key, app not enabled for user, or app lacks read_conversations capability
+- `404 Not Found`: App not found
+- `429 Too Many Requests`: Rate limit exceeded
+
+## Implementing the Read Memories Import
+
+The Read Memories Import allows your app to programmatically access and read all memories in a user's knowledge base.
+
+### API Endpoint
+
+To read memories, make a GET request to:
+
+```
+GET https://api.omi.me/v2/integrations/{app_id}/memories?uid={user_id}
+```
+
+Where:
+- `{app_id}` is your app's unique identifier
+- `{user_id}` is the OMI user ID whose memories you want to access
+
+### Authentication
+
+Include your API key in the request headers:
+
+```
+Authorization: Bearer sk_your_api_key_here
+```
+
+> **Important**: The API key must be associated with the app specified in the URL path.
+
+### Query Parameters
+
+The endpoint supports the following optional query parameters:
+
+- `limit`: Maximum number of memories to return (default: 100, max: 1000)
+- `offset`: Number of memories to skip (for pagination)
+
+### Response
+
+A successful request will return a 200 OK status with a JSON response containing an array of memories:
+
+```json
+{
+  "memories": [
+    {
+      "id": "memory_id_1",
+      "content": "User prefers vegetarian food options",
+      "created_at": "2024-03-15T12:00:00Z",
+      "tags": ["preferences", "food"]
+    },
+    {
+      "id": "memory_id_2",
+      "content": "User's anniversary is on June 12th",
+      "created_at": "2024-03-15T12:05:00Z",
+      "tags": ["dates", "personal"]
+    }
+  ]
+}
+```
+
+### Error Handling
+
+Common error responses include:
+
+- `400 Bad Request`: Invalid request format
+- `401 Unauthorized`: Missing or invalid Authorization header
+- `403 Forbidden`: Invalid API key, app not enabled for user, or app lacks read_memories capability
+- `404 Not Found`: App not found
+- `429 Too Many Requests`: Rate limit exceeded
+
 ### Authentication
 
 Include your API key in the request headers:
@@ -224,7 +370,118 @@ Common error responses include:
 
 ## Example Implementation
 
-Here are examples showing how to create memories and facts using different text sources:
+Here are examples showing how to create and read memories, facts, and conversations:
+
+### Reading Conversations
+
+#### Python Example
+
+```python
+import requests
+import json
+
+# API configuration
+APP_ID = "your_app_id_here"
+API_KEY = "sk_your_api_key_here"
+USER_ID = "user_123"
+API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/conversations"
+
+# Optional query parameters
+params = {
+    "limit": 50,
+    "offset": 0,
+    "include_discarded": False
+}
+
+# Make the API request
+headers = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json"
+}
+
+response = requests.get(
+    f"{API_URL}?uid={USER_ID}",
+    headers=headers,
+    params=params
+)
+
+# Handle the response
+if response.status_code == 200:
+    conversations = response.json()["conversations"]
+    print(f"Retrieved {len(conversations)} conversations")
+    for conversation in conversations:
+        print(f"Conversation ID: {conversation['id']}")
+        print(f"Title: {conversation['structured']['title']}")
+        print(f"Created at: {conversation['created_at']}")
+        print("---")
+else:
+    print(f"Error retrieving conversations: {response.status_code}")
+    print(response.text)
+```
+
+##### cURL Example
+
+```bash
+curl -X GET "https://api.omi.me/v2/integrations/your_app_id_here/conversations?uid=user_123&limit=50&offset=0" \
+  -H "Authorization: Bearer sk_your_api_key_here" \
+  -H "Content-Type: application/json"
+```
+
+### Reading Memories
+
+#### Python Example
+
+```python
+import requests
+import json
+
+# API configuration
+APP_ID = "your_app_id_here"
+API_KEY = "sk_your_api_key_here"
+USER_ID = "user_123"
+API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/memories"
+
+# Optional query parameters
+params = {
+    "limit": 100,
+    "offset": 0
+}
+
+# Make the API request
+headers = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json"
+}
+
+response = requests.get(
+    f"{API_URL}?uid={USER_ID}",
+    headers=headers,
+    params=params
+)
+
+# Handle the response
+if response.status_code == 200:
+    memories = response.json()["memories"]
+    print(f"Retrieved {len(memories)} memories")
+    for memory in memories:
+        print(f"Memory ID: {memory['id']}")
+        print(f"Content: {memory['content']}")
+        print(f"Created at: {memory['created_at']}")
+        if memory.get('tags'):
+            print(f"Tags: {', '.join(memory['tags'])}")
+        print("---")
+else:
+    print(f"Error retrieving memories: {response.status_code}")
+    print(response.text)
+```
+
+##### cURL Example
+
+```bash
+curl -X GET "https://api.omi.me/v2/integrations/your_app_id_here/memories?uid=user_123&limit=100&offset=0" \
+  -H "Authorization: Bearer sk_your_api_key_here" \
+  -H "Content-Type: application/json"
+```
 
 ### Creating Conversations
 
@@ -746,6 +1003,8 @@ Before your app can use integration Imports, several conditions must be met:
 1. **App Configuration**: Your app must be configured with the "External Integration" capability and specifically have the appropriate Import enabled:
    - For creating conversations: the "create_conversation" Import
    - For creating memories: the "create_memories" Import
+   - For reading conversations: the "read_conversations" Import
+   - For reading memories: the "read_memories" Import
 
 2. **API Key**: You must generate an API key for your app through the app management interface.
 
@@ -789,5 +1048,9 @@ Here are some inspiring examples of what you can build with integration Imports:
 6. **Preference Tracker**: Extract memories about user preferences from emails or messages
 7. **Knowledge Base Builder**: Create memories from educational content or research materials
 8. **Contact Information Manager**: Extract contact details as memories from emails or messages
+9. **Personal Analytics Dashboard**: Read and analyze conversations and memories to provide insights
+10. **Memory Search Tool**: Create a specialized search interface for user memories
+11. **Conversation Visualizer**: Generate visual representations of conversation patterns and topics
+12. **Cross-Platform Sync**: Read conversations from OMI and sync them with other platforms
 
 We can't wait to see what you build with OMI integration Imports!

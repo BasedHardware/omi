@@ -52,7 +52,9 @@
           {
             "group": "SDK",
             "pages": [
+              "docs/developer/sdk/sdk",
               "docs/developer/sdk/python",
+              "docs/developer/sdk/ReactNative",
               "docs/developer/sdk/swift"
             ]
           },
