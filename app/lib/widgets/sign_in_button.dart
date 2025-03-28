@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/utils/platform_check.dart';

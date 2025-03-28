@@ -6,7 +6,7 @@ class ExecutionGuard {
   static ExecutionTarget? currentTarget;
 
   ExecutionGuard() {
-    currentTarget ??= currentPlatform; 
+    currentTarget ??= currentPlatform;
   }
 
   dynamic notAllowedOn(List<ExecutionTarget> notAllowedOn, dynamic code) {
@@ -20,7 +20,6 @@ class ExecutionGuard {
     if (allowedOn.contains(currentTarget)) return code;
     return;
   }
-
 
   static bool get isWeb => (currentTarget ??= currentPlatform) == ExecutionTarget.web;
   static bool get isAndroid => (currentTarget ??= currentPlatform) == ExecutionTarget.android;

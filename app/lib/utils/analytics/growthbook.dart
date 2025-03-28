@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';

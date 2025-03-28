@@ -119,18 +119,7 @@ class MessageProvider extends ChangeNotifier {
     var res = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowMultiple: true,
-        allowedExtensions: [
-          'jpeg',
-          'md',
-          'pdf',
-          'gif',
-          'doc',
-          'png',
-          'pptx',
-          'txt',
-          'xlsx',
-          'webp'
-        ]);
+        allowedExtensions: ['jpeg', 'md', 'pdf', 'gif', 'doc', 'png', 'pptx', 'txt', 'xlsx', 'webp']);
     if (res != null) {
       for (var file in res.files) {
         if (file.bytes == null) continue;
@@ -169,8 +158,7 @@ class MessageProvider extends ChangeNotifier {
         uploadedFiles.addAll(res);
       } else {
         clearSelectedFiles();
-        AppSnackbar.showSnackbarError(
-            'Failed to upload file, please try again later');
+        AppSnackbar.showSnackbarError('Failed to upload file, please try again later');
       }
       setMultiUploadingFileStatus(files.keys.map((e) => e).toList(), false);
       notifyListeners();
@@ -206,8 +194,7 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<List<ServerMessage>> getMessagesFromServer(
-      {bool dropdownSelected = false}) async {
+  Future<List<ServerMessage>> getMessagesFromServer({bool dropdownSelected = false}) async {
     if (!hasCachedMessages) {
       firstTimeLoadingText = 'Reading your memories...';
       notifyListeners();
@@ -274,12 +261,10 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future sendVoiceMessageStreamToServer(List<List<int>> audioBytes,
-      {Function? onFirstChunkRecived}) async {
+  Future sendVoiceMessageStreamToServer(List<List<int>> audioBytes, {Function? onFirstChunkRecived}) async {
     var file = await FileUtils.saveAudioBytesToTempFile(
       audioBytes,
-      DateTime.now().millisecondsSinceEpoch ~/ 1000 -
-          (audioBytes.length / 100).ceil(),
+      DateTime.now().millisecondsSinceEpoch ~/ 1000 - (audioBytes.length / 100).ceil(),
     );
 
     setShowTypingIndicator(true);
@@ -290,9 +275,7 @@ class MessageProvider extends ChangeNotifier {
     try {
       bool firstChunkRecieved = false;
       await for (var chunk in sendVoiceMessageStreamServer([file])) {
-        if (!firstChunkRecieved &&
-            [MessageChunkType.data, MessageChunkType.done]
-                .contains(chunk.type)) {
+        if (!firstChunkRecieved && [MessageChunkType.data, MessageChunkType.done].contains(chunk.type)) {
           firstChunkRecieved = true;
           if (onFirstChunkRecived != null) {
             onFirstChunkRecived();
@@ -351,8 +334,7 @@ class MessageProvider extends ChangeNotifier {
     clearSelectedFiles();
     clearUploadedFiles();
     try {
-      await for (var chunk in sendMessageStreamServer(text,
-          appId: appProvider?.selectedChatAppId, filesId: fileIds)) {
+      await for (var chunk in sendMessageStreamServer(text, appId: appProvider?.selectedChatAppId, filesId: fileIds)) {
         if (chunk.type == MessageChunkType.think) {
           message.thinkings.add(chunk.text);
           notifyListeners();

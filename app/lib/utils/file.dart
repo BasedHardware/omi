@@ -26,7 +26,7 @@ class FileUtils {
 
     return file;
   }
-  
+
   static Future<File> convertPcmToWavFile(Uint8List pcmBytes, int sampleRate, int channels) async {
     try {
       // Convert PCM to WAV bytes
@@ -35,12 +35,12 @@ class FileUtils {
         sampleRate: sampleRate,
         numChannels: channels,
       ).asBytes();
-      
+
       // Create a temporary file
       final tempDir = await getTemporaryDirectory();
       final tempPath = '${tempDir.path}/recording_${DateTime.now().millisecondsSinceEpoch}.wav';
       final file = File(tempPath);
-      
+
       // Write WAV bytes to file
       await file.writeAsBytes(wavBytes);
       return file;

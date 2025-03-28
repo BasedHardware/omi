@@ -95,7 +95,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver, TickerProviderStateMixin {
-  ForegroundUtil? foregroundUtil = (!ExecutionGuard.isWeb)  ? ForegroundUtil(): null;
+  ForegroundUtil? foregroundUtil = (!ExecutionGuard.isWeb) ? ForegroundUtil() : null;
   List<Widget> screens = [Container(), const SizedBox(), const SizedBox(), const SizedBox()];
 
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
@@ -200,10 +200,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
       // ForegroundUtil.requestPermissions();
 
-      if (!ExecutionGuard.isWeb){
-      await ForegroundUtil.initializeForegroundService();
-      ForegroundUtil.startForegroundTask();
-      }    
+      if (!ExecutionGuard.isWeb) {
+        await ForegroundUtil.initializeForegroundService();
+        ForegroundUtil.startForegroundTask();
+      }
       if (mounted) {
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
@@ -257,9 +257,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     _listenToMessagesFromNotification();
     super.initState();
 
-    
     // After init
-    if(!ExecutionGuard.isWeb)FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
+    if (!ExecutionGuard.isWeb) FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
   }
 
   void _listenToMessagesFromNotification() {
@@ -566,7 +565,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    if(!ExecutionGuard.isWeb) ForegroundUtil.stopForegroundTask();
+    if (!ExecutionGuard.isWeb) ForegroundUtil.stopForegroundTask();
     if (_controller != null) {
       _controller!.dispose();
       _controller = null;

@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/utils/platform_check.dart';
@@ -32,7 +31,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                     onChanged: (s) async {
                       if (s != null) {
                         if (s) {
-                          if(!ExecutionGuard.isWeb)await provider.askForBackgroundPermissions();
+                          if (!ExecutionGuard.isWeb) await provider.askForBackgroundPermissions();
                         } else {
                           provider.updateBackgroundPermission(false);
                         }
@@ -122,7 +121,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
               onChanged: (s) async {
                 if (s != null) {
                   if (s) {
-                    if (!ExecutionGuard.isWeb) await provider.askForNotificationPermissions();
+                    await provider.askForNotificationPermissions();
                   } else {
                     provider.updateNotificationPermission(false);
                   }
@@ -164,7 +163,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                               provider.setLoading(true);
                               if (ExecutionGuard.isAndroid) {
                                 if (!provider.hasBackgroundPermission) {
-                                  if(!ExecutionGuard.isWeb) await provider.askForBackgroundPermissions();
+                                  if (!ExecutionGuard.isWeb) await provider.askForBackgroundPermissions();
                                 }
                               }
                               await Permission.notification.request().then(

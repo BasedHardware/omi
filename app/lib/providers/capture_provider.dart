@@ -614,7 +614,7 @@ class CaptureProvider extends ChangeNotifier
 
     if (segments.isEmpty) {
       debugPrint('newSegments: ${newSegments.last}');
-      if(!ExecutionGuard.isWeb) FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
+      if (!ExecutionGuard.isWeb) FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
       _loadInProgressConversation();
     }
     TranscriptSegment.combineSegments(segments, newSegments);

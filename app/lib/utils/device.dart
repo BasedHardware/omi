@@ -17,11 +17,11 @@ class DeviceUtils {
     if (latestFirmwareDetails['version'] == null || latestFirmwareDetails['draft']) {
       return ('Latest Version Not Available', false, '');
     }
-    
+
     String latestVersionStr = latestFirmwareDetails['version'];
     Version latestVersion = Version.parse(latestVersionStr);
     Version minVersion = Version.parse(latestFirmwareDetails['min_version']);
-    
+
     if (currentVersion < minVersion) {
       return ('0', false, latestVersionStr);
     } else {

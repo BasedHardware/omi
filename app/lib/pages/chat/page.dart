@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
@@ -370,7 +369,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                               width: MediaQuery.sizeOf(context).width * 0.2,
                                               decoration: BoxDecoration(
                                                 color: Colors.grey[800],
-                                                image: provider.selectedFileTypes[idx] == 'image' && provider.selectedFiles[fileName] != null  
+                                                image: provider.selectedFileTypes[idx] == 'image' &&
+                                                        provider.selectedFiles[fileName] != null
                                                     ? DecorationImage(
                                                         image: MemoryImage(provider.selectedFiles[fileName]!),
                                                         fit: BoxFit.cover,

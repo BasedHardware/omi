@@ -114,7 +114,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     notifyListeners();
   }
 
-  Future askForBackgroundPermissions() async { 
+  Future askForBackgroundPermissions() async {
     await FlutterForegroundTask.requestIgnoreBatteryOptimization();
     var isAllowed = await ForegroundUtil().isIgnoringBatteryOptimizations;
     updateBackgroundPermission(isAllowed);
@@ -299,5 +299,4 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   void onStatusChanged(DeviceServiceStatus status) {
     // TODO: implement onStatusChanged
   }
-
 }
