@@ -24,6 +24,8 @@ yarn.lock
 build/
 dist/
 .build/
+.swiftpm/
+.vscode
 
 # Android specific
 **/android/**/build/
