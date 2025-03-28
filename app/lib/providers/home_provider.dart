@@ -59,6 +59,19 @@ class HomeProvider extends ChangeNotifier {
     'Vietnamese': 'vi',
   };
 
+  final autoDetectionSupportedLanguages = [
+    'English',
+    'Spanish',
+    'French',
+    'German',
+    'Hindi',
+    'Russian',
+    'Portuguese',
+    'Japanese',
+    'Italian',
+    'Dutch'
+  ];
+
   HomeProvider() {
     chatFieldFocusNode.addListener(_onFocusChange);
     appsSearchFieldFocusNode.addListener(_onFocusChange);

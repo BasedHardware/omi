@@ -512,6 +512,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       const Spacer(),
                       SpeechLanguageSheet(
                         recordingLanguage: provider.recordingLanguage,
+                        autoDetectionSupportedLanguages: provider.autoDetectionSupportedLanguages,
                         setRecordingLanguage: (language) {
                           provider.setRecordingLanguage(language);
                           // Notify capture provider
