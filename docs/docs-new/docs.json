@@ -23,7 +23,7 @@
           {
             "group": "Apps",
             "pages": [
-              "docs/developer/apps/Introduction",
+              "docs/developer/apps/introduction",
               "docs/developer/apps/PromptBased",
               "docs/developer/apps/Integrations",
               "docs/developer/apps/AudioStreaming",
