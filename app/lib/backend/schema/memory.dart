@@ -1,12 +1,12 @@
-enum FactCategory { core, lifestyle, hobbies, interests, habits, work, skills, learnings, other }
+enum MemoryCategory { core, lifestyle, hobbies, interests, habits, work, skills, learnings, other }
 
-enum FactVisibility { private, public }
+enum MemoryVisibility { private, public }
 
-class Fact {
+class Memory {
   String id;
   String uid;
   String content;
-  FactCategory category;
+  MemoryCategory category;
   DateTime createdAt;
   DateTime updatedAt;
   String? conversationId;
@@ -16,9 +16,9 @@ class Fact {
   bool manuallyAdded;
   bool edited;
   bool deleted;
-  FactVisibility visibility;
+  MemoryVisibility visibility;
 
-  Fact({
+  Memory({
     required this.id,
     required this.uid,
     required this.content,
@@ -35,14 +35,14 @@ class Fact {
     required this.visibility,
   });
 
-  factory Fact.fromJson(Map<String, dynamic> json) {
-    return Fact(
+  factory Memory.fromJson(Map<String, dynamic> json) {
+    return Memory(
       id: json['id'],
       uid: json['uid'],
       content: json['content'],
-      category: FactCategory.values.firstWhere(
+      category: MemoryCategory.values.firstWhere(
         (e) => e.toString().split('.').last == json['category'],
-        orElse: () => FactCategory.other,
+        orElse: () => MemoryCategory.other,
       ),
       createdAt: DateTime.parse(json['created_at']).toLocal(),
       updatedAt: DateTime.parse(json['updated_at']).toLocal(),
@@ -54,8 +54,8 @@ class Fact {
       edited: json['edited'] ?? false,
       deleted: json['deleted'] ?? false,
       visibility: json['visibility'] != null
-          ? (FactVisibility.values.asNameMap()[json['visibility']] ?? FactVisibility.public)
-          : FactVisibility.public,
+          ? (MemoryVisibility.values.asNameMap()[json['visibility']] ?? MemoryVisibility.public)
+          : MemoryVisibility.public,
     );
   }
 

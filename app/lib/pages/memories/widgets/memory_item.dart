@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:omi/backend/schema/fact.dart';
-import 'package:omi/providers/facts_provider.dart';
+import 'package:omi/backend/schema/memory.dart';
+import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
 import 'delete_confirmation.dart';
 
-class FactItem extends StatelessWidget {
-  final Fact fact;
-  final FactsProvider provider;
-  final Function(BuildContext, Fact, FactsProvider) onTap;
+class MemoryItem extends StatelessWidget {
+  final Memory memory;
+  final MemoriesProvider provider;
+  final Function(BuildContext, Memory, MemoriesProvider) onTap;
   final bool showDismissible;
 
-  const FactItem({
+  const MemoryItem({
     super.key,
-    required this.fact,
+    required this.memory,
     required this.provider,
     required this.onTap,
     this.showDismissible = true,
@@ -22,8 +22,8 @@ class FactItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Widget factWidget = GestureDetector(
-      onTap: () => onTap(context, fact, provider),
+    final Widget memoryWidget = GestureDetector(
+      onTap: () => onTap(context, memory, provider),
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
@@ -36,7 +36,7 @@ class FactItem extends StatelessWidget {
             ListTile(
               contentPadding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
               title: Text(
-                fact.content.decodeString,
+                memory.content.decodeString,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 16,
@@ -50,19 +50,19 @@ class FactItem extends StatelessWidget {
     );
 
     if (!showDismissible) {
-      return factWidget;
+      return memoryWidget;
     }
 
     return Dismissible(
-      key: Key(fact.id),
+      key: Key(memory.id),
       direction: DismissDirection.endToStart,
       confirmDismiss: (direction) async {
         final shouldDelete = await DeleteConfirmation.show(context);
         return shouldDelete;
       },
       onDismissed: (direction) {
-        provider.deleteFact(fact);
-        MixpanelManager().factsPageDeletedFact(fact);
+        provider.deleteMemory(memory);
+        MixpanelManager().memoriesPageDeletedMemory(memory);
       },
       background: Container(
         margin: const EdgeInsets.only(bottom: 8),
@@ -74,12 +74,12 @@ class FactItem extends StatelessWidget {
         padding: const EdgeInsets.only(right: 20),
         child: const Icon(Icons.delete_outline, color: Colors.white),
       ),
-      child: factWidget,
+      child: memoryWidget,
     );
   }
 
   Widget _buildVisibilityButton(BuildContext context) {
-    return PopupMenuButton<FactVisibility>(
+    return PopupMenuButton<MemoryVisibility>(
       padding: EdgeInsets.zero,
       position: PopupMenuPosition.under,
       surfaceTintColor: Colors.transparent,
@@ -98,7 +98,7 @@ class FactItem extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              fact.visibility == FactVisibility.private ? Icons.lock_outline : Icons.public,
+              memory.visibility == MemoryVisibility.private ? Icons.lock_outline : Icons.public,
               size: 16,
               color: Colors.white70,
             ),
@@ -114,31 +114,31 @@ class FactItem extends StatelessWidget {
       itemBuilder: (context) => [
         _buildVisibilityItem(
           context,
-          FactVisibility.private,
+          MemoryVisibility.private,
           Icons.lock_outline,
           'Will not be used for personas',
         ),
         _buildVisibilityItem(
           context,
-          FactVisibility.public,
+          MemoryVisibility.public,
           Icons.public,
           'Will be used for personas',
         ),
       ],
       onSelected: (visibility) {
-        provider.updateFactVisibility(fact, visibility);
+        provider.updateMemoryVisibility(memory, visibility);
       },
     );
   }
 
-  PopupMenuItem<FactVisibility> _buildVisibilityItem(
+  PopupMenuItem<MemoryVisibility> _buildVisibilityItem(
     BuildContext context,
-    FactVisibility visibility,
+    MemoryVisibility visibility,
     IconData icon,
     String description,
   ) {
-    final isSelected = fact.visibility == visibility;
-    return PopupMenuItem<FactVisibility>(
+    final isSelected = memory.visibility == visibility;
+    return PopupMenuItem<MemoryVisibility>(
       value: visibility,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 4),

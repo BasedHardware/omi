@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:omi/backend/schema/fact.dart';
-import 'package:omi/providers/facts_provider.dart';
+import 'package:omi/backend/schema/memory.dart';
+import 'package:omi/providers/memories_provider.dart';
 
-import '../facts_review_page.dart';
+import '../memories_review_page.dart';
 
-class FactReviewSheet extends StatelessWidget {
-  final List<Fact> facts;
-  final FactsProvider provider;
+class MemoriesReviewSheet extends StatelessWidget {
+  final List<Memory> memories;
+  final MemoriesProvider provider;
 
-  const FactReviewSheet({
+  const MemoriesReviewSheet({
     super.key,
-    required this.facts,
+    required this.memories,
     required this.provider,
   });
 
@@ -38,7 +38,7 @@ class FactReviewSheet extends StatelessWidget {
                         SizedBox(
                           width: MediaQuery.of(context).size.width * 0.74,
                           child: Text(
-                            'Review and save ${facts.length} facts generated from today\'s conversation with Omi',
+                            'Review and save ${memories.length} memories generated from today\'s conversation with Omi',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 16,
@@ -92,7 +92,7 @@ class FactReviewSheet extends StatelessWidget {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => FactReviewPage(facts: facts),
+                              builder: (context) => MemoriesReviewPage(memories: memories),
                             ),
                           );
                         },

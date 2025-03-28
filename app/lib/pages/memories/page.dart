@@ -1,24 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:omi/backend/schema/fact.dart';
-import 'package:omi/providers/facts_provider.dart';
+import 'package:omi/backend/schema/memory.dart';
+import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/widgets/extensions/functions.dart';
 import 'package:provider/provider.dart';
 
-import 'category_facts_page.dart';
-import 'widgets/fact_edit_sheet.dart';
-import 'widgets/fact_item.dart';
-import 'widgets/fact_dialog.dart';
-import 'widgets/fact_review_sheet.dart';
+import 'widgets/memory_edit_sheet.dart';
+import 'widgets/memory_item.dart';
+import 'widgets/memory_dialog.dart';
+import 'widgets/memory_review_sheet.dart';
 
-class FactsPage extends StatefulWidget {
-  const FactsPage({super.key});
+class MemoriesPage extends StatefulWidget {
+  const MemoriesPage({super.key});
 
   @override
-  State<FactsPage> createState() => FactsPageState();
+  State<MemoriesPage> createState() => MemoriesPageState();
 }
 
-class FactsPageState extends State<FactsPage> {
+class MemoriesPageState extends State<MemoriesPage> {
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -30,11 +29,11 @@ class FactsPageState extends State<FactsPage> {
   @override
   void initState() {
     () async {
-      await context.read<FactsProvider>().init();
+      await context.read<MemoriesProvider>().init();
 
-      final unreviewedFacts = context.read<FactsProvider>().unreviewed;
-      if (unreviewedFacts.isNotEmpty) {
-        _showReviewSheet(unreviewedFacts);
+      final unreviewedMemories = context.read<MemoriesProvider>().unreviewed;
+      if (unreviewedMemories.isNotEmpty) {
+        _showReviewSheet(unreviewedMemories);
       }
     }.withPostFrameCallback();
     super.initState();
@@ -42,7 +41,7 @@ class FactsPageState extends State<FactsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<FactsProvider>(
+    return Consumer<MemoriesProvider>(
       builder: (context, provider, _) {
         return PopScope(
           canPop: true,
@@ -71,8 +70,8 @@ class FactsPageState extends State<FactsPage> {
                           IconButton(
                             icon: const Icon(Icons.add),
                             onPressed: () {
-                              showFactDialog(context, provider);
-                              MixpanelManager().factsPageCreateFactBtn();
+                              showMemoryDialog(context, provider);
+                              MixpanelManager().memoriesPageCreateMemoryBtn();
                             },
                           ),
                         ],
@@ -116,7 +115,7 @@ class FactsPageState extends State<FactsPage> {
                       ),
                       SliverPadding(
                         padding: const EdgeInsets.all(16),
-                        sliver: provider.filteredFacts.isEmpty
+                        sliver: provider.filteredMemories.isEmpty
                             ? SliverFillRemaining(
                                 child: Center(
                                   child: Column(
@@ -125,7 +124,7 @@ class FactsPageState extends State<FactsPage> {
                                       Icon(Icons.note_add, size: 48, color: Colors.grey.shade600),
                                       const SizedBox(height: 16),
                                       Text(
-                                        provider.searchQuery.isEmpty ? 'No facts yet' : 'No facts found',
+                                        provider.searchQuery.isEmpty ? 'No memories yet' : 'No memories found',
                                         style: TextStyle(
                                           color: Colors.grey.shade400,
                                           fontSize: 18,
@@ -134,8 +133,8 @@ class FactsPageState extends State<FactsPage> {
                                       if (provider.searchQuery.isEmpty) ...[
                                         const SizedBox(height: 8),
                                         TextButton(
-                                          onPressed: () => showFactDialog(context, provider),
-                                          child: const Text('Add your first fact'),
+                                          onPressed: () => showMemoryDialog(context, provider),
+                                          child: const Text('Add your first memory'),
                                         ),
                                       ],
                                     ],
@@ -145,14 +144,14 @@ class FactsPageState extends State<FactsPage> {
                             : SliverList(
                                 delegate: SliverChildBuilderDelegate(
                                   (context, index) {
-                                    final fact = provider.filteredFacts[index];
-                                    return FactItem(
-                                      fact: fact,
+                                    final memory = provider.filteredMemories[index];
+                                    return MemoryItem(
+                                      memory: memory,
                                       provider: provider,
                                       onTap: _showQuickEditSheet,
                                     );
                                   },
-                                  childCount: provider.filteredFacts.length,
+                                  childCount: provider.filteredMemories.length,
                                 ),
                               ),
                       ),
@@ -164,42 +163,42 @@ class FactsPageState extends State<FactsPage> {
     );
   }
 
-  void _showQuickEditSheet(BuildContext context, Fact fact, FactsProvider provider) {
+  void _showQuickEditSheet(BuildContext context, Memory memory, MemoriesProvider provider) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) => FactEditSheet(
-        fact: fact,
+      builder: (context) => MemoryEditSheet(
+        memory: memory,
         provider: provider,
         onDelete: (_, __, ___) {},
       ),
     );
   }
 
-  void _showReviewSheet(List<Fact> facts) async {
-    if (facts.isEmpty) return;
+  void _showReviewSheet(List<Memory> memories) async {
+    if (memories.isEmpty) return;
     await showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isDismissible: true,
       enableDrag: false,
       builder: (context) => ListenableProvider(
-          create: (_) => FactsProvider(),
+          create: (_) => MemoriesProvider(),
           builder: (context, _) {
-            return FactReviewSheet(
-              facts: facts,
-              provider: context.read<FactsProvider>(),
+            return MemoriesReviewSheet(
+              memories: memories,
+              provider: context.read<MemoriesProvider>(),
             );
           }),
     );
   }
 
-  void _showDeleteAllConfirmation(BuildContext context, FactsProvider provider) {
-    if (provider.facts.isEmpty) {
+  void _showDeleteAllConfirmation(BuildContext context, MemoriesProvider provider) {
+    if (provider.memories.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No facts to delete'),
+          content: Text('No memories to delete'),
           duration: Duration(seconds: 2),
         ),
       );
@@ -228,7 +227,7 @@ class FactsPageState extends State<FactsPage> {
           ),
           TextButton(
             onPressed: () {
-              provider.deleteAllFacts();
+              provider.deleteAllMemories();
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(

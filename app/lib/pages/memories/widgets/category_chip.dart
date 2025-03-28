@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:omi/backend/schema/fact.dart';
+import 'package:omi/backend/schema/memory.dart';
 
 class CategoryChip extends StatelessWidget {
-  final FactCategory category;
+  final MemoryCategory category;
   final int? count;
   final bool isSelected;
   final VoidCallback? onTap;
