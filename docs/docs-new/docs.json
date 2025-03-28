@@ -13,7 +13,7 @@
       {
         "group": "Get Started",
         "pages": [
-          "docs/get_started/introduction",
+          "../../readme",
           "docs/get_started/Flash_device"
         ]
       },
