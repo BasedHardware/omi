@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'sdks/python/omi/README.md'
+      - 'sdks/python/README.md'
  
       # Add more paths as needed
 
@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v2
       - name: Copy multiple files
         run: |
-          cp sdks/python/omi/README.md docs/docs/developer/sdk/python.mdx
+          cp sdks/python/README.md docs/docs/developer/sdk/python.mdx
         
           # Add more cp commands for additional files
       - name: Commit changes
