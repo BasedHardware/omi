@@ -6,22 +6,27 @@ import httpx
 from pydantic import BaseModel
 from ulid import ULID
 
-from database.apps import update_app_in_db, upsert_app_to_db, get_persona_by_id_db, get_persona_by_username_twitter_handle_db
+from database.apps import update_app_in_db, upsert_app_to_db, get_persona_by_id_db, \
+    get_persona_by_username_twitter_handle_db
 from database.redis_db import delete_generic_cache, save_username, is_username_taken
 from utils.llm import condense_tweets, generate_twitter_persona_prompt
-from utils.conversations.facts import process_twitter_facts
+from utils.conversations.memories import process_twitter_memories
+
 rapid_api_host = os.getenv('RAPID_API_HOST')
 rapid_api_key = os.getenv('RAPID_API_KEY')
 
 defaultTimeoutSec = 15
+
 
 class TwitterTweet(BaseModel):
     text: str
     created_at: str
     id: str
 
+
 class TwitterTimeline(BaseModel):
     timeline: List[TwitterTweet]
+
 
 class TwitterProfile(BaseModel):
     name: str
@@ -51,6 +56,8 @@ class TwitterProfile(BaseModel):
 
 
 T = TypeVar('T')
+
+
 def with_retry(operation_name: str, func: Callable[[], T]) -> T:
     max_retries = 5
     base_delay = 1
@@ -62,10 +69,11 @@ def with_retry(operation_name: str, func: Callable[[], T]) -> T:
             delay = base_delay * (2 ** attempt)
             if attempt == max_retries - 1:
                 raise
-            print(f"Error in {operation_name} (attempt {attempt+1}/{max_retries}): {str(e)}")
+            print(f"Error in {operation_name} (attempt {attempt + 1}/{max_retries}): {str(e)}")
             print(f"Retrying in {delay} seconds...")
             time.sleep(delay)
     raise Exception("Maximum retries exceeded")
+
 
 async def get_twitter_profile(handle: str) -> TwitterProfile:
     """Fetch Twitter profile for a user and return structured data"""
@@ -75,7 +83,6 @@ async def get_twitter_profile(handle: str) -> TwitterProfile:
         "X-RapidAPI-Key": rapid_api_key,
         "X-RapidAPI-Host": rapid_api_host
     }
-
 
     def fetch_profile():
         response = httpx.get(url, headers=headers, timeout=defaultTimeoutSec)
@@ -94,13 +101,15 @@ async def get_twitter_profile(handle: str) -> TwitterProfile:
 
     return with_retry(f"fetching Twitter profile for {handle}", fetch_profile)
 
+
 def create_facts_from_twitter_tweets(uid: str, persona_id: str, tweets: List[TwitterTweet]) -> None:
-    """Create individual facts from tweets for more detailed persona information"""
+    """Create individual memories from tweets for more detailed persona information"""
     # Combine tweets into a single text for fact extraction
     combined_text = "\n".join([f"{tweet.text} (Posted: {tweet.created_at})" for tweet in tweets])
 
     # Process tweets and extract facts using the dedicated function
-    process_twitter_facts(uid, combined_text, persona_id)
+    process_twitter_memories(uid, combined_text, persona_id)
+
 
 async def get_twitter_timeline(handle: str) -> TwitterTimeline:
     """Fetch Twitter timeline for a user and return structured data"""
@@ -132,6 +141,7 @@ async def get_twitter_timeline(handle: str) -> TwitterTimeline:
         response.raise_for_status()
 
     return with_retry(f"fetching Twitter timeline for {handle}", fetch_timeline)
+
 
 async def verify_latest_tweet(username: str, handle: str) -> Dict[str, Any]:
     """Verify if the latest tweet contains verification text"""
@@ -179,6 +189,7 @@ async def upsert_persona_from_twitter_profile(username: str, handle: str, uid: s
     create_facts_from_twitter_tweets(uid, persona['id'], timeline.timeline)
 
     return persona
+
 
 def _create_or_update_persona(profile: TwitterProfile, username: str, uid: str, handle: str) -> Dict[str, Any]:
     """Create a new persona or update an existing one"""
