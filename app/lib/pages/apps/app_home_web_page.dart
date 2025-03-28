@@ -1,8 +1,5 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:omi/utils/browser.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/preferences.dart';
 
@@ -19,7 +16,6 @@ class AppHomeWebPage extends StatefulWidget {
 }
 
 class _AppHomeWebPageState extends State<AppHomeWebPage> with SingleTickerProviderStateMixin {
-  late final WebViewController _controller;
   late final AnimationController _animationController;
   late final Animation<Offset> _slideAnimation;
   bool _isLoading = true;
@@ -39,42 +35,49 @@ class _AppHomeWebPageState extends State<AppHomeWebPage> with SingleTickerProvid
       curve: Curves.easeOut,
     ));
     _animationController.forward();
-    _controller = WebViewController()
-      ..setUserAgent(topUserAgents[Random().nextInt(topUserAgents.length)])
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageFinished: (String url) {
-            setState(() {
-              _isLoading = false;
-            });
-          },
-          onWebResourceError: (WebResourceError error) {
-            setState(() {
-              _isLoading = false;
-            });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Failed to load page: ${error.description}',
-                  style: const TextStyle(color: Colors.white),
-                ),
-                backgroundColor: Colors.red,
-                duration: const Duration(seconds: 3),
-                behavior: SnackBarBehavior.floating,
-                margin: EdgeInsets.only(
-                  bottom: MediaQuery.of(context).size.height - 100,
-                  left: 20,
-                  right: 20,
-                ),
-              ),
-            );
-          },
-        ),
-      )
-      ..loadRequest(Uri.parse(
-        '${widget.app.externalIntegration?.appHomeUrl ?? ''}?uid=${SharedPreferencesUtil().uid}',
-      ));
+
+    // Launch the custom tab after animation completes
+    var url = '${widget.app.externalIntegration?.appHomeUrl ?? ''}?uid=${SharedPreferencesUtil().uid}';
+    _animationController.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        _openCustomTab(url);
+      }
+    });
+  }
+
+  void _openCustomTab(String url) async {
+    setState(() {
+      _isLoading = false;
+    });
+
+    try {
+      await launchCustomTab(context, url);
+      // Close this page after the custom tab is closed
+      if (mounted) {
+        _animationController.reverse().then((_) {
+          Navigator.of(context).pop();
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to load page: $e',
+              style: const TextStyle(color: Colors.white),
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+            margin: EdgeInsets.only(
+              bottom: MediaQuery.of(context).size.height - 100,
+              left: 20,
+              right: 20,
+            ),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -82,70 +85,62 @@ class _AppHomeWebPageState extends State<AppHomeWebPage> with SingleTickerProvid
     return Scaffold(
       backgroundColor: Colors.black,
       body: SlideTransition(
-          position: _slideAnimation,
-          child: SafeArea(
-            child: Stack(
-              children: [
-                // Main content with top padding and rounded corners
-                Padding(
-                  padding: const EdgeInsets.only(top: 16, bottom: 48),
-                  child: ClipRRect(
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(16),
-                      topRight: Radius.circular(16),
+        position: _slideAnimation,
+        child: SafeArea(
+          child: Stack(
+            children: [
+              // Loading indicator
+              if (_isLoading)
+                Container(
+                  color: Colors.black,
+                  child: const Center(
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                     ),
-                    child: WebViewWidget(controller: _controller),
                   ),
                 ),
-                if (_isLoading)
-                  Container(
-                    color: Colors.black,
-                    child: const Center(
-                      child: CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
+              // Bottom bar
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: GestureDetector(
+                  onTap: () {
+                    _animationController.reverse().then((_) {
+                      Navigator.of(context).pop();
+                    });
+                  },
+                  child: Container(
+                    height: 48,
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.7),
                     ),
-                  ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: GestureDetector(
-                    onTap: () {
-                      _animationController.reverse().then((_) {
-                        Navigator.of(context).pop();
-                      });
-                    },
-                    child: Container(
-                      height: 48,
-                      alignment: Alignment.center,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.7),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.max,
-                        children: [
-                          const Icon(
-                            Icons.keyboard_double_arrow_down,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.max,
+                      children: [
+                        const Icon(
+                          Icons.keyboard_double_arrow_down,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                        Text(
+                          "${widget.app.name}'s App Details",
+                          style: const TextStyle(
                             color: Colors.white,
-                            size: 24,
+                            fontSize: 12,
                           ),
-                          Text(
-                            "${widget.app.name}'s App Details",
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ],
-            ),
-          )),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
