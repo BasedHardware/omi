@@ -1,4 +1,4 @@
-# 🎧 Omi Python SDK 
+# 🎧 Omi Python SDK!
 
 This SDK connects to an **Omi wearable device** over **Bluetooth**, decodes the **Opus-encoded audio**, and transcribes it in **real time using Deepgram**.
 
