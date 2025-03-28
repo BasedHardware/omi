@@ -23,6 +23,7 @@ yarn.lock
 .pub/
 build/
 dist/
+.build/
 
 # Android specific
 **/android/**/build/
@@ -178,3 +179,5 @@ web-build/
 web-report/
 .metro-cache/
 .aider*
+
+lefthook.yml
