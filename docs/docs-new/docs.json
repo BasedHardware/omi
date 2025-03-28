@@ -13,7 +13,7 @@
       {
         "group": "Get Started",
         "pages": [
-          "docs/get_started/Introduction",
+          "docs/get_started/introduction",
           "docs/get_started/Flash_device"
         ]
       },
@@ -23,7 +23,7 @@
           {
             "group": "Apps",
             "pages": [
-              "docs/developer/apps/introduction",
+              "docs/developer/apps/Introduction",
               "docs/developer/apps/PromptBased",
               "docs/developer/apps/Integrations",
               "docs/developer/apps/AudioStreaming",
