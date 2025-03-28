@@ -306,15 +306,15 @@ export default function App() {
         sample_rate: '16000',
         encoding: 'opus',
         channels: '1',
-        model: 'nova-2',
-        language: 'en-US',
+        model: 'nova-3',
+        language: 'multi',
         smart_format: 'true',
         interim_results: 'false',
         punctuate: 'true',
         diarize: 'true'
       });
 
-      const ws = new WebSocket(`wss://api.deepgram.com/v1/listen?${params.toString()}`, [], {
+      const ws = new WebSocket(`wss://api.beta.deepgram.com/v1/listen?${params.toString()}`, [], {
         headers: {
           'Authorization': `Token ${deepgramApiKey}`
         }

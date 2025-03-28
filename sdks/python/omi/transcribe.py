@@ -3,7 +3,7 @@ import json
 import asyncio
 
 async def transcribe(audio_queue, api_key):
-    url = "wss://api.deepgram.com/v1/listen?punctuate=true&model=nova&language=en-US&encoding=linear16&sample_rate=16000&channels=1"
+    url = "wss://api.beta.deepgram.com/v1/listen?model=nova-3&language=multi&smart_format=true&punctuate=true&encoding=linear16&sample_rate=16000&channels=1"
     headers = {
         "Authorization": f"Token {api_key}"
     }
