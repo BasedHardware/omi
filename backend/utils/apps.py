@@ -15,7 +15,7 @@ from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
     get_omi_personas_by_uid_db, get_api_key_by_hash_db
 from database.auth import get_user_name
 from database.conversations import get_conversations
-from database.facts import get_facts, get_user_public_facts
+from database.memories import get_memories, get_user_public_memories
 from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_generic_cache, \
     set_generic_cache, set_app_usage_history_cache, get_app_usage_history_cache, get_app_money_made_cache, \
     set_app_money_made_cache, get_plugins_installs_count, get_plugins_reviews, get_app_cache_by_id, set_app_cache_by_id, \
@@ -25,7 +25,7 @@ from database.users import get_stripe_connect_account_id
 from models.app import App, UsageHistoryItem, UsageHistoryType
 from models.conversation import Conversation
 from utils import stripe
-from utils.llm import condense_conversations, condense_facts, generate_persona_description, condense_tweets
+from utils.llm import condense_conversations, condense_memories, generate_persona_description, condense_tweets
 from utils.social import get_twitter_timeline, TwitterProfile, get_twitter_profile
 
 MarketplaceAppReviewUIDs = os.getenv('MARKETPLACE_APP_REVIEWERS').split(',') if os.getenv(
@@ -379,17 +379,17 @@ def get_omi_personas_by_uid(uid: str):
 
 
 async def generate_persona_prompt(uid: str, persona: dict):
-    """Generate a persona prompt based on user facts and conversations."""
+    """Generate a persona prompt based on user memories and conversations."""
 
     print(f"generate_persona_prompt {uid}")
 
-    # Get latest facts and user info
-    facts = get_facts(uid, limit=250)
+    # Get latest memories and user info
+    memories = get_memories(uid, limit=250)
     user_name = get_user_name(uid)
 
     # Get and condense recent conversations
-    memories = get_conversations(uid, limit=100)
-    conversation_history = Conversation.conversations_to_string(memories)
+    conversations = get_conversations(uid, limit=100)
+    conversation_history = Conversation.conversations_to_string(conversations)
     conversation_history = condense_conversations([conversation_history])
 
     tweets = None
@@ -399,8 +399,8 @@ async def generate_persona_prompt(uid: str, persona: dict):
         timeline = await get_twitter_timeline(persona['twitter']['username'])
         tweets = [{'tweet': tweet.text, 'posted_at': tweet.created_at} for tweet in timeline.timeline]
 
-    # Condense facts
-    facts_text = condense_facts([fact['content'] for fact in facts if not fact['deleted']], user_name)
+    # Condense memories
+    memories_text = condense_memories([memory['content'] for memory in memories if not memory['deleted']], user_name)
 
     # Generate updated chat prompt
     persona_prompt = f"""
@@ -447,7 +447,7 @@ async def generate_persona_prompt(uid: str, persona: dict):
     You have all the necessary condensed facts and contextual knowledge. Begin personifying {user_name} now.
 
     Personal Facts and Context:
-    {facts_text}
+    {memories_text}
 
     Recent Conversations:
     {conversation_history}
@@ -460,10 +460,10 @@ async def generate_persona_prompt(uid: str, persona: dict):
 
 
 def generate_persona_desc(uid: str, persona_name: str):
-    """Generate a persona description based on user facts."""
-    facts = get_facts(uid, limit=250)
+    """Generate a persona description based on user memories."""
+    memories = get_memories(uid, limit=250)
 
-    persona_description = generate_persona_description(facts, persona_name)
+    persona_description = generate_persona_description(memories, persona_name)
     return persona_description
 
 
@@ -497,14 +497,14 @@ def sync_update_persona_prompt(persona: dict):
 
 
 async def update_persona_prompt(persona: dict):
-    """Update a persona's chat prompt with latest facts and conversations."""
-    # Get latest facts and user info
-    facts = get_user_public_facts(persona['uid'], limit=250)
+    """Update a persona's chat prompt with latest memories and conversations."""
+    # Get latest memories and user info
+    memories = get_user_public_memories(persona['uid'], limit=250)
     user_name = get_user_name(persona['uid'])
 
     # Get and condense recent conversations
-    memories = get_conversations(persona['uid'], limit=100)
-    conversation_history = Conversation.conversations_to_string(memories)
+    conversations = get_conversations(persona['uid'], limit=100)
+    conversation_history = Conversation.conversations_to_string(conversations)
     conversation_history = condense_conversations([conversation_history])
 
     condensed_tweets = None
@@ -515,8 +515,8 @@ async def update_persona_prompt(persona: dict):
         tweets = [tweet.text for tweet in timeline.timeline]
         condensed_tweets = condense_tweets(tweets, persona['name'])
 
-    # Condense facts
-    facts_text = condense_facts([fact['content'] for fact in facts if not fact['deleted']], user_name)
+    # Condense memories
+    memories_text = condense_memories([memory['content'] for memory in memories if not memory['deleted']], user_name)
 
     # Generate updated chat prompt
     persona_prompt = f"""
@@ -563,7 +563,7 @@ You have:
 You have all the necessary condensed facts and contextual knowledge. Begin personifying {user_name} now.
 
 Personal Facts and Context:
-{facts_text}
+{memories_text}
 
 Recent Conversations:
 {conversation_history}

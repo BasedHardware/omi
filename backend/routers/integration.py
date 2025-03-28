@@ -11,8 +11,8 @@ import database.apps as apps_db
 import utils.apps as apps_utils
 from utils.apps import verify_api_key
 import database.redis_db as redis_db
-import database.facts as facts_db
-from models.facts import FactDB
+import database.memories as memory_db
+from models.memories import MemoryDB
 from database.redis_db import get_enabled_plugins, r as redis_client
 import database.notifications as notification_db
 import models.integrations as integration_models
@@ -20,7 +20,7 @@ import models.conversation as conversation_models
 from models.app import App
 from routers.conversations import process_conversation, trigger_external_integrations
 from utils.conversations.location import get_google_maps_location
-from utils.conversations.facts import process_external_integration_fact
+from utils.conversations.memories import process_external_integration_memory
 from utils.plugins import send_plugin_notification
 
 # Rate limit settings - more conservative limits to prevent notification fatigue
@@ -133,7 +133,7 @@ async def create_conversation_via_integration(
 async def create_memories_via_integration(
     request: Request,
     app_id: str,
-    fact_data: integration_models.ExternalIntegrationCreateFact,
+    fact_data: integration_models.ExternalIntegrationCreateMemory,
     uid: str,
     authorization: Optional[str] = Header(None)
 ):
@@ -164,8 +164,8 @@ async def create_memories_via_integration(
             (not fact_data.memories or len(fact_data.memories) == 0):
         raise HTTPException(status_code=422, detail="Either text or explicit memories(facts) are required and cannot be empty")
 
-    # Process and save the fact using the utility function
-    process_external_integration_fact(uid, fact_data, app_id)
+    # Process and save the memory using the utility function
+    process_external_integration_memory(uid, fact_data, app_id)
 
     # Empty response
     return {}
@@ -176,7 +176,7 @@ async def create_memories_via_integration(
 async def create_facts_via_integration(
     request: Request,
     app_id: str,
-    fact_data: integration_models.ExternalIntegrationCreateFact,
+    fact_data: integration_models.ExternalIntegrationCreateMemory,
     uid: str,
     authorization: Optional[str] = Header(None)
 ):
@@ -207,8 +207,8 @@ async def create_facts_via_integration(
             (not fact_data.memories or len(fact_data.memories) == 0):
         raise HTTPException(status_code=422, detail="Either text or explicit memories(facts) are required and cannot be empty")
 
-    # Process and save the fact using the utility function
-    process_external_integration_fact(uid, fact_data, app_id)
+    # Process and save the memory using the utility function
+    process_external_integration_memory(uid, fact_data, app_id)
 
     # Empty response
     return {}
@@ -245,11 +245,11 @@ async def get_memories_via_integration(
     if app_id not in enabled_plugins:
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
-    # Check if the app has the capability to read facts
-    if not apps_utils.app_has_action(app, 'create_facts'):
-        raise HTTPException(status_code=403, detail="App does not have the capability to read facts")
+    # Check if the app has the capability to read memories
+    if not apps_utils.app_has_action(app, 'read_memories'):
+        raise HTTPException(status_code=403, detail="App does not have the capability to read memories")
 
-    facts = facts_db.get_facts(uid, limit=limit, offset=offset)
+    facts = memory_db.get_memories(uid, limit=limit, offset=offset)
     memory_items = [integration_models.MemoryItem(**fact) for fact in facts]
 
     return {"memories": memory_items}
@@ -290,7 +290,7 @@ async def get_conversations_via_integration(
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
     # Check if the app has the capability to read conversations
-    if not apps_utils.app_has_action(app, 'create_conversation'):
+    if not apps_utils.app_has_action(app, 'read_conversations'):
         raise HTTPException(status_code=403, detail="App does not have the capability to read conversations")
 
     conversations_data = conversations_db.get_conversations(

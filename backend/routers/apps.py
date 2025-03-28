@@ -23,7 +23,7 @@ from utils.apps import get_available_apps, get_available_app_by_id, get_approved
     is_permit_payment_plan_get, generate_persona_prompt, generate_persona_desc, get_persona_by_uid, \
     increment_username, generate_api_key
 
-from database.facts import migrate_facts
+from database.memories import migrate_memories
 
 from utils.llm import generate_description, generate_persona_intro_message
 
@@ -89,7 +89,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
                 else:
                     external_integration['is_instructions_url'] = False
 
-        # Acitons
+        # Actions
         if actions := external_integration.get('actions'):
             for action in actions:
                 if not action.get('action'):
@@ -511,8 +511,30 @@ def get_plugin_capabilities():
             {'title': 'Memory Creation', 'id': 'memory_creation'},
             {'title': 'Transcript Processed', 'id': 'transcript_processed'},
         ], 'actions': [
-            {'title': 'Create conversations', 'id': 'create_conversation', 'doc_url': 'https://docs.omi.me/docs/developer/apps/IntegrationActions'},
-            {'title': 'Create memories', 'id': 'create_facts', 'doc_url': 'https://docs.omi.me/docs/developer/apps/IntegrationActions'}
+            {
+                'title': 'Create conversations', 
+                'id': 'create_conversation', 
+                'doc_url': 'https://docs.omi.me/docs/developer/apps/Import',
+                'description': 'Extend user conversations by making a POST request to the OMI System.'
+            },
+            {
+                'title': 'Create memories', 
+                'id': 'create_facts', 
+                'doc_url': 'https://docs.omi.me/docs/developer/apps/Import',
+                'description': 'Create new memories for the user through the OMI System.'
+            },
+            {
+                'title': 'Read conversations', 
+                'id': 'read_conversations', 
+                'doc_url': 'https://docs.omi.me/docs/developer/apps/Import',
+                'description': 'Access and read all user conversations through the OMI System. This gives the app access to all conversation history.'
+            },
+            {
+                'title': 'Read memories', 
+                'id': 'read_memories', 
+                'doc_url': 'https://docs.omi.me/docs/developer/apps/Import',
+                'description': 'Access and read all user memories through the OMI System. This gives the app access to all stored memories.'
+            }
         ]},
         {'title': 'Notification', 'id': 'proactive_notification', 'scopes': [
             {'title': 'User Name', 'id': 'user_name'},
@@ -640,7 +662,7 @@ async def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid
     migrate_app_owner_id_db(uid, old_id)
 
     # Start async tasks to migrate facts and update persona connected accounts
-    asyncio.create_task(migrate_facts(old_id, uid))
+    asyncio.create_task(migrate_memories(old_id, uid))
     asyncio.create_task(update_omi_persona_connected_accounts(uid))
 
     return {"status": "ok", "message": "Migration started"}
