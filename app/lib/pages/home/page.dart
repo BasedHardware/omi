@@ -14,7 +14,7 @@ import 'package:omi/main.dart';
 import 'package:omi/pages/apps/page.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
-import 'package:omi/pages/facts/page.dart';
+import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/home/widgets/chat_apps_dropdown_widget.dart';
 import 'package:omi/pages/persona/persona_profile.dart';
 import 'package:omi/pages/home/widgets/speech_language_sheet.dart';
@@ -135,7 +135,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   ///Screens with respect to subpage
   final Map<String, Widget> screensWithRespectToPath = {
     '/settings': const SettingsPage(),
-    '/facts': const FactsPage(),
+    '/facts': const MemoriesPage(),
   };
   bool? previousConnection;
 
@@ -243,7 +243,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         case "facts":
           MyApp.navigatorKey.currentState?.push(
             MaterialPageRoute(
-              builder: (context) => const FactsPage(),
+              builder: (context) => const MemoriesPage(),
             ),
           );
           break;

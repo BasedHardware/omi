@@ -23,7 +23,7 @@ from utils.apps import get_available_apps, get_available_app_by_id, get_approved
     is_permit_payment_plan_get, generate_persona_prompt, generate_persona_desc, get_persona_by_uid, \
     increment_username, generate_api_key
 
-from database.facts import migrate_facts
+from database.memories import migrate_memories
 
 from utils.llm import generate_description, generate_persona_intro_message
 
@@ -662,7 +662,7 @@ async def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid
     migrate_app_owner_id_db(uid, old_id)
 
     # Start async tasks to migrate facts and update persona connected accounts
-    asyncio.create_task(migrate_facts(old_id, uid))
+    asyncio.create_task(migrate_memories(old_id, uid))
     asyncio.create_task(update_omi_persona_connected_accounts(uid))
 
     return {"status": "ok", "message": "Migration started"}

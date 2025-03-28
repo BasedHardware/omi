@@ -9,7 +9,7 @@ from langchain_core.prompts import ChatPromptTemplate
 
 # - **world**:  Clever world facts that {user_name} can share to others so it makes him look smarter.
 # - "{user_name} learned that second Notion cofounder joined 5 years after." (**world**)
-extract_facts_prompt = ChatPromptTemplate.from_messages([
+extract_memories_prompt = ChatPromptTemplate.from_messages([
     '''
     You are an experienced detective tasked with creating a detailed profile of {user_name} based on conversations.
 
@@ -71,7 +71,7 @@ extract_facts_prompt = ChatPromptTemplate.from_messages([
     '''.replace('    ', '').strip()
 ])
 
-extract_facts_text_content_prompt = ChatPromptTemplate.from_messages([
+extract_memories_text_content_prompt = ChatPromptTemplate.from_messages([
     '''
     You are an expert at extracting both (1) new facts about {user_name} and (2) new learnings or insights relevant to {user_name}.
 
@@ -165,7 +165,7 @@ extract_facts_text_content_prompt = ChatPromptTemplate.from_messages([
 ])
 
 
-extract_facts_text_content_prompt_v1 = ChatPromptTemplate.from_messages([
+extract_memories_text_content_prompt_v1 = ChatPromptTemplate.from_messages([
     '''
     You are an expert fact extractor. Your task is to analyze the {text_source} content and extract important facts about {user_name}.
 

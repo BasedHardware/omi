@@ -2,10 +2,10 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/shared.dart';
-import 'package:omi/backend/schema/fact.dart';
+import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/env/env.dart';
 
-Future<bool> createFactServer(String content, String visibility) async {
+Future<bool> createMemoryServer(String content, String visibility) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v2/facts',
     headers: {},
@@ -16,23 +16,23 @@ Future<bool> createFactServer(String content, String visibility) async {
     }),
   );
   if (response == null) return false;
-  debugPrint('createFact response: ${response.body}');
+  debugPrint('createMemory response: ${response.body}');
   return response.statusCode == 200;
 }
 
-Future<bool> updateFactVisibilityServer(String factId, String visibility) async {
+Future<bool> updateMemoryVisibilityServer(String memoryId, String visibility) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/facts/$factId/visibility?value=$visibility',
+    url: '${Env.apiBaseUrl}v1/facts/$memoryId/visibility?value=$visibility',
     headers: {},
     method: 'PATCH',
     body: '',
   );
   if (response == null) return false;
-  debugPrint('updateFactVisibility response: ${response.body}');
+  debugPrint('updateMemoryVisibility response: ${response.body}');
   return response.statusCode == 200;
 }
 
-Future<List<Fact>> getFacts({int limit = 100, int offset = 0}) async {
+Future<List<Memory>> getMemories({int limit = 100, int offset = 0}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v2/facts?limit=$limit&offset=$offset',
     headers: {},
@@ -40,24 +40,24 @@ Future<List<Fact>> getFacts({int limit = 100, int offset = 0}) async {
     body: '',
   );
   if (response == null) return [];
-  debugPrint('getFacts response: ${response.body}');
-  List<dynamic> facts = json.decode(response.body);
-  return facts.map((fact) => Fact.fromJson(fact)).toList();
+  debugPrint('getMemories response: ${response.body}');
+  List<dynamic> memories = json.decode(response.body);
+  return memories.map((memory) => Memory.fromJson(memory)).toList();
 }
 
-Future<bool> deleteFactServer(String factId) async {
+Future<bool> deleteMemoryServer(String memoryId) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/facts/$factId',
+    url: '${Env.apiBaseUrl}v1/facts/$memoryId',
     headers: {},
     method: 'DELETE',
     body: '',
   );
   if (response == null) return false;
-  debugPrint('deleteFact response: ${response.body}');
+  debugPrint('deleteMemory response: ${response.body}');
   return response.statusCode == 200;
 }
 
-Future<bool> deleteAllFactServer() async {
+Future<bool> deleteAllMemoriesServer() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/facts',
     headers: {},
@@ -65,30 +65,30 @@ Future<bool> deleteAllFactServer() async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('deleteFact response: ${response.body}');
+  debugPrint('deleteAllMemories response: ${response.body}');
   return response.statusCode == 200;
 }
 
-Future<bool> reviewFactServer(String factId, bool value) async {
+Future<bool> reviewMemoryServer(String memoryId, bool value) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/facts/$factId/review?value=$value',
+    url: '${Env.apiBaseUrl}v1/facts/$memoryId/review?value=$value',
     headers: {},
     method: 'POST',
     body: '',
   );
   if (response == null) return false;
-  debugPrint('reviewFact response: ${response.body}');
+  debugPrint('reviewMemory response: ${response.body}');
   return response.statusCode == 200;
 }
 
-Future<bool> editFactServer(String factId, String value) async {
+Future<bool> editMemoryServer(String memoryId, String value) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/facts/$factId?value=$value',
+    url: '${Env.apiBaseUrl}v1/facts/$memoryId?value=$value',
     headers: {},
     method: 'PATCH',
     body: '',
   );
   if (response == null) return false;
-  debugPrint('editFact response: ${response.body}');
+  debugPrint('editMemory response: ${response.body}');
   return response.statusCode == 200;
 }

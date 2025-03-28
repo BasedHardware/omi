@@ -1,25 +1,25 @@
 import 'package:flutter/material.dart';
-import 'package:omi/backend/schema/fact.dart';
-import 'package:omi/providers/facts_provider.dart';
+import 'package:omi/backend/schema/memory.dart';
+import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
 import 'delete_confirmation.dart';
 
-class FactEditSheet extends StatelessWidget {
-  final Fact fact;
-  final FactsProvider provider;
-  final Function(BuildContext, Fact, FactsProvider)? onDelete;
+class MemoryEditSheet extends StatelessWidget {
+  final Memory memory;
+  final MemoriesProvider provider;
+  final Function(BuildContext, Memory, MemoriesProvider)? onDelete;
 
-  const FactEditSheet({
+  const MemoryEditSheet({
     super.key,
-    required this.fact,
+    required this.memory,
     required this.provider,
     this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
-    final contentController = TextEditingController(text: fact.content.decodeString);
+    final contentController = TextEditingController(text: memory.content.decodeString);
     contentController.selection = TextSelection.fromPosition(
       TextPosition(offset: contentController.text.length),
     );
@@ -51,7 +51,7 @@ class FactEditSheet extends StatelessWidget {
                       const Icon(Icons.label_outline, size: 14, color: Colors.white),
                       const SizedBox(width: 4),
                       Text(
-                        fact.category.toString().split('.').last,
+                        memory.category.toString().split('.').last,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 14,
@@ -84,7 +84,7 @@ class FactEditSheet extends StatelessWidget {
               ),
               onSubmitted: (value) {
                 if (value.trim().isNotEmpty) {
-                  provider.editFact(fact, value, fact.category);
+                  provider.editMemory(memory, value, memory.category);
                 }
                 Navigator.pop(context);
               },
@@ -136,10 +136,10 @@ class FactEditSheet extends StatelessWidget {
   Future<void> _showDeleteConfirmation(BuildContext context) async {
     final shouldDelete = await DeleteConfirmation.show(context);
     if (shouldDelete) {
-      provider.deleteFact(fact);
+      provider.deleteMemory(memory);
       Navigator.pop(context); // Close edit sheet
       if (onDelete != null) {
-        onDelete!(context, fact, provider);
+        onDelete!(context, memory, provider);
       }
     }
   }
