@@ -24,12 +24,11 @@ Future<void> launchCustomTab(BuildContext context, String url, {CustomTabsSessio
       configuration: const SheetPresentationControllerConfiguration(
         detents: {
           SheetPresentationControllerDetent.large,
-          SheetPresentationControllerDetent.medium,
         },
         prefersScrollingExpandsWhenScrolledToEdge: true,
         prefersGrabberVisible: true,
         prefersEdgeAttachedInCompactHeight: true,
-        preferredCornerRadius: 48.0,
+        preferredCornerRadius: 16.0,
       ),
       preferredBarTintColor: theme.colorScheme.primary,
       preferredControlTintColor: theme.colorScheme.onPrimary,
