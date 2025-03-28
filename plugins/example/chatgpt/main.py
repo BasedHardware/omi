@@ -22,54 +22,33 @@ logger = logging.getLogger("chatgpt_integration")
 @router.get("/", response_class=HTMLResponse)
 async def chatgpt_page(request: Request, uid: str = ""):
     """
-    Renders the simplified ChatGPT integration page with direct link to OmiGPT
-    """
-    # Log the access for analytics
-    if uid:
-        logger.info(f"ChatGPT integration page accessed with UID: {uid}")
-    else:
-        logger.warning("ChatGPT integration page accessed without UID")
-    
-    return templates.TemplateResponse(
-        "chatgpt/index.html", 
-        {
-            "request": request, 
-            "uid": uid,
-            "page_title": "Connect Omi with ChatGPT"
-        }
-    )
-
-@router.get("/redirect", response_class=RedirectResponse)
-async def redirect_to_chatgpt(uid: str = ""):
-    """
-    Redirects to ChatGPT with UID as a URL parameter
+    Renders a simple redirect page to ChatGPT with the UID
     """
     try:
         if not uid or uid.strip() == "":
-            # If no UID is provided, redirect to the main page with an error
-            logger.warning("Redirect attempted without UID")
+            # If no UID is provided, log the error
+            logger.warning("ChatGPT integration accessed without UID")
             return RedirectResponse(
-                url="/chatgpt?error=missing_uid",
+                url="/",  # Redirect to home page if no UID
                 status_code=302
             )
         
-        # Log the redirect for analytics
-        logger.info(f"Redirecting to ChatGPT with UID: {uid}")
+        # Log the access for analytics
+        logger.info(f"ChatGPT integration page accessed with UID: {uid}")
         
-        # Encode the UID for URL safety
-        from urllib.parse import quote
-        encoded_uid = quote(uid.strip())
-        
-        # Redirect to ChatGPT with UID as a URL parameter
-        chatgpt_url = f"https://chatgpt.com/g/g-67e2772d0af081919a5baddf4a12aacf-omi?uid={encoded_uid}"
-        return RedirectResponse(
-            url=chatgpt_url,
-            status_code=302
+        # Return the template with the UID
+        return templates.TemplateResponse(
+            "chatgpt/index.html", 
+            {
+                "request": request, 
+                "uid": uid.strip(),
+                "page_title": "Redirecting to Omi for ChatGPT"
+            }
         )
     except Exception as e:
         logger.error(f"Error in redirect: {str(e)}")
         return RedirectResponse(
-            url="/chatgpt?error=redirect_failed",
+            url="/",  # Redirect to home page on error
             status_code=302
         )
 
