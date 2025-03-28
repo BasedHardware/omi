@@ -1,0 +1,31 @@
+name: Sync Multiple Files to Mintlify docs
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'sdks/python/omi/README.md'
+ 
+      # Add more paths as needed
+
+jobs:
+  sync-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Copy multiple files
+        run: |
+          cp sdks/python/omi/README.md docs/docs/developer/sdk/python.mdx
+        
+          # Add more cp commands for additional files
+      - name: Commit changes
+        uses: EndBug/add-and-commit@v7
+        with:
+          author_name: GitHub Action
+          author_email: action@github.com
+          message: 'Sync multiple files to Mintlify docs'
+          add: |
+            docs/docs/developer/sdk/python.mdx
+     
+            # Add more paths as needed
