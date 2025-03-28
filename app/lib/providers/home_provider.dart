@@ -18,6 +18,7 @@ class HomeProvider extends ChangeNotifier {
   String recordingLanguage = SharedPreferencesUtil().recordingsLanguage;
 
   final Map<String, String> availableLanguages = {
+    'Auto Detection': 'auto',
     'Bulgarian': 'bg',
     'Catalan': 'ca',
     'Chinese (Mandarin, Simplified)': 'zh',

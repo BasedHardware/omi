@@ -68,7 +68,21 @@ class SpeechLanguageSheet extends StatelessWidget {
                           onTap: () {
                             var newValue = availableLanguages.values.toList()[i];
                             if (newValue == recordingLanguage) return;
-                            if (newValue != 'en') {
+                            if (newValue == 'auto') {
+                              showDialog(
+                                context: context,
+                                barrierDismissible: false,
+                                builder: (c) => getDialog(
+                                  context,
+                                  () => Navigator.of(context).pop(),
+                                  () => {},
+                                  'Language Limitations',
+                                  'Auto language detection is currently supported for 10 languages and is still in beta. Quality is not guaranteed.',
+                                  singleButton: true,
+                                ),
+                              ).whenComplete(() => Navigator.of(context).pop());
+                            }
+                            if (newValue != 'en' && newValue != 'auto') {
                               showDialog(
                                 context: context,
                                 barrierDismissible: false,
