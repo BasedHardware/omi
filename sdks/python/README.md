@@ -4,7 +4,7 @@ This SDK connects to an **Omi wearable device** over **Bluetooth**, decodes the 
 
 ---
 
-## ✅ Features
+## ✅ Features:
 
 - 🔗 Real-time BLE connection to Omi
 - 🔊 Opus audio decoding (16-bit, 16kHz mono)
