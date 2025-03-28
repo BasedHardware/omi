@@ -5,27 +5,71 @@ on:
     branches:
       - main
     paths:
-      - 'sdks/python/README.md'
- 
-      # Add more paths as needed
+      - "docs/**.mdx"
+  workflow_dispatch:
 
 jobs:
   sync-docs:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
     steps:
-      - uses: actions/checkout@v2
-      - name: Copy multiple files
-        run: |
-          cp sdks/python/README.md docs/docs/developer/sdk/python.mdx
-        
-          # Add more cp commands for additional files
-      - name: Commit changes
-        uses: EndBug/add-and-commit@v7
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
-          author_name: GitHub Action
-          author_email: action@github.com
-          message: 'Sync multiple files to Mintlify docs'
-          add: |
-            docs/docs/developer/sdk/python.mdx
-     
-            # Add more paths as needed
+          fetch-depth: 0
+
+      - name: Convert .mdx files to README.md
+        run: |
+          declare -A FILE_MAP=(
+            ["docs/docs/docs/developer/sdk/python.mdx"]="sdks/python/README.md"
+            ["docs/docs/docs/developer/sdk/ReactNative.mdx"]="sdks/react-native/README.md"
+            ["docs/docs/docs/developer/sdk/swift.mdx"]="sdks/swift/README.md"
+          )
+
+          for MDX_FILE in "${!FILE_MAP[@]}"; do
+            README_FILE="${FILE_MAP[$MDX_FILE]}"
+            
+            # Create directory if it doesn't exist
+            mkdir -p "$(dirname "$README_FILE")"
+
+            if [ -f "$MDX_FILE" ]; then
+              echo "Processing: $MDX_FILE → $README_FILE"
+
+              awk 'BEGIN{printing=0} /^---$/ {printing=!printing; next} printing==0 {print}' "$MDX_FILE" | tail -n +2 > temp.md
+
+              echo "<!-- This file is auto-generated from $MDX_FILE. Do not edit manually. -->" | cat - temp.md > "$README_FILE"
+              rm temp.md
+              
+              echo "Successfully generated $README_FILE"
+            else
+              echo "Warning: File $MDX_FILE not found, skipping..."
+              ls -la "$(dirname "$MDX_FILE")"
+            fi
+          done
+
+      - name: Debug file existence
+        run: |
+          echo "Checking for generated README files:"
+          for dir in sdks/*/; do
+            if [ -f "${dir}README.md" ]; then
+              echo "✅ ${dir}README.md exists"
+            else
+              echo "❌ ${dir}README.md does not exist"
+            fi
+          done
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions@github.com"
+
+          git add sdks/*/README.md
+
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore: sync docs to SDK README files"
+            git push
+          fi
