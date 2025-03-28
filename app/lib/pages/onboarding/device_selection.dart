@@ -88,10 +88,7 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                             await Posthog().capture(
                               eventName: 'clicked_get_started',
                             );
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(builder: (context) => const SocialHandleScreen()),
-                            );
+                            routeToPage(context, const OnboardingWrapper());
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white.withOpacity(0.12),
@@ -102,7 +99,7 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                             ),
                           ),
                           child: const Text(
-                            'Get Started',
+                            'Connect omi',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -114,13 +111,16 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                         ),
                         TextButton(
                           onPressed: () async {
-                            routeToPage(context, const OnboardingWrapper());
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(builder: (context) => const SocialHandleScreen()),
+                            );
                           },
                           child: const Text(
-                            'Sign in',
+                            'I don\'t have omi',
                             style: TextStyle(
                               color: Colors.white,
-                              fontWeight: FontWeight.w500,
+                              fontWeight: FontWeight.bold,
                               fontSize: 16,
                             ),
                           ),
