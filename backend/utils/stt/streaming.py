@@ -59,6 +59,10 @@ if is_dg_self_hosted:
 
 deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), deepgram_options)
 
+# Create a beta-specific client
+deepgram_beta_options = DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"})
+deepgram_beta_options.url = "https://api.beta.deepgram.com"
+deepgram_beta = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), deepgram_beta_options)
 
 async def process_audio_dg(
         stream_transcript, language: str, sample_rate: int, channels: int, preseconds: int = 0,
@@ -138,24 +142,15 @@ def connect_to_deepgram_with_backoff(on_message, on_error, language: str, sample
 def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, channels: int):
     # 'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=8000&language=$recordingsLanguage&model=nova-2-general&no_delay=true&endpointing=100&interim_results=false&smart_format=true&diarize=true'
 
-    # Languages that should use the beta API
-    beta_languages = ['en', 'es', 'fr', 'de', 'hi', 'ru', 'pt', 'ja', 'it', 'nl']
-
     try:
-        if language in beta_languages:
-            # Create a beta-specific client just for this connection
-            beta_options = DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"})
-            beta_options.url = "https://api.beta.deepgram.com"
-            deepgram_beta = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), beta_options)
+        if language == "auto":
             print(f"Using beta Deepgram API (api.beta.deepgram.com) for language: {language}")
             
-            # Use nova-3 model and multi language for beta languages
+            # Use nova-3 model and multi language for auto language
             model_name = "nova-3"
-            # Store the original language parameter
-            original_language = language
-            # Set language to "multi" for beta languages
+            # Set language to "multi" for auto language
             language = "multi"
-            print(f"Using nova-3 model with multi-language support for {original_language}")
+            print("Using nova-3 model with multi-language support")
 
             dg_beta_connection = deepgram_beta.listen.websocket.v("1")
             dg_beta_connection.on(LiveTranscriptionEvents.Transcript, on_message)
