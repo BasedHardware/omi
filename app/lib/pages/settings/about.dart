@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:omi/pages/settings/webview.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/browser.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -31,10 +31,7 @@ class _AboutOmiPageState extends State<AboutOmiPage> {
               trailing: const Icon(Icons.privacy_tip_outlined, size: 20),
               onTap: () {
                 MixpanelManager().pageOpened('About Privacy Policy');
-                routeToPage(
-                  context,
-                  const PageWebView(url: 'https://www.omi.me/pages/privacy', title: 'Privacy Policy'),
-                );
+                launchCustomTab(context, 'https://www.omi.me/pages/privacy');
               },
             ),
             ListTile(
@@ -44,8 +41,7 @@ class _AboutOmiPageState extends State<AboutOmiPage> {
               trailing: const Icon(Icons.language_outlined, size: 20),
               onTap: () {
                 MixpanelManager().pageOpened('About Visit Website');
-                // routeToPage(context, const PageWebView(url: 'https://www.omi.me/', title: 'omi'));
-                launchUrl(Uri.parse('https://www.omi.me/'));
+                launchCustomTab(context, 'https://www.omi.me/');
               },
             ),
             ListTile(
@@ -64,7 +60,7 @@ class _AboutOmiPageState extends State<AboutOmiPage> {
               trailing: const Icon(Icons.discord, color: Colors.purple, size: 20),
               onTap: () {
                 MixpanelManager().pageOpened('About Join Discord');
-                launchUrl(Uri.parse('https://discord.gg/omi'));
+                launchCustomTab(context, 'https://discord.gg/omi');
               },
             ),
           ],
