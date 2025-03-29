@@ -1,31 +1,66 @@
-name: Sync Multiple Files to Mintlify docs
+name: Sync Mintlify Docs Back to SDK README.md
 
 on:
   push:
     branches:
       - main
     paths:
-      - 'sdks/python/README.md'
- 
+      - "docs/docs/docs/developer/sdk/*.mdx"
+
       # Add more paths as needed
 
 jobs:
   sync-docs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - name: Copy multiple files
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Sync .mdx to README.md
+        shell: bash
         run: |
-          cp sdks/python/README.md docs/docs/developer/sdk/python.mdx
-        
-          # Add more cp commands for additional files
+          echo "🔁 Syncing MDX files to SDK README.md..."
+
+          declare -A files=(
+            ["docs/docs/docs/developer/sdk/Python.mdx"]="sdks/python/README.md"
+            ["docs/docs/docs/developer/sdk/ReactNative.mdx"]="sdks/react-native/README.md"
+            ["docs/docs/docs/developer/sdk/Swift.mdx"]="sdks/swift/README.md"
+          )
+
+          for src in "${!files[@]}"; do
+            dest="${files[$src]}"
+            echo "→ Processing $src → $dest"
+
+            if [[ -f "$src" ]]; then
+              # Create temp file without frontmatter
+              awk 'BEGIN{skip=0} /^---/{skip++; next} skip==2 {print}' "$src" > temp.md
+
+              # Fix relative image paths (only if needed)
+              sed -i 's|](/images/|](../../docs/images/|g' temp.md
+
+              # Add auto-generated banner
+              {
+                echo "<!--"
+                echo "⚠️ This file is auto-generated from $src. Do not edit manually."
+                echo "-->"
+                echo ""
+                cat temp.md
+              } > "$dest"
+
+              rm temp.md
+              echo "✅ Synced $src → $dest"
+            else
+              echo "⚠️ Skipped: $src not found"
+            fi
+          done
+
       - name: Commit changes
         uses: EndBug/add-and-commit@v7
         with:
           author_name: GitHub Action
           author_email: action@github.com
-          message: 'Sync multiple files to Mintlify docs'
+          message: "chore(docs): sync .mdx → SDK README.md"
           add: |
-            docs/docs/developer/sdk/python.mdx
-     
-            # Add more paths as needed
+            sdks/python/README.md
+            sdks/react-native/README.md
+            sdks/swift/README.md
