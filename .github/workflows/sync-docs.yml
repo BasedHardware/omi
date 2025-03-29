@@ -32,16 +32,20 @@ jobs:
             echo "→ Processing $src → $dest"
 
             if [[ -f "$src" ]]; then
-              # Create temp file without frontmatter
+              # Strip frontmatter
               awk 'BEGIN{skip=0} /^---/{skip++; next} skip==2 {print}' "$src" > temp.md
 
-              if [[ "$src" == docs/docs/docs/assembly/* ]]; then
-                sed -i 's|](/images/|](../docs/images/|g' temp.md
-              else
-                sed -i 's|](/images/|](../../docs/images/|g' temp.md
-              fi
+              relative_depth=$(awk -F'/' '{print NF-1}' <<< "$dest")
+              prefix=""
+              for ((i=0; i<$relative_depth; i++)); do
+                prefix+="../"
+              done
+
+              sed -i "s|](/images/|](${prefix}docs/images/|g" temp.md
 
               mkdir -p "$(dirname "$dest")"
+
+              rm -f "$dest"
 
               # Add auto-generated banner
               {
