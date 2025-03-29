@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, Optional, List, Tuple, Dict, Any
+from typing import Annotated, Optional, List, Tuple, Dict, Any, Union
 
 from fastapi import APIRouter, Header, HTTPException, Depends, Query
 import database.conversations as conversations_db
@@ -265,11 +265,17 @@ async def get_conversations_via_integration(
     offset: int = Query(0, ge=0),
     include_discarded: bool = Query(False),
     statuses: List[str] = Query([]),
+    start_date: Optional[Union[datetime, str]] = Query(None, description="Filter conversations after this date (ISO format)"),
+    end_date: Optional[Union[datetime, str]] = Query(None, description="Filter conversations before this date (ISO format)"),
     authorization: Optional[str] = Header(None)
 ):
     """
     Get all conversations for a user via integration API.
     Authentication is required via API key in the Authorization header.
+
+    Optional date range filtering:
+    - start_date: Filter conversations after this date (ISO format)
+    - end_date: Filter conversations before this date (ISO format)
     """
     # Verify API key from Authorization header
     if not authorization or not authorization.startswith('Bearer '):
@@ -293,12 +299,27 @@ async def get_conversations_via_integration(
     if not apps_utils.app_has_action(app, 'read_conversations'):
         raise HTTPException(status_code=403, detail="App does not have the capability to read conversations")
 
+    # Convert string dates to datetime objects if needed
+    if isinstance(start_date, str) and start_date:
+        try:
+            start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid start_date format. Use ISO format (YYYY-MM-DDTHH:MM:SS.sssZ)")
+
+    if isinstance(end_date, str) and end_date:
+        try:
+            end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid end_date format. Use ISO format (YYYY-MM-DDTHH:MM:SS.sssZ)")
+
     conversations_data = conversations_db.get_conversations(
         uid,
         limit=limit,
         offset=offset,
         include_discarded=include_discarded,
-        statuses=statuses
+        statuses=statuses,
+        start_date=start_date,
+        end_date=end_date
     )
 
     conversation_items = [integration_models.ConversationItem(**conv) for conv in conversations_data]
