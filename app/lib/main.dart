@@ -120,21 +120,20 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     const Breakpoint(start: 0, end: 450, name: MOBILE),
                     const Breakpoint(start: 451, end: 800, name: TABLET),
                     const Breakpoint(start: 801, end: 1920, name: DESKTOP),
+                    const Breakpoint(start: 1921, end: double.infinity, name: '4K'),
                   ],
                 );
               },
               onGenerateRoute: (RouteSettings settings) {
                 return MaterialPageRoute(builder: (context) {
-                  return MaxWidthBox(
-                    maxWidth: 1200,
-                    child: ResponsiveScaledBox(
-                      width: ResponsiveValue<double>(context, conditionalValues: const [
-                        Condition.equals(name: MOBILE, value: 450),
-                        Condition.between(start: 800, end: 1100, value: 800),
-                        Condition.between(start: 1000, end: 1200, value: 1000),
-                      ]).value,
-                      child: BouncingScrollWrapper.builder(context, child!, dragWithMouse: true),
-                    ),
+                  return ResponsiveScaledBox(
+                    width: ResponsiveValue<double>(context, conditionalValues: [
+                      Condition.equals(name: MOBILE, value: 450),
+                      Condition.between(start: 451, end: 800, value: 800),
+                      Condition.between(start: 801, end: 1100, value: 800),
+                      Condition.between(start: 1000, end: 1200, value: 1000),
+                    ]).value,
+                    child: BouncingScrollWrapper.builder(context, child!, dragWithMouse: true),
                   );
                 });
               },
