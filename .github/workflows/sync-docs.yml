@@ -25,9 +25,6 @@ jobs:
             ["docs/docs/docs/developer/sdk/python.mdx"]="sdks/python/README.md"
             ["docs/docs/docs/developer/sdk/reactnative.mdx"]="sdks/react-native/README.md"
             ["docs/docs/docs/developer/sdk/swift.mdx"]="sdks/swift/README.md"
-
-            # Just for testing and remove this when not needed
-            ["docs/docs/docs/assembly/Build_the_device.mdx"]="test-output/assembly/README.md"
           )
 
           for src in "${!files[@]}"; do
@@ -64,7 +61,7 @@ jobs:
           done
 
       - name: Commit changes
-        uses: EndBug/add-and-commit@v7
+        uses: EndBug/add-and-commit@v9
         with:
           author_name: GitHub Action
           author_email: action@github.com
@@ -73,4 +70,3 @@ jobs:
             sdks/python/README.md
             sdks/react-native/README.md
             sdks/swift/README.md
-            test-output/assembly/README.md
