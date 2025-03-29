@@ -39,6 +39,14 @@ jobs:
 
               awk 'BEGIN{printing=0} /^---$/ {printing=!printing; next} printing==0 {print}' "$MDX_FILE" | tail -n +2 > temp.md
 
+              path_depth=$(awk -F'/' '{print NF-1}' <<< "$README_FILE")
+              image_base_path=""
+              for ((i=0; i<$relative_depth; i++)); do
+                image_base_path+="../"
+              done
+
+              sed -i "s|](/images/|](${image_base_path}docs/images/|g" temp.md
+
               echo "<!-- This file is auto-generated from $MDX_FILE. Do not edit manually. -->" | cat - temp.md > "$README_FILE"
               rm temp.md
               
