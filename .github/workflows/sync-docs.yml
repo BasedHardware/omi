@@ -3,11 +3,13 @@ name: Sync Mintlify Docs Back to SDK README.md
 on:
   push:
     branches:
-      - main
+      - '**'
     paths:
       - "docs/docs/docs/developer/sdk/*.mdx"
 
       # Add more paths as needed
+
+  workflow_dispatch:
 
 jobs:
   sync-docs:
