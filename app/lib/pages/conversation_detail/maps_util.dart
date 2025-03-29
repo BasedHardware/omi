@@ -1,7 +1,6 @@
-import 'dart:io';
-
 import 'package:omi/env/env.dart';
 import 'package:map_launcher/map_launcher.dart';
+import 'package:omi/utils/platform_check.dart';
 
 class MapsUtil {
   static String getMapImageUrl(double lat, double lng) {
@@ -15,7 +14,7 @@ class MapsUtil {
   }
 
   static void launchMap(double lat, double lng) async {
-    if (Platform.isIOS) {
+    if (ExecutionGuard.isIOS) {
       await MapLauncher.showMarker(
         mapType: MapType.apple,
         coords: Coords(lat, lng),

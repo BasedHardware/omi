@@ -8,6 +8,7 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:provider/provider.dart';
+import 'package:responsive_framework/responsive_framework.dart';
 
 class BatteryInfoWidget extends StatelessWidget {
   const BatteryInfoWidget({super.key});
@@ -73,7 +74,7 @@ class BatteryInfoWidget extends StatelessWidget {
                   }
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical:7 ),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade900,
                     borderRadius: BorderRadius.circular(10),
@@ -82,8 +83,8 @@ class BatteryInfoWidget extends StatelessWidget {
                     children: [
                       Image.asset(
                         Assets.images.logoTransparent.path,
-                        width: MediaQuery.sizeOf(context).width * 0.05,
-                        height: MediaQuery.sizeOf(context).width * 0.05,
+                        width: MediaQuery.sizeOf(context).width * (ResponsiveBreakpoints.of(context).largerOrEqualTo(DESKTOP) ?0.02:  0.05),
+                        height: MediaQuery.sizeOf(context).width * (ResponsiveBreakpoints.of(context).largerOrEqualTo(DESKTOP) ?0.02:  0.05),
                       ),
                       isMemoriesPage ? const SizedBox(width: 8) : const SizedBox.shrink(),
                       deviceProvider.isConnecting && isMemoriesPage

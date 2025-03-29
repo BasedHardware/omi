@@ -199,7 +199,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   //     if (provider.loadingImportMemories) return;
                   //     setState(() => provider.loadingImportMemories = true);
                   //     // open file picker
-                  //     var file = await FilePicker.platform.pickFiles(
+                  //     var file = await FilePicker.ExecutionGuard.pickFiles(
                   //       type: FileType.custom,
                   //       allowedExtensions: ['json'],
                   //     );

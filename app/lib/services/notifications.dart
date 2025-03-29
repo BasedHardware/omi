@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
 import 'dart:ui';
@@ -15,6 +14,7 @@ import 'package:omi/backend/schema/message.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
+import 'package:omi/utils/platform_check.dart';
 
 class NotificationService {
   NotificationService._();
@@ -37,7 +37,8 @@ class NotificationService {
   final AwesomeNotifications _awesomeNotifications = AwesomeNotifications();
 
   Future<void> initialize() async {
-    await _initializeAwesomeNotifications();
+    // TODO: remove this when AwesomeNotifications added web support.
+    if (!ExecutionGuard.isWeb) await _initializeAwesomeNotifications();
     // Calling it here because the APNS token can sometimes arrive early or it might take some time (like a few seconds)
     // Reference: https://github.com/firebase/flutterfire/issues/12244#issuecomment-1969286794
     await _firebaseMessaging.getAPNSToken();
@@ -132,7 +133,7 @@ class NotificationService {
   }
 
   void saveNotificationToken() async {
-    if (Platform.isIOS) {
+    if (ExecutionGuard.isIOS) {
       await _firebaseMessaging.getAPNSToken();
     }
     String? token = await _firebaseMessaging.getToken();
@@ -161,7 +162,7 @@ class NotificationService {
 
   // FIXME: Causes the different behavior on android and iOS
   bool _shouldShowForegroundNotificationOnFCMMessageReceived() {
-    return Platform.isAndroid;
+    return ExecutionGuard.isAndroid;
   }
 
   Future<void> listenForMessages() async {
@@ -228,18 +229,18 @@ class NotificationUtil {
     IsolateNameServer.registerPortWithName(receivePort!.sendPort, 'notification_action_port');
   }
 
-  /// Use this method to detect when the user taps on a notification or action button
+  // / Use this method to detect when the user taps on a notification or action button
   @pragma("vm:entry-point")
   static Future<void> onActionReceivedMethod(ReceivedAction receivedAction) async {
     if (receivePort != null) {
       await onActionReceivedMethodImpl(receivedAction);
     } else {
-      print(
+      debugPrint(
           'onActionReceivedMethod was called inside a parallel dart isolate, where receivePort was never initialized.');
       SendPort? sendPort = IsolateNameServer.lookupPortByName('notification_action_port');
 
       if (sendPort != null) {
-        print('Redirecting the execution to main isolate process in listening...');
+        debugPrint('Redirecting the execution to main isolate process in listening...');
         dynamic serializedData = receivedAction.toMap();
         sendPort.send(serializedData);
       }

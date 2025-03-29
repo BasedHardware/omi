@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+// import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
@@ -26,6 +27,7 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
+import 'package:omi/utils/platform_check.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
 
@@ -612,7 +614,7 @@ class CaptureProvider extends ChangeNotifier
 
     if (segments.isEmpty) {
       debugPrint('newSegments: ${newSegments.last}');
-      FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
+      if (!ExecutionGuard.isWeb) FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
       _loadInProgressConversation();
     }
     TranscriptSegment.combineSegments(segments, newSegments);

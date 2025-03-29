@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'package:omi/utils/platform_check.dart';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -36,7 +36,7 @@ class AppDialog {
               ),
             ),
           ];
-    if (Platform.isIOS) {
+    if (ExecutionGuard.isIOS) {
       return CupertinoAlertDialog(
         title: Text(title),
         content: Text(content),

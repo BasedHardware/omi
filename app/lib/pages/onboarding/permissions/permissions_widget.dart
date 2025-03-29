@@ -1,7 +1,6 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/utils/platform_check.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
@@ -26,13 +25,13 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            Platform.isAndroid
+            ExecutionGuard.isAndroid
                 ? CheckboxListTile(
                     value: provider.hasBackgroundPermission,
                     onChanged: (s) async {
                       if (s != null) {
                         if (s) {
-                          await provider.askForBackgroundPermissions();
+                          if (!ExecutionGuard.isWeb) await provider.askForBackgroundPermissions();
                         } else {
                           provider.updateBackgroundPermission(false);
                         }
@@ -162,9 +161,9 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                             padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                             onPressed: () async {
                               provider.setLoading(true);
-                              if (Platform.isAndroid) {
+                              if (ExecutionGuard.isAndroid) {
                                 if (!provider.hasBackgroundPermission) {
-                                  await provider.askForBackgroundPermissions();
+                                  if (!ExecutionGuard.isWeb) await provider.askForBackgroundPermissions();
                                 }
                               }
                               await Permission.notification.request().then(

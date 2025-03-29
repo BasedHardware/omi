@@ -6,23 +6,23 @@
     The path provided below has to start and end with a slash "/" in order for
     it to work correctly.
 
-    Fore more details:
+    For more details:
     * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
   -->
-  <base href="/">
+  <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-
+  
   <!-- iOS meta tags & icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Omi">
-
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
   
-
-  <meta name="robots" content="noindex">
-
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png">
 
@@ -34,7 +34,7 @@
   <meta name="twitter:description" content="Built with FlutterFlow.">
   <meta name="twitter:image" content="https://storage.googleapis.com/flutterflow-prod-hosting/og_splash_gradient.png">
   <meta name="twitter:card" content="summary_large_image">
-
+  
   <title>Omi AI</title>
   <meta name="description" content="Built with FlutterFlow.">
     
@@ -44,18 +44,20 @@
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#f1f4f8">
 
   <link rel="manifest" href="manifest.json">
+  <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"> 
+  
+  
   <script>
-    // The value below is injected by flutter build, do not touch.
-    var serviceWorkerVersion = null;
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/firebase-messaging-sw.js')
+        .then((registration) => {
+          console.log('Service Worker registered', registration);
+        })
+        .catch((error) => {
+          console.log('Service Worker registration failed', error);
+        });
+    }
   </script>
-  <!-- This script adds the flutter initialization JS code -->
-  <script src="flutter.js" defer=""></script>
-  
-  
-  <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
-  
-  
-  
   
   
   
@@ -79,9 +81,8 @@
     body {
       margin: 0;
       min-height: 100%;
-      background-color: #ffffff;
-      background-image: url("splash/img/light-background.png");
-      background-size: 100% 100%;
+      background-color: #000000;
+          background-size: 100% 100%;
     }
 
     .center {
@@ -139,29 +140,16 @@
   </script>
 </head>
 <body>
+  <picture id="splash">
+      <source srcset="splash/img/light-1x.png 1x, splash/img/light-2x.png 2x, splash/img/light-3x.png 3x, splash/img/light-4x.png 4x" media="(prefers-color-scheme: light)">
+      <source srcset="splash/img/dark-1x.png 1x, splash/img/dark-2x.png 2x, splash/img/dark-3x.png 3x, splash/img/dark-4x.png 4x" media="(prefers-color-scheme: dark)">
+      <img class="center" aria-hidden="true" src="splash/img/light-1x.png" alt="">
+  </picture>
   
   
   
   
-  
-  <script>
-    window.addEventListener('load', function (ev) {
-      // Download main.dart.js
-      _flutter.loader.loadEntrypoint({
-        entrypointUrl: 'main.dart.js',
-        serviceWorker: {
-          serviceWorkerUrl: 'flutter_service_worker.js?v=',
-          serviceWorkerVersion: serviceWorkerVersion,
-        },
-        onEntrypointLoaded: async function(engineInitializer) {
-          // Initialize the Flutter engine
-          let appRunner = await engineInitializer.initializeEngine({useColorEmoji: true,});
-          // Run the app
-          await appRunner.runApp();
-        }
-      });
-    });
-  </script>
+  <script src="flutter_bootstrap.js" async=""></script>
 
 
 </body></html>

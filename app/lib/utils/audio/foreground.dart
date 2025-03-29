@@ -1,8 +1,7 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:omi/utils/platform_check.dart';
 
 @pragma('vm:entry-point')
 void _startForegroundCallback() {
@@ -74,7 +73,7 @@ class ForegroundUtil {
       await FlutterForegroundTask.requestNotificationPermission();
     }
 
-    if (Platform.isAndroid) {
+    if (ExecutionGuard.isAndroid) {
       // if (!await FlutterForegroundTask.canDrawOverlays) {
       //   await FlutterForegroundTask.openSystemAlertWindowSettings();
       // }

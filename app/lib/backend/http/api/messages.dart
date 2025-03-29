@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/message.dart';
@@ -9,6 +10,7 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/string_utils.dart';
 import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:http_parser/http_parser.dart';
 import 'package:path/path.dart';
 
 Future<List<ServerMessage>> getMessagesServer({
@@ -261,27 +263,25 @@ Future<List<ServerMessage>> sendVoiceMessageServer(List<File> files) async {
   }
 }
 
-Future<List<MessageFile>?> uploadFilesServer(List<File> files, {String? appId}) async {
+Future<List<MessageFile>?> uploadFilesServer(Map<String, Uint8List> files, {String? appId}) async {
   var url = '${Env.apiBaseUrl}v1/files?plugin_id=$appId';
   if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
     url = '${Env.apiBaseUrl}v1/files';
   }
+  debugPrint("Uploading at $url");
   var request = http.MultipartRequest(
     'POST',
     Uri.parse(url),
   );
   request.headers.addAll({'Authorization': await getAuthHeader()});
-  for (var file in files) {
-    var stream = http.ByteStream(file.openRead());
-    var length = await file.length();
-    var multipartFile = http.MultipartFile(
+  files.forEach((key, value) {
+    var multipartFile = http.MultipartFile.fromBytes(
       'files',
-      stream,
-      length,
-      filename: basename(file.path),
+      value,
+      filename: key,
     );
     request.files.add(multipartFile);
-  }
+  });
 
   try {
     var streamedResponse = await request.send();
@@ -312,20 +312,19 @@ Future reportMessageServer(String messageId) async {
   }
 }
 
-
 Future<String> transcribeVoiceMessage(File audioFile) async {
   try {
     var request = http.MultipartRequest(
       'POST',
       Uri.parse('${Env.apiBaseUrl}v1/voice-message/transcribe'),
     );
-    
+
     request.headers.addAll({'Authorization': await getAuthHeader()});
     request.files.add(await http.MultipartFile.fromPath('files', audioFile.path));
-    
+
     var streamedResponse = await request.send();
     var response = await http.Response.fromStream(streamedResponse);
-    
+
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       return data['transcript'] ?? '';

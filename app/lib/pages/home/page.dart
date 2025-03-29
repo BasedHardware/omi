@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -31,6 +30,7 @@ import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform_check.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -95,7 +95,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver, TickerProviderStateMixin {
-  ForegroundUtil foregroundUtil = ForegroundUtil();
+  ForegroundUtil? foregroundUtil = (!ExecutionGuard.isWeb) ? ForegroundUtil() : null;
   List<Widget> screens = [Container(), const SizedBox(), const SizedBox(), const SizedBox()];
 
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
@@ -199,8 +199,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       _initiateApps();
 
       // ForegroundUtil.requestPermissions();
-      await ForegroundUtil.initializeForegroundService();
-      ForegroundUtil.startForegroundTask();
+
+      if (!ExecutionGuard.isWeb) {
+        await ForegroundUtil.initializeForegroundService();
+        ForegroundUtil.startForegroundTask();
+      }
       if (mounted) {
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
@@ -255,7 +258,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     super.initState();
 
     // After init
-    FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
+    if (!ExecutionGuard.isWeb) FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
   }
 
   void _listenToMessagesFromNotification() {
@@ -274,7 +277,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   Widget build(BuildContext context) {
     return MyUpgradeAlert(
       upgrader: _upgrader,
-      dialogStyle: Platform.isIOS ? UpgradeDialogStyle.cupertino : UpgradeDialogStyle.material,
+      dialogStyle: ExecutionGuard.isIOS ? UpgradeDialogStyle.cupertino : UpgradeDialogStyle.material,
       child: Consumer<ConnectivityProvider>(
         builder: (ctx, connectivityProvider, child) {
           bool isConnected = connectivityProvider.isConnected;
@@ -538,11 +541,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   ),
                   onPressed: () {
                     MixpanelManager().pageOpened('Persona Profile');
-
+      
                     // Set routing in provider
                     var personaProvider = Provider.of<PersonaProvider>(context, listen: false);
                     personaProvider.setRouting(PersonaProfileRouting.home);
-
+      
                     // Navigate
                     var homeProvider = Provider.of<HomeProvider>(context, listen: false);
                     homeProvider.setIndex(3);
@@ -562,7 +565,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    ForegroundUtil.stopForegroundTask();
+    if (!ExecutionGuard.isWeb) ForegroundUtil.stopForegroundTask();
     if (_controller != null) {
       _controller!.dispose();
       _controller = null;

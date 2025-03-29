@@ -20,6 +20,7 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/device_widget.dart';
 import 'package:provider/provider.dart';
+import 'package:responsive_framework/responsive_framework.dart';
 
 class OnboardingWrapper extends StatefulWidget {
   const OnboardingWrapper({super.key});
@@ -173,55 +174,58 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         body: SingleChildScrollView(
           child: Stack(
             children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: ListView(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  children: [
-                    DeviceAnimationWidget(animatedBackground: _controller!.index != -1),
-                    // _controller!.index == 6 || _controller!.index == 7
-                    //     ? const SizedBox()
-                    //     : Center(
-                    //         child: Text(
-                    //           'Omi',
-                    //           style: TextStyle(
-                    //               color: Colors.grey.shade200,
-                    //               fontSize: _controller!.index == _controller!.length - 1 ? 28 : 40,
-                    //               fontWeight: FontWeight.w500),
-                    //         ),
-                    //       ),
-                    const SizedBox(height: 24),
-                    [-1, 5, 6, 7].contains(_controller?.index)
-                        ? const SizedBox(
-                            height: 0,
-                          )
-                        : Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: Text(
-                              _controller!.index == _controller!.length - 1
-                                  ? 'Your personal growth journey with AI that listens to your every word.'
-                                  : 'Your personal growth journey with AI that listens to your every word.',
-                              style: TextStyle(color: Colors.grey.shade300, fontSize: 24),
-                              textAlign: TextAlign.center,
+              Center(
+                child: Container(
+                  width: ResponsiveBreakpoints.of(context).largerThan(TABLET) ? 800 : null,
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical:  ResponsiveBreakpoints.of(context).largerThan(TABLET)? 32 :8),
+                  child: ListView(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    children: [
+                      DeviceAnimationWidget(animatedBackground: _controller!.index != -1),
+                      // _controller!.index == 6 || _controller!.index == 7
+                      //     ? const SizedBox()
+                      //     : Center(
+                      //         child: Text(
+                      //           'Omi',
+                      //           style: TextStyle(
+                      //               color: Colors.grey.shade200,
+                      //               fontSize: _controller!.index == _controller!.length - 1 ? 28 : 40,
+                      //               fontWeight: FontWeight.w500),
+                      //         ),
+                      //       ),
+                      const SizedBox(height: 24),
+                      [-1, 5, 6, 7].contains(_controller?.index)
+                          ? const SizedBox(
+                              height: 0,
+                            )
+                          : Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: Text(
+                                _controller!.index == _controller!.length - 1
+                                    ? 'Your personal growth journey with AI that listens to your every word.'
+                                    : 'Your personal growth journey with AI that listens to your every word.',
+                                style: TextStyle(color: Colors.grey.shade300, fontSize: 24),
+                                textAlign: TextAlign.center,
+                              ),
                             ),
+                      SizedBox(
+                        height: (_controller!.index == 5 || _controller!.index == 6 || _controller!.index == 7)
+                            ? max(MediaQuery.of(context).size.height - 500 - 10,
+                                maxHeightWithTextScale(context, _controller!.index))
+                            : max(MediaQuery.of(context).size.height - 500 - 30,
+                                maxHeightWithTextScale(context, _controller!.index)),
+                        child: Padding(
+                          padding: EdgeInsets.only(bottom: MediaQuery.sizeOf(context).height <= 700 ? 10 : 64),
+                          child: TabBarView(
+                            controller: _controller,
+                            physics: const NeverScrollableScrollPhysics(),
+                            children: pages,
                           ),
-                    SizedBox(
-                      height: (_controller!.index == 5 || _controller!.index == 6 || _controller!.index == 7)
-                          ? max(MediaQuery.of(context).size.height - 500 - 10,
-                              maxHeightWithTextScale(context, _controller!.index))
-                          : max(MediaQuery.of(context).size.height - 500 - 30,
-                              maxHeightWithTextScale(context, _controller!.index)),
-                      child: Padding(
-                        padding: EdgeInsets.only(bottom: MediaQuery.sizeOf(context).height <= 700 ? 10 : 64),
-                        child: TabBarView(
-                          controller: _controller,
-                          physics: const NeverScrollableScrollPhysics(),
-                          children: pages,
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
               if (_controller!.index == 3)

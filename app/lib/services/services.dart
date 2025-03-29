@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -8,6 +7,7 @@ import 'package:flutter_sound/flutter_sound.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/sockets.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/utils/platform_check.dart';
 
 class ServiceManager {
   late IMicRecorderService _mic;
@@ -81,7 +81,7 @@ Future onStart(ServiceInstance service) async {
   // Recorder
   MicRecorderService? recorder;
   service.on('recorder.start').listen((event) async {
-    recorder = MicRecorderService(isInBG: Platform.isAndroid ? true : false);
+    recorder = MicRecorderService(isInBG: ExecutionGuard.isAndroid ? true : false);
     recorder?.start(onByteReceived: (bytes) {
       Uint8List audioBytes = bytes;
       List<dynamic> audioBytesList = audioBytes.toList();
