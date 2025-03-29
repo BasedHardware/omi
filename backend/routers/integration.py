@@ -8,6 +8,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 import database.apps as apps_db
+import database.conversations as conversations_db
 import utils.apps as apps_utils
 from utils.apps import verify_api_key
 import database.redis_db as redis_db
@@ -17,10 +18,12 @@ from database.redis_db import get_enabled_plugins, r as redis_client
 import database.notifications as notification_db
 import models.integrations as integration_models
 import models.conversation as conversation_models
+from models.conversation import SearchRequest
 from models.app import App
 from routers.conversations import process_conversation, trigger_external_integrations
 from utils.conversations.location import get_google_maps_location
 from utils.conversations.memories import process_external_integration_memory
+from utils.conversations.search import search_conversations
 from utils.plugins import send_plugin_notification
 
 # Rate limit settings - more conservative limits to prevent notification fatigue
@@ -335,6 +338,91 @@ async def get_conversations_via_integration(
 
     # Create response with exclude_none=True
     response = integration_models.ConversationsResponse(conversations=conversation_items)
+    return response.dict(exclude_none=True)
+
+
+@router.post('/v2/integrations/{app_id}/search/conversations', response_model=integration_models.SearchConversationsResponse,
+             response_model_exclude_none=True, tags=['integration', 'conversations'])
+async def search_conversations_via_integration(
+    request: Request,
+    app_id: str,
+    uid: str,
+    search_request: SearchRequest,
+    authorization: Optional[str] = Header(None)
+):
+    """
+    Search conversations for a user via integration API.
+    Authentication is required via API key in the Authorization header.
+    """
+    # Verify API key from Authorization header
+    if not authorization or not authorization.startswith('Bearer '):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'")
+
+    api_key = authorization.replace('Bearer ', '')
+    if not verify_api_key(app_id, api_key):
+        raise HTTPException(status_code=403, detail="Invalid API key")
+
+    # Verify if the app exists
+    app = apps_db.get_app_by_id_db(app_id)
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+
+    # Verify if the uid has enabled the app
+    enabled_plugins = redis_db.get_enabled_plugins(uid)
+    if app_id not in enabled_plugins:
+        raise HTTPException(status_code=403, detail="App is not enabled for this user")
+
+    # Check if the app has the capability to read conversations
+    if not apps_utils.app_has_action(app, 'read_conversations'):
+        raise HTTPException(status_code=403, detail="App does not have the capability to read conversations")
+
+    # Convert ISO datetime strings to Unix timestamps if provided
+    start_timestamp = None
+    end_timestamp = None
+
+    if search_request.start_date:
+        start_timestamp = int(datetime.fromisoformat(search_request.start_date).timestamp())
+
+    if search_request.end_date:
+        end_timestamp = int(datetime.fromisoformat(search_request.end_date).timestamp())
+
+    # Search conversations
+    search_results = search_conversations(
+        query=search_request.query,
+        page=search_request.page,
+        per_page=search_request.per_page,
+        uid=uid,
+        include_discarded=search_request.include_discarded,
+        start_date=start_timestamp,
+        end_date=end_timestamp
+    )
+
+    # Extract conversation IDs from search results
+    conversation_ids = [conv.get('id') for conv in search_results['items']]
+
+    # Get full conversation data using the IDs
+    full_conversations = []
+    if conversation_ids:
+        full_conversations = conversations_db.get_conversations_by_id(uid, conversation_ids)
+
+    # Convert database conversations to integration model
+    conversation_items = []
+    for conv in full_conversations:
+        try:
+            item = integration_models.ConversationItem.parse_obj(conv)
+            conversation_items.append(item)
+        except Exception as e:
+            print(f"Error parsing conversation {conv.get('id')}: {str(e)}")
+            continue
+
+    # Create response with pagination info
+    response = integration_models.SearchConversationsResponse(
+        conversations=conversation_items,
+        total_pages=search_results['total_pages'],
+        current_page=search_results['current_page'],
+        per_page=search_results['per_page']
+    )
+
     return response.dict(exclude_none=True)
 
 
