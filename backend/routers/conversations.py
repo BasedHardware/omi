@@ -1,9 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
+from typing import Optional, List
+from datetime import datetime
 
 import database.conversations as conversations_db
 import database.redis_db as redis_db
 from database.vector_db import delete_vector
 from models.conversation import *
+from models.conversation import SearchRequest
+
 from routers.transcribe_v2 import retrieve_in_progress_conversation
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.search import search_conversations
@@ -349,6 +353,18 @@ def get_public_conversations(offset: int = 0, limit: int = 1000):
 
 @router.post("/v1/conversations/search", response_model=dict, tags=['conversations'])
 def search_conversations_endpoint(search_request: SearchRequest, uid: str = Depends(auth.get_current_user_uid)):
+    # Convert ISO datetime strings to Unix timestamps if provided
+    start_timestamp = None
+    end_timestamp = None
+    
+    if search_request.start_date:
+        start_timestamp = int(datetime.fromisoformat(search_request.start_date).timestamp())
+    
+    if search_request.end_date:
+        end_timestamp = int(datetime.fromisoformat(search_request.end_date).timestamp())
+    
     return search_conversations(query=search_request.query, page=search_request.page,
                                 per_page=search_request.per_page, uid=uid,
-                                include_discarded=search_request.include_discarded)
+                                include_discarded=search_request.include_discarded,
+                                start_date=start_timestamp,
+                                end_date=end_timestamp)
