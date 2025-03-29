@@ -356,13 +356,13 @@ def search_conversations_endpoint(search_request: SearchRequest, uid: str = Depe
     # Convert ISO datetime strings to Unix timestamps if provided
     start_timestamp = None
     end_timestamp = None
-    
+
     if search_request.start_date:
         start_timestamp = int(datetime.fromisoformat(search_request.start_date).timestamp())
-    
+
     if search_request.end_date:
         end_timestamp = int(datetime.fromisoformat(search_request.end_date).timestamp())
-    
+
     return search_conversations(query=search_request.query, page=search_request.page,
                                 per_page=search_request.per_page, uid=uid,
                                 include_discarded=search_request.include_discarded,
