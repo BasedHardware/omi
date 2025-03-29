@@ -36,7 +36,7 @@ def get_conversation(uid, conversation_id):
 
 
 def get_conversations(uid: str, limit: int = 100, offset: int = 0, include_discarded: bool = False,
-                 statuses: List[str] = []):
+                      statuses: List[str] = [], start_date: Optional[datetime] = None, end_date: Optional[datetime] = None):
     conversations_ref = (
         db.collection('users').document(uid).collection('memories')
         .where(filter=FieldFilter('deleted', '==', False))
@@ -45,7 +45,17 @@ def get_conversations(uid: str, limit: int = 100, offset: int = 0, include_disca
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
     if len(statuses) > 0:
         conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
+
+    # Apply date range filters if provided
+    if start_date:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '>=', start_date))
+    if end_date:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '<=', end_date))
+
+    # Sort
     conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+
+    # Limits
     conversations_ref = conversations_ref.limit(limit).offset(offset)
     return [doc.to_dict() for doc in conversations_ref.stream()]
 

@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, Optional, List, Tuple, Dict, Any
+from typing import Annotated, Optional, List, Tuple, Dict, Any, Union
 
 from fastapi import APIRouter, Header, HTTPException, Depends, Query
 import database.conversations as conversations_db
@@ -8,6 +8,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 import database.apps as apps_db
+import database.conversations as conversations_db
 import utils.apps as apps_utils
 from utils.apps import verify_api_key
 import database.redis_db as redis_db
@@ -17,10 +18,12 @@ from database.redis_db import get_enabled_plugins, r as redis_client
 import database.notifications as notification_db
 import models.integrations as integration_models
 import models.conversation as conversation_models
+from models.conversation import SearchRequest
 from models.app import App
 from routers.conversations import process_conversation, trigger_external_integrations
 from utils.conversations.location import get_google_maps_location
 from utils.conversations.memories import process_external_integration_memory
+from utils.conversations.search import search_conversations
 from utils.plugins import send_plugin_notification
 
 # Rate limit settings - more conservative limits to prevent notification fatigue
@@ -214,7 +217,7 @@ async def create_facts_via_integration(
     return {}
 
 
-@router.get('/v2/integrations/{app_id}/memories', response_model=integration_models.MemoriesResponse, tags=['integration', 'facts'])
+@router.get('/v2/integrations/{app_id}/memories', response_model=integration_models.MemoriesResponse, response_model_exclude_none=True, tags=['integration', 'facts'])
 async def get_memories_via_integration(
     request: Request,
     app_id: str,
@@ -255,7 +258,7 @@ async def get_memories_via_integration(
     return {"memories": memory_items}
 
 
-@router.get('/v2/integrations/{app_id}/conversations', response_model=integration_models.ConversationsResponse,
+@router.get('/v2/integrations/{app_id}/conversations', response_model=integration_models.ConversationsResponse, response_model_exclude_none=True,
             tags=['integration', 'conversations'])
 async def get_conversations_via_integration(
     request: Request,
@@ -265,10 +268,90 @@ async def get_conversations_via_integration(
     offset: int = Query(0, ge=0),
     include_discarded: bool = Query(False),
     statuses: List[str] = Query([]),
+    start_date: Optional[Union[datetime, str]] = Query(None, description="Filter conversations after this date (ISO format)"),
+    end_date: Optional[Union[datetime, str]] = Query(None, description="Filter conversations before this date (ISO format)"),
     authorization: Optional[str] = Header(None)
 ):
     """
     Get all conversations for a user via integration API.
+    Authentication is required via API key in the Authorization header.
+
+    Optional date range filtering:
+    - start_date: Filter conversations after this date (ISO format)
+    - end_date: Filter conversations before this date (ISO format)
+    """
+    # Verify API key from Authorization header
+    if not authorization or not authorization.startswith('Bearer '):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'")
+
+    api_key = authorization.replace('Bearer ', '')
+    if not verify_api_key(app_id, api_key):
+        raise HTTPException(status_code=403, detail="Invalid API key")
+
+    # Verify if the app exists
+    app = apps_db.get_app_by_id_db(app_id)
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+
+    # Verify if the uid has enabled the app
+    enabled_plugins = redis_db.get_enabled_plugins(uid)
+    if app_id not in enabled_plugins:
+        raise HTTPException(status_code=403, detail="App is not enabled for this user")
+
+    # Check if the app has the capability to read conversations
+    if not apps_utils.app_has_action(app, 'read_conversations'):
+        raise HTTPException(status_code=403, detail="App does not have the capability to read conversations")
+
+    # Convert string dates to datetime objects if needed
+    if isinstance(start_date, str) and start_date:
+        try:
+            start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid start_date format. Use ISO format (YYYY-MM-DDTHH:MM:SS.sssZ)")
+
+    if isinstance(end_date, str) and end_date:
+        try:
+            end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid end_date format. Use ISO format (YYYY-MM-DDTHH:MM:SS.sssZ)")
+
+    conversations_data = conversations_db.get_conversations(
+        uid,
+        limit=limit,
+        offset=offset,
+        include_discarded=include_discarded,
+        statuses=statuses,
+        start_date=start_date,
+        end_date=end_date
+    )
+
+    # Convert database conversations
+    conversation_items = []
+    for conv in conversations_data:
+        try:
+            item = integration_models.ConversationItem.parse_obj(conv)
+            # Convert to dict with exclude_none=True to remove null values
+            conversation_items.append(item)
+        except Exception as e:
+            print(f"Error parsing conversation {conv.get('id')}: {str(e)}")
+            continue
+
+    # Create response with exclude_none=True
+    response = integration_models.ConversationsResponse(conversations=conversation_items)
+    return response.dict(exclude_none=True)
+
+
+@router.post('/v2/integrations/{app_id}/search/conversations', response_model=integration_models.SearchConversationsResponse,
+             response_model_exclude_none=True, tags=['integration', 'conversations'])
+async def search_conversations_via_integration(
+    request: Request,
+    app_id: str,
+    uid: str,
+    search_request: SearchRequest,
+    authorization: Optional[str] = Header(None)
+):
+    """
+    Search conversations for a user via integration API.
     Authentication is required via API key in the Authorization header.
     """
     # Verify API key from Authorization header
@@ -293,17 +376,54 @@ async def get_conversations_via_integration(
     if not apps_utils.app_has_action(app, 'read_conversations'):
         raise HTTPException(status_code=403, detail="App does not have the capability to read conversations")
 
-    conversations_data = conversations_db.get_conversations(
-        uid,
-        limit=limit,
-        offset=offset,
-        include_discarded=include_discarded,
-        statuses=statuses
+    # Convert ISO datetime strings to Unix timestamps if provided
+    start_timestamp = None
+    end_timestamp = None
+
+    if search_request.start_date:
+        start_timestamp = int(datetime.fromisoformat(search_request.start_date).timestamp())
+
+    if search_request.end_date:
+        end_timestamp = int(datetime.fromisoformat(search_request.end_date).timestamp())
+
+    # Search conversations
+    search_results = search_conversations(
+        query=search_request.query,
+        page=search_request.page,
+        per_page=search_request.per_page,
+        uid=uid,
+        include_discarded=search_request.include_discarded,
+        start_date=start_timestamp,
+        end_date=end_timestamp
     )
 
-    conversation_items = [integration_models.ConversationItem(**conv) for conv in conversations_data]
+    # Extract conversation IDs from search results
+    conversation_ids = [conv.get('id') for conv in search_results['items']]
 
-    return {"conversations": conversation_items}
+    # Get full conversation data using the IDs
+    full_conversations = []
+    if conversation_ids:
+        full_conversations = conversations_db.get_conversations_by_id(uid, conversation_ids)
+
+    # Convert database conversations to integration model
+    conversation_items = []
+    for conv in full_conversations:
+        try:
+            item = integration_models.ConversationItem.parse_obj(conv)
+            conversation_items.append(item)
+        except Exception as e:
+            print(f"Error parsing conversation {conv.get('id')}: {str(e)}")
+            continue
+
+    # Create response with pagination info
+    response = integration_models.SearchConversationsResponse(
+        conversations=conversation_items,
+        total_pages=search_results['total_pages'],
+        current_page=search_results['current_page'],
+        per_page=search_results['per_page']
+    )
+
+    return response.dict(exclude_none=True)
 
 
 @router.post('/v2/integrations/{app_id}/notification', response_model=integration_models.EmptyResponse,
