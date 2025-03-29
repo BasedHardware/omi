@@ -33,7 +33,7 @@ jobs:
 
             if [[ -f "$src" ]]; then
               # Strip frontmatter
-              awk 'BEGIN{skip=0} /^---/{skip++; next} skip==2 {print}' "$src" > temp.md
+              sed '1,/^---$/d' "$src" | sed '/^---$/d' > temp.md
 
               relative_depth=$(awk -F'/' '{print NF-1}' <<< "$dest")
               prefix=""
