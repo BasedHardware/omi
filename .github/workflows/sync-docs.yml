@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Sync .mdx to README.md
         shell: bash
@@ -25,7 +25,9 @@ jobs:
             ["docs/docs/docs/developer/sdk/python.mdx"]="sdks/python/README.md"
             ["docs/docs/docs/developer/sdk/reactnative.mdx"]="sdks/react-native/README.md"
             ["docs/docs/docs/developer/sdk/swift.mdx"]="sdks/swift/README.md"
-            ["docs/docs/docs/assembly/Build_the_device.mdx"]="assembly/README.md"
+
+            # Just for testing and remove this when not needed
+            ["docs/docs/docs/assembly/Build_the_device.mdx"]="test-output/assembly/README.md"
           )
 
           for src in "${!files[@]}"; do
@@ -41,6 +43,8 @@ jobs:
               else
                 sed -i 's|](/images/|](../../docs/images/|g' temp.md
               fi
+
+              mkdir -p "$(dirname "$dest")"
 
               # Add auto-generated banner
               {
@@ -69,4 +73,4 @@ jobs:
             sdks/python/README.md
             sdks/react-native/README.md
             sdks/swift/README.md
-            assembly/README.md
+            test-output/assembly/README.md
