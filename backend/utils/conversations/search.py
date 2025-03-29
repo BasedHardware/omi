@@ -30,7 +30,7 @@ def search_conversations(
         filter_by = f'userId:={uid} && deleted:=false'
         if not include_discarded:
             filter_by = filter_by + ' && discarded:=false'
-        
+
         # Add date range filters if provided
         if start_date is not None:
             filter_by = filter_by + f' && created_at:>={start_date}'
