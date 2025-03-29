@@ -128,3 +128,10 @@ class ConversationItem(BaseModel):
 
 class ConversationsResponse(BaseModel):
     conversations: List[ConversationItem] = Field(description="List of user conversations")
+
+
+class SearchConversationsResponse(BaseModel):
+    conversations: List[ConversationItem] = Field(description="List of user conversations")
+    total_pages: int = Field(description="Total number of pages")
+    current_page: int = Field(description="Current page number")
+    per_page: int = Field(description="Number of items per page")
