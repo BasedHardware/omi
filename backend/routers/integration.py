@@ -214,7 +214,7 @@ async def create_facts_via_integration(
     return {}
 
 
-@router.get('/v2/integrations/{app_id}/memories', response_model=integration_models.MemoriesResponse, tags=['integration', 'facts'])
+@router.get('/v2/integrations/{app_id}/memories', response_model=integration_models.MemoriesResponse, response_model_exclude_none=True, tags=['integration', 'facts'])
 async def get_memories_via_integration(
     request: Request,
     app_id: str,
@@ -255,7 +255,7 @@ async def get_memories_via_integration(
     return {"memories": memory_items}
 
 
-@router.get('/v2/integrations/{app_id}/conversations', response_model=integration_models.ConversationsResponse,
+@router.get('/v2/integrations/{app_id}/conversations', response_model=integration_models.ConversationsResponse, response_model_exclude_none=True,
             tags=['integration', 'conversations'])
 async def get_conversations_via_integration(
     request: Request,
@@ -322,9 +322,20 @@ async def get_conversations_via_integration(
         end_date=end_date
     )
 
-    conversation_items = [integration_models.ConversationItem(**conv) for conv in conversations_data]
+    # Convert database conversations
+    conversation_items = []
+    for conv in conversations_data:
+        try:
+            item = integration_models.ConversationItem.parse_obj(conv)
+            # Convert to dict with exclude_none=True to remove null values
+            conversation_items.append(item)
+        except Exception as e:
+            print(f"Error parsing conversation {conv.get('id')}: {str(e)}")
+            continue
 
-    return {"conversations": conversation_items}
+    # Create response with exclude_none=True
+    response = integration_models.ConversationsResponse(conversations=conversation_items)
+    return response.dict(exclude_none=True)
 
 
 @router.post('/v2/integrations/{app_id}/notification', response_model=integration_models.EmptyResponse,
