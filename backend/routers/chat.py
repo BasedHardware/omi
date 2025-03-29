@@ -12,9 +12,9 @@ from multipart.multipart import shutil
 import database.chat as chat_db
 from database.apps import record_app_usage
 from models.app import App
-from models.chat import ChatSession, Message, SendMessageRequest, MessageSender, ResponseMessage, MessageMemory, \
+from models.chat import ChatSession, Message, SendMessageRequest, MessageSender, ResponseMessage, MessageConversation, \
     FileChat
-from models.memory import Memory
+from models.conversation import Conversation
 from models.plugin import UsageHistoryType
 from routers.sync import retrieve_file_paths, decode_files_to_wav, retrieve_vad_segments
 from utils.apps import get_available_app_by_id
@@ -100,18 +100,18 @@ def send_message(
         ask_for_nps = callback_data.get('ask_for_nps', False)
 
         # cited extraction
-        cited_memory_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
-        if len(cited_memory_idxs) > 0:
+        cited_conversation_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
+        if len(cited_conversation_idxs) > 0:
             response = re.sub(r'\[\d+\]', '', response)
-        memories = [memories[i - 1] for i in cited_memory_idxs if 0 < i and i <= len(memories)]
+        memories = [memories[i - 1] for i in cited_conversation_idxs if 0 < i and i <= len(memories)]
 
         memories_id = []
-        # check if the items in the memories list are dict
+        # check if the items in the conversations list are dict
         if memories:
             converted_memories = []
             for m in memories[:5]:
                 if isinstance(m, dict):
-                    converted_memories.append(Memory(**m))
+                    converted_memories.append(Conversation(**m))
                 else:
                     converted_memories.append(m)
             memories_id = [m.id for m in converted_memories]
@@ -130,7 +130,7 @@ def send_message(
             chat_db.add_message_to_chat_session(uid, chat_session.id, ai_message.id)
 
         chat_db.add_message(uid, ai_message.dict())
-        ai_message.memories = [MessageMemory(**m) for m in (memories if len(memories) < 5 else memories[:5])]
+        ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
         if app_id:
             record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
 
@@ -198,18 +198,18 @@ def send_message_v1(
     response, ask_for_nps, memories = execute_graph_chat(uid, messages, app, cited=True)  # plugin
 
     # cited extraction
-    cited_memory_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
-    if len(cited_memory_idxs) > 0:
+    cited_conversation_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
+    if len(cited_conversation_idxs) > 0:
         response = re.sub(r'\[\d+\]', '', response)
-    memories = [memories[i - 1] for i in cited_memory_idxs if 0 < i and i <= len(memories)]
+    memories = [memories[i - 1] for i in cited_conversation_idxs if 0 < i and i <= len(memories)]
 
     memories_id = []
-    # check if the items in the memories list are dict
+    # check if the items in the conversations list are dict
     if memories:
         converted_memories = []
         for m in memories[:5]:
             if isinstance(m, dict):
-                converted_memories.append(Memory(**m))
+                converted_memories.append(Conversation(**m))
             else:
                 converted_memories.append(m)
         memories_id = [m.id for m in converted_memories]
@@ -334,7 +334,7 @@ def get_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_cu
     chat_session = chat_db.get_chat_session(uid, plugin_id=plugin_id)
     chat_session_id = chat_session['id'] if chat_session else None
 
-    messages = chat_db.get_messages(uid, limit=100, include_memories=True, plugin_id=plugin_id,
+    messages = chat_db.get_messages(uid, limit=100, include_conversations=True, plugin_id=plugin_id,
                                     chat_session_id=chat_session_id)
     print('get_messages', len(messages), plugin_id)
     if not messages:

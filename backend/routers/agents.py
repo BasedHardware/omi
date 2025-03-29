@@ -3,7 +3,7 @@ from fastapi import Request, HTTPException
 
 from models import shared
 from models import task
-from utils.memories.process_memory import process_user_expression_measurement_callback
+from utils.conversations.process_conversation import process_user_expression_measurement_callback
 from utils.other import hume
 
 router = APIRouter()

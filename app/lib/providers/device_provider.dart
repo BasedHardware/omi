@@ -136,8 +136,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       debugPrint("period connect...");
       print('seconds: $connectionCheckSeconds');
       print('triggered timer at ${DateTime.now()}');
-
       if (SharedPreferencesUtil().btDevice.id.isEmpty) {
+        t.cancel();
         return;
       }
       print("isConnected: $isConnected, isConnecting: $isConnecting, connectedDevice: $connectedDevice");

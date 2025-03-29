@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/pages/facts/page.dart';
+import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/payments/payments_page.dart';
 import 'package:omi/pages/settings/change_name_widget.dart';
 import 'package:omi/pages/settings/people.dart';
@@ -70,7 +70,7 @@ class _ProfilePageState extends State<ProfilePage> {
               subtitle: const Text('What Omi has learned about you 👀'),
               trailing: const Icon(Icons.self_improvement, size: 20),
               onTap: () {
-                routeToPage(context, const FactsPage());
+                routeToPage(context, const MemoriesPage());
                 MixpanelManager().pageOpened('Profile Facts');
               },
             ),
