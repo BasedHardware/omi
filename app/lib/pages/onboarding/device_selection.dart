@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
-
+import 'package:responsive_framework/responsive_framework.dart';
 import 'package:omi/pages/persona/twitter/social_profile.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
@@ -45,7 +45,8 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
           Scaffold(
             backgroundColor: Colors.transparent,
             body: SafeArea(
-              child: Padding(
+              child: Container(
+                alignment: Alignment.center,
                 padding: const EdgeInsets.symmetric(horizontal: 24.0),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,

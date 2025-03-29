@@ -12,7 +12,7 @@ import 'package:omi/widgets/dialog.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
-
+import 'package:omi/widgets/decider_widget.dart';
 import 'device_settings.dart';
 
 enum SettingsMode {
