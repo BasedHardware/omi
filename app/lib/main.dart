@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
@@ -63,7 +62,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
-        providers:getAllProviders(),
+        providers: getAllProviders(),
         builder: (context, child) {
           return WithForegroundTaskConditionally(
             child: MaterialApp(
@@ -116,23 +115,28 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
                 };
                 return ResponsiveBreakpoints.builder(
-                  child: Builder(builder: (context) {
-                    return ResponsiveScaledBox(
-                        width: ResponsiveValue<double?>(context, defaultValue: null, conditionalValues: [
-                          const Condition.equals(name: 'MOBILE_SMALL', value: 480),
-                        ]).value,
-                        child: ClampingScrollWrapper.builder(context, child!));
-                  }),
+                  child: child!,
                   breakpoints: [
                     const Breakpoint(start: 0, end: 450, name: MOBILE),
                     const Breakpoint(start: 451, end: 800, name: TABLET),
-                    const Breakpoint(
-                      start: 801,
-                      end: 1920,
-                      name: DESKTOP,
-                    ),
+                    const Breakpoint(start: 801, end: 1920, name: DESKTOP),
                   ],
                 );
+              },
+              onGenerateRoute: (RouteSettings settings) {
+                return MaterialPageRoute(builder: (context) {
+                  return MaxWidthBox(
+                    maxWidth: 1200,
+                    child: ResponsiveScaledBox(
+                      width: ResponsiveValue<double>(context, conditionalValues: const [
+                        Condition.equals(name: MOBILE, value: 450),
+                        Condition.between(start: 800, end: 1100, value: 800),
+                        Condition.between(start: 1000, end: 1200, value: 1000),
+                      ]).value,
+                      child: BouncingScrollWrapper.builder(context, child!, dragWithMouse: true),
+                    ),
+                  );
+                });
               },
               home: TalkerWrapper(
                 talker: Logger.instance.talker,
@@ -153,8 +157,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         });
   }
 }
-
-
 
 class WithForegroundTaskConditionally extends StatelessWidget {
   final Widget child;
