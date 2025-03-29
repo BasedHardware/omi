@@ -1,9 +1,10 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from enum import Enum
-from datetime import datetime
+from datetime import datetime, timezone
 
 from models.memories import MemoryCategory, MemoryDB
+from models.transcript_segment import TranscriptSegment as BaseTranscriptSegment
 
 
 class ConversationTimestampRange(BaseModel):
@@ -56,33 +57,81 @@ class MemoriesResponse(BaseModel):
     memories: List[MemoryItem] = Field(description="List of user memories (facts)")
 
 
+class ActionItem(BaseModel):
+    description: str = Field(description="The action item to be completed")
+    completed: bool = False
+    deleted: bool = False
+
+
+class Event(BaseModel):
+    title: str = Field(description="The title of the event")
+    description: str = Field(description="A brief description of the event", default='')
+    start: datetime = Field(description="The start date and time of the event")
+    duration: int = Field(description="The duration of the event in minutes", default=30)
+    created: bool = False
+
+    def as_dict_cleaned_dates(self):
+        event_dict = self.dict()
+        start_time = event_dict['start']
+        if start_time.tzinfo is None:
+            event_dict['start'] = start_time.isoformat() + 'Z'
+        else:
+            event_dict['start'] = start_time.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
+        return event_dict
+
+
+class ConversationItemStructured(BaseModel):
+    title: str
+    overview: str
+    emoji: str = "🧠"
+    category: str = "other"
+    action_items: List[ActionItem] = Field(default=[])
+    events: List[Event] = Field(default=[])
+
+
+class ConversationItemGeolocation(BaseModel):
+    google_place_id: Optional[str] = None
+    latitude: float
+    longitude: float
+    address: Optional[str] = None
+    location_type: Optional[str] = None
+
+
+class ConversationItemTranscriptSegment(BaseModel):
+    text: str
+    speaker: Optional[str] = None
+    is_user: bool = False
+    person_id: Optional[str] = None
+    start: float = 0.0
+    end: float = 0.0
+
+
 class ConversationItem(BaseModel):
-    """
-    Conversation item model for API responses
-    """
     id: str
     created_at: datetime
-    started_at: Optional[datetime]
-    finished_at: Optional[datetime]
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
     source: str
-    structured: Optional[Dict[str, Any]] = None
-    transcript_segments: Optional[List[Dict[str, Any]]] = None
-    visibility: Optional[str] = None
+    structured: Optional[ConversationItemStructured] = None
+    transcript_segments: Optional[List[ConversationItemTranscriptSegment]] = None
     discarded: Optional[bool] = False
-    deleted: Optional[bool] = False
     app_id: Optional[str] = None
-    geolocation: Optional[Dict[str, Any]] = None
     language: Optional[str] = None
-    processing_memory_id: Optional[str] = None
     external_data: Optional[Dict] = None
+    geolocation: Optional[ConversationItemGeolocation] = None
+    status: Optional[str] = None
 
     class Config:
-        arbitrary_types_allowed = True
         json_encoders = {
-            datetime: lambda v: v.isoformat()
+            datetime: lambda v: v.isoformat() + 'Z' if v.tzinfo is None else v.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
         }
-        exclude_none = True
-
 
 class ConversationsResponse(BaseModel):
     conversations: List[ConversationItem] = Field(description="List of user conversations")
+
+
+class SearchConversationsResponse(BaseModel):
+    conversations: List[ConversationItem] = Field(description="List of user conversations")
+    total_pages: int = Field(description="Total number of pages")
+    current_page: int = Field(description="Current page number")
+    per_page: int = Field(description="Number of items per page")
