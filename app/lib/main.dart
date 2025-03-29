@@ -128,10 +128,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 return MaterialPageRoute(builder: (context) {
                   return ResponsiveScaledBox(
                     width: ResponsiveValue<double>(context, conditionalValues: [
-                      Condition.equals(name: MOBILE, value: 450),
-                      Condition.between(start: 451, end: 800, value: 800),
-                      Condition.between(start: 801, end: 1100, value: 800),
-                      Condition.between(start: 1000, end: 1200, value: 1000),
+                      const Condition.equals(name: MOBILE, value: 450),
+                      const Condition.between(start: 451, end: 800, value: 800),
+                      const Condition.between(start: 801, end: 1920, value: 1920),
+                      Condition.between(start: 1921, end: double.infinity.toInt(), value: 1920),
                     ]).value,
                     child: BouncingScrollWrapper.builder(context, child!, dragWithMouse: true),
                   );

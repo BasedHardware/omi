@@ -541,11 +541,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   ),
                   onPressed: () {
                     MixpanelManager().pageOpened('Persona Profile');
-
+      
                     // Set routing in provider
                     var personaProvider = Provider.of<PersonaProvider>(context, listen: false);
                     personaProvider.setRouting(PersonaProfileRouting.home);
-
+      
                     // Navigate
                     var homeProvider = Provider.of<HomeProvider>(context, listen: false);
                     homeProvider.setIndex(3);

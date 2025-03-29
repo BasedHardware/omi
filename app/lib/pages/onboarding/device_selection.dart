@@ -48,88 +48,92 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
               child: Container(
                 alignment: Alignment.center,
                 padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Spacer(flex: 6),
-                    Column(
-                      children: [
-                        const SizedBox(height: 10),
-                        Container(
-                          child: const Text(
-                            'omi',
+                child: SizedBox(
+                width: ResponsiveBreakpoints.of(context).largerThan(TABLET) ?  1200: null,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Spacer(flex: 6),
+                      Column(
+                        children: [
+                          const SizedBox(height: 10),
+                          Container(
+                            child:  Text(
+                              'omi',
+
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: ResponsiveBreakpoints.of(context).largerThan(TABLET) ?126 :84,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.5,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                          Text(
+                            'scale yourself',
                             style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 84,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.5,
+                              color: Colors.white.withOpacity(0.6),
+                                fontSize: ResponsiveBreakpoints.of(context).largerThan(TABLET) ?33 :22,
+                              fontWeight: FontWeight.w500,
                             ),
                             textAlign: TextAlign.center,
                           ),
-                        ),
-                        Text(
-                          'scale yourself',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.6),
-                            fontSize: 22,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                    const Spacer(flex: 5),
-                    const SizedBox(
-                      height: 30,
-                    ),
-                    Column(
-                      children: [
-                        ElevatedButton(
-                          onPressed: () async {
-                            await Posthog().capture(
-                              eventName: 'clicked_get_started',
-                            );
-                            routeToPage(context, const OnboardingWrapper());
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white.withOpacity(0.12),
-                            foregroundColor: Colors.white,
-                            minimumSize: const Size(double.infinity, 56),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(28),
+                        ],
+                      ),
+                      const Spacer(flex: 5),
+                      const SizedBox(
+                        height: 30,
+                      ),
+                      Column(
+                        children: [
+                          ElevatedButton(
+                            onPressed: () async {
+                              await Posthog().capture(
+                                eventName: 'clicked_get_started',
+                              );
+                              routeToPage(context, const OnboardingWrapper());
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white.withOpacity(0.12),
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size(double.infinity, 56),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(28),
+                              ),
+                            ),
+                            child: const Text(
+                              'Connect omi',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
-                          child: const Text(
-                            'Connect omi',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
+                          const SizedBox(
+                            height: 24,
+                          ),
+                          TextButton(
+                            onPressed: () async {
+                              Navigator.pushReplacement(
+                                context,
+                                MaterialPageRoute(builder: (context) => const SocialHandleScreen()),
+                              );
+                            },
+                            child: const Text(
+                              'I don\'t have omi',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(
-                          height: 24,
-                        ),
-                        TextButton(
-                          onPressed: () async {
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(builder: (context) => const SocialHandleScreen()),
-                            );
-                          },
-                          child: const Text(
-                            'I don\'t have omi',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Spacer(flex: 3),
-                  ],
+                        ],
+                      ),
+                      const Spacer(flex: 3),
+                    ],
+                  ),
                 ),
               ),
             ),
