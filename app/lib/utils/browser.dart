@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_custom_tabs/flutter_custom_tabs.dart';
 
@@ -7,21 +6,24 @@ Future<void> launchCustomTab(BuildContext context, String url, {CustomTabsSessio
   final mediaQuery = MediaQuery.of(context);
   await launchUrl(
     Uri.parse(url),
-    customTabsOptions: CustomTabsOptions.partial(
-      configuration: PartialCustomTabsConfiguration(
-        initialHeight: mediaQuery.size.height,
+    customTabsOptions: CustomTabsOptions(
+      partial: PartialCustomTabsConfiguration(
+        initialHeight: mediaQuery.size.height - 300,
+        activityHeightResizeBehavior: CustomTabsActivityHeightResizeBehavior.adjustable,
       ),
       colorSchemes: CustomTabsColorSchemes.defaults(
         colorScheme: theme.brightness.toColorScheme(),
         toolbarColor: theme.colorScheme.primary,
       ),
       showTitle: false,
+      urlBarHidingEnabled: true,
       shareState: CustomTabsShareState.off,
       browser: session != null ? CustomTabsBrowserConfiguration.session(session) : null,
-      closeButton: CustomTabsCloseButton(icon: CustomTabsCloseButtonIcons.back),
+      closeButton:
+          CustomTabsCloseButton(icon: CustomTabsCloseButtonIcons.back, position: CustomTabsCloseButtonPosition.end),
     ),
-    safariVCOptions: SafariViewControllerOptions.pageSheet(
-      configuration: const SheetPresentationControllerConfiguration(
+    safariVCOptions: const SafariViewControllerOptions(
+      pageSheet: SheetPresentationControllerConfiguration(
         detents: {
           SheetPresentationControllerDetent.large,
         },
@@ -30,9 +32,8 @@ Future<void> launchCustomTab(BuildContext context, String url, {CustomTabsSessio
         prefersEdgeAttachedInCompactHeight: true,
         preferredCornerRadius: 16.0,
       ),
-      preferredBarTintColor: theme.colorScheme.primary,
-      preferredControlTintColor: theme.colorScheme.onPrimary,
-      entersReaderIfAvailable: true,
+      modalPresentationStyle: ViewControllerModalPresentationStyle.pageSheet,
+      entersReaderIfAvailable: false,
       dismissButtonStyle: SafariViewControllerDismissButtonStyle.close,
     ),
   );
