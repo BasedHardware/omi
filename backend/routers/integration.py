@@ -270,6 +270,7 @@ async def get_conversations_via_integration(
     statuses: List[str] = Query([]),
     start_date: Optional[Union[datetime, str]] = Query(None, description="Filter conversations after this date (ISO format)"),
     end_date: Optional[Union[datetime, str]] = Query(None, description="Filter conversations before this date (ISO format)"),
+    max_transcript_segments: int = Query(100, ge=-1, le=1000, description="Maximum number of transcript segments to include per conversation. Use -1 for no limit."),
     authorization: Optional[str] = Header(None)
 ):
     """
@@ -330,6 +331,12 @@ async def get_conversations_via_integration(
     for conv in conversations_data:
         try:
             item = integration_models.ConversationItem.parse_obj(conv)
+
+            # Limit transcript segments
+            if max_transcript_segments != -1 and item.transcript_segments and \
+                    len(item.transcript_segments) > max_transcript_segments:
+                item.transcript_segments = item.transcript_segments[:max_transcript_segments]
+
             # Convert to dict with exclude_none=True to remove null values
             conversation_items.append(item)
         except Exception as e:
@@ -348,6 +355,7 @@ async def search_conversations_via_integration(
     app_id: str,
     uid: str,
     search_request: SearchRequest,
+    max_transcript_segments: int = Query(100, ge=-1, le=1000, description="Maximum number of transcript segments to include per conversation. Use -1 for no limit."),
     authorization: Optional[str] = Header(None)
 ):
     """
@@ -410,6 +418,12 @@ async def search_conversations_via_integration(
     for conv in full_conversations:
         try:
             item = integration_models.ConversationItem.parse_obj(conv)
+
+            # Limit transcript segments
+            if max_transcript_segments != -1 and item.transcript_segments and \
+                    len(item.transcript_segments) > max_transcript_segments:
+                item.transcript_segments = item.transcript_segments[:max_transcript_segments]
+
             conversation_items.append(item)
         except Exception as e:
             print(f"Error parsing conversation {conv.get('id')}: {str(e)}")
