@@ -5,9 +5,7 @@ on:
     branches:
       - '**'
     paths:
-      - "docs/docs/docs/developer/sdk/*.mdx"
-
-      # Add more paths as needed
+      - "docs/docs/docs/**/*.mdx"
 
   workflow_dispatch:
 
@@ -24,9 +22,10 @@ jobs:
           echo "🔁 Syncing MDX files to SDK README.md..."
 
           declare -A files=(
-            ["docs/docs/docs/developer/sdk/Python.mdx"]="sdks/python/README.md"
-            ["docs/docs/docs/developer/sdk/ReactNative.mdx"]="sdks/react-native/README.md"
-            ["docs/docs/docs/developer/sdk/Swift.mdx"]="sdks/swift/README.md"
+            ["docs/docs/docs/developer/sdk/python.mdx"]="sdks/python/README.md"
+            ["docs/docs/docs/developer/sdk/reactnative.mdx"]="sdks/react-native/README.md"
+            ["docs/docs/docs/developer/sdk/swift.mdx"]="sdks/swift/README.md"
+            ["docs/docs/docs/assembly/Build_the_device.mdx"]="assembly/README.md"
           )
 
           for src in "${!files[@]}"; do
@@ -37,8 +36,11 @@ jobs:
               # Create temp file without frontmatter
               awk 'BEGIN{skip=0} /^---/{skip++; next} skip==2 {print}' "$src" > temp.md
 
-              # Fix relative image paths (only if needed)
-              sed -i 's|](/images/|](../../docs/images/|g' temp.md
+              if [[ "$src" == docs/docs/docs/assembly/* ]]; then
+                sed -i 's|](/images/|](../docs/images/|g' temp.md
+              else
+                sed -i 's|](/images/|](../../docs/images/|g' temp.md
+              fi
 
               # Add auto-generated banner
               {
@@ -53,6 +55,7 @@ jobs:
               echo "✅ Synced $src → $dest"
             else
               echo "⚠️ Skipped: $src not found"
+              ls -la "$(dirname "$src")"
             fi
           done
 
@@ -66,3 +69,4 @@ jobs:
             sdks/python/README.md
             sdks/react-native/README.md
             sdks/swift/README.md
+            assembly/README.md
