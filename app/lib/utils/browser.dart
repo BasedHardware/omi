@@ -26,11 +26,12 @@ Future<void> launchCustomTab(BuildContext context, String url, {CustomTabsSessio
       pageSheet: SheetPresentationControllerConfiguration(
         detents: {
           SheetPresentationControllerDetent.large,
+          SheetPresentationControllerDetent.medium,
         },
         prefersScrollingExpandsWhenScrolledToEdge: true,
         prefersGrabberVisible: true,
         prefersEdgeAttachedInCompactHeight: true,
-        preferredCornerRadius: 16.0,
+        preferredCornerRadius: 48.0,
       ),
       modalPresentationStyle: ViewControllerModalPresentationStyle.pageSheet,
       entersReaderIfAvailable: false,
