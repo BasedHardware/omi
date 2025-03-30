@@ -7,7 +7,7 @@ from typing import Union, Tuple, List
 
 from fastapi import HTTPException
 
-import database.facts as facts_db
+import database.memories as memories_db
 import database.conversations as conversations_db
 import database.notifications as notification_db
 import database.tasks as tasks_db
@@ -15,7 +15,7 @@ import database.trends as trends_db
 from database.apps import record_app_usage, get_omi_personas_by_uid_db
 from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
-from models.facts import FactDB, Fact
+from models.memories import MemoryDB, Memory
 from models.conversation import *
 from models.conversation import ExternalIntegrationCreateConversation, Conversation, CreateConversation, ConversationSource
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
@@ -24,11 +24,11 @@ from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps, update_personas_async, sync_update_persona_prompt
 from utils.llm import obtain_emotional_message, retrieve_metadata_fields_from_transcript, \
     summarize_open_glass, get_transcript_structure, generate_embedding, \
-    get_plugin_result, should_discard_conversation, summarize_experience_text, new_facts_extractor, \
+    get_plugin_result, should_discard_conversation, summarize_experience_text, new_memories_extractor, \
     trends_extractor, get_email_structure, get_post_structure, get_message_structure, \
     retrieve_metadata_from_email, retrieve_metadata_from_post, retrieve_metadata_from_message, \
     retrieve_metadata_from_text, \
-    extract_facts_from_text
+    extract_memories_from_text
 from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
 from utils.retrieval.rag import retrieve_rag_conversation_context
@@ -134,23 +134,23 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
 
 def _extract_facts(uid: str, conversation: Conversation):
     # TODO: maybe instead (once they can edit them) we should not tie it this hard
-    facts_db.delete_facts_for_memory(uid, conversation.id)
+    memories_db.delete_memories_for_conversation(uid, conversation.id)
 
-    new_facts: List[Fact] = []
+    new_facts: List[Memory] = []
 
     # Extract facts based on conversation source
     if conversation.source == ConversationSource.external_integration:
         text_content = conversation.external_data.get('text')
         if text_content and len(text_content) > 0:
             text_source = conversation.external_data.get('text_source', 'other')
-            new_facts = extract_facts_from_text(uid, text_content, text_source)
+            new_facts = extract_memories_from_text(uid, text_content, text_source)
     else:
         # For regular conversations with transcript segments
-        new_facts = new_facts_extractor(uid, conversation.transcript_segments)
+        new_facts = new_memories_extractor(uid, conversation.transcript_segments)
 
     parsed_facts = []
     for fact in new_facts:
-        parsed_facts.append(FactDB.from_fact(fact, uid, conversation.id, conversation.structured.category, False))
+        parsed_facts.append(MemoryDB.from_memory(fact, uid, conversation.id, conversation.structured.category, False))
         print('_extract_facts:', fact.category.value.upper(), '|', fact.content)
 
     if len(parsed_facts) == 0:
@@ -158,10 +158,10 @@ def _extract_facts(uid: str, conversation: Conversation):
         return
 
     print(f"Saving {len(parsed_facts)} facts for conversation {conversation.id}")
-    facts_db.save_facts(uid, [fact.dict() for fact in parsed_facts])
+    memories_db.save_memories(uid, [fact.dict() for fact in parsed_facts])
 
 
-def send_new_facts_notification(token: str, facts: [FactDB]):
+def send_new_facts_notification(token: str, facts: [MemoryDB]):
     facts_str = ", ".join([fact.content for fact in facts])
     message = f"New facts {facts_str}"
     ai_message = NotificationMessage(

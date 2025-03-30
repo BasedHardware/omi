@@ -302,17 +302,17 @@ def get_cached_user_name(uid: str) -> str:
     return name.decode()
 
 
-# TODO: cache facts if speed improves dramatically
-def cache_facts(uid: str, facts: List[dict]):
-    r.set(f'users:{uid}:facts', str(facts))
+# TODO: cache memories if speed improves dramatically
+def cache_memories(uid: str, memories: List[dict]):
+    r.set(f'users:{uid}:facts', str(memories))
     r.expire(f'users:{uid}:facts', 60 * 60)  # 1 hour, most people chat during a few minutes
 
 
-def get_cached_facts(uid: str) -> List[dict]:
-    facts = r.get(f'users:{uid}:facts')
-    if not facts:
+def get_cached_memories(uid: str) -> List[dict]:
+    memories = r.get(f'users:{uid}:facts')
+    if not memories:
         return []
-    return eval(facts)
+    return eval(memories)
 
 
 def cache_signed_url(blob_path: str, signed_url: str, ttl: int = 60 * 60):

@@ -22,12 +22,20 @@ def search_conversations(
         page: int = 1,
         per_page: int = 10,
         include_discarded: bool = True,
+        start_date: int = None,
+        end_date: int = None,
 ) -> Dict:
     try:
 
         filter_by = f'userId:={uid} && deleted:=false'
         if not include_discarded:
             filter_by = filter_by + ' && discarded:=false'
+
+        # Add date range filters if provided
+        if start_date is not None:
+            filter_by = filter_by + f' && created_at:>={start_date}'
+        if end_date is not None:
+            filter_by = filter_by + f' && created_at:<={end_date}'
 
         search_parameters = {
             'q': query,

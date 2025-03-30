@@ -300,3 +300,5 @@ class SearchRequest(BaseModel):
     page: Optional[int] = 1
     per_page: Optional[int] = 10
     include_discarded: Optional[bool] = True
+    start_date: Optional[str] = None  # ISO format datetime string
+    end_date: Optional[str] = None    # ISO format datetime string

@@ -57,10 +57,10 @@ def delete_person(uid: str, person_id: str):
 def delete_user_data(uid: str):
     # TODO: why dont we delete the whole document ref here?
     user_ref = db.collection('users').document(uid)
-    memories_ref = user_ref.collection('memories')
-    # delete all memories
+    conversations_ref = user_ref.collection('memories')
+    # delete all conversations
     batch = db.batch()
-    for doc in memories_ref.stream():
+    for doc in conversations_ref.stream():
         batch.delete(doc.reference)
     batch.commit()
     # delete chat messages
@@ -69,16 +69,16 @@ def delete_user_data(uid: str):
     for doc in messages_ref.stream():
         batch.delete(doc.reference)
     batch.commit()
-    # delete facts
+    # delete memories
     batch = db.batch()
-    facts_ref = user_ref.collection('facts')
-    for doc in facts_ref.stream():
+    memories_ref = user_ref.collection('facts')
+    for doc in memories_ref.stream():
         batch.delete(doc.reference)
     batch.commit()
-    # delete processing memories
-    processing_memories_ref = user_ref.collection('processing_memories')
+    # delete processing conversations
+    processing_conversations_ref = user_ref.collection('processing_memories')
     batch = db.batch()
-    for doc in processing_memories_ref.stream():
+    for doc in processing_conversations_ref.stream():
         batch.delete(doc.reference)
     batch.commit()
     # delete user
