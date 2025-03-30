@@ -1,0 +1,41 @@
+name: Sync Docs to README.md
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/docs/**.mdx"
+
+jobs:
+  sync-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Convert .mdx to README.md
+        run: |
+          declare -A doc_map
+          doc_map["docs/docs/developer/sdk/ReactNative.mdx"]="sdks/react-native/README.md"
+          doc_map["docs/docs/developer/sdk/python.mdx"]="sdks/python/README.md"
+          # Add more mappings as needed
+
+          for mdx in "${!doc_map[@]}"; do
+            md=${doc_map[$mdx]}
+            echo "Processing: $mdx -> $md"
+            
+            # Remove metadata (title, description)
+            awk '/^---$/ {found++; next} found == 2 {print}' "$mdx" > "$md"
+            
+            # Add auto-generated notice
+            echo -e "\n---\n\n*This file is auto-generated from [$mdx](https://github.com/BasedHardware/omi/blob/main/$mdx). Do not edit manually.*" >> "$md"
+          done
+
+      - name: Commit changes
+        uses: EndBug/add-and-commit@v7
+        with:
+          author_name: GitHub Action
+          author_email: action@github.com
+          message: "Sync Docs to README.md"
+          add: "sdks/**/README.md"
