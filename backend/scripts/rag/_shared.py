@@ -29,7 +29,7 @@ else:
 
 import database.conversations as conversations_db
 # noinspection PyUnresolvedReferences
-import database.facts as facts_d
+import database.memories as facts_d
 
 uid = 'viUv7GtdoHXbK1UBCDlPuTDuPgJ2'
 

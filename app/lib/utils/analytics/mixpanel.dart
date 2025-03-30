@@ -1,5 +1,5 @@
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/backend/schema/fact.dart';
+import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/env/env.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
@@ -148,21 +148,21 @@ class MixpanelManager {
 
   void deviceDisconnected() => track('Device Disconnected');
 
-  void factsPageCategoryOpened(FactCategory category) =>
+  void memoriesPageCategoryOpened(MemoryCategory category) =>
       track('Fact Page Category Opened', properties: {'category': category.toString().split('.').last});
 
-  void factsPageDeletedFact(Fact fact) => track(
+  void memoriesPageDeletedMemory(Memory memory) => track(
         'Fact Page Deleted Fact',
         properties: {
-          'fact_category': fact.category.toString().split('.').last,
+          'fact_category': memory.category.toString().split('.').last,
         },
       );
 
-  void factsPageEditedFact() => track('Fact Page Edited Fact');
+  void memoriesPageEditedMemory() => track('Fact Page Edited Fact');
 
-  void factsPageCreateFactBtn() => track('Fact Page Create Fact Button Pressed');
+  void memoriesPageCreateMemoryBtn() => track('Fact Page Create Fact Button Pressed');
 
-  void factsPageCreatedFact(FactCategory category) =>
+  void memoriesPageCreatedMemory(MemoryCategory category) =>
       track('Fact Page Created Fact', properties: {'fact_category': category.toString().split('.').last});
 
   Map<String, dynamic> _getTranscriptProperties(String transcript) {
