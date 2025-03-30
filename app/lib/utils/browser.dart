@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_custom_tabs/flutter_custom_tabs.dart';
 
@@ -6,24 +7,21 @@ Future<void> launchCustomTab(BuildContext context, String url, {CustomTabsSessio
   final mediaQuery = MediaQuery.of(context);
   await launchUrl(
     Uri.parse(url),
-    customTabsOptions: CustomTabsOptions(
-      partial: PartialCustomTabsConfiguration(
-        initialHeight: mediaQuery.size.height - 300,
-        activityHeightResizeBehavior: CustomTabsActivityHeightResizeBehavior.adjustable,
+    customTabsOptions: CustomTabsOptions.partial(
+      configuration: PartialCustomTabsConfiguration(
+        initialHeight: mediaQuery.size.height,
       ),
       colorSchemes: CustomTabsColorSchemes.defaults(
         colorScheme: theme.brightness.toColorScheme(),
         toolbarColor: theme.colorScheme.primary,
       ),
       showTitle: false,
-      urlBarHidingEnabled: true,
       shareState: CustomTabsShareState.off,
       browser: session != null ? CustomTabsBrowserConfiguration.session(session) : null,
-      closeButton:
-          CustomTabsCloseButton(icon: CustomTabsCloseButtonIcons.back, position: CustomTabsCloseButtonPosition.end),
+      closeButton: CustomTabsCloseButton(icon: CustomTabsCloseButtonIcons.back),
     ),
-    safariVCOptions: const SafariViewControllerOptions(
-      pageSheet: SheetPresentationControllerConfiguration(
+    safariVCOptions: SafariViewControllerOptions.pageSheet(
+      configuration: const SheetPresentationControllerConfiguration(
         detents: {
           SheetPresentationControllerDetent.large,
           SheetPresentationControllerDetent.medium,
@@ -33,8 +31,9 @@ Future<void> launchCustomTab(BuildContext context, String url, {CustomTabsSessio
         prefersEdgeAttachedInCompactHeight: true,
         preferredCornerRadius: 48.0,
       ),
-      modalPresentationStyle: ViewControllerModalPresentationStyle.pageSheet,
-      entersReaderIfAvailable: false,
+      preferredBarTintColor: theme.colorScheme.primary,
+      preferredControlTintColor: theme.colorScheme.onPrimary,
+      entersReaderIfAvailable: true,
       dismissButtonStyle: SafariViewControllerDismissButtonStyle.close,
     ),
   );
