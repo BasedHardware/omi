@@ -1,9 +1,12 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/pages/connectivity/connectivity.dart';
+import 'package:omi/pages/home/widgets/build_app_bar.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
@@ -36,6 +39,7 @@ import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+import 'package:responsive_framework/responsive_framework.dart';
 import 'package:upgrader/upgrader.dart';
 
 import '../conversations/sync_page.dart';
@@ -102,6 +106,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   bool scriptsInProgress = false;
 
   PageController? _controller;
+
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   void _initiateApps() {
     context.read<AppProvider>().getApps();
@@ -255,6 +261,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     });
 
     _listenToMessagesFromNotification();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (mounted) {
+        if (context.read<ConversationProvider>().conversations.isEmpty) {
+          await context.read<ConversationProvider>().getInitialConversations();
+        }
+      }
+      if (mounted) {
+        if (context.read<MessageProvider>().messages.isEmpty) {
+          await context.read<MessageProvider>().refreshMessages();
+        }
+      }
+    });
     super.initState();
 
     // After init
@@ -273,293 +292,222 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     });
   }
 
+  final totalTabs = ['Memories', 'Chat', 'Explore'];
+
   @override
   Widget build(BuildContext context) {
+    final connectivityProvider = context.watch<ConnectivityProvider>();
+    connectionCheck(connectivityProvider, context);
     return MyUpgradeAlert(
       upgrader: _upgrader,
       dialogStyle: ExecutionGuard.isIOS ? UpgradeDialogStyle.cupertino : UpgradeDialogStyle.material,
-      child: Consumer<ConnectivityProvider>(
-        builder: (ctx, connectivityProvider, child) {
-          bool isConnected = connectivityProvider.isConnected;
-          previousConnection ??= true;
-          if (previousConnection != isConnected && connectivityProvider.isInitialized) {
-            previousConnection = isConnected;
-            if (!isConnected) {
-              Future.delayed(const Duration(seconds: 2), () {
-                if (mounted && !connectivityProvider.isConnected) {
-                  ScaffoldMessenger.of(ctx).showMaterialBanner(
-                    MaterialBanner(
-                      content: const Text(
-                        'No internet connection. Please check your connection.',
-                        style: TextStyle(color: Colors.white70),
-                      ),
-                      backgroundColor: const Color(0xFF424242), // Dark gray instead of red
-                      leading: const Icon(Icons.wifi_off, color: Colors.white70),
-                      actions: [
-                        TextButton(
-                          onPressed: () {
-                            ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                          },
-                          child: const Text('Dismiss', style: TextStyle(color: Colors.white70)),
+      child: Consumer<HomeProvider>(
+        builder: (context, homeProvider, _) {
+          return Scaffold(
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            appBar: homeProvider.selectedIndex == 3
+                ? null
+                : ResponsiveBreakpoints.of(context).largerOrEqualTo(DESKTOP)
+                    ? null
+                    : buildAppBar(context, _controller),
+            body: Row(
+              children: [
+                if (ResponsiveBreakpoints.of(context).largerOrEqualTo(DESKTOP))
+                  Drawer(
+                    elevation: 4,
+                    backgroundColor: Colors.black,
+                    child: Container(
+                      margin: const EdgeInsets.all(8),
+                      decoration: const BoxDecoration(
+                        color: Colors.black,
+                        borderRadius: BorderRadius.all(Radius.circular(16)),
+                        border: GradientBoxBorder(
+                          gradient: LinearGradient(colors: [
+                            Color.fromARGB(127, 208, 208, 208),
+                            Color.fromARGB(127, 188, 99, 121),
+                            Color.fromARGB(127, 86, 101, 182),
+                            Color.fromARGB(127, 126, 190, 236)
+                          ]),
+                          width: 2,
                         ),
-                      ],
-                    ),
-                  );
-                }
-              });
-            } else {
-              Future.delayed(Duration.zero, () {
-                if (mounted) {
-                  ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                  ScaffoldMessenger.of(ctx).showMaterialBanner(
-                    MaterialBanner(
-                      content: const Text(
-                        'Internet connection is restored.',
-                        style: TextStyle(color: Colors.white),
+                        shape: BoxShape.rectangle,
                       ),
-                      backgroundColor: const Color(0xFF2E7D32), // Dark green instead of bright green
-                      leading: const Icon(Icons.wifi, color: Colors.white),
-                      actions: [
-                        TextButton(
-                          onPressed: () {
-                            if (mounted) {
-                              ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                            }
-                          },
-                          child: const Text('Dismiss', style: TextStyle(color: Colors.white)),
-                        ),
-                      ],
-                      onVisible: () => Future.delayed(const Duration(seconds: 3), () {
-                        if (mounted) {
-                          ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                        }
-                      }),
-                    ),
-                  );
-                }
-
-                WidgetsBinding.instance.addPostFrameCallback((_) async {
-                  if (mounted) {
-                    if (ctx.read<ConversationProvider>().conversations.isEmpty) {
-                      await ctx.read<ConversationProvider>().getInitialConversations();
-                    }
-                    if (ctx.read<MessageProvider>().messages.isEmpty) {
-                      await ctx.read<MessageProvider>().refreshMessages();
-                    }
-                  }
-                });
-              });
-            }
-          }
-          return child!;
-        },
-        child: Consumer<HomeProvider>(
-          builder: (context, homeProvider, _) {
-            return Scaffold(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              appBar: homeProvider.selectedIndex == 3 ? null : _buildAppBar(context),
-              body: DefaultTabController(
-                length: 3,
-                initialIndex: _controller?.initialPage ?? 0,
-                child: GestureDetector(
-                  onTap: () {
-                    primaryFocus?.unfocus();
-                    // context.read<HomeProvider>().memoryFieldFocusNode.unfocus();
-                    // context.read<HomeProvider>().chatFieldFocusNode.unfocus();
-                  },
-                  child: Stack(
-                    children: [
-                      Center(
-                        child: PageView(
-                          controller: _controller,
-                          physics: const NeverScrollableScrollPhysics(),
-                          children: const [
-                            ConversationsPage(),
-                            ChatPage(isPivotBottom: false),
-                            AppsPage(),
-                            PersonaProfilePage(bottomMargin: 120),
-                          ],
-                        ),
-                      ),
-                      Consumer<HomeProvider>(
-                        builder: (context, home, child) {
-                          if (home.chatFieldFocusNode.hasFocus ||
-                              home.convoSearchFieldFocusNode.hasFocus ||
-                              home.appsSearchFieldFocusNode.hasFocus) {
-                            return const SizedBox.shrink();
-                          } else {
-                            return Align(
-                              alignment: Alignment.bottomCenter,
-                              child: Container(
-                                margin: const EdgeInsets.fromLTRB(20, 16, 20, 42),
-                                decoration: const BoxDecoration(
-                                  color: Colors.black,
-                                  borderRadius: BorderRadius.all(Radius.circular(16)),
-                                  border: GradientBoxBorder(
-                                    gradient: LinearGradient(colors: [
-                                      Color.fromARGB(127, 208, 208, 208),
-                                      Color.fromARGB(127, 188, 99, 121),
-                                      Color.fromARGB(127, 86, 101, 182),
-                                      Color.fromARGB(127, 126, 190, 236)
-                                    ]),
-                                    width: 2,
-                                  ),
-                                  shape: BoxShape.rectangle,
-                                ),
-                                child: TabBar(
-                                  labelPadding: const EdgeInsets.only(top: 4, bottom: 4),
-                                  indicatorPadding: EdgeInsets.zero,
-                                  onTap: (index) {
-                                    MixpanelManager()
-                                        .bottomNavigationTabClicked(['Memories', 'Chat', 'Explore'][index]);
-                                    primaryFocus?.unfocus();
-                                    if (home.selectedIndex == index) {
-                                      return;
-                                    }
-                                    home.setIndex(index);
-                                    _controller?.animateToPage(index,
-                                        duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
-                                  },
-                                  indicatorColor: Colors.transparent,
-                                  tabs: [
-                                    Tab(
-                                      child: Text(
-                                        'Home',
-                                        style: TextStyle(
-                                          color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
-                                          fontSize: MediaQuery.sizeOf(context).width < 410 ? 13 : 15,
-                                        ),
-                                      ),
-                                    ),
-                                    Tab(
-                                      child: Text(
-                                        'Chat',
-                                        style: TextStyle(
-                                          color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
-                                          fontSize: MediaQuery.sizeOf(context).width < 410 ? 13 : 15,
-                                        ),
-                                      ),
-                                    ),
-                                    Tab(
-                                      child: Text(
-                                        'Explore',
-                                        style: TextStyle(
-                                          color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
-                                          fontSize: MediaQuery.sizeOf(context).width < 410 ? 13 : 15,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                      child: ListView.builder(
+                        itemCount: totalTabs.length,
+                        itemBuilder: (context, index) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: TextButton(
+                              style: TextButton.styleFrom(
+                                fixedSize: Size.fromHeight(50),
+                              ),
+                              onPressed: () {
+                                MixpanelManager().bottomNavigationTabClicked(['Memories', 'Chat', 'Explore'][index]);
+                                primaryFocus?.unfocus();
+                                if (homeProvider.selectedIndex == index) {
+                                  return;
+                                }
+                                homeProvider.setIndex(index);
+                                _controller?.animateToPage(index,
+                                    duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
+                              },
+                              child: Text(
+                                totalTabs[index],
+                                style: TextStyle(
+                                  color: homeProvider.selectedIndex == index ? Colors.white : Colors.grey,
+                                  fontSize: MediaQuery.sizeOf(context).width < 410 ? 13 : 15,
                                 ),
                               ),
-                            );
-                          }
+                            ),
+                          );
                         },
                       ),
-                    ],
+                    ),
+                  ),
+                Flexible(
+                  child: DefaultTabController(
+                    length: 3,
+                    initialIndex: _controller?.initialPage ?? 0,
+                    child: GestureDetector(
+                      onTap: () {
+                        primaryFocus?.unfocus();
+                        // context.read<HomeProvider>().memoryFieldFocusNode.unfocus();
+                        // context.read<HomeProvider>().chatFieldFocusNode.unfocus();
+                      },
+                      child: Stack(
+                        children: [
+                          Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: PageView(
+                                scrollDirection: Axis.horizontal,
+                                controller: _controller,
+                                physics: const NeverScrollableScrollPhysics(),
+                                children: [
+                                  ConversationsPage(),
+                                  ChatPage(isPivotBottom: false, pageController: _controller),
+                                  AppsPage(),
+                                  PersonaProfilePage(bottomMargin: 120),
+                                ],
+                              ),
+                            ),
+                          ),
+                          if (!ResponsiveBreakpoints.of(context).largerOrEqualTo(DESKTOP))
+                            Consumer<HomeProvider>(
+                              builder: (context, home, child) {
+                                if (home.chatFieldFocusNode.hasFocus ||
+                                    home.convoSearchFieldFocusNode.hasFocus ||
+                                    home.appsSearchFieldFocusNode.hasFocus) {
+                                  return const SizedBox.shrink();
+                                } else {
+                                  return Align(
+                                    alignment: Alignment.bottomCenter,
+                                    child: Container(
+                                      margin: const EdgeInsets.fromLTRB(20, 16, 20, 42),
+                                      decoration: const BoxDecoration(
+                                        color: Colors.black,
+                                        borderRadius: BorderRadius.all(Radius.circular(16)),
+                                        border: GradientBoxBorder(
+                                          gradient: LinearGradient(colors: [
+                                            Color.fromARGB(127, 208, 208, 208),
+                                            Color.fromARGB(127, 188, 99, 121),
+                                            Color.fromARGB(127, 86, 101, 182),
+                                            Color.fromARGB(127, 126, 190, 236)
+                                          ]),
+                                          width: 2,
+                                        ),
+                                        shape: BoxShape.rectangle,
+                                      ),
+                                      child: TabBar(
+                                        labelPadding: const EdgeInsets.only(top: 4, bottom: 4),
+                                        indicatorPadding: EdgeInsets.zero,
+                                        onTap: (index) {
+                                          MixpanelManager()
+                                              .bottomNavigationTabClicked(['Memories', 'Chat', 'Explore'][index]);
+                                          primaryFocus?.unfocus();
+                                          if (home.selectedIndex == index) {
+                                            return;
+                                          }
+                                          home.setIndex(index);
+                                          _controller?.animateToPage(index,
+                                              duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
+                                        },
+                                        indicatorColor: Colors.transparent,
+                                        tabs: [
+                                          Tab(
+                                            child: Text(
+                                              'Home',
+                                              style: TextStyle(
+                                                color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
+                                                fontSize: MediaQuery.sizeOf(context).width < 410 ? 13 : 15,
+                                              ),
+                                            ),
+                                          ),
+                                          Tab(
+                                            child: Text(
+                                              'Chat',
+                                              style: TextStyle(
+                                                color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
+                                                fontSize: MediaQuery.sizeOf(context).width < 410 ? 13 : 15,
+                                              ),
+                                            ),
+                                          ),
+                                          Tab(
+                                            child: Text(
+                                              'Explore',
+                                              style: TextStyle(
+                                                color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
+                                                fontSize: MediaQuery.sizeOf(context).width < 410 ? 13 : 15,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            );
-          },
-        ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context) {
-    return AppBar(
-      automaticallyImplyLeading: false,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      title: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          const BatteryInfoWidget(),
-          Consumer<HomeProvider>(builder: (context, provider, child) {
-            if (provider.selectedIndex == 0) {
-              return Consumer<ConversationProvider>(builder: (context, convoProvider, child) {
-                if (convoProvider.missingWalsInSeconds >= 120) {
-                  return GestureDetector(
-                    onTap: () {
-                      routeToPage(context, const SyncPage());
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.only(left: 12),
-                      child: const Icon(Icons.download, color: Colors.white, size: 24),
-                    ),
-                  );
-                } else {
-                  return const SizedBox.shrink();
-                }
-              });
-            } else {
-              return const SizedBox.shrink();
-            }
-          }),
-          Consumer<HomeProvider>(
-            builder: (context, provider, child) {
-              if (provider.selectedIndex == 1) {
-                return ChatAppsDropdownWidget(
-                  controller: _controller!,
-                );
-              } else if (provider.selectedIndex == 2) {
-                return Padding(
-                  padding: EdgeInsets.only(right: MediaQuery.sizeOf(context).width * 0.16),
-                  child: const Text('Explore', style: TextStyle(color: Colors.white, fontSize: 18)),
-                );
-              } else {
-                return Expanded(
-                  child: Row(
-                    children: [
-                      const Spacer(),
-                      SpeechLanguageSheet(
-                        recordingLanguage: provider.recordingLanguage,
-                        setRecordingLanguage: (language) {
-                          provider.setRecordingLanguage(language);
-                          // Notify capture provider
-                          if (context.mounted) {
-                            context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                          }
-                        },
-                        availableLanguages: provider.availableLanguages,
-                      ),
-                    ],
-                  ),
-                );
+  void connectionCheck(ConnectivityProvider connectivityProvider, BuildContext context) async {
+    bool isConnected = connectivityProvider.isConnected;
+    previousConnection ??= true;
+    if (previousConnection != isConnected && connectivityProvider.isInitialized) {
+      previousConnection = isConnected;
+      if (!isConnected) {
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted && !connectivityProvider.isConnected) {
+            showNoConnectionDialog(connectivityProvider, context, mounted);
+          }
+        });
+      } else {
+        Future.delayed(Duration.zero, () {
+          showConnectionRestoredDialoag(context, mounted);
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
+            if (mounted) {
+              if (context.read<ConversationProvider>().conversations.isEmpty) {
+                await context.read<ConversationProvider>().getInitialConversations();
               }
-            },
-          ),
-          Row(
-            children: [
-              IconButton(
-                  padding: const EdgeInsets.all(8.0),
-                  icon: SvgPicture.asset(
-                    Assets.images.icPersonaProfile.path,
-                    width: 28,
-                    height: 28,
-                  ),
-                  onPressed: () {
-                    MixpanelManager().pageOpened('Persona Profile');
-      
-                    // Set routing in provider
-                    var personaProvider = Provider.of<PersonaProvider>(context, listen: false);
-                    personaProvider.setRouting(PersonaProfileRouting.home);
-      
-                    // Navigate
-                    var homeProvider = Provider.of<HomeProvider>(context, listen: false);
-                    homeProvider.setIndex(3);
-                    if (homeProvider.onSelectedIndexChanged != null) {
-                      homeProvider.onSelectedIndexChanged!(3);
-                    }
-                  }),
-            ],
-          ),
-        ],
-      ),
-      elevation: 0,
-      centerTitle: true,
-    );
+              if (context.read<MessageProvider>().messages.isEmpty) {
+                await context.read<MessageProvider>().refreshMessages();
+              }
+            }
+          });
+        });
+      }
+    }
   }
 
   @override

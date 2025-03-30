@@ -9,6 +9,7 @@ class CustomErrorWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    debugPrint("Recieved FLutter Error: $errorMessage");
     return Scaffold(
       body: Center(
         child: Column(

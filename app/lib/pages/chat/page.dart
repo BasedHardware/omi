@@ -12,6 +12,7 @@ import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/animated_mini_banner.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
 import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
+import 'package:omi/pages/home/widgets/build_app_bar.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -21,7 +22,6 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/platform_check.dart';
-import 'dart:html';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -30,11 +30,9 @@ import 'widgets/message_action_menu.dart';
 
 class ChatPage extends StatefulWidget {
   final bool isPivotBottom;
+  final PageController? pageController;
 
-  const ChatPage({
-    super.key,
-    this.isPivotBottom = false,
-  });
+  const ChatPage({super.key, this.isPivotBottom = false, required this.pageController});
 
   @override
   State<ChatPage> createState() => ChatPageState();
@@ -104,11 +102,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       builder: (context, provider, connectivityProvider, child) {
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
-          appBar: provider.isLoadingMessages
-              ? AnimatedMiniBanner(
+                    appBar: widget.pageController != null? buildAppBar(context, widget.pageController) : null,
+          body: Stack(
+            children: [
+              if (provider.isLoadingMessages)
+                AnimatedMiniBanner(
                   showAppBar: provider.isLoadingMessages,
                   child: Container(
-                    width: double.infinity,
+                    width: MediaQuery.sizeOf(context).width,
                     height: 10,
                     color: Colors.green,
                     child: const Center(
@@ -118,10 +119,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       ),
                     ),
                   ),
-                )
-              : null,
-          body: Stack(
-            children: [
+                ),
               Align(
                 alignment: Alignment.topCenter,
                 child: provider.isLoadingMessages && !provider.hasCachedMessages

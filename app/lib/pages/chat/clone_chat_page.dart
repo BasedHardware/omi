@@ -94,7 +94,7 @@ class CloneChatPageState extends State<CloneChatPage> {
                     // Hide keyboard when tapping outside
                     FocusScope.of(context).unfocus();
                   },
-                  child: const ChatPage(isPivotBottom: true),
+                  child: const ChatPage(isPivotBottom: true,pageController: null,),
                 ),
         );
       },
