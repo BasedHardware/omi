@@ -305,11 +305,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         builder: (context, homeProvider, _) {
           return Scaffold(
             backgroundColor: Theme.of(context).colorScheme.primary,
-            appBar: homeProvider.selectedIndex == 3
-                ? null
-                : ResponsiveBreakpoints.of(context).largerOrEqualTo(DESKTOP)
-                    ? null
-                    : buildAppBar(context, _controller),
+            appBar:
+                ResponsiveBreakpoints.of(context).largerOrEqualTo(DESKTOP) ? null : buildAppBar(context, _controller),
             body: Row(
               children: [
                 if (ResponsiveBreakpoints.of(context).largerOrEqualTo(DESKTOP))
@@ -364,7 +361,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       ),
                     ),
                   ),
-                Flexible(
+                Expanded(
                   child: DefaultTabController(
                     length: 3,
                     initialIndex: _controller?.initialPage ?? 0,

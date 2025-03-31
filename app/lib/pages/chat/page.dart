@@ -24,6 +24,7 @@ import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/platform_check.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
+import 'package:responsive_framework/responsive_framework.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'widgets/message_action_menu.dart';
@@ -102,10 +103,27 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       builder: (context, provider, connectivityProvider, child) {
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
-                    appBar: widget.pageController != null? buildAppBar(context, widget.pageController) : null,
+          appBar: (widget.pageController != null && ResponsiveBreakpoints.of(context).largerOrEqualTo(DESKTOP))
+              ? buildAppBar(context, widget.pageController)
+              : (provider.isLoadingMessages)
+                  ? AnimatedMiniBanner(
+                      showAppBar: provider.isLoadingMessages,
+                      child: Container(
+                        width: MediaQuery.sizeOf(context).width,
+                        height: 10,
+                        color: Colors.green,
+                        child: const Center(
+                          child: Text(
+                            'Syncing messages with server...',
+                            style: TextStyle(color: Colors.white, fontSize: 14),
+                          ),
+                        ),
+                      ),
+                    )
+                  : null,
           body: Stack(
             children: [
-              if (provider.isLoadingMessages)
+              if (ResponsiveBreakpoints.of(context).largerOrEqualTo(DESKTOP) && provider.isLoadingMessages)
                 AnimatedMiniBanner(
                   showAppBar: provider.isLoadingMessages,
                   child: Container(
@@ -330,7 +348,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                         margin: EdgeInsets.only(
                             left: 28,
                             right: 28,
-                            bottom: widget.isPivotBottom ? 40 : (home.isChatFieldFocused ? 40 : 120)),
+                            bottom: ResponsiveBreakpoints.of(context).largerOrEqualTo(DESKTOP) ?widget.isPivotBottom ? 10 : (home.isChatFieldFocused ? 10 : 30): widget.isPivotBottom ? 40 : (home.isChatFieldFocused ? 40 : 120)),
                         decoration: const BoxDecoration(
                           color: Colors.black,
                           borderRadius: BorderRadius.all(Radius.circular(16)),

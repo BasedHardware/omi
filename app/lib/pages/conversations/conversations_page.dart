@@ -7,6 +7,7 @@ import 'package:omi/pages/conversations/widgets/search_widget.dart';
 import 'package:omi/pages/home/widgets/build_app_bar.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:responsive_framework/responsive_framework.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import 'widgets/empty_conversations.dart';
@@ -42,8 +43,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     super.build(context);
     return Consumer<ConversationProvider>(builder: (context, convoProvider, child) {
       return Scaffold(
-        appBar:buildAppBar(context, widget.controller),
-          backgroundColor: Colors.black,
+        appBar: ResponsiveBreakpoints.of(context).largerOrEqualTo(DESKTOP) ?  buildAppBar(context, widget.controller) :null,
+        backgroundColor: Colors.black,
         body: RefreshIndicator(
           color: Colors.white,
           onRefresh: () async {
@@ -134,9 +135,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     },
                   ),
                 ),
-              const SliverToBoxAdapter(
-                child: SizedBox(height: 80),
-              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 80)),
             ],
           ),
         ),
