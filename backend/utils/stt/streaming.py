@@ -191,7 +191,7 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
         raise Exception(f'Could not open socket: {e}')
 
 
-soniox_valid_languages = ['en']
+# soniox_valid_languages = ['en']
 
 
 async def process_audio_soniox(stream_transcript, sample_rate: int, language: str, uid: str):
@@ -200,24 +200,31 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
     if not api_key:
         raise ValueError("API key is not set. Please set the SONIOX_API_KEY environment variable.")
 
-    uri = 'wss://api.soniox.com/transcribe-websocket'
+    # uri = 'wss://api.soniox.com/transcribe-websocket'
+    # New Soniox STT Websocket 
+    uri = 'wss://stt-rt.soniox.com/transcribe-websocket'
 
     # Validate the language and construct the model name
-    if language not in soniox_valid_languages:
-        raise ValueError(f"Unsupported language '{language}'. Supported languages are: {soniox_valid_languages}")
+    # if language not in soniox_valid_languages:
+    #     raise ValueError(f"Unsupported language '{language}'. Supported languages are: {soniox_valid_languages}")
 
     has_speech_profile = create_user_speech_profile(uid) if uid and sample_rate == 16000 else False  # only english too
 
     # Construct the initial request with all required and optional parameters
     request = {
         'api_key': api_key,
-        'sample_rate_hertz': sample_rate,
-        'include_nonfinal': True,
-        'enable_endpoint_detection': True,
-        'enable_streaming_speaker_diarization': True,
-        'enable_speaker_identification': has_speech_profile,
-        'cand_speaker_names': [uid] if has_speech_profile else [],
-        'max_num_speakers': 4,
+        'audio_format': 'pcm_s16le',
+        'sample_rate': sample_rate,
+        'num_channels': 1,
+        'model': 'stt-rt-preview',
+        # 'api_key': api_key,
+        # 'sample_rate_hertz': sample_rate,
+        # 'include_nonfinal': True,
+        # 'enable_endpoint_detection': True,
+        # 'enable_streaming_speaker_diarization': True,
+        # 'enable_speaker_identification': has_speech_profile,
+        # 'cand_speaker_names': [uid] if has_speech_profile else [],
+        # 'max_num_speakers': 4,
         # 'enable_global_speaker_diarization': False,
         # 'enable_profanity_filter': False,
         # 'enable_dictation': False,
@@ -238,7 +245,7 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
         #
         #     ]
         # },
-        'model': f'{language}_v2_lowlatency'
+        # 'model': f'{language}_v2_lowlatency'
     }
 
     try:

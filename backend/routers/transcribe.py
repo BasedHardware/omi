@@ -76,7 +76,10 @@ async def _listen(
 
     # Not when comes from the phone, and only Friend's with 1.0.4
     # if stt_service == STTService.soniox and language not in soniox_valid_languages:
-    stt_service = STTService.deepgram
+    if language == "auto":
+        stt_service = STTService.soniox
+    else:
+        stt_service = STTService.deepgram
 
     try:
         await websocket.accept()
