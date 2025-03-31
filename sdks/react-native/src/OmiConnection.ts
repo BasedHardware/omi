@@ -1,5 +1,5 @@
 import { BleManager, Device, Subscription } from 'react-native-ble-plx';
-import { DeviceConnectionState, BleAudioCodec, OmiDevice } from './types';
+import { DeviceConnectionState, OmiDevice, BleAudioCodec } from './types';
 import { Platform } from 'react-native';
 
 // Service and characteristic UUIDs
@@ -39,7 +39,7 @@ export class OmiConnection {
     this.bleManager.startDeviceScan(
       null,
       null,
-      (error, device) => {
+      (error: any, device: any) => {
         if (error) {
           console.error('Scan error:', error);
           return;
@@ -104,7 +104,7 @@ export class OmiConnection {
       this._connectedDeviceId = deviceId;
 
       // Set up disconnection listener
-      device.onDisconnected((_, disconnectedDevice) => {
+      device.onDisconnected((_: any, disconnectedDevice: any) => {
         this.device = null;
         this._connectedDeviceId = null;
         if (onConnectionStateChanged) {
@@ -208,7 +208,7 @@ export class OmiConnection {
       // Get the Omi service
       const services = await this.device.services();
       const omiService = services.find(
-        (service) => service.uuid.toLowerCase() === OMI_SERVICE_UUID.toLowerCase()
+        (service: any) => service.uuid.toLowerCase() === OMI_SERVICE_UUID.toLowerCase()
       );
 
       if (!omiService) {
@@ -219,7 +219,7 @@ export class OmiConnection {
       // Get the audio codec characteristic
       const characteristics = await omiService.characteristics();
       const codecCharacteristic = characteristics.find(
-        (char) => char.uuid.toLowerCase() === AUDIO_CODEC_CHARACTERISTIC_UUID.toLowerCase()
+        (char: any) => char.uuid.toLowerCase() === AUDIO_CODEC_CHARACTERISTIC_UUID.toLowerCase()
       );
 
       if (!codecCharacteristic) {
@@ -245,15 +245,12 @@ export class OmiConnection {
 
       // Map codec ID to enum - following the same pattern as in omi_connection.dart
       switch (codecId) {
-        // case 0:
-        //   codec = BleAudioCodec.PCM16;
+        case 0:
+          codec = BleAudioCodec.PCM16;
+          break;
         case 1:
           codec = BleAudioCodec.PCM8;
           break;
-        // case 10:
-        //   codec = BleAudioCodec.MULAW16;
-        // case 11:
-        //   codec = BleAudioCodec.MULAW8;
         case 20:
           codec = BleAudioCodec.OPUS;
           break;
@@ -286,7 +283,7 @@ export class OmiConnection {
       // Get the Omi service
       const services = await this.device.services();
       const omiService = services.find(
-        (service) => service.uuid.toLowerCase() === OMI_SERVICE_UUID.toLowerCase()
+        (service: any) => service.uuid.toLowerCase() === OMI_SERVICE_UUID.toLowerCase()
       );
 
       if (!omiService) {
@@ -297,7 +294,7 @@ export class OmiConnection {
       // Get the audio data stream characteristic
       const characteristics = await omiService.characteristics();
       const audioDataStreamCharacteristic = characteristics.find(
-        (char) => char.uuid.toLowerCase() === AUDIO_DATA_STREAM_CHARACTERISTIC_UUID.toLowerCase()
+        (char: any) => char.uuid.toLowerCase() === AUDIO_DATA_STREAM_CHARACTERISTIC_UUID.toLowerCase()
       );
 
       if (!audioDataStreamCharacteristic) {
@@ -318,7 +315,7 @@ export class OmiConnection {
         }
 
         // Set up the monitor - this automatically enables notifications
-        const subscription = audioDataStreamCharacteristic.monitor((error, characteristic) => {
+        const subscription = audioDataStreamCharacteristic.monitor((error: any, characteristic: any) => {
           if (error) {
             console.error('Audio data stream notification error:', error);
             return;
@@ -389,7 +386,7 @@ export class OmiConnection {
       // Get the Battery service
       const services = await this.device.services();
       const batteryService = services.find(
-        (service) => service.uuid.toLowerCase() === BATTERY_SERVICE_UUID.toLowerCase()
+        (service: any) => service.uuid.toLowerCase() === BATTERY_SERVICE_UUID.toLowerCase()
       );
 
       if (!batteryService) {
@@ -400,7 +397,7 @@ export class OmiConnection {
       // Get the battery level characteristic
       const characteristics = await batteryService.characteristics();
       const batteryLevelCharacteristic = characteristics.find(
-        (char) => char.uuid.toLowerCase() === BATTERY_LEVEL_CHARACTERISTIC_UUID.toLowerCase()
+        (char: any) => char.uuid.toLowerCase() === BATTERY_LEVEL_CHARACTERISTIC_UUID.toLowerCase()
       );
 
       if (!batteryLevelCharacteristic) {
