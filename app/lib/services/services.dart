@@ -276,6 +276,8 @@ class MicRecorderService implements IMicRecorderService {
 
   late FlutterSoundRecorder _recorder;
   late StreamController<Uint8List> _controller;
+  late AudioRecorder _systemRecorder;
+  StreamSubscription<Uint8List>? _streamSubscription;
 
   Function(Uint8List bytes)? _onByteReceived;
   Function? _onRecording;
@@ -285,6 +287,7 @@ class MicRecorderService implements IMicRecorderService {
 
   MicRecorderService({bool isInBG = false}) {
     _recorder = FlutterSoundRecorder();
+    _systemRecorder = AudioRecorder();
     _isInBG = isInBG;
   }
 
@@ -298,7 +301,8 @@ class MicRecorderService implements IMicRecorderService {
     Function()? onInitializing,
   }) async {
     if (_status == RecorderServiceStatus.recording) {
-      throw Exception("Recorder is recording, please stop it before start new recording.");
+      throw Exception(
+          "Recorder is recording, please stop it before start new recording.");
     }
     if (_status == RecorderServiceStatus.initialising) {
       throw Exception("Recorder is initialising");
@@ -314,24 +318,24 @@ class MicRecorderService implements IMicRecorderService {
       _onRecording!();
     }
 
-      // new record
-      await _recorder.openRecorder(isBGService: _isInBG);
-      _controller = StreamController<Uint8List>();
+    // new record
+    await _recorder.openRecorder(isBGService: _isInBG);
+    _controller = StreamController<Uint8List>();
 
-      await _recorder.startRecorder(
-        toStream: _controller.sink,
-        codec: Codec.pcm16,
-        numChannels: 1,
-        sampleRate: 16000,
-        bufferSize: 8192,
-      );
-      
-      _controller.stream.listen((buffer) {
-        Uint8List audioBytes = buffer;
-        if (_onByteReceived != null) {
-          _onByteReceived!(audioBytes);
-        }
-      });
+    await _recorder.startRecorder(
+      toStream: _controller.sink,
+      codec: Codec.pcm16,
+      numChannels: 1,
+      sampleRate: 16000,
+      bufferSize: 8192,
+    );
+
+    _controller.stream.listen((buffer) {
+      Uint8List audioBytes = buffer;
+      if (_onByteReceived != null) {
+        _onByteReceived!(audioBytes);
+      }
+    });
 
     _status = RecorderServiceStatus.recording;
     return;
@@ -352,7 +356,6 @@ class MicRecorderService implements IMicRecorderService {
     _onRecording = null;
   }
 }
-
 
 abstract class ISystemMicRecorderService {
   Future<void> start({
@@ -391,7 +394,8 @@ final class SystemMicRecorderService implements ISystemMicRecorderService {
     Function()? onInitializing,
   }) async {
     if (_status == RecorderServiceStatus.recording) {
-      throw Exception("Recorder is recording, please stop it before start new recording.");
+      throw Exception(
+          "Recorder is recording, please stop it before start new recording.");
     }
     if (_status == RecorderServiceStatus.initialising) {
       throw Exception("Recorder is initialising");
@@ -407,22 +411,22 @@ final class SystemMicRecorderService implements ISystemMicRecorderService {
       _onRecording!();
     }
 
-      if(!await _recorder.hasPermission()) return;
-      const audioRecorderConfig =  RecordConfig(
-        encoder: AudioEncoder.pcm16bits,
-        numChannels: 1,
-        sampleRate: 16000,
-      );
-      print(await _recorder.listInputDevices());
-      final stream = await _recorder.startStream(audioRecorderConfig);
-      _streamSubscription = stream.listen((buffer) {
-        Uint8List audioBytes = buffer;
-        print("Getting data ${_recorder.convertBytesToInt16(Uint8List.fromList(audioBytes))}");
-        if (_onByteReceived != null) {
-          _onByteReceived!(audioBytes);
-        }
-      });
-    
+    if (!await _recorder.hasPermission()) return;
+    const audioRecorderConfig = RecordConfig(
+      encoder: AudioEncoder.pcm16bits,
+      numChannels: 1,
+      sampleRate: 16000,
+    );
+    print(await _recorder.listInputDevices());
+    final stream = await _recorder.startStream(audioRecorderConfig);
+    _streamSubscription = stream.listen((buffer) {
+      Uint8List audioBytes = buffer;
+      print(
+          "Getting data ${_recorder.convertBytesToInt16(Uint8List.fromList(audioBytes))}");
+      if (_onByteReceived != null) {
+        _onByteReceived!(audioBytes);
+      }
+    });
 
     _status = RecorderServiceStatus.recording;
     return;
@@ -430,8 +434,8 @@ final class SystemMicRecorderService implements ISystemMicRecorderService {
 
   @override
   void stop() {
-      _streamSubscription?.cancel();
-      _recorder.dispose();
+    _streamSubscription?.cancel();
+    _recorder.dispose();
     // callback
     _status = RecorderServiceStatus.stop;
     if (_onStop != null) {
@@ -442,5 +446,4 @@ final class SystemMicRecorderService implements ISystemMicRecorderService {
     _onStop = null;
     _onRecording = null;
   }
-
 }
