@@ -5,8 +5,6 @@
 export enum BleAudioCodec {
   PCM16 = 'pcm16',
   PCM8 = 'pcm8',
-  MULAW16 = 'mulaw16',
-  MULAW8 = 'mulaw8',
   OPUS = 'opus',
   UNKNOWN = 'unknown',
 }
@@ -14,6 +12,8 @@ export enum BleAudioCodec {
 export enum DeviceConnectionState {
   CONNECTED = 'connected',
   DISCONNECTED = 'disconnected',
+  CONNECTING = 'connecting',
+  DISCONNECTING = 'disconnecting',
 }
 
 export interface OmiDevice {
@@ -40,3 +40,31 @@ export interface OmiNativeModule {
   startScan(): Promise<void>;
   stopScan(): Promise<void>;
 }
+
+/**
+ * Options for audio processing
+ */
+export interface AudioProcessingOptions {
+  sampleRate?: number;
+  channels?: number;
+  bitDepth?: number;
+  codec?: BleAudioCodec;
+}
+
+/**
+ * Interface for audio data events
+ */
+export interface AudioDataEvent {
+  deviceId: string;
+  data: Uint8Array;
+  timestamp: number;
+}
+
+/**
+ * Interface for connection state change events
+ */
+export interface ConnectionStateEvent {
+  deviceId: string;
+  state: DeviceConnectionState;
+}
+
