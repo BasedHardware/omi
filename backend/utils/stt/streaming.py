@@ -208,7 +208,8 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
     # if language not in soniox_valid_languages:
     #     raise ValueError(f"Unsupported language '{language}'. Supported languages are: {soniox_valid_languages}")
 
-    has_speech_profile = create_user_speech_profile(uid) if uid and sample_rate == 16000 else False  # only english too
+    # has_speech_profile = create_user_speech_profile(uid) if uid and sample_rate == 16000 else False  # only english too
+    has_speech_profile = False  # Don't create speech profile
 
     # Construct the initial request with all required and optional parameters
     request = {
@@ -217,6 +218,7 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
         'sample_rate': sample_rate,
         'num_channels': 1,
         'model': 'stt-rt-preview',
+        "enable_speaker_tags": True
         # 'api_key': api_key,
         # 'sample_rate_hertz': sample_rate,
         # 'include_nonfinal': True,
@@ -261,44 +263,55 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
         async def on_message():
             try:
                 async for message in soniox_socket:
-                    response = json.loads(message)
-                    # print(response)
-                    fw = response['fw']
-                    if not fw:
-                        continue
-                    spks = response['spks']
-                    user_speaker_id = None if not spks else spks[0]['spk']
+                    responses = json.loads(message)
+                    print(responses)
                     segments = []
-                    for f in fw:
-                        word = f['t']
-                        if word == '' or word == '<end>':
+                    user_speaker_id = None
+                    if responses[0] and 'spk:' in responses[0]['text']:
+                        text = responses[0]['text']
+                        user_speaker_id = int(text.split('spk:')[1].split()[0])
+
+                    for response in responses:
+                        if response.get('finished', False):
+                            break
+                        if response['text'] == '':
                             continue
-                        word = word.replace('<end>', '')
-                        start = (f['s'] / 1000)
-                        end = (f['s'] + f['d']) / 1000
-                        if not segments:
-                            segments.append({
-                                'speaker': f"SPEAKER_0{f['spk']}",
-                                'start': start,
-                                'end': end,
-                                'text': word,
-                                'is_user': user_speaker_id == f['spk'],
-                                'person_id': None,
-                            })
-                        else:
-                            last_segment = segments[-1]
-                            if last_segment['speaker'] == f"SPEAKER_0{f['spk']}":
-                                last_segment['text'] += word
-                                last_segment['end'] += f['d'] / 1000
-                            else:
+
+                        text = response['text']
+                        tokens = response['tokens']
+
+                        spk = None
+                        if 'spk:' in text:
+                            spk = int(text.split('spk:')[1].split()[0])
+
+                        for token in tokens:
+                            word = token['text']
+                            start = token['start_ms'] / 1000
+                            end = token['end_ms'] / 1000
+
+                            if not segments:
                                 segments.append({
-                                    'speaker': f"SPEAKER_0{f['spk']}",
+                                    'speaker': f"SPEAKER_0{spk}",
                                     'start': start,
                                     'end': end,
                                     'text': word,
-                                    'is_user': user_speaker_id == f['spk'],
+                                    'is_user': spk == user_speaker_id if spk else False,
                                     'person_id': None,
                                 })
+                            else:
+                                last_segment = segments[-1]
+                                if last_segment['speaker'] == f"SPEAKER_0{spk}":
+                                    last_segment['text'] += word
+                                    last_segment['end'] = end
+                                else:
+                                    segments.append({
+                                        'speaker': f"SPEAKER_0{spk}",
+                                        'start': start,
+                                        'end': end,
+                                        'text': word,
+                                        'is_user': spk == user_speaker_id if spk else False,
+                                        'person_id': None,
+                                    })
 
                     for i, segment in enumerate(segments):
                         segments[i]['text'] = segments[i]['text'].strip().replace('  ', '')
