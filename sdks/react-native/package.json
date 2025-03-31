@@ -30,7 +30,7 @@
     "test": "jest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
-    "build": "tsc",
+    "build": "bob build",
     "prepare": "yarn build",
     "release": "release-it",
     "example": "yarn --cwd example",
@@ -72,7 +72,7 @@
     "react-native": "0.71.3",
     "react-native-builder-bob": "^0.20.0",
     "release-it": "^15.0.0",
-    "typescript": "^4.5.2"
+    "typescript": "^4.9.5"
   },
   "resolutions": {
     "@types/react": "17.0.21"
@@ -161,5 +161,6 @@
         }
       ]
     ]
-  }
+  },
+  "typings": "lib/typescript/index.d.ts"
 }
