@@ -25,8 +25,12 @@ def upsert_conversation(uid: str, conversation_data: dict):
         del conversation_data['photos']
 
     user_ref = db.collection('users').document(uid)
+    # TODO: memories collection is deprecated, remove this after migration
     conversation_ref = user_ref.collection('memories').document(conversation_data['id'])
     conversation_ref.set(conversation_data)
+    ########################################################
+    new_conversation_ref = user_ref.collection('conversations').document(conversation_data['id'])
+    new_conversation_ref.set(conversation_data)
 
 
 def get_conversation(uid, conversation_id):
@@ -62,20 +66,32 @@ def get_conversations(uid: str, limit: int = 100, offset: int = 0, include_disca
 
 def update_conversation(uid: str, conversation_id: str, memoy_data: dict):
     user_ref = db.collection('users').document(uid)
+    # TODO: memories collection is deprecated, remove this after migration
     conversation_ref = user_ref.collection('memories').document(conversation_id)
     conversation_ref.update(memoy_data)
+    ########################################################
+    new_conversation_ref = user_ref.collection('conversations').document(conversation_id)
+    new_conversation_ref.update(memoy_data)
 
 
 def update_conversation_title(uid: str, conversation_id: str, title: str):
     user_ref = db.collection('users').document(uid)
+    # TODO: memories collection is deprecated, remove this after migration
     conversation_ref = user_ref.collection('memories').document(conversation_id)
     conversation_ref.update({'structured.title': title})
+    ########################################################
+    new_conversation_ref = user_ref.collection('conversations').document(conversation_id)
+    new_conversation_ref.update({'structured.title': title})
 
 
 def delete_conversation(uid, conversation_id):
     user_ref = db.collection('users').document(uid)
+    # TODO: memories collection is deprecated, remove this after migration
     conversation_ref = user_ref.collection('memories').document(conversation_id)
     conversation_ref.update({'deleted': True})
+    ########################################################
+    new_conversation_ref = user_ref.collection('conversations').document(conversation_id)
+    new_conversation_ref.update({'deleted': True})
 
 
 def filter_conversations_by_date(uid, start_date, end_date):
@@ -133,14 +149,22 @@ def get_processing_conversations(uid: str):
 
 def update_conversation_status(uid: str, conversation_id: str, status: str):
     user_ref = db.collection('users').document(uid)
+    # TODO: memories collection is deprecated, remove this after migration
     conversation_ref = user_ref.collection('memories').document(conversation_id)
     conversation_ref.update({'status': status})
+    ########################################################
+    new_conversation_ref = user_ref.collection('conversations').document(conversation_id)
+    new_conversation_ref.update({'status': status})
 
 
 def set_conversation_as_discarded(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
+    # TODO: memories collection is deprecated, remove this after migration
     conversation_ref = user_ref.collection('memories').document(conversation_id)
     conversation_ref.update({'discarded': True})
+    ########################################################
+    new_conversation_ref = user_ref.collection('conversations').document(conversation_id)
+    new_conversation_ref.update({'discarded': True})
 
 
 # *********************************
@@ -149,8 +173,12 @@ def set_conversation_as_discarded(uid: str, conversation_id: str):
 
 def update_conversation_events(uid: str, conversation_id: str, events: List[dict]):
     user_ref = db.collection('users').document(uid)
+    # TODO: memories collection is deprecated, remove this after migration
     conversation_ref = user_ref.collection('memories').document(conversation_id)
     conversation_ref.update({'structured.events': events})
+    ########################################################
+    new_conversation_ref = user_ref.collection('conversations').document(conversation_id)
+    new_conversation_ref.update({'structured.events': events})
 
 
 # *********************************
@@ -159,8 +187,12 @@ def update_conversation_events(uid: str, conversation_id: str, events: List[dict
 
 def update_conversation_action_items(uid: str, conversation_id: str, action_items: List[dict]):
     user_ref = db.collection('users').document(uid)
+    # TODO: memories collection is deprecated, remove this after migration
     conversation_ref = user_ref.collection('memories').document(conversation_id)
     conversation_ref.update({'structured.action_items': action_items})
+    ########################################################
+    new_conversation_ref = user_ref.collection('conversations').document(conversation_id)
+    new_conversation_ref.update({'structured.action_items': action_items})
 
 
 # ******************************
@@ -169,14 +201,22 @@ def update_conversation_action_items(uid: str, conversation_id: str, action_item
 
 def update_conversation_finished_at(uid: str, conversation_id: str, finished_at: datetime):
     user_ref = db.collection('users').document(uid)
+    # TODO: memories collection is deprecated, remove this after migration
     conversation_ref = user_ref.collection('memories').document(conversation_id)
     conversation_ref.update({'finished_at': finished_at})
+    ########################################################
+    new_conversation_ref = user_ref.collection('conversations').document(conversation_id)
+    new_conversation_ref.update({'finished_at': finished_at})
 
 
 def update_conversation_segments(uid: str, conversation_id: str, segments: List[dict]):
     user_ref = db.collection('users').document(uid)
+    # TODO: memories collection is deprecated, remove this after migration
     conversation_ref = user_ref.collection('memories').document(conversation_id)
     conversation_ref.update({'transcript_segments': segments})
+    ########################################################
+    new_conversation_ref = user_ref.collection('conversations').document(conversation_id)
+    new_conversation_ref.update({'transcript_segments': segments})
 
 
 # ***********************************
@@ -185,8 +225,12 @@ def update_conversation_segments(uid: str, conversation_id: str, segments: List[
 
 def set_conversation_visibility(uid: str, conversation_id: str, visibility: str):
     user_ref = db.collection('users').document(uid)
+    # TODO: memories collection is deprecated, remove this after migration
     conversation_ref = user_ref.collection('memories').document(conversation_id)
     conversation_ref.update({'visibility': visibility})
+    ########################################################
+    new_conversation_ref = user_ref.collection('conversations').document(conversation_id)
+    new_conversation_ref.update({'visibility': visibility})
 
 
 async def _get_public_conversation(db: AsyncClient, uid: str, conversation_id: str):
@@ -219,8 +263,16 @@ def set_postprocessing_status(
         model: PostProcessingModel = PostProcessingModel.fal_whisperx
 ):
     user_ref = db.collection('users').document(uid)
+    # TODO: memories collection is deprecated, remove this after migration
     conversation_ref = user_ref.collection('memories').document(conversation_id)
     conversation_ref.update({
+        'postprocessing.status': status,
+        'postprocessing.model': model,
+        'postprocessing.fail_reason': fail_reason
+    })
+    ########################################################
+    new_conversation_ref = user_ref.collection('conversations').document(conversation_id)
+    new_conversation_ref.update({
         'postprocessing.status': status,
         'postprocessing.model': model,
         'postprocessing.fail_reason': fail_reason
