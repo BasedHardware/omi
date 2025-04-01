@@ -21,16 +21,13 @@ class ServiceManager {
 
   static ServiceManager _create() {
     ServiceManager sm = ServiceManager();
-    PlatformHandler.optional(
-      defaultAction: () {
-        sm._mic = MicRecorderBackgroundService(
-          runner: BackgroundService(),
-        );
-      },
-      onMacOS: () {
-        sm._mic = MicRecorderService();
-      }
-    );
+    PlatformHandler.optional(defaultAction: () {
+      sm._mic = MicRecorderBackgroundService(
+        runner: BackgroundService(),
+      );
+    }, onMacOS: () {
+      sm._mic = MicRecorderService();
+    });
     sm._device = DeviceService();
     sm._socket = SocketServicePool();
     sm._wal = WalService();
@@ -323,42 +320,39 @@ class MicRecorderService implements IMicRecorderService {
     }
 
     // new record
-    PlatformHandler.optional(
-      defaultAction: () async {
-        await _recorder.openRecorder(isBGService: _isInBG);
-        _controller = StreamController<Uint8List>();
+    PlatformHandler.optional(defaultAction: () async {
+      await _recorder.openRecorder(isBGService: _isInBG);
+      _controller = StreamController<Uint8List>();
 
-        await _recorder.startRecorder(
-          toStream: _controller.sink,
-          codec: Codec.pcm16,
-          numChannels: 1,
-          sampleRate: 16000,
-          bufferSize: 8192,
-        );
+      await _recorder.startRecorder(
+        toStream: _controller.sink,
+        codec: Codec.pcm16,
+        numChannels: 1,
+        sampleRate: 16000,
+        bufferSize: 8192,
+      );
 
-        _controller.stream.listen((buffer) {
-          Uint8List audioBytes = buffer;
-          if (_onByteReceived != null) {
-            _onByteReceived!(audioBytes);
-          }
-        });
-      },
-      onMacOS: () async {
-        if (!await _systemRecorder.hasPermission()) return;
-        const audioRecorderConfig = RecordConfig(
-          encoder: AudioEncoder.pcm16bits,
-          numChannels: 1,
-          sampleRate: 16000,
-        );
-        final stream = await _systemRecorder.startStream(audioRecorderConfig);
-        _streamSubscription = stream.listen((buffer) {
-          Uint8List audioBytes = buffer;
-          if (_onByteReceived != null) {
-            _onByteReceived!(audioBytes);
-          }
-        });
-      }
-    );
+      _controller.stream.listen((buffer) {
+        Uint8List audioBytes = buffer;
+        if (_onByteReceived != null) {
+          _onByteReceived!(audioBytes);
+        }
+      });
+    }, onMacOS: () async {
+      if (!await _systemRecorder.hasPermission()) return;
+      const audioRecorderConfig = RecordConfig(
+        encoder: AudioEncoder.pcm16bits,
+        numChannels: 1,
+        sampleRate: 16000,
+      );
+      final stream = await _systemRecorder.startStream(audioRecorderConfig);
+      _streamSubscription = stream.listen((buffer) {
+        Uint8List audioBytes = buffer;
+        if (_onByteReceived != null) {
+          _onByteReceived!(audioBytes);
+        }
+      });
+    });
 
     _status = RecorderServiceStatus.recording;
     return;
@@ -366,17 +360,14 @@ class MicRecorderService implements IMicRecorderService {
 
   @override
   void stop() {
-    PlatformHandler.optional(
-      defaultAction: () {
-        _recorder.stopRecorder();
-        _controller.close();
-      },
-      onMacOS: () {
-        _streamSubscription?.cancel();
-        _systemRecorder.dispose();
-      }
-    );
-    
+    PlatformHandler.optional(defaultAction: () {
+      _recorder.stopRecorder();
+      _controller.close();
+    }, onMacOS: () {
+      _streamSubscription?.cancel();
+      _systemRecorder.dispose();
+    });
+
     // callback
     _status = RecorderServiceStatus.stop;
     if (_onStop != null) {

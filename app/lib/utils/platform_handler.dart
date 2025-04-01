@@ -11,7 +11,6 @@ typedef PlatformCallback = void Function();
 /// the code is running on the web, and the `Platform` class from the `dart:io`
 /// library to check for Android, iOS, and MacOS platforms.
 class PlatformHandler {
-  
   /// Executes the appropriate callback based on the platform.
   /// If the platform is not recognized, it executes the `defaultAction` callback.
   ///

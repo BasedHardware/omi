@@ -73,7 +73,7 @@ Future<bool> _init() async {
     defaultAction: () async {
       await IntercomManager().initIntercom();
       await MixpanelManager.init();
-    }, 
+    },
     onMacOS: () {},
   );
   await NotificationService.instance.initialize();
@@ -85,11 +85,11 @@ Future<bool> _init() async {
   bool isAuth = (await getIdToken()) != null;
   PlatformHandler.optional(
     defaultAction: () async {
-      if(isAuth) {
+      if (isAuth) {
         MixpanelManager().identify();
       }
       initOpus(await opus_flutter.load());
-    }, 
+    },
     onMacOS: () {},
   );
 
@@ -120,67 +120,37 @@ void main() async {
   }
   // _setupAudioSession();
   bool isAuth = await _init();
-  PlatformHandler.optional(
-    defaultAction: () async {
-      if(Env.instabugApiKey != null) {
-        await Instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
-        runZonedGuarded(
-          () async {
-            Instabug.init(
-              token: Env.instabugApiKey!,
-              invocationEvents: [InvocationEvent.none],
+  PlatformHandler.optional(defaultAction: () async {
+    if (Env.instabugApiKey != null) {
+      await Instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
+      runZonedGuarded(
+        () async {
+          Instabug.init(
+            token: Env.instabugApiKey!,
+            invocationEvents: [InvocationEvent.none],
+          );
+          if (isAuth) {
+            Instabug.identifyUser(
+              FirebaseAuth.instance.currentUser?.email ?? '',
+              SharedPreferencesUtil().fullName,
+              SharedPreferencesUtil().uid,
             );
-            if (isAuth) {
-              Instabug.identifyUser(
-                FirebaseAuth.instance.currentUser?.email ?? '',
-                SharedPreferencesUtil().fullName,
-                SharedPreferencesUtil().uid,
-              );
-            }
-            FlutterError.onError = (FlutterErrorDetails details) {
-              Zone.current.handleUncaughtError(
-                  details.exception, details.stack ?? StackTrace.empty);
-            };
-            Instabug.setColorTheme(ColorTheme.dark);
-            runApp(const MyApp());
-          },
-          CrashReporting.reportCrash,
-        );
-      } else {
-        runApp(const MyApp());
-      }
-    },
-    onMacOS: () {
+          }
+          FlutterError.onError = (FlutterErrorDetails details) {
+            Zone.current.handleUncaughtError(
+                details.exception, details.stack ?? StackTrace.empty);
+          };
+          Instabug.setColorTheme(ColorTheme.dark);
+          runApp(const MyApp());
+        },
+        CrashReporting.reportCrash,
+      );
+    } else {
       runApp(const MyApp());
     }
-  );
-  // if (Env.instabugApiKey != null && !Platform.isMacOS) {
-  //   await Instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
-  //   runZonedGuarded(
-  //     () async {
-  //       Instabug.init(
-  //         token: Env.instabugApiKey!,
-  //         invocationEvents: [InvocationEvent.none],
-  //       );
-  //       if (isAuth) {
-  //         Instabug.identifyUser(
-  //           FirebaseAuth.instance.currentUser?.email ?? '',
-  //           SharedPreferencesUtil().fullName,
-  //           SharedPreferencesUtil().uid,
-  //         );
-  //       }
-  //       FlutterError.onError = (FlutterErrorDetails details) {
-  //         Zone.current.handleUncaughtError(
-  //             details.exception, details.stack ?? StackTrace.empty);
-  //       };
-  //       Instabug.setColorTheme(ColorTheme.dark);
-  //       runApp(const MyApp());
-  //     },
-  //     CrashReporting.reportCrash,
-  //   );
-  // } else {
-  //   runApp(const MyApp());
-  // }
+  }, onMacOS: () {
+    runApp(const MyApp());
+  });
 }
 
 class MyApp extends StatefulWidget {
