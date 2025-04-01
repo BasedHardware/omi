@@ -68,16 +68,15 @@ jobs:
             fi
           done
 
-      - name: Commit and push changes
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions@github.com"
-
-          git add sdks/*/README.md
-
-          if git diff --staged --quiet; then
-            echo "No changes to commit."
-          else
-            git commit -m "chore: sync docs to SDK README files"
-            git push
-          fi
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: sync docs to SDK README files"
+          title: "chore: sync docs to SDK README files"
+          body: |
+            This PR was automatically created by the Sync Docs workflow.
+          branch: sync-docs
+          base: main
+          committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
