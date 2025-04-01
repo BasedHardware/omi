@@ -66,7 +66,18 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
             Image.asset(
               Assets.images.herologo.path,
               height: (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) * widget.sizeMultiplier,
-              width: (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) * widget.sizeMultiplier,
+              width: (Media
+                      
+Positioned(
+  bottom: 16,
+  right: 16,
+  child: FloatingActionButton(
+    onPressed: () {
+      // Handle mic mute toggle logic here
+    },
+    child: Icon(Icons.mic_off),
+  ),
+),Query.sizeOf(context).height <= 700 ? 130 : 160) * widget.sizeMultiplier,
             )
           ],
         ),
