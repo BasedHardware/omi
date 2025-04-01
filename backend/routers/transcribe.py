@@ -37,8 +37,6 @@ class STTService(str, Enum):
     soniox = "soniox"
     speechmatics = "speechmatics"
 
-    # auto = "auto"
-
     @staticmethod
     def get_model_name(value):
         if value == STTService.deepgram:
@@ -64,7 +62,7 @@ def retrieve_in_progress_conversation(uid):
 
 
 async def _listen(
-        websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
+        websocket: WebSocket, uid: str, language: str = 'auto', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = STTService.soniox
 ):
 
@@ -74,9 +72,12 @@ async def _listen(
         await websocket.close(code=1008, reason="Bad uid")
         return
 
-    # Not when comes from the phone, and only Friend's with 1.0.4
-    # if stt_service == STTService.soniox and language not in soniox_valid_languages:
-    stt_service = STTService.deepgram
+    # If language is 'auto', always use Soniox which supports auto language detection
+    # Otherwise, check if Soniox supports the language, fallback to Deepgram if not
+    if language == 'auto':
+        stt_service = STTService.soniox
+    elif stt_service == STTService.soniox and language not in soniox_valid_languages:
+        stt_service = STTService.deepgram
 
     try:
         await websocket.accept()
@@ -353,7 +354,7 @@ async def _listen(
             # SONIOX
             elif stt_service == STTService.soniox:
                 soniox_socket = await process_audio_soniox(
-                    stream_transcript, sample_rate, language,
+                    stream_transcript, sample_rate, language, codec,
                     uid if include_speech_profile else None
                 )
             # SPEECHMATICS
@@ -664,7 +665,7 @@ async def _listen(
 
 @router.websocket("/v3/listen")
 async def listen_handler(
-        websocket: WebSocket, uid: str = Depends(auth.get_current_user_uid), language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
+        websocket: WebSocket, uid: str = Depends(auth.get_current_user_uid), language: str = 'auto', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = STTService.soniox
 ):
     await _listen(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, stt_service)
