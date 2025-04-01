@@ -22,7 +22,7 @@ import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/features/calendar.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
-import 'package:omi/utils/platform_check.dart';
+import 'package:omi/utils/execution_gaurd.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'package:posthog_flutter/posthog_flutter.dart';

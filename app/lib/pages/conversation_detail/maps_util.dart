@@ -1,6 +1,6 @@
 import 'package:omi/env/env.dart';
 import 'package:map_launcher/map_launcher.dart';
-import 'package:omi/utils/platform_check.dart';
+import 'package:omi/utils/execution_gaurd.dart';
 
 class MapsUtil {
   static String getMapImageUrl(double lat, double lng) {

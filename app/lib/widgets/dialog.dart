@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:omi/utils/platform_check.dart';
+import 'package:omi/utils/execution_gaurd.dart';
 
 //TODO: switch to required named parameters
 getDialog(

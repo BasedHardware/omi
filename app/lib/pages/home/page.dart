@@ -1,13 +1,9 @@
 import 'dart:async';
 
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/connectivity/connectivity.dart';
 import 'package:omi/pages/home/widgets/build_app_bar.dart';
-import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -17,9 +13,7 @@ import 'package:omi/pages/apps/page.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/memories/page.dart';
-import 'package:omi/pages/home/widgets/chat_apps_dropdown_widget.dart';
 import 'package:omi/pages/persona/persona_profile.dart';
-import 'package:omi/pages/home/widgets/speech_language_sheet.dart';
 import 'package:omi/pages/settings/page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -32,8 +26,7 @@ import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/audio/foreground.dart';
-import 'package:omi/utils/other/temp.dart';
-import 'package:omi/utils/platform_check.dart';
+import 'package:omi/utils/execution_gaurd.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -41,9 +34,6 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:upgrader/upgrader.dart';
-
-import '../conversations/sync_page.dart';
-import 'widgets/battery_info_widget.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final String? navigateToRoute;
@@ -107,7 +97,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   PageController? _controller;
 
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   void _initiateApps() {
     context.read<AppProvider>().getApps();
@@ -206,10 +195,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
       // ForegroundUtil.requestPermissions();
 
-      if (!ExecutionGuard.isWeb) {
-        await ForegroundUtil.initializeForegroundService();
-        ForegroundUtil.startForegroundTask();
-      }
+      await ForegroundUtil.initializeForegroundService();
+      ForegroundUtil.startForegroundTask();
+
       if (mounted) {
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
@@ -336,7 +324,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                             padding: const EdgeInsets.symmetric(vertical: 8),
                             child: TextButton(
                               style: TextButton.styleFrom(
-                                fixedSize: Size.fromHeight(50),
+                                fixedSize: const Size.fromHeight(50),
                               ),
                               onPressed: () {
                                 MixpanelManager().bottomNavigationTabClicked(['Memories', 'Chat', 'Explore'][index]);
@@ -381,10 +369,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 controller: _controller,
                                 physics: const NeverScrollableScrollPhysics(),
                                 children: [
-                                  ConversationsPage(),
+                                  const ConversationsPage(),
                                   ChatPage(isPivotBottom: false, pageController: _controller),
-                                  AppsPage(),
-                                  PersonaProfilePage(bottomMargin: 120),
+                                  const AppsPage(),
+                                  const PersonaProfilePage(bottomMargin: 120),
                                 ],
                               ),
                             ),

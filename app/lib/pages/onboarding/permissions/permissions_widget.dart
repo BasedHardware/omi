@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/utils/platform_check.dart';
+import 'package:omi/utils/execution_gaurd.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
@@ -31,7 +31,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                     onChanged: (s) async {
                       if (s != null) {
                         if (s) {
-                          if (!ExecutionGuard.isWeb) await provider.askForBackgroundPermissions();
+                          await provider.askForBackgroundPermissions();
                         } else {
                           provider.updateBackgroundPermission(false);
                         }
@@ -163,7 +163,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                               provider.setLoading(true);
                               if (ExecutionGuard.isAndroid) {
                                 if (!provider.hasBackgroundPermission) {
-                                  if (!ExecutionGuard.isWeb) await provider.askForBackgroundPermissions();
+                                   await provider.askForBackgroundPermissions();
                                 }
                               }
                               await Permission.notification.request().then(

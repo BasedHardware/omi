@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:omi/gen/assets.gen.dart';
-import 'package:omi/utils/platform_check.dart';
+import 'package:omi/utils/execution_gaurd.dart';
 
 class SignInButton extends StatelessWidget {
   final String title;

@@ -14,7 +14,7 @@ import 'package:omi/backend/schema/message.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
-import 'package:omi/utils/platform_check.dart';
+import 'package:omi/utils/execution_gaurd.dart';
 
 class NotificationService {
   NotificationService._();

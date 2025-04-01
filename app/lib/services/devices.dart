@@ -6,6 +6,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/models.dart';
+import 'package:omi/utils/execution_gaurd.dart';
 
 abstract class IDeviceService {
   void start();
@@ -157,7 +158,7 @@ class DeviceService implements IDeviceService {
     _status = DeviceServiceStatus.stop;
     onStatusChanged(_status);
 
-    if (FlutterBluePlus.isScanningNow) {
+    if (FlutterBluePlus.isScanningNow && !ExecutionGuard.isWeb) {
       FlutterBluePlus.stopScan();
     }
     _subscriptions.clear();

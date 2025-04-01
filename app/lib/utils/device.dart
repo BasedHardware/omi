@@ -1,6 +1,6 @@
 import 'package:version/version.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:omi/utils/platform_check.dart';
+import 'package:omi/utils/execution_gaurd.dart';
 
 class DeviceUtils {
   static Future<(String, bool, String)> shouldUpdateFirmware({
