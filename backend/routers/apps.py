@@ -495,8 +495,8 @@ def change_app_visibility(app_id: str, private: bool, uid: str = Depends(auth.ge
 def get_notification_scopes():
     return [
         {'title': 'User Name', 'id': 'user_name'},
-        {'title': 'User Facts', 'id': 'user_facts'},
-        {'title': 'User Memories', 'id': 'user_context'},
+        {'title': 'User Memories', 'id': 'user_facts'},
+        {'title': 'User Conversations', 'id': 'user_context'},
         {'title': 'User Chat', 'id': 'user_chat'}
     ]
 
@@ -508,7 +508,7 @@ def get_plugin_capabilities():
         {'title': 'Conversations', 'id': 'memories'},
         {'title': 'External Integration', 'id': 'external_integration', 'triggers': [
             {'title': 'Audio Bytes', 'id': 'audio_bytes'},
-            {'title': 'Memory Creation', 'id': 'memory_creation'},
+            {'title': 'Conversation Creation', 'id': 'memory_creation'},
             {'title': 'Transcript Processed', 'id': 'transcript_processed'},
         ], 'actions': [
             {
