@@ -510,17 +510,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   child: Row(
                     children: [
                       const Spacer(),
-                      SpeechLanguageSheet(
-                        recordingLanguage: provider.recordingLanguage,
-                        setRecordingLanguage: (language) {
-                          provider.setRecordingLanguage(language);
-                          // Notify capture provider
-                          if (context.mounted) {
-                            context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                          }
-                        },
-                        availableLanguages: provider.availableLanguages,
-                      ),
                     ],
                   ),
                 );
