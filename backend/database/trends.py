@@ -4,7 +4,7 @@ from typing import Dict, List
 from firebase_admin import firestore
 from google.api_core.retry import Retry
 
-from models.memory import Memory
+from models.conversation import Conversation
 from models.trend import Trend, valid_items
 from ._client import db, document_id_from_seed
 
@@ -40,7 +40,7 @@ def get_trends_data() -> List[Dict]:
     return trends_data
 
 
-def save_trends(memory: Memory, trends: List[Trend]):
+def save_trends(memory: Conversation, trends: List[Trend]):
     trends_coll_ref = db.collection('trends')
 
     for trend in trends:

@@ -57,10 +57,10 @@ def delete_person(uid: str, person_id: str):
 def delete_user_data(uid: str):
     # TODO: why dont we delete the whole document ref here?
     user_ref = db.collection('users').document(uid)
-    memories_ref = user_ref.collection('memories')
-    # delete all memories
+    conversations_ref = user_ref.collection('memories')
+    # delete all conversations
     batch = db.batch()
-    for doc in memories_ref.stream():
+    for doc in conversations_ref.stream():
         batch.delete(doc.reference)
     batch.commit()
     # delete chat messages
@@ -69,16 +69,16 @@ def delete_user_data(uid: str):
     for doc in messages_ref.stream():
         batch.delete(doc.reference)
     batch.commit()
-    # delete facts
+    # delete memories
     batch = db.batch()
-    facts_ref = user_ref.collection('facts')
-    for doc in facts_ref.stream():
+    memories_ref = user_ref.collection('facts')
+    for doc in memories_ref.stream():
         batch.delete(doc.reference)
     batch.commit()
-    # delete processing memories
-    processing_memories_ref = user_ref.collection('processing_memories')
+    # delete processing conversations
+    processing_conversations_ref = user_ref.collection('processing_memories')
     batch = db.batch()
-    for doc in processing_memories_ref.stream():
+    for doc in processing_conversations_ref.stream():
         batch.delete(doc.reference)
     batch.commit()
     # delete user
@@ -90,11 +90,11 @@ def delete_user_data(uid: str):
 # ************* Analytics **************
 # **************************************
 
-def set_memory_summary_rating_score(uid: str, memory_id: str, value: int):
-    doc_id = document_id_from_seed('memory_summary' + memory_id)
+def set_conversation_summary_rating_score(uid: str, conversation_id: str, value: int):
+    doc_id = document_id_from_seed('memory_summary' + conversation_id)
     db.collection('analytics').document(doc_id).set({
         'id': doc_id,
-        'memory_id': memory_id,
+        'memory_id': conversation_id,
         'uid': uid,
         'value': value,
         'created_at': datetime.now(timezone.utc),
@@ -102,8 +102,8 @@ def set_memory_summary_rating_score(uid: str, memory_id: str, value: int):
     })
 
 
-def get_memory_summary_rating_score(memory_id: str):
-    doc_id = document_id_from_seed('memory_summary' + memory_id)
+def get_conversation_summary_rating_score(conversation_id: str):
+    doc_id = document_id_from_seed('memory_summary' + conversation_id)
     doc_ref = db.collection('analytics').document(doc_id)
     doc = doc_ref.get()
     if doc.exists:
