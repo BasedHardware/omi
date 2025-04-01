@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:omi/utils/platform_handler.dart';
 
 @pragma('vm:entry-point')
 void _startForegroundCallback() {
@@ -65,24 +66,27 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
 
 class ForegroundUtil {
   static Future<void> requestPermissions() async {
-    if(Platform.isMacOS) return;
-    // Android 13+, you need to allow notification permission to display foreground service notification.
-    //
-    // iOS: If you need notification, ask for permission.
-    final NotificationPermission notificationPermissionStatus =
-        await FlutterForegroundTask.checkNotificationPermission();
-    if (notificationPermissionStatus != NotificationPermission.granted) {
-      await FlutterForegroundTask.requestNotificationPermission();
-    }
-
-    if (Platform.isAndroid) {
-      // if (!await FlutterForegroundTask.canDrawOverlays) {
-      //   await FlutterForegroundTask.openSystemAlertWindowSettings();
-      // }
-      if (!await FlutterForegroundTask.isIgnoringBatteryOptimizations) {
-        await FlutterForegroundTask.requestIgnoreBatteryOptimization();
-      }
-    }
+    PlatformHandler.optional(
+      onIOS: () async {
+        // iOS: If you need notification, ask for permission.
+        final NotificationPermission notificationPermissionStatus =
+            await FlutterForegroundTask.checkNotificationPermission();
+        if (notificationPermissionStatus != NotificationPermission.granted) {
+          await FlutterForegroundTask.requestNotificationPermission();
+        }
+      },
+      onAndroid: () async {
+        // Android 13+, you need to allow notification permission to display foreground service notification.
+        //
+        // if (!await FlutterForegroundTask.canDrawOverlays) {
+          //   await FlutterForegroundTask.openSystemAlertWindowSettings();
+        // }
+        if (!await FlutterForegroundTask.isIgnoringBatteryOptimizations) {
+          await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+        }
+      },
+      defaultAction: () {}
+    );
   }
 
   Future<bool> get isIgnoringBatteryOptimizations async => await FlutterForegroundTask.isIgnoringBatteryOptimizations;

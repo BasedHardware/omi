@@ -49,6 +49,7 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/features/calendar.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:omi/utils/platform_handler.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'package:posthog_flutter/posthog_flutter.dart';
@@ -61,15 +62,20 @@ Future<bool> _init() async {
 
   // Firebase
   if (F.env == Environment.prod) {
-    await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform, name: 'prod');
+    await Firebase.initializeApp(
+        options: prod.DefaultFirebaseOptions.currentPlatform, name: 'prod');
   } else {
-    await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform, name: 'dev');
+    await Firebase.initializeApp(
+        options: dev.DefaultFirebaseOptions.currentPlatform, name: 'dev');
   }
 
-  if(!Platform.isMacOS) {
-    await IntercomManager().initIntercom();
-    await MixpanelManager.init();
-  }
+  PlatformHandler.optional(
+    defaultAction: () async {
+      await IntercomManager().initIntercom();
+      await MixpanelManager.init();
+    }, 
+    onMacOS: () {},
+  );
   await NotificationService.instance.initialize();
   await SharedPreferencesUtil.init();
 
@@ -77,10 +83,15 @@ Future<bool> _init() async {
   await ServiceManager.instance().start();
 
   bool isAuth = (await getIdToken()) != null;
-  if (isAuth && !Platform.isMacOS) MixpanelManager().identify();
-  if(!Platform.isMacOS) {
-    initOpus(await opus_flutter.load());
-  }
+  PlatformHandler.optional(
+    defaultAction: () async {
+      if(isAuth) {
+        MixpanelManager().identify();
+      }
+      initOpus(await opus_flutter.load());
+    }, 
+    onMacOS: () {},
+  );
 
   await GrowthbookUtil.init();
   CalendarUtil.init();
@@ -109,32 +120,67 @@ void main() async {
   }
   // _setupAudioSession();
   bool isAuth = await _init();
-  if (Env.instabugApiKey != null && !Platform.isMacOS) {
-    await Instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
-    runZonedGuarded(
-      () async {
-        Instabug.init(
-          token: Env.instabugApiKey!,
-          invocationEvents: [InvocationEvent.none],
+  PlatformHandler.optional(
+    defaultAction: () async {
+      if(Env.instabugApiKey != null) {
+        await Instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
+        runZonedGuarded(
+          () async {
+            Instabug.init(
+              token: Env.instabugApiKey!,
+              invocationEvents: [InvocationEvent.none],
+            );
+            if (isAuth) {
+              Instabug.identifyUser(
+                FirebaseAuth.instance.currentUser?.email ?? '',
+                SharedPreferencesUtil().fullName,
+                SharedPreferencesUtil().uid,
+              );
+            }
+            FlutterError.onError = (FlutterErrorDetails details) {
+              Zone.current.handleUncaughtError(
+                  details.exception, details.stack ?? StackTrace.empty);
+            };
+            Instabug.setColorTheme(ColorTheme.dark);
+            runApp(const MyApp());
+          },
+          CrashReporting.reportCrash,
         );
-        if (isAuth) {
-          Instabug.identifyUser(
-            FirebaseAuth.instance.currentUser?.email ?? '',
-            SharedPreferencesUtil().fullName,
-            SharedPreferencesUtil().uid,
-          );
-        }
-        FlutterError.onError = (FlutterErrorDetails details) {
-          Zone.current.handleUncaughtError(details.exception, details.stack ?? StackTrace.empty);
-        };
-        Instabug.setColorTheme(ColorTheme.dark);
+      } else {
         runApp(const MyApp());
-      },
-      CrashReporting.reportCrash,
-    );
-  } else {
-    runApp(const MyApp());
-  }
+      }
+    },
+    onMacOS: () {
+      runApp(const MyApp());
+    }
+  );
+  // if (Env.instabugApiKey != null && !Platform.isMacOS) {
+  //   await Instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
+  //   runZonedGuarded(
+  //     () async {
+  //       Instabug.init(
+  //         token: Env.instabugApiKey!,
+  //         invocationEvents: [InvocationEvent.none],
+  //       );
+  //       if (isAuth) {
+  //         Instabug.identifyUser(
+  //           FirebaseAuth.instance.currentUser?.email ?? '',
+  //           SharedPreferencesUtil().fullName,
+  //           SharedPreferencesUtil().uid,
+  //         );
+  //       }
+  //       FlutterError.onError = (FlutterErrorDetails details) {
+  //         Zone.current.handleUncaughtError(
+  //             details.exception, details.stack ?? StackTrace.empty);
+  //       };
+  //       Instabug.setColorTheme(ColorTheme.dark);
+  //       runApp(const MyApp());
+  //     },
+  //     CrashReporting.reportCrash,
+  //   );
+  // } else {
+  //   runApp(const MyApp());
+  // }
 }
 
 class MyApp extends StatefulWidget {
@@ -143,10 +189,12 @@ class MyApp extends StatefulWidget {
   @override
   State<MyApp> createState() => _MyAppState();
 
-  static _MyAppState of(BuildContext context) => context.findAncestorStateOfType<_MyAppState>()!;
+  static _MyAppState of(BuildContext context) =>
+      context.findAncestorStateOfType<_MyAppState>()!;
 
   // The navigator key is necessary to navigate using static methods
-  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
@@ -184,31 +232,40 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             update: (BuildContext context, value, MessageProvider? previous) =>
                 (previous?..updateAppProvider(value)) ?? MessageProvider(),
           ),
-          ChangeNotifierProxyProvider2<ConversationProvider, MessageProvider, CaptureProvider>(
+          ChangeNotifierProxyProvider2<ConversationProvider, MessageProvider,
+              CaptureProvider>(
             create: (context) => CaptureProvider(),
-            update: (BuildContext context, conversation, message, CaptureProvider? previous) =>
-                (previous?..updateProviderInstances(conversation, message)) ?? CaptureProvider(),
+            update: (BuildContext context, conversation, message,
+                    CaptureProvider? previous) =>
+                (previous?..updateProviderInstances(conversation, message)) ??
+                CaptureProvider(),
           ),
           ChangeNotifierProxyProvider<CaptureProvider, DeviceProvider>(
             create: (context) => DeviceProvider(),
-            update: (BuildContext context, captureProvider, DeviceProvider? previous) =>
+            update: (BuildContext context, captureProvider,
+                    DeviceProvider? previous) =>
                 (previous?..setProviders(captureProvider)) ?? DeviceProvider(),
           ),
           ChangeNotifierProxyProvider<DeviceProvider, OnboardingProvider>(
             create: (context) => OnboardingProvider(),
-            update: (BuildContext context, value, OnboardingProvider? previous) =>
+            update: (BuildContext context, value,
+                    OnboardingProvider? previous) =>
                 (previous?..setDeviceProvider(value)) ?? OnboardingProvider(),
           ),
           ListenableProvider(create: (context) => HomeProvider()),
           ChangeNotifierProxyProvider<DeviceProvider, SpeechProfileProvider>(
             create: (context) => SpeechProfileProvider(),
-            update: (BuildContext context, device, SpeechProfileProvider? previous) =>
+            update: (BuildContext context, device,
+                    SpeechProfileProvider? previous) =>
                 (previous?..setProviders(device)) ?? SpeechProfileProvider(),
           ),
-          ChangeNotifierProxyProvider2<AppProvider, ConversationProvider, ConversationDetailProvider>(
+          ChangeNotifierProxyProvider2<AppProvider, ConversationProvider,
+              ConversationDetailProvider>(
             create: (context) => ConversationDetailProvider(),
-            update: (BuildContext context, app, conversation, ConversationDetailProvider? previous) =>
-                (previous?..setProviders(app, conversation)) ?? ConversationDetailProvider(),
+            update: (BuildContext context, app, conversation,
+                    ConversationDetailProvider? previous) =>
+                (previous?..setProviders(app, conversation)) ??
+                ConversationDetailProvider(),
           ),
           ChangeNotifierProvider(create: (context) => CalenderProvider()),
           ChangeNotifierProvider(create: (context) => DeveloperModeProvider()),
@@ -245,13 +302,20 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   ),
                   snackBarTheme: SnackBarThemeData(
                     backgroundColor: Colors.grey.shade900,
-                    contentTextStyle: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
+                    contentTextStyle: const TextStyle(
+                        fontSize: 16,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w500),
                   ),
                   textTheme: TextTheme(
-                    titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
-                    titleMedium: const TextStyle(fontSize: 16, color: Colors.white),
-                    bodyMedium: const TextStyle(fontSize: 14, color: Colors.white),
-                    labelMedium: TextStyle(fontSize: 12, color: Colors.grey.shade200),
+                    titleLarge:
+                        const TextStyle(fontSize: 18, color: Colors.white),
+                    titleMedium:
+                        const TextStyle(fontSize: 16, color: Colors.white),
+                    bodyMedium:
+                        const TextStyle(fontSize: 14, color: Colors.white),
+                    labelMedium:
+                        TextStyle(fontSize: 12, color: Colors.grey.shade200),
                   ),
                   textSelectionTheme: const TextSelectionThemeData(
                     cursorColor: Colors.white,
@@ -259,17 +323,20 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     selectionHandleColor: Colors.white,
                   ),
                   cupertinoOverrideTheme: const CupertinoThemeData(
-                    primaryColor: Colors.white, // Controls the selection handles on iOS
+                    primaryColor:
+                        Colors.white, // Controls the selection handles on iOS
                   )),
               themeMode: ThemeMode.dark,
               builder: (context, child) {
                 FlutterError.onError = (FlutterErrorDetails details) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
-                    Logger.instance.talker.handle(details.exception, details.stack);
+                    Logger.instance.talker
+                        .handle(details.exception, details.stack);
                   });
                 };
                 ErrorWidget.builder = (errorDetails) {
-                  return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
+                  return CustomErrorWidget(
+                      errorMessage: errorDetails.exceptionAsString());
                 };
                 return child!;
               },
@@ -317,15 +384,19 @@ class _DeciderWidgetState extends State<DeciderWidget> {
   void openAppLink(Uri uri) async {
     if (uri.pathSegments.first == 'apps') {
       if (mounted) {
-        var app = await context.read<AppProvider>().getAppFromId(uri.pathSegments[1]);
+        var app =
+            await context.read<AppProvider>().getAppFromId(uri.pathSegments[1]);
         if (app != null) {
-          MixpanelManager().track('App Opened From DeepLink', properties: {'appId': app.id});
+          MixpanelManager()
+              .track('App Opened From DeepLink', properties: {'appId': app.id});
           if (mounted) {
-            Navigator.of(context).push(MaterialPageRoute(builder: (context) => AppDetailPage(app: app)));
+            Navigator.of(context).push(MaterialPageRoute(
+                builder: (context) => AppDetailPage(app: app)));
           }
         } else {
           debugPrint('App not found: ${uri.pathSegments[1]}');
-          AppSnackbar.showSnackbarError('Oops! Looks like the app you are looking for is not available.');
+          AppSnackbar.showSnackbarError(
+              'Oops! Looks like the app you are looking for is not available.');
         }
       }
     } else {
@@ -355,7 +426,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
         context.read<AppProvider>().setAppsFromCache();
         context.read<MessageProvider>().refreshMessages();
       } else {
-        if(!kIsWeb) {
+        if (!kIsWeb) {
           await IntercomManager.instance.intercom.loginUnidentifiedUser();
         }
       }

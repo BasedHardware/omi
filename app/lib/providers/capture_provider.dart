@@ -423,42 +423,23 @@ class CaptureProvider extends ChangeNotifier
 
     // prepare
     await changeAudioRecordProfile(BleAudioCodec.pcm16, 16000);
-
-    if(Platform.isMacOS) {
-      await ServiceManager.instance().systemMic.start(onByteReceived: (bytes) {
-        if (_socket?.state == SocketServiceState.connected) {
-          _socket?.send(bytes);
-        }
-      }, onRecording: () {
-        updateRecordingState(RecordingState.record);
-      }, onStop: () {
-        updateRecordingState(RecordingState.stop);
-      }, onInitializing: () {
-        updateRecordingState(RecordingState.initialising);
-      });
-    } else {
     // record
-      await ServiceManager.instance().mic.start(onByteReceived: (bytes) {
-        if (_socket?.state == SocketServiceState.connected) {
-          _socket?.send(bytes);
-        }
-      }, onRecording: () {
-        updateRecordingState(RecordingState.record);
-      }, onStop: () {
-        updateRecordingState(RecordingState.stop);
-      }, onInitializing: () {
-        updateRecordingState(RecordingState.initialising);
-      });
-    }
+    await ServiceManager.instance().mic.start(onByteReceived: (bytes) {
+      if (_socket?.state == SocketServiceState.connected) {
+        _socket?.send(bytes);
+      }
+    }, onRecording: () {
+      updateRecordingState(RecordingState.record);
+    }, onStop: () {
+      updateRecordingState(RecordingState.stop);
+    }, onInitializing: () {
+      updateRecordingState(RecordingState.initialising);
+    });
   }
 
   stopStreamRecording() async {
     _cleanupCurrentState();
-    if(Platform.isMacOS) {
-      ServiceManager.instance().systemMic.stop();
-    }  else {
-     ServiceManager.instance().mic.stop();
-    }
+    ServiceManager.instance().mic.stop();
     await _socket?.stop(reason: 'stop stream recording');
   }
 

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/utils/platform_handler.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
@@ -161,10 +162,13 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                           child: MaterialButton(
                             padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                             onPressed: () async {
-                               if(Platform.isMacOS) {
-                                widget.goNext();
-                                return;
-                               }
+                              PlatformHandler.optional(
+                                defaultAction: () {},
+                                onMacOS: () {
+                                  widget.goNext();
+                                  return;
+                                },
+                              );
                               provider.setLoading(true);
                               if (Platform.isAndroid) {
                                 if (!provider.hasBackgroundPermission) {
