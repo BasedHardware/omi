@@ -14,11 +14,11 @@ from utils.other.endpoints import timeit
 
 # os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 
-import database.memories as memories_db
+import database.conversations as conversations_db
 from database.redis_db import get_filter_category_items
 from database.vector_db import query_vectors_by_metadata
 from models.chat import Message
-from models.memory import Memory
+from models.conversation import Conversation
 from utils.llm import select_structured_filters, generate_embedding, extract_question_from_transcript, \
     provide_advice_message
 
@@ -39,7 +39,7 @@ class GraphState(TypedDict):
 
     filters: Optional[StructuredFilters]
 
-    memories_found: Optional[List[Memory]]
+    memories_found: Optional[List[Conversation]]
 
     answer: Optional[str]
 
@@ -80,7 +80,7 @@ def query_vectors(state: GraphState):
         entities=state.get('filters', {}).get('entities', []),
         dates=state.get('filters', {}).get('dates', []),
     )
-    memories = memories_db.get_memories_by_id(uid, memories_id)
+    memories = conversations_db.get_conversations_by_id(uid, memories_id)
     return {'memories_found': memories}
 
 
@@ -88,7 +88,7 @@ def provide_answer(state: GraphState):
     response: str = provide_advice_message(
         state.get('uid'),
         state.get('segments'),
-        Memory.memories_to_string(state.get('memories_found', []), True),
+        Conversation.conversations_to_string(state.get('memories_found', []), True),
     )
     return {'answer': response}
 
@@ -114,7 +114,7 @@ graph = workflow.compile(checkpointer=checkpointer)
 @timeit
 def execute_graph_realtime(
         uid: str, segments: List[TranscriptSegment], use_full_transcript: bool = False
-) -> Tuple[str, List[Memory]]:
+) -> Tuple[str, List[Conversation]]:
     segments = segments if len(segments) < 10 or use_full_transcript else segments[-10:]
     result = graph.invoke({'uid': uid, 'segments': segments}, {"configurable": {"thread_id": str(uuid.uuid4())}})
     return result.get('answer'), result.get('memories_found', [])

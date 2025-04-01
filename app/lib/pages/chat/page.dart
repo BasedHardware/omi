@@ -13,6 +13,7 @@ import 'package:omi/pages/chat/select_text_screen.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/animated_mini_banner.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
+import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -45,7 +46,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   bool isScrollingDown = false;
 
-  bool _showSendButton = false;
+  bool _showVoiceRecorder = false;
 
   var prefs = SharedPreferencesUtil();
   late List<App> apps;
@@ -93,14 +94,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     textController.dispose();
     scrollController.dispose();
     super.dispose();
-  }
-
-  void setShowSendButton() {
-    if (_showSendButton != textController.text.isNotEmpty) {
-      setState(() {
-        _showSendButton = textController.text.isNotEmpty;
-      });
-    }
   }
 
   @override
@@ -316,12 +309,16 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                               ),
               ),
               Consumer<HomeProvider>(builder: (context, home, child) {
-                bool shouldShowSuffixIcon(MessageProvider p) {
-                  return !p.sendingMessage && _showSendButton;
+                bool shouldShowSendButton(MessageProvider p) {
+                  return !p.sendingMessage && !_showVoiceRecorder;
                 }
 
-                bool shouldShowSendButton(MessageProvider p) {
-                  return !p.sendingMessage && _showSendButton;
+                bool shouldShowVoiceRecorderButton() {
+                  return !_showVoiceRecorder;
+                }
+
+                bool shouldShowMenuButton() {
+                  return !_showVoiceRecorder;
                 }
 
                 return Align(
@@ -433,101 +430,128 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.add,
-                                    color: provider.selectedFiles.length > 3 ? Colors.grey : const Color(0xFFF7F4F4),
-                                    size: 24.0,
-                                  ),
-                                  onPressed: () {
-                                    if (provider.selectedFiles.length > 3) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('You can only upload 4 files at a time'),
-                                          duration: Duration(seconds: 2),
-                                        ),
-                                      );
-                                      return;
-                                    }
-                                    showModalBottomSheet(
-                                      context: context,
-                                      backgroundColor: Colors.grey[850],
-                                      shape: const RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
-                                      ),
-                                      builder: (BuildContext context) {
-                                        return Padding(
-                                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 40),
-                                          child: Wrap(
-                                            children: [
-                                              ListTile(
-                                                leading: const Icon(Icons.camera_alt, color: Colors.white),
-                                                title:
-                                                    const Text("Take a Photo", style: TextStyle(color: Colors.white)),
-                                                onTap: () {
-                                                  Navigator.pop(context);
-                                                  context.read<MessageProvider>().captureImage();
-                                                },
-                                              ),
-                                              ListTile(
-                                                leading: const Icon(Icons.photo, color: Colors.white),
-                                                title:
-                                                    const Text("Select a Photo", style: TextStyle(color: Colors.white)),
-                                                onTap: () {
-                                                  Navigator.pop(context);
-                                                  context.read<MessageProvider>().selectImage();
-                                                },
-                                              ),
-                                              ListTile(
-                                                leading: const Icon(Icons.insert_drive_file, color: Colors.white),
-                                                title:
-                                                    const Text("Select a File", style: TextStyle(color: Colors.white)),
-                                                onTap: () {
-                                                  Navigator.pop(context);
-                                                  context.read<MessageProvider>().selectFile();
-                                                },
-                                              ),
-                                            ],
+                                if (shouldShowMenuButton())
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.add,
+                                      color: provider.selectedFiles.length > 3 ? Colors.grey : const Color(0xFFF7F4F4),
+                                      size: 24.0,
+                                    ),
+                                    onPressed: () {
+                                      if (provider.selectedFiles.length > 3) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('You can only upload 4 files at a time'),
+                                            duration: Duration(seconds: 2),
                                           ),
                                         );
-                                      },
-                                    );
-                                  },
-                                ),
-                                Expanded(
-                                  child: ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      maxHeight: 150,
-                                    ),
-                                    child: TextField(
-                                      enabled: true,
-                                      controller: textController,
-                                      obscureText: false,
-                                      onChanged: (value) {
-                                        setShowSendButton();
-                                      },
-                                      focusNode: home.chatFieldFocusNode,
-                                      textAlign: TextAlign.start,
-                                      textAlignVertical: TextAlignVertical.top,
-                                      decoration: const InputDecoration(
-                                        hintText: 'Message',
-                                        hintStyle: TextStyle(fontSize: 14.0, color: Colors.grey),
-                                        focusedBorder: InputBorder.none,
-                                        enabledBorder: InputBorder.none,
-                                        contentPadding: EdgeInsets.only(top: 8, bottom: 10),
-                                      ),
-                                      maxLines: null,
-                                      keyboardType: TextInputType.multiline,
-                                      style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200, height: 24 / 14),
-                                    ),
+                                        return;
+                                      }
+                                      showModalBottomSheet(
+                                        context: context,
+                                        backgroundColor: Colors.grey[850],
+                                        shape: const RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
+                                        ),
+                                        builder: (BuildContext context) {
+                                          return Padding(
+                                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 40),
+                                            child: Wrap(
+                                              children: [
+                                                ListTile(
+                                                  leading: const Icon(Icons.camera_alt, color: Colors.white),
+                                                  title:
+                                                      const Text("Take a Photo", style: TextStyle(color: Colors.white)),
+                                                  onTap: () {
+                                                    Navigator.pop(context);
+                                                    context.read<MessageProvider>().captureImage();
+                                                  },
+                                                ),
+                                                ListTile(
+                                                  leading: const Icon(Icons.photo, color: Colors.white),
+                                                  title: const Text("Select a Photo",
+                                                      style: TextStyle(color: Colors.white)),
+                                                  onTap: () {
+                                                    Navigator.pop(context);
+                                                    context.read<MessageProvider>().selectImage();
+                                                  },
+                                                ),
+                                                ListTile(
+                                                  leading: const Icon(Icons.insert_drive_file, color: Colors.white),
+                                                  title: const Text("Select a File",
+                                                      style: TextStyle(color: Colors.white)),
+                                                  onTap: () {
+                                                    Navigator.pop(context);
+                                                    context.read<MessageProvider>().selectFile();
+                                                  },
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        },
+                                      );
+                                    },
                                   ),
+                                Expanded(
+                                  child: _showVoiceRecorder
+                                      ? VoiceRecorderWidget(
+                                          onTranscriptReady: (transcript) {
+                                            setState(() {
+                                              textController.text = transcript;
+                                              _showVoiceRecorder = false;
+                                            });
+                                          },
+                                          onClose: () {
+                                            setState(() {
+                                              _showVoiceRecorder = false;
+                                            });
+                                          },
+                                        )
+                                      : ConstrainedBox(
+                                          constraints: const BoxConstraints(
+                                            maxHeight: 150,
+                                          ),
+                                          child: TextField(
+                                            enabled: true,
+                                            controller: textController,
+                                            obscureText: false,
+                                            focusNode: home.chatFieldFocusNode,
+                                            textAlign: TextAlign.start,
+                                            textAlignVertical: TextAlignVertical.top,
+                                            decoration: InputDecoration(
+                                              hintText: 'Message',
+                                              hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
+                                              focusedBorder: InputBorder.none,
+                                              enabledBorder: InputBorder.none,
+                                              contentPadding: const EdgeInsets.only(top: 8, bottom: 10),
+                                            ),
+                                            maxLines: null,
+                                            keyboardType: TextInputType.multiline,
+                                            style:
+                                                TextStyle(fontSize: 14.0, color: Colors.grey.shade200, height: 24 / 14),
+                                          ),
+                                        ),
                                 ),
-                                !shouldShowSuffixIcon(provider) && !shouldShowSendButton(provider)
+                                if (shouldShowVoiceRecorderButton())
+                                  GestureDetector(
+                                    child: Container(
+                                      padding: const EdgeInsets.only(top: 14, bottom: 14, left: 14, right: 14),
+                                      child: const Icon(
+                                        Icons.mic_outlined,
+                                        color: Color(0xFFF7F4F4),
+                                        size: 20.0,
+                                      ),
+                                    ),
+                                    onTap: () {
+                                      setState(() {
+                                        _showVoiceRecorder = true;
+                                      });
+                                    },
+                                  ),
+                                !shouldShowSendButton(provider)
                                     ? const SizedBox.shrink()
-                                    : IconButton(
-                                        splashColor: Colors.transparent,
-                                        splashRadius: 1,
-                                        onPressed: provider.sendingMessage || provider.isUploadingFiles
+                                    : GestureDetector(
+                                        onTap: provider.sendingMessage || provider.isUploadingFiles
                                             ? null
                                             : () {
                                                 String message = textController.text;
@@ -544,10 +568,18 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                   );
                                                 }
                                               },
-                                        icon: const Icon(
-                                          Icons.arrow_upward_outlined,
-                                          color: Color(0xFFF7F4F4),
-                                          size: 20.0,
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4),
+                                          margin: const EdgeInsets.only(top: 10, bottom: 10, right: 6),
+                                          decoration: const BoxDecoration(
+                                            color: Colors.white,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(
+                                            Icons.arrow_upward_outlined,
+                                            color: Colors.black,
+                                            size: 20.0,
+                                          ),
                                         ),
                                       ),
                               ],

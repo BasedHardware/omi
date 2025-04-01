@@ -134,12 +134,15 @@ class CaptureProvider extends ChangeNotifier
     await _resetState();
   }
 
-  Future<void> changeAudioRecordProfile([
-    BleAudioCodec? audioCodec,
+  Future<void> changeAudioRecordProfile({
+    required BleAudioCodec audioCodec,
     int? sampleRate,
-  ]) async {
+  }) async {
     debugPrint("changeAudioRecordProfile");
     await _resetState();
+
+    // New codec
+    SharedPreferencesUtil().deviceCodec = audioCodec;
     await _initiateWebsocket(audioCodec: audioCodec, sampleRate: sampleRate);
   }
 
@@ -273,9 +276,9 @@ class CaptureProvider extends ChangeNotifier
   Future<void> _resetState() async {
     debugPrint('resetState');
     _cleanupCurrentState();
-    await _recheckCodecChange();
-    await _ensureSocketConnection();
-    await _initiateFriendAudioStreaming();
+    await _recheckDeviceCodecChange();
+    await _ensureDeviceSocketConnection();
+    await _initiateDeviceAudioStreaming();
     await initiateStorageBytesStreaming(); // ??
     notifyListeners();
   }
@@ -343,19 +346,23 @@ class CaptureProvider extends ChangeNotifier
     return connection.getBleButtonState();
   }
 
-  Future<bool> _recheckCodecChange() async {
-    if (_recordingDevice != null) {
-      BleAudioCodec newCodec = await _getAudioCodec(_recordingDevice!.id);
-      if (SharedPreferencesUtil().deviceCodec != newCodec) {
-        debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $newCodec');
-        await SharedPreferencesUtil().setDeviceCodec(newCodec);
-        return true;
-      }
+  Future<bool> _recheckDeviceCodecChange() async {
+    if (_recordingDevice == null) {
+      return false;
+    }
+    BleAudioCodec newCodec = await _getAudioCodec(_recordingDevice!.id);
+    if (SharedPreferencesUtil().deviceCodec != newCodec) {
+      debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $newCodec');
+      await SharedPreferencesUtil().setDeviceCodec(newCodec);
+      return true;
     }
     return false;
   }
 
-  Future<void> _ensureSocketConnection() async {
+  Future<void> _ensureDeviceSocketConnection() async {
+    if (_recordingDevice == null) {
+      return;
+    }
     var codec = SharedPreferencesUtil().deviceCodec;
     var language = SharedPreferencesUtil().recordingsLanguage;
     if (language != _socket?.language || codec != _socket?.codec || _socket?.state != SocketServiceState.connected) {
@@ -363,15 +370,16 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
-  Future<void> _initiateFriendAudioStreaming() async {
-    if (_recordingDevice == null) return;
-
+  Future<void> _initiateDeviceAudioStreaming() async {
+    if (_recordingDevice == null) {
+      return;
+    }
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
     if (SharedPreferencesUtil().deviceCodec != codec) {
       debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $codec');
       SharedPreferencesUtil().deviceCodec = codec;
       notifyInfo('FIM_CHANGE');
-      await _ensureSocketConnection();
+      await _ensureDeviceSocketConnection();
     }
 
     // Why is the _recordingDevice null at this point?
@@ -422,7 +430,8 @@ class CaptureProvider extends ChangeNotifier
     }
 
     // prepare
-    await changeAudioRecordProfile(BleAudioCodec.pcm16, 16000);
+    await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
+
     // record
     await ServiceManager.instance().mic.start(onByteReceived: (bytes) {
       if (_socket?.state == SocketServiceState.connected) {
@@ -484,7 +493,6 @@ class CaptureProvider extends ChangeNotifier
           t.cancel();
           return;
         }
-
         await _initiateWebsocket();
       });
     }
@@ -519,7 +527,7 @@ class CaptureProvider extends ChangeNotifier
   void onMessageEventReceived(ServerMessageEvent event) {
     if (event.type == MessageEventType.conversationProcessingStarted) {
       if (event.conversation == null) {
-        debugPrint("Memory data not received in event. Content is: $event");
+        debugPrint("Conversation data not received in event. Content is: $event");
         return;
       }
       conversationProvider!.addProcessingConversation(event.conversation!);
@@ -540,7 +548,7 @@ class CaptureProvider extends ChangeNotifier
 
     if (event.type == MessageEventType.lastConversation) {
       if (event.memoryId == null) {
-        debugPrint("Memory ID not received in last_memory event. Content is: $event");
+        debugPrint("Conversation ID not received in last_memory event. Content is: $event");
         return;
       }
       _handleLastConvoEvent(event.memoryId!);
