@@ -194,7 +194,7 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
 soniox_valid_languages = ['en', 'auto']
 
 
-async def process_audio_soniox(stream_transcript, sample_rate: int, language: str, codec: str, uid: str):
+async def process_audio_soniox(stream_transcript, sample_rate: int, language: str, uid: str):
     # Soniox supports diarization primarily for English
     api_key = os.getenv('SONIOX_API_KEY')
     if not api_key:
@@ -202,34 +202,20 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
 
     uri = 'wss://stt-rt.soniox.com/transcribe-websocket'
 
-    # For auto language detection or if language is not in valid languages, use auto
-    model_language = language if language in soniox_valid_languages else 'auto'
-    
     # Speaker identification only works with English and 16kHz sample rate
     has_speech_profile = create_user_speech_profile(uid) if uid and sample_rate == 16000 and language == 'en' else False
 
-    # Map our codec to Soniox supported format
-    if codec == 'pcm16':
-        audio_format = "s16le"
-    elif codec == 'opus':
-        audio_format = "ogg"
-    elif codec == 'pcm8':
-        audio_format = "mulaw"
-    else:
-        # Default fallback
-        audio_format = "s16le" if sample_rate == 16000 else "mulaw"
-    
     # Construct the initial request with all required and optional parameters
     request = {
         'api_key': api_key,
         'model': 'stt-rt-preview',
-        'audio_format': audio_format,
-        'sample_rate': str(sample_rate),
-        'num_channels': '1',
+        'audio_format': "s16le" if sample_rate == 16000 else "mulaw",
+        'sample_rate': sample_rate,
+        'num_channels': 1,
         'enable_speaker_tags': True,
         'language_hints': [language] if language != 'auto' else []
     }
-    
+
     # Add speaker identification if available
     if has_speech_profile:
         request['enable_speaker_identification'] = True
@@ -240,59 +226,97 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
         print("Connecting to Soniox WebSocket...")
         soniox_socket = await websockets.connect(uri, ping_timeout=10, ping_interval=10)
         print("Connected to Soniox WebSocket.")
+
         # Send the initial request
         await soniox_socket.send(json.dumps(request))
         print(f"Sent initial request: {request}")
 
+        # Variables to track current segment
+        current_segment = None
+        current_segment_time = None
+        current_speaker_id = None
+
         # Start listening for messages from Soniox
         async def on_message():
+            nonlocal current_segment, current_segment_time, current_speaker_id
             try:
                 async for message in soniox_socket:
                     response = json.loads(message)
-                    # print(response)
-                    fw = response['fw']
-                    if not fw:
-                        continue
-                    spks = response['spks']
-                    user_speaker_id = None if not spks else spks[0]['spk']
-                    segments = []
-                    for f in fw:
-                        word = f['t']
-                        if word == '' or word == '<end>':
+                    print(response)
+
+                    # Update last message time
+                    current_time = time.time()
+
+                    # Check for error responses
+                    if 'error_code' in response:
+                        error_message = response.get('error_message', 'Unknown error')
+                        error_code = response.get('error_code', 0)
+                        print(f"Soniox error: {error_code} - {error_message}")
+                        raise Exception(f"Soniox error: {error_code} - {error_message}")
+
+                    # Process response based on tokens field
+                    if 'tokens' in response:
+                        tokens = response.get('tokens', [])
+
+                        if not tokens:
+                            if current_segment:
+                                stream_transcript([current_segment])
+                                current_segment = None
+                                current_segment_time = None
                             continue
-                        word = word.replace('<end>', '')
-                        start = (f['s'] / 1000)
-                        end = (f['s'] + f['d']) / 1000
-                        if not segments:
-                            segments.append({
-                                'speaker': f"SPEAKER_0{f['spk']}",
-                                'start': start,
-                                'end': end,
-                                'text': word,
-                                'is_user': user_speaker_id == f['spk'],
-                                'person_id': None,
-                            })
-                        else:
-                            last_segment = segments[-1]
-                            if last_segment['speaker'] == f"SPEAKER_0{f['spk']}":
-                                last_segment['text'] += word
-                                last_segment['end'] += f['d'] / 1000
+
+                        # Extract speaker information and text from tokens
+                        new_speaker_id = None
+                        speaker_change_detected = False
+                        token_texts = []
+
+                        # First check if any token contains a speaker tag
+                        for token in tokens:
+                            token_text = token['text']
+                            if token_text.startswith('spk:'):
+                                new_speaker_id = token_text.split(':')[1] if ':' in token_text else "1"
+                                speaker_change_detected = (current_speaker_id is not None and
+                                                           current_speaker_id != new_speaker_id)
+                                current_speaker_id = new_speaker_id
                             else:
-                                segments.append({
-                                    'speaker': f"SPEAKER_0{f['spk']}",
-                                    'start': start,
-                                    'end': end,
-                                    'text': word,
-                                    'is_user': user_speaker_id == f['spk'],
-                                    'person_id': None,
-                                })
+                                token_texts.append(token_text)
 
-                    for i, segment in enumerate(segments):
-                        segments[i]['text'] = segments[i]['text'].strip().replace('  ', '')
+                        # If no speaker tag found in this response, use the current speaker
+                        if new_speaker_id is None and current_speaker_id is not None:
+                            new_speaker_id = current_speaker_id
+                        elif new_speaker_id is None:
+                            new_speaker_id = "1"  # Default speaker
 
-                    # print('Soniox:', transcript.replace('<end>', ''))
-                    if segments:
-                        stream_transcript(segments)
+                        # Combine all non-speaker tokens into text
+                        clean_text = ''.join(token_texts)
+
+                        # Get timing information
+                        start_time = tokens[0]['start_ms'] / 1000.0
+                        end_time = tokens[-1]['end_ms'] / 1000.0
+
+                        # If we have a speaker change, send the current segment and start a new one
+                        if (speaker_change_detected or (current_segment_time and current_time - current_segment_time > 1)) \
+                                and current_segment is not None:
+                            stream_transcript([current_segment])
+                            current_segment = None
+                            current_segment_time = None
+
+                        # Create a new segment or append to existing one
+                        if current_segment is None:
+                            current_segment = {
+                                'speaker': f"SPEAKER_0{new_speaker_id}",
+                                'start': start_time,
+                                'end': end_time,
+                                'text': clean_text,
+                                'is_user': new_speaker_id == uid,
+                                'person_id': None
+                            }
+                            current_segment_time = current_time
+                        else:
+                            current_segment['text'] += clean_text
+                            current_segment['end'] = end_time
+                    else:
+                        print(f"Unexpected Soniox response format: {response}")
             except websockets.exceptions.ConnectionClosedOK:
                 print("Soniox connection closed normally.")
             except Exception as e:
@@ -302,7 +326,7 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
                     await soniox_socket.close()
                     print("Soniox WebSocket closed in on_message.")
 
-        # Start the on_message coroutine
+        # Start the coroutines
         asyncio.create_task(on_message())
         asyncio.create_task(soniox_socket.keepalive_ping())
 

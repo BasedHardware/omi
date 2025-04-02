@@ -354,7 +354,7 @@ async def _listen(
             # SONIOX
             elif stt_service == STTService.soniox:
                 soniox_socket = await process_audio_soniox(
-                    stream_transcript, sample_rate, language, codec,
+                    stream_transcript, sample_rate, language,
                     uid if include_speech_profile else None
                 )
             # SPEECHMATICS
@@ -545,7 +545,7 @@ async def _listen(
                 conversation = _get_or_create_in_progress_conversation(segments)
                 current_conversation_id = conversation.id
                 conversations_db.update_conversation_segments(uid, conversation.id,
-                                                   [s.dict() for s in conversation.transcript_segments])
+                                                              [s.dict() for s in conversation.transcript_segments])
                 conversations_db.update_conversation_finished_at(uid, conversation.id, finished_at)
             except Exception as e:
                 print(f'Could not process transcript: error {e}', uid)
