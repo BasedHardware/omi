@@ -61,24 +61,6 @@ class TranscriptSegment {
     return jsonList.map((e) => TranscriptSegment.fromJson(e)).toList();
   }
 
-  static cleanSegments(List<TranscriptSegment> segments) {
-    var hallucinations = ['Thank you.', 'I don\'t know what to do,', 'I\'m', 'It was the worst case.', 'and,'];
-    // TODO: do this with any words that gets repeated twice
-    // - Replicate apparently has much more hallucinations
-    for (var i = 0; i < segments.length; i++) {
-      for (var hallucination in hallucinations) {
-        segments[i].text = segments[i]
-            .text
-            .replaceAll('$hallucination $hallucination $hallucination', '')
-            .replaceAll('$hallucination $hallucination', '')
-            .replaceAll('  ', ' ')
-            .trim();
-      }
-    }
-    // remove empty segments
-    segments.removeWhere((element) => element.text.isEmpty);
-  }
-
   static combineSegments(
     List<TranscriptSegment> segments,
     List<TranscriptSegment> newSegments, {
@@ -86,7 +68,6 @@ class TranscriptSegment {
     double toRemoveSeconds = 0,
   }) {
     if (newSegments.isEmpty) return;
-    // print('toAddSeconds: $toAddSeconds toRemoveSeconds: $toRemoveSeconds');
 
     for (var segment in newSegments) {
       segment.start -= toRemoveSeconds;
@@ -125,30 +106,7 @@ class TranscriptSegment {
       joinedSimilarSegments.removeAt(0);
     }
 
-    cleanSegments(segments);
-    cleanSegments(joinedSimilarSegments);
-
     segments.addAll(joinedSimilarSegments);
-
-    //     for i, segment in enumerate(segments):
-    //         segments[i].text = (
-    //             segments[i].text.strip()
-    //             .replace('  ', '')
-    //             .replace(' ,', ',')
-    //             .replace(' .', '.')
-    //             .replace(' ?', '?')
-    //         )
-
-    // Speechmatics specific issue with punctuation
-    for (var i = 0; i < segments.length; i++) {
-      segments[i].text = segments[i]
-          .text
-          .replaceAll('  ', '')
-          .replaceAll(' ,', ',')
-          .replaceAll(' .', '.')
-          .replaceAll(' ?', '?')
-          .trim();
-    }
   }
 
   static String segmentsAsString(
