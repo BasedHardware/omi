@@ -119,7 +119,7 @@ class SpeechProfileProvider extends ChangeNotifier
   Future<void> _initiateWebsocket({bool force = false}) async {
     _socket = await ServiceManager.instance()
         .socket
-        .speechProfile(codec: BleAudioCodec.opus, sampleRate: 16000, force: force);
+        .speechProfile(codec: BleAudioCodec.opus, sampleRate: 16000, language: "auto", force: force);
     if (_socket == null) {
       throw Exception("Can not create new speech profile socket");
     }
