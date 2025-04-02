@@ -244,8 +244,8 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                 ),
                               ),
                               SizedBox(height: 20),
-                              Text("Note: This only works in English",
-                                  style: TextStyle(color: Colors.white, fontSize: 16)),
+                              //Text("Note: This only works in English",
+                              //    style: TextStyle(color: Colors.white, fontSize: 16)),
                             ],
                           )
                         : provider.text.isEmpty

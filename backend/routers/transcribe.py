@@ -37,8 +37,6 @@ class STTService(str, Enum):
     soniox = "soniox"
     speechmatics = "speechmatics"
 
-    # auto = "auto"
-
     @staticmethod
     def get_model_name(value):
         if value == STTService.deepgram:
@@ -74,9 +72,12 @@ async def _listen(
         await websocket.close(code=1008, reason="Bad uid")
         return
 
-    # Not when comes from the phone, and only Friend's with 1.0.4
-    # if stt_service == STTService.soniox and language not in soniox_valid_languages:
-    stt_service = STTService.deepgram
+    # If language is 'auto', always use Soniox which supports auto language detection
+    # Otherwise, fallback to Deepgram if not
+    if language == 'auto':
+        stt_service = STTService.soniox
+    else:
+        stt_service = STTService.deepgram
 
     try:
         await websocket.accept()
@@ -313,6 +314,7 @@ async def _listen(
     # Process STT
     _send_message_event(MessageServiceStatusEvent(status="stt_initiating", status_text="STT Service Starting"))
     soniox_socket = None
+    soniox_socket2 = None
     speechmatics_socket = None
     deepgram_socket = None
     deepgram_socket2 = None
@@ -327,6 +329,7 @@ async def _listen(
     async def _process_stt():
         nonlocal websocket_close_code
         nonlocal soniox_socket
+        nonlocal soniox_socket2
         nonlocal speechmatics_socket
         nonlocal deepgram_socket
         nonlocal deepgram_socket2
@@ -334,7 +337,7 @@ async def _listen(
         try:
             file_path, speech_profile_duration = None, 0
             # Thougts: how bee does for recognizing other languages speech profile?
-            if language == 'en' and (codec == 'opus' or codec == 'pcm16') and include_speech_profile:
+            if (language == 'en' or language == 'auto') and (codec == 'opus' or codec == 'pcm16') and include_speech_profile:
                 file_path = get_profile_audio_if_exists(uid)
                 speech_profile_duration = AudioSegment.from_wav(file_path).duration_seconds + 5 if file_path else 0
 
@@ -350,12 +353,26 @@ async def _listen(
                         return deepgram_socket.send(data)
 
                     asyncio.create_task(send_initial_file_path(file_path, deepgram_socket_send))
+
             # SONIOX
             elif stt_service == STTService.soniox:
                 soniox_socket = await process_audio_soniox(
                     stream_transcript, sample_rate, language,
-                    uid if include_speech_profile else None
+                    uid if include_speech_profile else None,
+                    preseconds=speech_profile_duration
                 )
+
+                # Create a second socket for initial speech profile if needed
+                print("speech_profile_duration", speech_profile_duration)
+                print("file_path", file_path)
+                if speech_profile_duration and file_path:
+                    soniox_socket2 = await process_audio_soniox(
+                        stream_transcript, sample_rate, language,
+                        uid if include_speech_profile else None
+                    )
+
+                    asyncio.create_task(send_initial_file_path(file_path, soniox_socket.send))
+                    print('speech_profile soniox duration', speech_profile_duration, uid)
             # SPEECHMATICS
             elif stt_service == STTService.speechmatics:
                 speechmatics_socket = await process_audio_speechmatics(
@@ -544,7 +561,7 @@ async def _listen(
                 conversation = _get_or_create_in_progress_conversation(segments)
                 current_conversation_id = conversation.id
                 conversations_db.update_conversation_segments(uid, conversation.id,
-                                                   [s.dict() for s in conversation.transcript_segments])
+                                                              [s.dict() for s in conversation.transcript_segments])
                 conversations_db.update_conversation_finished_at(uid, conversation.id, finished_at)
             except Exception as e:
                 print(f'Could not process transcript: error {e}', uid)
@@ -571,7 +588,7 @@ async def _listen(
     #         offset += sample_size
     #     return False
 
-    async def receive_audio(dg_socket1, dg_socket2, soniox_socket, speechmatics_socket1):
+    async def receive_audio(dg_socket1, dg_socket2, soniox_socket, soniox_socket2, speechmatics_socket1):
         nonlocal websocket_active
         nonlocal websocket_close_code
 
@@ -590,18 +607,29 @@ async def _listen(
                 #     has_speech = _has_speech(data, sample_rate)
 
                 if has_speech:
+                    # Handle Soniox sockets
                     if soniox_socket is not None:
-                        await soniox_socket.send(data)
+                        elapsed_seconds = time.time() - timer_start
+                        if elapsed_seconds > speech_profile_duration or not soniox_socket2:
+                            await soniox_socket.send(data)
+                            if soniox_socket2:
+                                print('Killing soniox_socket2', uid)
+                                await soniox_socket2.close()
+                                soniox_socket2 = None
+                        else:
+                            await soniox_socket2.send(data)
 
+                    # Handle Speechmatics socket
                     if speechmatics_socket1 is not None:
                         await speechmatics_socket1.send(data)
 
+                    # Handle Deepgram sockets
                     if dg_socket1 is not None:
                         elapsed_seconds = time.time() - timer_start
                         if elapsed_seconds > speech_profile_duration or not dg_socket2:
                             dg_socket1.send(data)
                             if dg_socket2:
-                                print('Killing socket2', uid)
+                                print('Killing deepgram_socket2', uid)
                                 dg_socket2.finish()
                                 dg_socket2 = None
                         else:
@@ -624,6 +652,8 @@ async def _listen(
                 dg_socket2.finish()
             if soniox_socket:
                 await soniox_socket.close()
+            if soniox_socket2:
+                await soniox_socket2.close()
             if speechmatics_socket:
                 await speechmatics_socket.close()
 
@@ -631,7 +661,7 @@ async def _listen(
     #
     try:
         audio_process_task = asyncio.create_task(
-            receive_audio(deepgram_socket, deepgram_socket2, soniox_socket, speechmatics_socket)
+            receive_audio(deepgram_socket, deepgram_socket2, soniox_socket, soniox_socket2, speechmatics_socket)
         )
         stream_transcript_task = asyncio.create_task(stream_transcript_process())
 
