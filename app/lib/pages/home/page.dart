@@ -97,7 +97,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   PageController? _controller;
 
-
   void _initiateApps() {
     context.read<AppProvider>().getApps();
   }
@@ -195,9 +194,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
       // ForegroundUtil.requestPermissions();
 
-      await ForegroundUtil.initializeForegroundService();
-      ForegroundUtil.startForegroundTask();
-
       if (mounted) {
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
@@ -248,8 +244,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       }
     });
 
-    _listenToMessagesFromNotification();
-
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (mounted) {
         if (context.read<ConversationProvider>().conversations.isEmpty) {
@@ -265,7 +259,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     super.initState();
 
     // After init
-    if (!ExecutionGuard.isWeb) FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
+    if (!ExecutionGuard.isWeb) {
+      _initForegroundUtil();
+      _listenToMessagesFromNotification();
+      FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
+    }
   }
 
   void _listenToMessagesFromNotification() {
@@ -493,6 +491,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         });
       }
     }
+  }
+
+  void _initForegroundUtil() async {
+    await ForegroundUtil.initializeForegroundService();
+    ForegroundUtil.startForegroundTask();
   }
 
   @override
