@@ -181,7 +181,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                 ),
                               ),
                               SizedBox(height: 14),
-                              Text("Note: This only works in English", style: TextStyle(color: Colors.white)),
+                              //Text("Note: This only works in English", style: TextStyle(color: Colors.white)),
                             ],
                           )
                         : LayoutBuilder(
