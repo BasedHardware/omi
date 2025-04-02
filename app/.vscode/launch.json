@@ -10,6 +10,13 @@
       ],
       "program": "lib/main.dart",
       "flutterMode": "debug"
+    },
+    {
+      "name": "Flutter Web (dev) ",
+      "type": "dart",
+      "request": "launch",
+      "program": "lib/main.dart",
+      "flutterMode": "debug"
     }
   ]
 }

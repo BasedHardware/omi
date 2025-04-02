@@ -2,12 +2,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/main.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
-
+import 'package:omi/widgets/decider_widget.dart';
 class DeleteAccount extends StatefulWidget {
   const DeleteAccount({super.key});
 

@@ -26,6 +26,7 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
+import 'package:omi/utils/execution_gaurd.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
 
@@ -612,7 +613,7 @@ class CaptureProvider extends ChangeNotifier
 
     if (segments.isEmpty) {
       debugPrint('newSegments: ${newSegments.last}');
-      FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
+      if (!ExecutionGuard.isWeb) FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
       _loadInProgressConversation();
     }
     TranscriptSegment.combineSegments(segments, newSegments);

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -17,6 +16,7 @@ import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/audio/foreground.dart';
+import 'package:omi/utils/execution_gaurd.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class OnboardingProvider extends BaseProvider with MessageNotifierMixin implements IDeviceServiceSubsciption {
@@ -81,12 +81,12 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
   Future askForBluetoothPermissions() async {
     FlutterBluePlus.setLogLevel(LogLevel.info, color: true);
-    if (Platform.isIOS) {
+    if (ExecutionGuard.isIOS) {
       PermissionStatus bleStatus = await Permission.bluetooth.request();
       debugPrint('bleStatus: $bleStatus');
       updateBluetoothPermission(bleStatus.isGranted);
     } else {
-      if (Platform.isAndroid) {
+      if (ExecutionGuard.isAndroid) {
         if (FlutterBluePlus.adapterStateNow != BluetoothAdapterState.on) {
           try {
             await FlutterBluePlus.turnOn();
@@ -114,6 +114,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   Future askForBackgroundPermissions() async {
+    if (ExecutionGuard.isWeb) return;
     await FlutterForegroundTask.requestIgnoreBatteryOptimization();
     var isAllowed = await ForegroundUtil().isIgnoringBatteryOptimizations;
     updateBackgroundPermission(isAllowed);

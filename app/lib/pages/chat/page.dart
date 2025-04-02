@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
@@ -14,6 +12,7 @@ import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/animated_mini_banner.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
 import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
+import 'package:omi/pages/home/widgets/build_app_bar.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -22,19 +21,19 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/utils/execution_gaurd.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
+import 'package:responsive_framework/responsive_framework.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'widgets/message_action_menu.dart';
 
 class ChatPage extends StatefulWidget {
   final bool isPivotBottom;
+  final PageController? pageController;
 
-  const ChatPage({
-    super.key,
-    this.isPivotBottom = false,
-  });
+  const ChatPage({super.key, this.isPivotBottom = false, required this.pageController});
 
   @override
   State<ChatPage> createState() => ChatPageState();
@@ -104,11 +103,31 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       builder: (context, provider, connectivityProvider, child) {
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
-          appBar: provider.isLoadingMessages
-              ? AnimatedMiniBanner(
+          appBar: (widget.pageController != null && ResponsiveBreakpoints.of(context).largerOrEqualTo(DESKTOP))
+              ? buildAppBar(context, widget.pageController)
+              : (provider.isLoadingMessages)
+                  ? AnimatedMiniBanner(
+                      showAppBar: provider.isLoadingMessages,
+                      child: Container(
+                        width: MediaQuery.sizeOf(context).width,
+                        height: 10,
+                        color: Colors.green,
+                        child: const Center(
+                          child: Text(
+                            'Syncing messages with server...',
+                            style: TextStyle(color: Colors.white, fontSize: 14),
+                          ),
+                        ),
+                      ),
+                    )
+                  : null,
+          body: Stack(
+            children: [
+              if (ResponsiveBreakpoints.of(context).largerOrEqualTo(DESKTOP) && provider.isLoadingMessages)
+                AnimatedMiniBanner(
                   showAppBar: provider.isLoadingMessages,
                   child: Container(
-                    width: double.infinity,
+                    width: MediaQuery.sizeOf(context).width,
                     height: 10,
                     color: Colors.green,
                     child: const Center(
@@ -118,10 +137,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       ),
                     ),
                   ),
-                )
-              : null,
-          body: Stack(
-            children: [
+                ),
               Align(
                 alignment: Alignment.topCenter,
                 child: provider.isLoadingMessages && !provider.hasCachedMessages
@@ -177,10 +193,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
                                   double bottomPadding = chatIndex == 0
                                       ? provider.selectedFiles.isNotEmpty
-                                          ? (Platform.isAndroid
+                                          ? (ExecutionGuard.isAndroid
                                               ? MediaQuery.sizeOf(context).height * 0.32
                                               : MediaQuery.sizeOf(context).height * 0.3)
-                                          : (Platform.isAndroid
+                                          : (ExecutionGuard.isAndroid
                                               ? MediaQuery.sizeOf(context).height * 0.21
                                               : MediaQuery.sizeOf(context).height * 0.19)
                                       : 0;
@@ -332,7 +348,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                         margin: EdgeInsets.only(
                             left: 28,
                             right: 28,
-                            bottom: widget.isPivotBottom ? 40 : (home.isChatFieldFocused ? 40 : 120)),
+                            bottom: ResponsiveBreakpoints.of(context).largerOrEqualTo(DESKTOP) ?widget.isPivotBottom ? 10 : (home.isChatFieldFocused ? 10 : 30): widget.isPivotBottom ? 40 : (home.isChatFieldFocused ? 40 : 120)),
                         decoration: const BoxDecoration(
                           color: Colors.black,
                           borderRadius: BorderRadius.all(Radius.circular(16)),
@@ -362,15 +378,17 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                           scrollDirection: Axis.horizontal,
                                           shrinkWrap: true,
                                           itemBuilder: (ctx, idx) {
+                                            String fileName = provider.selectedFiles.keys.elementAt(idx);
                                             return Container(
                                               margin: const EdgeInsets.only(bottom: 10, top: 10, left: 10),
                                               height: MediaQuery.sizeOf(context).width * 0.2,
                                               width: MediaQuery.sizeOf(context).width * 0.2,
                                               decoration: BoxDecoration(
                                                 color: Colors.grey[800],
-                                                image: provider.selectedFileTypes[idx] == 'image'
+                                                image: provider.selectedFileTypes[idx] == 'image' &&
+                                                        provider.selectedFiles[fileName] != null
                                                     ? DecorationImage(
-                                                        image: FileImage(provider.selectedFiles[idx]),
+                                                        image: MemoryImage(provider.selectedFiles[fileName]!),
                                                         fit: BoxFit.cover,
                                                       )
                                                     : null,
@@ -387,7 +405,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                           ),
                                                         )
                                                       : Container(),
-                                                  if (provider.isFileUploading(provider.selectedFiles[idx].path))
+                                                  if (provider.isFileUploading(fileName))
                                                     Container(
                                                       color: Colors.black.withOpacity(0.5),
                                                       child: const Center(
