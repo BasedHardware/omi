@@ -194,7 +194,7 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
 soniox_valid_languages = ['en', 'auto']
 
 
-async def process_audio_soniox(stream_transcript, sample_rate: int, language: str, uid: str):
+async def process_audio_soniox(stream_transcript, sample_rate: int, language: str, uid: str, preseconds: int = 0):
     # Soniox supports diarization primarily for English
     api_key = os.getenv('SONIOX_API_KEY')
     if not api_key:
@@ -203,17 +203,21 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
     uri = 'wss://stt-rt.soniox.com/transcribe-websocket'
 
     # Speaker identification only works with English and 16kHz sample rate
-    has_speech_profile = create_user_speech_profile(uid) if uid and sample_rate == 16000 and language == 'en' else False
+    # New Soniox streaming is not supported speaker indentification
+    has_speech_profile = False  # create_user_speech_profile(uid) if uid and sample_rate == 16000 and language == 'en' else False
+
+    # Determine audio format based on sample rate
+    audio_format = "s16le" if sample_rate == 16000 else "mulaw"
 
     # Construct the initial request with all required and optional parameters
     request = {
         'api_key': api_key,
         'model': 'stt-rt-preview',
-        'audio_format': "s16le" if sample_rate == 16000 else "mulaw",
+        'audio_format': audio_format,
         'sample_rate': sample_rate,
         'num_channels': 1,
         'enable_speaker_tags': True,
-        'language_hints': ['vi', 'en'],
+        'language_hints': [language] if language != 'auto' else [],
     }
 
     # Add speaker identification if available
@@ -242,7 +246,7 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
             try:
                 async for message in soniox_socket:
                     response = json.loads(message)
-                    print(response)
+                    # print(response)
 
                     # Update last message time
                     current_time = time.time()
@@ -289,7 +293,7 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
 
                         # If we have either a speaker change or threshold exceeded, send the current segment and start a new one
                         punctuation_marks = ['.', '?', '!', ',', ';', ':', ' ']
-                        time_threshold_exceed = current_segment_time and current_time - current_segment_time > 1 and \
+                        time_threshold_exceed = current_segment_time and current_time - current_segment_time > 0.3 and \
                             (current_segment and current_segment['text'][-1] in punctuation_marks)
                         if (speaker_change_detected or time_threshold_exceed) and current_segment:
                             stream_transcript([current_segment])
@@ -303,6 +307,22 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
                         start_time = tokens[0]['start_ms'] / 1000.0
                         end_time = tokens[-1]['end_ms'] / 1000.0
 
+                        if preseconds > 0 and start_time < preseconds:
+                            # print('Skipping word', start_time)
+                            continue
+
+                        # Adjust timing if we have preseconds (for speech profile)
+                        if preseconds > 0:
+                            start_time -= preseconds
+                            end_time -= preseconds
+
+                        # Determine if this is the user based on speaker identification
+                        is_user = False
+                        if has_speech_profile and new_speaker_id == uid:
+                            is_user = True
+                        elif preseconds > 0 and new_speaker_id == "1":
+                            is_user = True
+
                         # Create a new segment or append to existing one
                         if current_segment is None:
                             current_segment = {
@@ -310,7 +330,7 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
                                 'start': start_time,
                                 'end': end_time,
                                 'text': content,
-                                'is_user': new_speaker_id == uid,
+                                'is_user': is_user,
                                 'person_id': None
                             }
                             current_segment_time = current_time
