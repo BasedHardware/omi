@@ -1,3 +1,9 @@
+# Facts are now memories, and the routes are now in the routes/memories.py file
+
+# MIGRATE: This file is deprecated and will be removed in the future.
+# Please refer to the routes/memories.py file for the latest routes.
+# This file is only used by the old versions of the app
+
 import threading
 from typing import List
 
