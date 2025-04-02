@@ -213,7 +213,7 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
         'sample_rate': sample_rate,
         'num_channels': 1,
         'enable_speaker_tags': True,
-        'language_hints': [language] if language != 'auto' else []
+        'language_hints': ['vi', 'en'],
     }
 
     # Add speaker identification if available
@@ -287,19 +287,21 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
                         elif new_speaker_id is None:
                             new_speaker_id = "1"  # Default speaker
 
+                        # If we have either a speaker change or threshold exceeded, send the current segment and start a new one
+                        punctuation_marks = ['.', '?', '!', ',', ';', ':', ' ']
+                        time_threshold_exceed = current_segment_time and current_time - current_segment_time > 1 and \
+                            (current_segment and current_segment['text'][-1] in punctuation_marks)
+                        if (speaker_change_detected or time_threshold_exceed) and current_segment:
+                            stream_transcript([current_segment])
+                            current_segment = None
+                            current_segment_time = None
+
                         # Combine all non-speaker tokens into text
-                        clean_text = ''.join(token_texts)
+                        content = ''.join(token_texts)
 
                         # Get timing information
                         start_time = tokens[0]['start_ms'] / 1000.0
                         end_time = tokens[-1]['end_ms'] / 1000.0
-
-                        # If we have a speaker change, send the current segment and start a new one
-                        if (speaker_change_detected or (current_segment_time and current_time - current_segment_time > 1)) \
-                                and current_segment is not None:
-                            stream_transcript([current_segment])
-                            current_segment = None
-                            current_segment_time = None
 
                         # Create a new segment or append to existing one
                         if current_segment is None:
@@ -307,14 +309,15 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
                                 'speaker': f"SPEAKER_0{new_speaker_id}",
                                 'start': start_time,
                                 'end': end_time,
-                                'text': clean_text,
+                                'text': content,
                                 'is_user': new_speaker_id == uid,
                                 'person_id': None
                             }
                             current_segment_time = current_time
                         else:
-                            current_segment['text'] += clean_text
+                            current_segment['text'] += content
                             current_segment['end'] = end_time
+
                     else:
                         print(f"Unexpected Soniox response format: {response}")
             except websockets.exceptions.ConnectionClosedOK:
