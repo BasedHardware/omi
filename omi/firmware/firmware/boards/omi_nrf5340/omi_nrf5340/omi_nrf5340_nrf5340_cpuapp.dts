@@ -31,7 +31,13 @@
 			zephyr,code = <INPUT_KEY_ENTER>;
 		};
 	};
-	
+
+	power_pin: power {
+		compatible = "nordic,gpio-pins";
+		gpios = <&gpio0 5 GPIO_ACTIVE_LOW>;
+		status = "okay";
+	};
+
 	motor_pin: motor {
 		compatible = "nordic,gpio-pins";
 		gpios = <&gpio0 25 GPIO_ACTIVE_HIGH>;
@@ -97,18 +103,21 @@
 		zephyr,bt-hci = &bt_hci_ipc0;
 		nordic,802154-spinel-ipc = &ipc0;
 		zephyr,ieee802154 = &ieee802154;
+		zephyr,wifi = &wlan0;
 	};
 	aliases {
 		dmic0 = &pdm0;
 		buttons = &buttons;
-		led0 = &led_red;
-		led1 = &led_green;
-		led2 = &led_blue;
 	};
 };
 
 &gpio0 {
 	status = "okay";
+	// power_hog {
+	// 	gpios = <5 GPIO_ACTIVE_LOW>;
+	// 	output-low;
+	// 	gpio-hog;
+	// };
 };
 
 &gpio1 {
@@ -204,5 +213,20 @@
 	};
 };
 
+&qspi {
+	pinctrl-0 = <&qspi_default>;
+	pinctrl-1 = <&qspi_sleep>;
+	pinctrl-names = "default", "sleep";
+	status = "okay";
+	nrf70: nrf7002@1 {
+		compatible = "nordic,nrf7002-qspi";
+		status = "okay";
+		reg = <1>;
+		qspi-frequency = <24000000>;
+		qspi-quad-mode;
+		#include "nrf70_common.dtsi"
+		#include "nrf70_common_5g.dtsi"
+	};
+};
 #include "omi_nrf5340-cpuapp_partitioning.dtsi"
 #include "omi_nrf5340-shared_sram.dtsi"
