@@ -62,7 +62,7 @@ def retrieve_in_progress_conversation(uid):
 
 
 async def _listen(
-        websocket: WebSocket, uid: str, language: str = 'auto', sample_rate: int = 8000, codec: str = 'pcm8',
+        websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = STTService.soniox
 ):
 
@@ -73,10 +73,11 @@ async def _listen(
         return
 
     # If language is 'auto', always use Soniox which supports auto language detection
-    # Otherwise, check if Soniox supports the language, fallback to Deepgram if not
+    # Otherwise, fallback to Deepgram if not
+    # if stt_service == STTService.soniox and language not in soniox_valid_languages:
     if language == 'auto':
         stt_service = STTService.soniox
-    elif stt_service == STTService.soniox and language not in soniox_valid_languages:
+    else:
         stt_service = STTService.deepgram
 
     try:
@@ -665,7 +666,7 @@ async def _listen(
 
 @router.websocket("/v3/listen")
 async def listen_handler(
-        websocket: WebSocket, uid: str = Depends(auth.get_current_user_uid), language: str = 'auto', sample_rate: int = 8000, codec: str = 'pcm8',
+        websocket: WebSocket, uid: str = Depends(auth.get_current_user_uid), language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = STTService.soniox
 ):
     await _listen(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, stt_service)
