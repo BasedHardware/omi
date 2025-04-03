@@ -38,9 +38,9 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void initState() {
-    if (!ExecutionGuard.isWeb) {
-      _notificationUtilInit();
-    }
+    NotificationUtil.initializeNotificationsEventListeners();
+    NotificationUtil.initializeIsolateReceivePort();
+
     WidgetsBinding.instance.addObserver(this);
     super.initState();
   }
@@ -169,9 +169,3 @@ class WithForegroundTaskConditionally extends StatelessWidget {
     }
   }
 }
-
-Future<void> _notificationUtilInit() async {
-  NotificationUtil.initializeNotificationsEventListeners();
-  NotificationUtil.initializeIsolateReceivePort();
-}
-

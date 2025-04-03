@@ -37,8 +37,9 @@ class NotificationService {
   final AwesomeNotifications _awesomeNotifications = AwesomeNotifications();
 
   Future<void> initialize() async {
+    if (ExecutionGuard.isWeb) return;
     // TODO: remove this when AwesomeNotifications added web support.
-    if (!ExecutionGuard.isWeb) await _initializeAwesomeNotifications();
+    await _initializeAwesomeNotifications();
     // Calling it here because the APNS token can sometimes arrive early or it might take some time (like a few seconds)
     // Reference: https://github.com/firebase/flutterfire/issues/12244#issuecomment-1969286794
     await _firebaseMessaging.getAPNSToken();
@@ -46,6 +47,7 @@ class NotificationService {
   }
 
   Future<void> _initializeAwesomeNotifications() async {
+    if (ExecutionGuard.isWeb) return;
     bool initialized = await _awesomeNotifications.initialize(
         // set the icon to null if you want to use the default app icon
         'resource://drawable/icon',
@@ -80,6 +82,7 @@ class NotificationService {
     NotificationSchedule? schedule,
     NotificationLayout layout = NotificationLayout.Default,
   }) {
+    if (ExecutionGuard.isWeb) return;
     _awesomeNotifications.createNotification(
       content: NotificationContent(
         id: id,
@@ -94,6 +97,7 @@ class NotificationService {
   }
 
   Future<bool> requestNotificationPermissions() async {
+    if (ExecutionGuard.isWeb) return false;
     bool isAllowed = await _awesomeNotifications.isNotificationAllowed();
     if (!isAllowed) {
       isAllowed = await _awesomeNotifications.requestPermissionToSendNotifications();
@@ -105,6 +109,7 @@ class NotificationService {
   // Whereever this method is awaited, it will cause the app to not move forwared in execution due to it being a method call.
   // This was also the culprit when we had the app freeze on splash screen.
   Future<void> register() async {
+    if (ExecutionGuard.isWeb) return;
     try {
       await platform.invokeMethod(
         'setNotificationOnKillService',
@@ -118,21 +123,24 @@ class NotificationService {
     }
   }
 
-  Future<String> getTimeZone() async {
+  Future<String?> getTimeZone() async {
+    if (ExecutionGuard.isWeb) return null;
     final String currentTimeZone = await FlutterTimezone.getLocalTimezone();
     return currentTimeZone;
   }
 
   Future<void> saveFcmToken(String? token) async {
+    if (ExecutionGuard.isWeb) return;
     if (token == null) return;
-    String timeZone = await getTimeZone();
+    String? timeZone = await getTimeZone();
     if (FirebaseAuth.instance.currentUser != null && token.isNotEmpty) {
       await Intercom.instance.sendTokenToIntercom(token);
-      await saveFcmTokenServer(token: token, timeZone: timeZone);
+      await saveFcmTokenServer(token: token, timeZone: timeZone!);
     }
   }
 
   void saveNotificationToken() async {
+    if (ExecutionGuard.isWeb) return;
     if (ExecutionGuard.isIOS) {
       await _firebaseMessaging.getAPNSToken();
     }
@@ -142,6 +150,7 @@ class NotificationService {
   }
 
   Future<bool> hasNotificationPermissions() async {
+    if (ExecutionGuard.isWeb) return false;
     return await _awesomeNotifications.isNotificationAllowed();
   }
 
@@ -151,6 +160,7 @@ class NotificationService {
     int notificationId = 1,
     Map<String, String?>? payload,
   }) async {
+    if (ExecutionGuard.isWeb) return;
     var allowed = await _awesomeNotifications.isNotificationAllowed();
     debugPrint('createNotification: $allowed');
     if (!allowed) return;
@@ -166,6 +176,8 @@ class NotificationService {
   }
 
   Future<void> listenForMessages() async {
+    if (ExecutionGuard.isWeb) return;
+
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       final data = message.data;
       final noti = message.notification;
@@ -205,6 +217,8 @@ class NotificationService {
       {required RemoteNotification noti,
       NotificationLayout layout = NotificationLayout.Default,
       Map<String, String?>? payload}) async {
+    if (ExecutionGuard.isWeb) return;
+
     final id = Random().nextInt(10000);
     showNotification(id: id, title: noti.title!, body: noti.body!, layout: layout, payload: payload);
   }
@@ -214,11 +228,14 @@ class NotificationUtil {
   static ReceivePort? receivePort;
 
   static Future<void> initializeNotificationsEventListeners() async {
+    if (ExecutionGuard.isWeb) return;
     // Only after at least the action method is set, the notification events are delivered
     AwesomeNotifications().setListeners(onActionReceivedMethod: NotificationUtil.onActionReceivedMethod);
   }
 
   static Future<void> initializeIsolateReceivePort() async {
+    if (ExecutionGuard.isWeb) return;
+
     receivePort = ReceivePort('Notification action port in main isolate');
     receivePort!.listen((serializedData) {
       final receivedAction = ReceivedAction().fromMap(serializedData);
@@ -232,6 +249,8 @@ class NotificationUtil {
   // / Use this method to detect when the user taps on a notification or action button
   @pragma("vm:entry-point")
   static Future<void> onActionReceivedMethod(ReceivedAction receivedAction) async {
+    if (ExecutionGuard.isWeb) return;
+
     if (receivePort != null) {
       await onActionReceivedMethodImpl(receivedAction);
     } else {
@@ -248,6 +267,8 @@ class NotificationUtil {
   }
 
   static Future<void> onActionReceivedMethodImpl(ReceivedAction receivedAction) async {
+    if (ExecutionGuard.isWeb) return;
+
     if (receivedAction.payload == null || receivedAction.payload!.isEmpty) {
       return;
     }
@@ -255,6 +276,8 @@ class NotificationUtil {
   }
 
   static void _handleAppLinkOrDeepLink(Map<String, dynamic> payload) async {
+    if (ExecutionGuard.isWeb) return;
+
     // Always ensure that all plugins was initialized
     // TODO: for what?
     WidgetsFlutterBinding.ensureInitialized();
