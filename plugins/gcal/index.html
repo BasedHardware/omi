@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OMI Google Calendar Integration</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            margin: 0;
+            padding: 20px;
+            max-width: 600px;
+            margin: 0 auto;
+            color: #333;
+        }
+        h1 {
+            font-size: 1.8rem;
+            color: #2c3e50;
+            margin-bottom: 1rem;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        button {
+            background-color: #4285F4; /* Google blue */
+            color: white;
+            border: none;
+            padding: 15px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #3367D6; /* Darker Google blue */
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .status-container {
+            margin-top: 20px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 5px;
+        }
+        .success {
+            background-color: #dff0d8;
+            color: #3c763d;
+        }
+        .error {
+            background-color: #f2dede;
+            color: #a94442;
+        }
+        .loading {
+            background-color: #d9edf7;
+            color: #31708f;
+        }
+        .user-info {
+            background-color: #f0f8ff;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border: 1px solid #bedcf9;
+        }
+        .user-info .label {
+            font-weight: bold;
+            color: #0056b3;
+        }
+        .warning-box {
+            background-color: #fff3cd;
+            color: #856404;
+            border-left: 4px solid #ffeeba;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 0 4px 4px 0;
+            display: none;
+        }
+        .logo {
+            width: 100px;
+            height: auto;
+            margin-bottom: 20px;
+        }
+        .steps {
+            margin-top: 20px;
+            padding-left: 20px;
+        }
+        .steps li {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>OMI Google Calendar Integration</h1>
+    
+    <div class="user-info" id="user-info">
+        <span><span class="label">User ID:</span> <span id="current-uid">Not set</span></span>
+        <button id="change-uid-btn" style="padding: 5px 10px; font-size: 0.8rem;">Change</button>
+    </div>
+    
+    <div class="warning-box" id="no-uid-warning">
+        <strong>No User ID detected!</strong> Please add ?uid=YOUR_USER_ID to the URL to use this application.
+    </div>
+    
+    <div class="container">
+        <p>Connect your Google Calendar to OMI and import your events as facts. This allows OMI to be aware of your schedule and provide context-aware assistance.</p>
+        
+        <h2>How it works:</h2>
+        <ol class="steps">
+            <li>Authorize OMI to access your Google Calendar</li>
+            <li>Select which calendar you want to import</li>
+            <li>Choose how far back to import events</li>
+            <li>Your calendar events will be imported as facts into OMI</li>
+        </ol>
+        
+        <button id="connect-btn">Connect Google Calendar</button>
+    </div>
+    
+    <div class="status-container" id="status-container"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const connectBtn = document.getElementById('connect-btn');
+            const statusContainer = document.getElementById('status-container');
+            const currentUidElement = document.getElementById('current-uid');
+            const noUidWarning = document.getElementById('no-uid-warning');
+            const changeUidBtn = document.getElementById('change-uid-btn');
+            
+            // Function to get URL parameters
+            function getUrlParameter(name) {
+                name = name.replace(/[\[]/, '\\[').replace(/[\]]/, '\\]');
+                const regex = new RegExp('[\\?&]' + name + '=([^&#]*)');
+                const results = regex.exec(location.search);
+                return results === null ? '' : decodeURIComponent(results[1].replace(/\+/g, ' '));
+            }
+            
+            // Get uid from URL
+            let userId = getUrlParameter('uid');
+            
+            // Update the UI to show current UID or warning
+            if (userId) {
+                currentUidElement.textContent = userId;
+                noUidWarning.style.display = 'none';
+                connectBtn.disabled = false;
+            } else {
+                currentUidElement.textContent = 'Not set';
+                noUidWarning.style.display = 'block';
+                connectBtn.disabled = true;
+            }
+            
+            // Add event listener for changing UID
+            changeUidBtn.addEventListener('click', function() {
+                const newUid = prompt('Enter your User ID:', userId || '');
+                if (newUid) {
+                    // Update URL with new UID
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('uid', newUid);
+                    window.location.href = url.toString();
+                }
+            });
+            
+            // Add event listener for connect button
+            connectBtn.addEventListener('click', function() {
+                if (!userId) {
+                    addStatus('Please set your User ID first', 'error');
+                    return;
+                }
+                
+                // Redirect to auth endpoint
+                window.location.href = `/auth?uid=${userId}`;
+            });
+            
+            // Function to add status message
+            function addStatus(message, type = 'loading') {
+                const statusElement = document.createElement('div');
+                statusElement.className = `status ${type}`;
+                statusElement.textContent = message;
+                
+                // Add to status container
+                statusContainer.appendChild(statusElement);
+                
+                // Scroll to status
+                statusElement.scrollIntoView({ behavior: 'smooth' });
+                
+                return statusElement;
+            }
+        });
+    </script>
+</body>
+</html>
