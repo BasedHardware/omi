@@ -16,8 +16,116 @@ class HomeProvider extends ChangeNotifier {
   bool hasSpeakerProfile = true;
   bool isLoading = false;
   String recordingLanguage = SharedPreferencesUtil().recordingsLanguage;
+  String userPrimaryLanguage = SharedPreferencesUtil().userPrimaryLanguage;
+  bool hasSetPrimaryLanguage = SharedPreferencesUtil().hasSetPrimaryLanguage;
 
   final Map<String, String> availableLanguages = {
+    'Afrikaans': 'af',
+    'Albanian': 'sq',
+    'Amharic': 'am',
+    'Arabic': 'ar',
+    'Armenian': 'hy',
+    'Azerbaijani': 'az',
+    'Basque': 'eu',
+    'Belarusian': 'be',
+    'Bengali': 'bn',
+    'Bosnian': 'bs',
+    'Bulgarian': 'bg',
+    'Burmese': 'my',
+    'Catalan': 'ca',
+    'Cebuano': 'ceb',
+    'Chinese (Mandarin, Simplified)': 'zh',
+    'Chinese (Mandarin, Traditional)': 'zh-TW',
+    'Chinese (Cantonese, Traditional)': 'zh-HK',
+    'Croatian': 'hr',
+    'Czech': 'cs',
+    'Danish': 'da',
+    'Dutch': 'nl',
+    'English': 'en',
+    'Esperanto': 'eo',
+    'Estonian': 'et',
+    'Filipino': 'fil',
+    'Finnish': 'fi',
+    'French': 'fr',
+    'Galician': 'gl',
+    'Georgian': 'ka',
+    'German': 'de',
+    'Greek': 'el',
+    'Gujarati': 'gu',
+    'Haitian Creole': 'ht',
+    'Hausa': 'ha',
+    'Hawaiian': 'haw',
+    'Hebrew': 'he',
+    'Hindi': 'hi',
+    'Hmong': 'hmn',
+    'Hungarian': 'hu',
+    'Icelandic': 'is',
+    'Igbo': 'ig',
+    'Indonesian': 'id',
+    'Irish': 'ga',
+    'Italian': 'it',
+    'Japanese': 'ja',
+    'Javanese': 'jv',
+    'Kannada': 'kn',
+    'Kazakh': 'kk',
+    'Khmer': 'km',
+    'Korean': 'ko',
+    'Kurdish': 'ku',
+    'Kyrgyz': 'ky',
+    'Lao': 'lo',
+    'Latin': 'la',
+    'Latvian': 'lv',
+    'Lithuanian': 'lt',
+    'Luxembourgish': 'lb',
+    'Macedonian': 'mk',
+    'Malagasy': 'mg',
+    'Malay': 'ms',
+    'Malayalam': 'ml',
+    'Maltese': 'mt',
+    'Maori': 'mi',
+    'Marathi': 'mr',
+    'Mongolian': 'mn',
+    'Nepali': 'ne',
+    'Norwegian': 'no',
+    'Nyanja': 'ny',
+    'Pashto': 'ps',
+    'Persian': 'fa',
+    'Polish': 'pl',
+    'Portuguese': 'pt',
+    'Punjabi': 'pa',
+    'Romanian': 'ro',
+    'Russian': 'ru',
+    'Samoan': 'sm',
+    'Scots Gaelic': 'gd',
+    'Serbian': 'sr',
+    'Sesotho': 'st',
+    'Shona': 'sn',
+    'Sindhi': 'sd',
+    'Sinhala': 'si',
+    'Slovak': 'sk',
+    'Slovenian': 'sl',
+    'Somali': 'so',
+    'Spanish': 'es',
+    'Sundanese': 'su',
+    'Swahili': 'sw',
+    'Swedish': 'sv',
+    'Tajik': 'tg',
+    'Tamil': 'ta',
+    'Telugu': 'te',
+    'Thai': 'th',
+    'Turkish': 'tr',
+    'Ukrainian': 'uk',
+    'Urdu': 'ur',
+    'Uzbek': 'uz',
+    'Vietnamese': 'vi',
+    'Welsh': 'cy',
+    'Xhosa': 'xh',
+    'Yiddish': 'yi',
+    'Yoruba': 'yo',
+    'Zulu': 'zu',
+  };
+
+  final Map<String, String> availableRecordingLanguages = {
     'Bulgarian': 'bg',
     'Catalan': 'ca',
     'Chinese (Mandarin, Simplified)': 'zh',
@@ -93,8 +201,55 @@ class HomeProvider extends ChangeNotifier {
     SharedPreferencesUtil().hasSpeakerProfile = res;
     debugPrint('_setupHasSpeakerProfile: ${SharedPreferencesUtil().hasSpeakerProfile}');
     AnalyticsManager().setUserAttribute('Speaker Profile', SharedPreferencesUtil().hasSpeakerProfile);
+    
+    // Check user primary language
+    await setupUserPrimaryLanguage();
+    
     setIsLoading(false);
     notifyListeners();
+  }
+  
+  Future<void> setupUserPrimaryLanguage() async {
+    try {
+      final language = await getUserPrimaryLanguage();
+      if (language == null) {
+        // User hasn't set a primary language yet
+        userPrimaryLanguage = '';
+        hasSetPrimaryLanguage = false;
+      } else {
+        userPrimaryLanguage = language;
+        hasSetPrimaryLanguage = true;
+        SharedPreferencesUtil().userPrimaryLanguage = language;
+        SharedPreferencesUtil().hasSetPrimaryLanguage = true;
+        AnalyticsManager().setUserAttribute('Primary Language', language);
+      }
+      debugPrint('setupUserPrimaryLanguage: $language, hasSet: $hasSetPrimaryLanguage');
+    } catch (e) {
+      debugPrint('Error setting up user primary language: $e');
+      userPrimaryLanguage = '';
+      hasSetPrimaryLanguage = false;
+    }
+    notifyListeners();
+    return;
+  }
+  
+  Future<bool> updateUserPrimaryLanguage(String languageCode) async {
+    try {
+      final success = await setUserPrimaryLanguage(languageCode);
+      if (success) {
+        userPrimaryLanguage = languageCode;
+        hasSetPrimaryLanguage = true;
+        SharedPreferencesUtil().userPrimaryLanguage = languageCode;
+        SharedPreferencesUtil().hasSetPrimaryLanguage = true;
+        AnalyticsManager().setUserAttribute('Primary Language', languageCode);
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint('Error setting user primary language: $e');
+      return false;
+    }
   }
 
   void setRecordingLanguage(String language) {
@@ -104,7 +259,7 @@ class HomeProvider extends ChangeNotifier {
   }
 
   String getLanguageName(String code) {
-    return availableLanguages.entries.firstWhere((element) => element.value == code).key;
+    return availableRecordingLanguages.entries.firstWhere((element) => element.value == code).key;
   }
 
   Future setUserPeople() async {

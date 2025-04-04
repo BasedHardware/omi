@@ -30,7 +30,7 @@ class OnboardingWrapper extends StatefulWidget {
 
 class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProviderStateMixin {
   TabController? _controller;
-  bool hasSpeechProfile = SharedPreferencesUtil().hasSpeakerProfile;
+  bool get hasSpeechProfile => SharedPreferencesUtil().hasSpeakerProfile;
 
   @override
   void initState() {

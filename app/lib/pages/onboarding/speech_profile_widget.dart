@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/pages/speech_profile/percentage_bar_progress.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
@@ -23,7 +25,12 @@ class SpeechProfileWidget extends StatefulWidget {
 class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerProviderStateMixin {
   @override
   void initState() {
-    WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {});
+    WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
+      // Check if user has set primary language
+      if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
+        await LanguageSelectionDialog.show(context);
+      }
+    });
     SharedPreferencesUtil().onboardingCompleted = true;
     super.initState();
   }
@@ -249,6 +256,11 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                   ),
                                   child: TextButton(
                                     onPressed: () async {
+                                      // Check if user has set primary language, if not, show dialog
+                                      if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
+                                        await LanguageSelectionDialog.show(context);
+                                      }
+                                      
                                       await stopDeviceRecording();
                                       await provider.initialise(finalizedCallback: restartDeviceRecording);
                                       provider.forceCompletionTimer =
