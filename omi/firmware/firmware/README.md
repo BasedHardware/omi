@@ -63,3 +63,32 @@ The storage will automatically activate whenever there is no Bluetooth connectio
 will begin filling with opus encoded data. Whenever you connect to the app, the contents of the storage will begin streaming to the app. When it is finished, it will try to delete the file on the device.
 
 The format of each packet is different to the streaming audio packets.
+
+## LED Status Indicators
+
+The device uses RGB LEDs to indicate its current status:
+
+- **Blue solid**: Device is connected to a phone via Bluetooth
+- **Red solid**: Device is recording but not connected to a phone
+- **Green blinking** (while charging): Battery is charging
+- **Green solid** (while charging): Battery is fully charged (100%)
+- **Red blinking**: Battery is low (below 20%)
+- **Red-Green-Blue sequence**: Boot sequence, device is starting up
+
+### Checking Battery Level
+
+The firmware supports checking battery level by double-tapping the device button. This will trigger an LED sequence that indicates the current battery percentage:
+
+- **Battery below 20%**: Fast red blinking for 3 seconds
+- **Battery 21-50%**: Red LED blinks (1-3 times depending on level)
+- **Battery 51-80%**: Yellow LED blinks (1-3 times depending on level)
+- **Battery 81-99%**: Green LED blinks (1-2 times depending on level)
+- **Battery 100%**: Solid green for 3 seconds
+
+The number of blinks within each color range indicates a more precise battery level. For example, in the red range (21-50%), 1 blink means 21-30%, 2 blinks mean 31-40%, and 3 blinks mean 41-50%.
+
+### Button Functions
+
+- **Single tap**: Enter sleep mode / wake from sleep
+- **Double tap**: Show battery level
+- **Long press**: Reserved for future functions
