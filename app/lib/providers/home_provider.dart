@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/speech_profile.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/main.dart';
+import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 
 class HomeProvider extends ChangeNotifier {
@@ -200,14 +202,11 @@ class HomeProvider extends ChangeNotifier {
     SharedPreferencesUtil().hasSpeakerProfile = res;
     debugPrint('_setupHasSpeakerProfile: ${SharedPreferencesUtil().hasSpeakerProfile}');
     AnalyticsManager().setUserAttribute('Speaker Profile', SharedPreferencesUtil().hasSpeakerProfile);
-    
-    // Check user primary language
-    await setupUserPrimaryLanguage();
-    
+
     setIsLoading(false);
     notifyListeners();
   }
-  
+
   Future<void> setupUserPrimaryLanguage() async {
     try {
       final language = await getUserPrimaryLanguage();
@@ -215,6 +214,13 @@ class HomeProvider extends ChangeNotifier {
         // User hasn't set a primary language yet
         userPrimaryLanguage = '';
         hasSetPrimaryLanguage = false;
+
+        // Show language dialog after a short delay to ensure UI is ready
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (MyApp.navigatorKey.currentContext != null) {
+            showLanguageDialogIfNeeded(MyApp.navigatorKey.currentContext!);
+          }
+        });
       } else {
         userPrimaryLanguage = language;
         hasSetPrimaryLanguage = true;
@@ -231,7 +237,13 @@ class HomeProvider extends ChangeNotifier {
     notifyListeners();
     return;
   }
-  
+
+  void showLanguageDialogIfNeeded(BuildContext context) {
+    if (!hasSetPrimaryLanguage) {
+      LanguageSelectionDialog.show(context, isRequired: true);
+    }
+  }
+
   Future<bool> updateUserPrimaryLanguage(String languageCode) async {
     try {
       final success = await setUserPrimaryLanguage(languageCode);
@@ -250,7 +262,6 @@ class HomeProvider extends ChangeNotifier {
       return false;
     }
   }
-
 
   String getLanguageName(String code) {
     return availableRecordingLanguages.entries.firstWhere((element) => element.value == code).key;
