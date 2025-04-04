@@ -226,3 +226,23 @@ def set_chat_message_analytics(
 ):
     set_chat_message_rating_score(uid, message_id, value)
     return {'status': 'ok'}
+
+
+# ***************************************
+# ************* Language ****************
+# ***************************************
+
+@router.get('/v1/users/language', tags=['v1'])
+def get_user_language(uid: str = Depends(auth.get_current_user_uid)):
+    """Get the user's preferred language."""
+    language = get_user_language_preference(uid)
+    if not language:
+        return {'language': None}
+    return {'language': language}
+
+
+@router.patch('/v1/users/language', tags=['v1'])
+def set_user_language(lang: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Set the user's preferred language (e.g., 'en', 'vi', etc.)."""
+    set_user_language_preference(uid, lang)
+    return {'status': 'ok'}

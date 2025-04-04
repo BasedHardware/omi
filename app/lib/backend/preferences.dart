@@ -197,6 +197,15 @@ class SharedPreferencesUtil {
 
   set showDiscardedMemories(bool value) => saveBool('showDiscardedMemories', value);
 
+  // User primary language preferences
+  String get userPrimaryLanguage => getString('userPrimaryLanguage') ?? '';
+
+  set userPrimaryLanguage(String value) => saveString('userPrimaryLanguage', value);
+  
+  bool get hasSetPrimaryLanguage => getBool('hasSetPrimaryLanguage') ?? false;
+
+  set hasSetPrimaryLanguage(bool value) => saveBool('hasSetPrimaryLanguage', value);
+
   int get currentStorageBytes => getInt('currentStorageBytes') ?? 0;
 
   set currentStorageBytes(int value) => saveInt('currentStorageBytes', value);
