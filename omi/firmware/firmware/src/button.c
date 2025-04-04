@@ -634,6 +634,23 @@ void display_battery_level(void)
         }
     }
 
+    // Constant timing regardless of number of blinks
+    // Total display time will be 3000ms for all patterns
+    const int TOTAL_DISPLAY_TIME_MS = 2000;
+
+    // Calculate timing for each blink based on number of blinks
+    // Each cycle includes an on-time and an off-time
+    int cycle_time_ms = TOTAL_DISPLAY_TIME_MS / num_blinks;
+    int on_time_ms = cycle_time_ms / 2;
+    int off_time_ms = cycle_time_ms / 2;
+
+    // Ensure minimum timing to keep blinks visible
+    if (on_time_ms < 200) on_time_ms = 200;
+    if (off_time_ms < 200) off_time_ms = 200;
+
+    LOG_INF("Blinking %d times with timing: on=%dms, off=%dms",
+            num_blinks, on_time_ms, off_time_ms);
+
     // Perform the blinking sequence
     for (int i = 0; i < num_blinks; i++) {
         // Turn on appropriate LEDs
@@ -641,14 +658,16 @@ void display_battery_level(void)
         if (use_green) set_led_green(true);
 
         // Hold the LED on
-        k_msleep(600);
+        k_msleep(on_time_ms);
 
         // Turn off all LEDs
         set_led_red(false);
         set_led_green(false);
 
-        // Pause between blinks
-        k_msleep(400);
+        // Skip the final off time if this is the last blink
+        if (i < num_blinks - 1) {
+            k_msleep(off_time_ms);
+        }
     }
 
     // Final pause after the sequence is complete

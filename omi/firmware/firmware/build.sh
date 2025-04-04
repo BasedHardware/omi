@@ -1,3 +1,4 @@
+cd ./build/build_xiao_ble_sense_devkitv2-adafruit
 set -e
 west build
-cp build/zephyr/zephyr.uf2 /Volumes/XIAO-SENSE/
+cp ./zephyr/zephyr.uf2 /Volumes/XIAO-SENSE/

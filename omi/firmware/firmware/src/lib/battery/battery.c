@@ -183,6 +183,14 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
 
 int battery_get_percentage(uint8_t *battery_percentage, uint16_t battery_millivolt)
 {
+    // Fix for issue #1885: Battery never shows 100% even when fully charged
+    // If voltage is high enough (≥ 96% charge), report as 100%
+    if (battery_millivolt >= 4074)
+    {
+        *battery_percentage = 100;
+        LOG_DBG("100 %% (adjusted for max charge)");
+        return 0;
+    }
 
     // Ensure voltage is within bounds
     if (battery_millivolt > battery_states[0].voltage)
