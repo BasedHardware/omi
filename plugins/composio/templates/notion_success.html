@@ -26,6 +26,13 @@
             color: #666;
             margin-bottom: 30px;
         }
+        .info-box {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
         .home-button {
             display: inline-block;
             padding: 12px 24px;
@@ -43,11 +50,16 @@
 </head>
 <body>
     <div class="success-icon">✓</div>
-    <div class="message">Success!</div>
+    <div class="message">Successfully Connected!</div>
     <div class="description">
-        Your Notion pages have been successfully connected and extracted to OMI.
-        The memories are now being processed and will be available in your OMI account.
+        Your Notion workspace has been successfully connected to OMI.
     </div>
-    <a href="/" class="home-button">Back to Home</a>
+    <div class="info-box">
+        <div style="margin-bottom: 15px;">
+            <span>Import in Progress</span>
+        </div>
+        <p>You can safely close this window - the import will continue running.</p>
+    </div>
+    <a href="/" class="home-button">Import More Content</a>
 </body>
 </html> 
