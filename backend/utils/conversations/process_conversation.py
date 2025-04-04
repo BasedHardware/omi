@@ -24,7 +24,7 @@ from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps, update_personas_async, sync_update_persona_prompt
 from utils.llm import obtain_emotional_message, retrieve_metadata_fields_from_transcript, \
     summarize_open_glass, get_transcript_structure, generate_embedding, \
-    get_plugin_result, should_discard_conversation, summarize_experience_text, new_memories_extractor, \
+    get_app_result, should_discard_conversation, summarize_experience_text, new_memories_extractor, \
     trends_extractor, get_email_structure, get_post_structure, get_message_structure, \
     retrieve_metadata_from_email, retrieve_metadata_from_post, retrieve_metadata_from_message, \
     retrieve_metadata_from_text, \
@@ -116,12 +116,12 @@ def _get_conversation_obj(uid: str, structured: Structured,
 def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = False):
     apps: List[App] = get_available_apps(uid)
     filtered_apps = [app for app in apps if app.works_with_memories() and app.enabled]
-    conversation.plugins_results = []
+    conversation.apps_results = []
     threads = []
 
     def execute_app(app):
-        if result := get_plugin_result(conversation.get_transcript(False), app).strip():
-            conversation.plugins_results.append(PluginResult(plugin_id=app.id, content=result))
+        if result := get_app_result(conversation.get_transcript(False), app).strip():
+            conversation.apps_results.append(AppResult(app_id=app.id, content=result))
             if not is_reprocess:
                 record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, conversation_id=conversation.id)
 
