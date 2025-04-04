@@ -242,7 +242,10 @@ def get_user_language(uid: str = Depends(auth.get_current_user_uid)):
 
 
 @router.patch('/v1/users/language', tags=['v1'])
-def set_user_language(lang: str, uid: str = Depends(auth.get_current_user_uid)):
+def set_user_language(data: dict, uid: str = Depends(auth.get_current_user_uid)):
     """Set the user's preferred language (e.g., 'en', 'vi', etc.)."""
-    set_user_language_preference(uid, lang)
+    language = data.get('language')
+    if not language:
+        raise HTTPException(status_code=400, detail="Language is required")
+    set_user_language_preference(uid, language)
     return {'status': 'ok'}
