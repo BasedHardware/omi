@@ -172,7 +172,7 @@ class CaptureProvider extends ChangeNotifier
     // Connect to the transcript socket
     String language = SharedPreferencesUtil().hasSetPrimaryLanguage 
         ? SharedPreferencesUtil().userPrimaryLanguage 
-        : SharedPreferencesUtil().recordingsLanguage;
+        : "auto";
     _socket = await ServiceManager.instance()
         .socket
         .conversation(codec: codec, sampleRate: sampleRate, language: language, force: force);
@@ -379,7 +379,7 @@ class CaptureProvider extends ChangeNotifier
     var codec = SharedPreferencesUtil().deviceCodec;
     var language = SharedPreferencesUtil().hasSetPrimaryLanguage 
         ? SharedPreferencesUtil().userPrimaryLanguage 
-        : SharedPreferencesUtil().recordingsLanguage;
+        : "auto";
     if (language != _socket?.language || codec != _socket?.codec || _socket?.state != SocketServiceState.connected) {
       await _initiateWebsocket(audioCodec: codec, force: true);
     }
