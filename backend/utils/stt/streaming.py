@@ -147,9 +147,7 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
     # 'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=8000&language=$recordingsLanguage&model=nova-2-general&no_delay=true&endpointing=100&interim_results=false&smart_format=true&diarize=true'
 
     try:
-        if language == "auto":
-            print(f"Using beta Deepgram API (api.beta.deepgram.com) for language: {language}")
-            
+        if language == "auto":            
             # Use nova-3 model and multi language for auto language
             model_name = "nova-3"
             # Set language to "multi" for auto language
