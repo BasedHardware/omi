@@ -157,9 +157,6 @@ class SharedPreferencesUtil {
 
   set showFirmwareUpdateDialog(bool value) => saveBool('v2/showFirmwareUpdateDialog', value);
 
-  String get recordingsLanguage => getString('recordingsLanguage2') ?? 'auto';
-
-  set recordingsLanguage(String value) => saveString('recordingsLanguage2', value);
 
   String get transcriptionModel => getString('transcriptionModel3') ?? 'soniox';
 

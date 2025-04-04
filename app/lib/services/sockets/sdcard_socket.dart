@@ -74,7 +74,7 @@ class SdCardSocketService {
     String? btConnectedTime,
   }) async {
     debugPrint('Websocket Opening sd card');
-    final recordingsLanguage = SharedPreferencesUtil().recordingsLanguage;
+    final recordingsLanguage = SharedPreferencesUtil().userPrimaryLanguage;
     // var params = '?language=$recordingsLanguage&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
     //     '&include_speech_profile=$includeSpeechProfile&new_memory_watch=$newMemoryWatch&stt_service=${SharedPreferencesUtil().transcriptionModel}';
     var params = '?uid=${SharedPreferencesUtil().uid}&bt_connected_time=$btConnectedTime';

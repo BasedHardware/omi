@@ -15,7 +15,6 @@ class HomeProvider extends ChangeNotifier {
   bool isConvoSearchFieldFocused = false;
   bool hasSpeakerProfile = true;
   bool isLoading = false;
-  String recordingLanguage = SharedPreferencesUtil().recordingsLanguage;
   String userPrimaryLanguage = SharedPreferencesUtil().userPrimaryLanguage;
   bool hasSetPrimaryLanguage = SharedPreferencesUtil().hasSetPrimaryLanguage;
 
@@ -252,11 +251,6 @@ class HomeProvider extends ChangeNotifier {
     }
   }
 
-  void setRecordingLanguage(String language) {
-    recordingLanguage = language;
-    SharedPreferencesUtil().recordingsLanguage = language;
-    notifyListeners();
-  }
 
   String getLanguageName(String code) {
     return availableRecordingLanguages.entries.firstWhere((element) => element.value == code).key;

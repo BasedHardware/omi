@@ -34,7 +34,7 @@ class MixpanelManager {
     setUserProperty('Apps Integrations Enabled Count', _preferences.enabledAppsIntegrationsCount);
     setUserProperty('Speaker Profile', _preferences.hasSpeakerProfile);
     setUserProperty('Calendar Enabled', _preferences.calendarEnabled);
-    setUserProperty('Recordings Language', _preferences.recordingsLanguage);
+    setUserProperty('Primary Language', _preferences.userPrimaryLanguage);
     setUserProperty('Authorized Storing Recordings', _preferences.permissionStoreRecordingsEnabled);
   }
 
@@ -193,7 +193,7 @@ class MixpanelManager {
     var properties = getConversationEventProperties(conversation);
     properties['memory_result'] = conversation.discarded ? 'discarded' : 'saved';
     properties['action_items_count'] = conversation.structured.actionItems.length;
-    properties['transcript_language'] = _preferences.recordingsLanguage;
+    properties['transcript_language'] = _preferences.userPrimaryLanguage;
     track('Memory Created', properties: properties);
   }
 
