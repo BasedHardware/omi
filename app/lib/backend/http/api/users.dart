@@ -307,10 +307,10 @@ Future<String?> getUserPrimaryLanguage() async {
 
 Future<bool> setUserPrimaryLanguage(String languageCode) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/language?lang=$languageCode',
+    url: '${Env.apiBaseUrl}v1/users/language',
     headers: {},
     method: 'PATCH',
-    body: '',
+    body: jsonEncode({'language': languageCode}),
   );
   if (response == null) return false;
   debugPrint('setUserPrimaryLanguage response: ${response.body}');
