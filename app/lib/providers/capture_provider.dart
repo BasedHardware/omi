@@ -132,6 +132,7 @@ class CaptureProvider extends ChangeNotifier
   Future<void> onRecordProfileSettingChanged() async {
     await _resetState();
   }
+  
 
   Future<void> changeAudioRecordProfile({
     required BleAudioCodec audioCodec,
@@ -151,18 +152,6 @@ class CaptureProvider extends ChangeNotifier
     bool force = false,
   }) async {
     debugPrint('initiateWebsocket in capture_provider');
-
-    // Check if user has set primary language
-    if (!SharedPreferencesUtil().hasSetPrimaryLanguage) {
-      debugPrint('User has not set primary language, showing dialog');
-      _transcriptServiceReady = false;
-      notifyListeners();
-      
-      // We'll let the UI handle showing the language selection dialog
-      // The UI should call _initiateWebsocket again after language is set
-      notifyInfo('LANGUAGE_SELECTION_NEEDED');
-      return;
-    }
 
     BleAudioCodec codec = audioCodec ?? SharedPreferencesUtil().deviceCodec;
     sampleRate ??= (codec == BleAudioCodec.opus ? 16000 : 8000);
@@ -440,17 +429,6 @@ class CaptureProvider extends ChangeNotifier
   }
 
   streamRecording() async {
-    // Check if user has set primary language
-    if (!SharedPreferencesUtil().hasSetPrimaryLanguage) {
-      debugPrint('User has not set primary language, showing dialog');
-      _transcriptServiceReady = false;
-      notifyListeners();
-      
-      // We'll notify listeners that language selection is needed
-      notifyInfo('LANGUAGE_SELECTION_NEEDED');
-      return;
-    }
-    
     await Permission.microphone.request();
 
     // prepare
@@ -479,17 +457,6 @@ class CaptureProvider extends ChangeNotifier
   Future streamDeviceRecording({BtDevice? device}) async {
     debugPrint("streamDeviceRecording $device");
     if (device != null) _updateRecordingDevice(device);
-    
-    // Check if user has set primary language
-    if (!SharedPreferencesUtil().hasSetPrimaryLanguage) {
-      debugPrint('User has not set primary language, showing dialog');
-      _transcriptServiceReady = false;
-      notifyListeners();
-      
-      // We'll notify listeners that language selection is needed
-      notifyInfo('LANGUAGE_SELECTION_NEEDED');
-      return;
-    }
     
     await _resetState();
   }
@@ -937,18 +904,9 @@ class CaptureProvider extends ChangeNotifier
     );
   }
   
-  /// Checks if the user has set a primary language and returns true if they have
-  bool checkPrimaryLanguageSet() {
-    return SharedPreferencesUtil().hasSetPrimaryLanguage;
-  }
-  
   /// Retry connecting to the transcription service after language is set
   Future<void> retryAfterLanguageSet() async {
-    if (checkPrimaryLanguageSet()) {
-      await _resetState();
-    } else {
-      notifyInfo('LANGUAGE_SELECTION_NEEDED');
-    }
+    await _resetState();
   }
 
   Future<bool> _writeToStorage(String deviceId, int numFile, int command, int offset) async {
