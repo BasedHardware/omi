@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:provider/provider.dart';
@@ -146,6 +147,8 @@ class LanguageSelectionDialog {
                               : () async {
                                   final success = await homeProvider.updateUserPrimaryLanguage(selectedLanguage!);
                                   if (success) {
+                                    // Notify CaptureProvider to update recording settings
+                                    Provider.of<CaptureProvider>(context, listen: false).onRecordProfileSettingChanged();
                                     Navigator.of(context).pop();
                                     AppSnackbar.showSnackbarSuccess('Language set to $selectedLanguageName');
                                   } else {
@@ -459,6 +462,8 @@ class LanguageSelectionDialog {
                         : () async {
                             final success = await homeProvider.updateUserPrimaryLanguage(selectedLanguage!);
                             if (success) {
+                              // Notify CaptureProvider to update recording settings
+                              Provider.of<CaptureProvider>(context, listen: false).onRecordProfileSettingChanged();
                               Navigator.of(context).pop();
                               AppSnackbar.showSnackbarSuccess('Language set to $selectedLanguageName');
                             } else {
