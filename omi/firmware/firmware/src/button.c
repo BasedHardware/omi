@@ -13,6 +13,7 @@
 #include "led.h"
 #include "mic.h"
 #include "sdcard.h"
+#include "lib/battery/battery.h"
 LOG_MODULE_REGISTER(button, CONFIG_LOG_DEFAULT_LEVEL);
 
 bool is_off = false;
@@ -31,7 +32,7 @@ static struct bt_gatt_attr button_service_attr[] = {
 
 static struct bt_gatt_service button_service = BT_GATT_SERVICE(button_service_attr);
 
-static void button_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) 
+static void button_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value)
 {
     if (value == BT_GATT_CCC_NOTIFY)
     {
@@ -60,11 +61,11 @@ void button_pressed_callback(const struct device *dev, struct gpio_callback *cb,
 {
     int temp = gpio_pin_get_raw(dev,d5_pin_input.pin);
     LOG_PRINTK("button_pressed_callback %d\n", temp);
-    if (temp) 
+    if (temp)
     {
         was_pressed = false;
     }
-    else 
+    else
     {
         was_pressed = true;
     }
@@ -90,62 +91,62 @@ static uint32_t inc_count_0 = 0;
 static int final_button_state[2] = {0,0};
 const static int threshold = 10;
 
-static void reset_count() 
+static void reset_count()
 {
     inc_count_0 = 0;
     inc_count_1 = 0;
 }
-static inline void notify_press() 
+static inline void notify_press()
 {
     final_button_state[0] = BUTTON_PRESS;
     LOG_INF("Button pressed");
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL)
-    { 
+    {
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
     }
 }
 
-static inline void notify_unpress() 
+static inline void notify_unpress()
 {
-    final_button_state[0] = BUTTON_RELEASE; 
+    final_button_state[0] = BUTTON_RELEASE;
     LOG_INF("Button released");
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL)
-    { 
+    {
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
     }
 }
 
-static inline void notify_tap() 
+static inline void notify_tap()
 {
     final_button_state[0] = SINGLE_TAP;
     LOG_INF("Button single tap");
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL)
-    { 
+    {
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
     }
 }
 
-static inline void notify_double_tap() 
+static inline void notify_double_tap()
 {
     final_button_state[0] = DOUBLE_TAP; //button press
     LOG_INF("Button double tap");
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL)
-    { 
+    {
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
     }
 }
 
-static inline void notify_long_tap() 
+static inline void notify_long_tap()
 {
     final_button_state[0] = LONG_TAP; //button press
     LOG_INF("Button long tap");
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL)
-    { 
+    {
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
     }
 }
@@ -173,7 +174,7 @@ static bool btn_is_pressed;
 
 static u_int8_t btn_last_event = BUTTON_EVENT_NONE;
 
-void check_button_level(struct k_work *work_item) 
+void check_button_level(struct k_work *work_item)
 {
     current_time = current_time + 1;
 
@@ -199,7 +200,7 @@ void check_button_level(struct k_work *work_item)
                 btn_last_tap_time = current_time;
             }
         }
-    } 
+    }
 
     // Check for single tap
     if (btn_state == BUTTON_RELEASED && !btn_is_pressed) {
@@ -236,6 +237,9 @@ void check_button_level(struct k_work *work_item)
         LOG_PRINTK("double tap detected\n");
         btn_last_event = event;
         notify_double_tap();
+
+        // Display battery level when double-tapped
+        display_battery_level();
     }
 
     // Long press, one time event
@@ -271,17 +275,17 @@ void check_button_level(struct k_work *work_item)
 // @deprecated
 //#define LONG_PRESS_INTERVAL 25
 //#define SINGLE_PRESS_INTERVAL 2
-//void check_button_level_2(struct k_work *work_item) 
+//void check_button_level_2(struct k_work *work_item)
 //{
 //     //insert the current button state here
 //    int state_ = was_pressed ? 1 : 0;
-//    if (current_button_state == IDLE) 
+//    if (current_button_state == IDLE)
 //    {
-//        if (state_ == 0) 
+//        if (state_ == 0)
 //        {
 //            //Do nothing!
 //        }
-//        else if (state_ == 1) 
+//        else if (state_ == 1)
 //        {
 //            //Also do nothing, but transition to the next state
 //            notify_press();
@@ -295,29 +299,29 @@ void check_button_level(struct k_work *work_item)
 //        }
 //    }
 //
-//    else if (current_button_state == ONE_PRESS) 
+//    else if (current_button_state == ONE_PRESS)
 //    {
-//        if (state_ == 0) 
+//        if (state_ == 0)
 //        {
-//            
-//            if(inc_count_0 == 0) 
+//
+//            if(inc_count_0 == 0)
 //            {
 //                notify_unpress();
 //            }
 //            inc_count_0++; //button is unpressed
-//            if (inc_count_0 > SINGLE_PRESS_INTERVAL) 
+//            if (inc_count_0 > SINGLE_PRESS_INTERVAL)
 //            {
-//                //If button is not pressed for a little while....... 
+//                //If button is not pressed for a little while.......
 //                //transition to Two_press. button could be a single or double tap
 //                current_button_state = TWO_PRESS;
-//                reset_count();          
+//                reset_count();
 //            }
 //        }
-//        if (state_ == 1) 
+//        if (state_ == 1)
 //        {
 //            inc_count_1++; //button is pressed
 //
-//            if (inc_count_1 > LONG_PRESS_INTERVAL) 
+//            if (inc_count_1 > LONG_PRESS_INTERVAL)
 //            {
 //                //If button is pressed for a long time.......
 //                notify_long_tap();
@@ -346,15 +350,15 @@ void check_button_level(struct k_work *work_item)
 //
 //    }
 //
-//    else if (current_button_state == TWO_PRESS) 
+//    else if (current_button_state == TWO_PRESS)
 //    {
-//        if (state_ == 0) 
+//        if (state_ == 0)
 //        {
-//            if (inc_count_1 > 0) 
+//            if (inc_count_1 > 0)
 //            { // if button has been pressed......
 //                notify_unpress();
 //                notify_double_tap();
-//                
+//
 //                //Fire the notify and enter a grace period
 //                current_button_state = GRACE;
 //                reset_count();
@@ -380,19 +384,19 @@ void check_button_level(struct k_work *work_item)
 //                current_button_state = GRACE;
 //                reset_count();
 //            }
-//            else 
+//            else
 //            {
 //                inc_count_0++; //not pressed
 //            }
 //        }
-//        else if (state_ == 1 ) 
+//        else if (state_ == 1 )
 //        {
-//            if (inc_count_1 == 0) 
+//            if (inc_count_1 == 0)
 //            {
 //                notify_press();
 //                inc_count_1++;
 //            }
-//            if (inc_count_1 > threshold) 
+//            if (inc_count_1 > threshold)
 //            {
 //                notify_long_tap();
 //                //play_haptic_milli(10);
@@ -417,22 +421,22 @@ void check_button_level(struct k_work *work_item)
 //        }
 //    }
 //
-//    else if (current_button_state == GRACE) 
+//    else if (current_button_state == GRACE)
 //    {
-//        if (state_ == 0) 
+//        if (state_ == 0)
 //        {
-//            if (inc_count_0 == 0 && (inc_count_1 > 0)) 
+//            if (inc_count_0 == 0 && (inc_count_1 > 0))
 //            {
 //                notify_unpress();
 //            }
 //            inc_count_0++;
-//            if (inc_count_0 > 1) 
+//            if (inc_count_0 > 1)
 //            {
 //                current_button_state = IDLE;
 //                reset_count();
 //            }
 //        }
-//        else if (state_ == 1) 
+//        else if (state_ == 1)
 //        {
 //            inc_count_1++;
 //        }
@@ -441,38 +445,38 @@ void check_button_level(struct k_work *work_item)
 //}
 
 
-static ssize_t button_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset) 
+static ssize_t button_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
 {
     LOG_INF("button_data_read_characteristic");
     LOG_PRINTK("was_pressed: %d\n", final_button_state[0]);
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &final_button_state, sizeof(final_button_state));
 }
 
-int button_init() 
+int button_init()
 {
-    if (gpio_is_ready_dt(&d4_pin)) 
+    if (gpio_is_ready_dt(&d4_pin))
     {
 	    LOG_INF("D4 Pin ready");
 	}
-    else 
+    else
     {
 		LOG_ERR("Error setting up D4 Pin");
         return -1;
 	}
-	if (gpio_pin_configure_dt(&d4_pin, GPIO_OUTPUT_ACTIVE) < 0) 
+	if (gpio_pin_configure_dt(&d4_pin, GPIO_OUTPUT_ACTIVE) < 0)
     {
 		LOG_ERR("Error setting up D4 Pin Voltage");
         return -1;
 	}
-	else 
+	else
     {
 		LOG_INF("D4 ready to transmit voltage");
 	}
-	if (gpio_is_ready_dt(&d5_pin_input)) 
+	if (gpio_is_ready_dt(&d5_pin_input))
     {
 		LOG_INF("D5 Pin ready");
 	}
-	else 
+	else
     {
 		LOG_ERR("D5 Pin not ready");
         return -1;
@@ -480,28 +484,28 @@ int button_init()
 
 	int err2 = gpio_pin_configure_dt(&d5_pin_input,GPIO_INPUT);
 
-	if (err2 != 0) 
+	if (err2 != 0)
     {
 		LOG_ERR("Error setting up D5 Pin");
 		return -1;
 	}
-	else 
+	else
     {
 		LOG_INF("D5 ready");
 	}
 // GPIO_INT_LEVEL_INACTIVE
 	err2 =  gpio_pin_interrupt_configure_dt(&d5_pin_input,GPIO_INT_EDGE_BOTH);
 
-	if (err2 != 0) 
+	if (err2 != 0)
     {
 		LOG_ERR("D5 unable to detect button presses");
 		return -1;
 	}
-	else 
+	else
     {
 		LOG_INF("D5 ready to detect button presses");
 	}
-  
+
 
     gpio_init_callback(&button_cb_data, button_pressed_callback, BIT(d5_pin_input.pin));
 	gpio_add_callback(d5_pin_input.port, &button_cb_data);
@@ -509,17 +513,17 @@ int button_init()
     return 0;
 }
 
-void activate_button_work() 
+void activate_button_work()
 {
      k_work_schedule(&button_work, K_MSEC(BUTTON_CHECK_INTERVAL));
 }
 
-void register_button_service() 
+void register_button_service()
 {
     bt_gatt_service_register(&button_service);
 }
 
-FSM_STATE_T get_current_button_state() 
+FSM_STATE_T get_current_button_state()
 {
     return current_button_state;
 }
@@ -539,11 +543,114 @@ void turnoff_all()
     gpio_remove_callback(d5_pin_input.port, &button_cb_data);
     gpio_pin_interrupt_configure_dt(&d5_pin_input,GPIO_INT_LEVEL_INACTIVE);
     //maybe save something here to indicate success. next time the button is pressed we should know about it
-    NRF_USBD->INTENCLR= 0xFFFFFFFF;    
+    NRF_USBD->INTENCLR= 0xFFFFFFFF;
     NRF_POWER->SYSTEMOFF=1;
 }
 
 void force_button_state(FSM_STATE_T state)
 {
     current_button_state = state;
+}
+
+// Display battery level using LED battery bar simulation
+void display_battery_level(void)
+{
+    uint16_t battery_millivolt;
+    uint8_t battery_percentage;
+
+    if (battery_get_millivolt(&battery_millivolt) != 0 ||
+        battery_get_percentage(&battery_percentage, battery_millivolt) != 0) {
+        // Error getting battery level, blink red quickly 3 times
+        for (int i = 0; i < 3; i++) {
+            set_led_red(true);
+            k_msleep(100);
+            set_led_red(false);
+            k_msleep(100);
+        }
+        return;
+    }
+
+    // Clear all LEDs and pause before starting
+    set_led_red(false);
+    set_led_green(false);
+    set_led_blue(false);
+    k_msleep(500);
+
+    LOG_INF("Battery level: %d%%", battery_percentage);
+
+    // Handle special cases first
+    if (battery_percentage < 20) {
+        // Less than 20% - fast red blinking (emergency indicator)
+        for (int i = 0; i < 6; i++) {
+            set_led_red(true);
+            k_msleep(150);
+            set_led_red(false);
+            k_msleep(150);
+        }
+        return;
+    }
+
+    if (battery_percentage == 100) {
+        // 100% - solid green for 3 seconds
+        set_led_green(true);
+        k_msleep(3000);
+        set_led_green(false);
+        return;
+    }
+
+    // Normal case - gradual progression
+    int num_blinks = 0;
+    bool use_red = false;
+    bool use_green = false;
+
+    if (battery_percentage < 51) {
+        // Red region (21-50%)
+        use_red = true;
+        if (battery_percentage < 31) {
+            num_blinks = 1;        // 21-30%
+        } else if (battery_percentage < 41) {
+            num_blinks = 2;        // 31-40%
+        } else {
+            num_blinks = 3;        // 41-50%
+        }
+    } else if (battery_percentage < 81) {
+        // Yellow region (51-80%)
+        use_red = true;
+        use_green = true;
+        if (battery_percentage < 61) {
+            num_blinks = 1;        // 51-60%
+        } else if (battery_percentage < 71) {
+            num_blinks = 2;        // 61-70%
+        } else {
+            num_blinks = 3;        // 71-80%
+        }
+    } else {
+        // Green region (81-99%)
+        use_green = true;
+        if (battery_percentage < 91) {
+            num_blinks = 1;        // 81-90%
+        } else {
+            num_blinks = 2;        // 91-99%
+        }
+    }
+
+    // Perform the blinking sequence
+    for (int i = 0; i < num_blinks; i++) {
+        // Turn on appropriate LEDs
+        if (use_red) set_led_red(true);
+        if (use_green) set_led_green(true);
+
+        // Hold the LED on
+        k_msleep(600);
+
+        // Turn off all LEDs
+        set_led_red(false);
+        set_led_green(false);
+
+        // Pause between blinks
+        k_msleep(400);
+    }
+
+    // Final pause after the sequence is complete
+    k_msleep(500);
 }
