@@ -61,7 +61,7 @@ async def _listen(
     language = 'multi' if language == 'auto' else language
 
     # Determine the best STT service
-    stt_service, language_for_stt = get_stt_service_for_language(language)
+    stt_service, language_for_stt, stt_model = get_stt_service_for_language(language)
     if not stt_service or not language_for_stt:
         await websocket.close(code=1008, reason=f"The language is not supported, {language}")
         return
@@ -331,10 +331,9 @@ async def _listen(
             # DEEPGRAM
             if stt_service == STTService.deepgram:
                 deepgram_socket = await process_audio_dg(
-                    stream_transcript, language_for_stt, sample_rate, 1, preseconds=speech_profile_duration
-                )
+                    stream_transcript, language_for_stt, sample_rate, 1, preseconds=speech_profile_duration, model=stt_model,)
                 if speech_profile_duration:
-                    deepgram_socket2 = await process_audio_dg(stream_transcript, language_for_stt, sample_rate, 1)
+                    deepgram_socket2 = await process_audio_dg(stream_transcript, language_for_stt, sample_rate, 1, model=stt_model)
 
                     async def deepgram_socket_send(data):
                         return deepgram_socket.send(data)
