@@ -86,15 +86,23 @@ async def send_initial_file(data: List[List[int]], transcript_socket):
 is_dg_self_hosted = os.getenv('DEEPGRAM_SELF_HOSTED_ENABLED', '').lower() == 'true'
 deepgram_options = DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"})
 
+# Create a beta-specific client
+deepgram_beta_options = DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"})
+
 if is_dg_self_hosted:
     dg_self_hosted_url = os.getenv('DEEPGRAM_SELF_HOSTED_URL')
     if not dg_self_hosted_url:
         raise ValueError("DEEPGRAM_SELF_HOSTED_URL must be set when DEEPGRAM_SELF_HOSTED_ENABLED is true")
     # Override only the URL while keeping all other options
     deepgram_options.url = dg_self_hosted_url
+    deepgram_beta_options.url = dg_self_hosted_url
+
     print(f"Using Deepgram self-hosted at: {dg_self_hosted_url}")
+else:
+    deepgram_beta_options.url = "https://api.beta.deepgram.com"
 
 deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), deepgram_options)
+deepgram_beta = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), deepgram_beta_options)
 
 
 async def process_audio_dg(
@@ -174,54 +182,110 @@ def connect_to_deepgram_with_backoff(on_message, on_error, language: str, sample
 
 def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, channels: int):
     # 'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=8000&language=$recordingsLanguage&model=nova-2-general&no_delay=true&endpointing=100&interim_results=false&smart_format=true&diarize=true'
+
     try:
-        dg_connection = deepgram.listen.websocket.v("1")
-        dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
-        dg_connection.on(LiveTranscriptionEvents.Error, on_error)
+        if language == "auto":            
+            # Use nova-3 model and multi language for auto language
+            model_name = "nova-3"
+            # Set language to "multi" for auto language
+            language = "multi"
+            print("Using nova-3 model with multi-language support")
 
-        def on_open(self, open, **kwargs):
-            print("Connection Open")
+            dg_beta_connection = deepgram_beta.listen.websocket.v("1")
+            dg_beta_connection.on(LiveTranscriptionEvents.Transcript, on_message)
+            dg_beta_connection.on(LiveTranscriptionEvents.Error, on_error)
 
-        def on_metadata(self, metadata, **kwargs):
-            print(f"Metadata: {metadata}")
+            def on_open(self, open, **kwargs):
+                print("Connection Open")
 
-        def on_speech_started(self, speech_started, **kwargs):
-            print("Speech Started")
+            def on_metadata(self, metadata, **kwargs):
+                print(f"Metadata: {metadata}")
 
-        def on_utterance_end(self, utterance_end, **kwargs):
-            pass
+            def on_speech_started(self, speech_started, **kwargs):
+                print("Speech Started")
 
-        def on_close(self, close, **kwargs):
-            print("Connection Closed")
+            def on_utterance_end(self, utterance_end, **kwargs):
+                pass
 
-        def on_unhandled(self, unhandled, **kwargs):
-            print(f"Unhandled Websocket Message: {unhandled}")
+            def on_close(self, close, **kwargs):
+                print("Connection Closed")
 
-        dg_connection.on(LiveTranscriptionEvents.Open, on_open)
-        dg_connection.on(LiveTranscriptionEvents.Metadata, on_metadata)
-        dg_connection.on(LiveTranscriptionEvents.SpeechStarted, on_speech_started)
-        dg_connection.on(LiveTranscriptionEvents.UtteranceEnd, on_utterance_end)
-        dg_connection.on(LiveTranscriptionEvents.Close, on_close)
-        dg_connection.on(LiveTranscriptionEvents.Unhandled, on_unhandled)
-        options = LiveOptions(
-            punctuate=True,
-            no_delay=True,
-            endpointing=100,
-            language=language,
-            interim_results=False,
-            smart_format=True,
-            profanity_filter=False,
-            diarize=True,
-            filler_words=False,
-            channels=channels,
-            multichannel=channels > 1,
-            model='nova-2-general',
-            sample_rate=sample_rate,
-            encoding='linear16'
-        )
-        result = dg_connection.start(options)
-        print('Deepgram connection started:', result)
-        return dg_connection
+            def on_unhandled(self, unhandled, **kwargs):
+                print(f"Unhandled Websocket Message: {unhandled}")
+
+            dg_beta_connection.on(LiveTranscriptionEvents.Open, on_open)
+            dg_beta_connection.on(LiveTranscriptionEvents.Metadata, on_metadata)
+            dg_beta_connection.on(LiveTranscriptionEvents.SpeechStarted, on_speech_started)
+            dg_beta_connection.on(LiveTranscriptionEvents.UtteranceEnd, on_utterance_end)
+            dg_beta_connection.on(LiveTranscriptionEvents.Close, on_close)
+            dg_beta_connection.on(LiveTranscriptionEvents.Unhandled, on_unhandled)
+            options = LiveOptions(
+                punctuate=True,
+                no_delay=True,
+                endpointing=100,
+                language=language,
+                interim_results=False,
+                smart_format=True,
+                profanity_filter=False,
+                diarize=True,
+                filler_words=False,
+                channels=channels,
+                multichannel=channels > 1,
+                model=model_name,
+                sample_rate=sample_rate,
+                encoding='linear16'
+            )
+            result = dg_beta_connection.start(options)
+            print('Deepgram connection started:', result)
+            return dg_beta_connection
+        else:
+            dg_connection = deepgram.listen.websocket.v("1")
+            dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
+            dg_connection.on(LiveTranscriptionEvents.Error, on_error)
+
+            def on_open(self, open, **kwargs):
+                print("Connection Open")
+
+            def on_metadata(self, metadata, **kwargs):
+                print(f"Metadata: {metadata}")
+
+            def on_speech_started(self, speech_started, **kwargs):
+                print("Speech Started")
+
+            def on_utterance_end(self, utterance_end, **kwargs):
+                pass
+
+            def on_close(self, close, **kwargs):
+                print("Connection Closed")
+
+            def on_unhandled(self, unhandled, **kwargs):
+                print(f"Unhandled Websocket Message: {unhandled}")
+
+            dg_connection.on(LiveTranscriptionEvents.Open, on_open)
+            dg_connection.on(LiveTranscriptionEvents.Metadata, on_metadata)
+            dg_connection.on(LiveTranscriptionEvents.SpeechStarted, on_speech_started)
+            dg_connection.on(LiveTranscriptionEvents.UtteranceEnd, on_utterance_end)
+            dg_connection.on(LiveTranscriptionEvents.Close, on_close)
+            dg_connection.on(LiveTranscriptionEvents.Unhandled, on_unhandled)
+            options = LiveOptions(
+                punctuate=True,
+                no_delay=True,
+                endpointing=100,
+                language=language,
+                interim_results=False,
+                smart_format=True,
+                profanity_filter=False,
+                diarize=True,
+                filler_words=False,
+                channels=channels,
+                multichannel=channels > 1,
+                model='nova-2-general',
+                sample_rate=sample_rate,
+                encoding='linear16'
+            )
+            result = dg_connection.start(options)
+            print('Deepgram connection started:', result)
+            return dg_connection
     except websockets.exceptions.WebSocketException as e:
         raise Exception(f'Could not open socket: WebSocketException {e}')
     except Exception as e:
