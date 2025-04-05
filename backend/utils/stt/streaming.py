@@ -35,9 +35,10 @@ class STTService(str, Enum):
 soniox_supported_languages = ['multi','en', 'af', 'sq', 'ar', 'az', 'eu', 'be', 'bn', 'bs', 'bg', 'ca', 'zh', 'hr', 'cs', 'da', 'nl', 'et', 'fi', 'fr', 'gl', 'de', 'el', 'gu', 'he', 'hi', 'hu', 'id', 'it', 'ja', 'kn', 'kk', 'ko', 'lv', 'lt', 'mk', 'ms', 'ml', 'mr', 'no', 'fa', 'pl', 'pt', 'pa', 'ro', 'ru', 'sr', 'sk', 'sl', 'es', 'sw', 'sv', 'tl', 'ta', 'te', 'th', 'tr', 'uk', 'ur', 'vi', 'cy']
 soniox_multi_languages = soniox_supported_languages
 
-# Languages supported by Deepgram, nova-2-general model
+# Languages supported by Deepgram, nova-2/nova-3 model
 deepgram_supported_languages = {'multi','bg','ca', 'zh', 'zh-CN', 'zh-Hans', 'zh-TW', 'zh-Hant', 'zh-HK', 'cs', 'da', 'da-DK', 'nl', 'en', 'en-US', 'en-AU', 'en-GB', 'en-NZ', 'en-IN', 'et', 'fi', 'nl-BE', 'fr', 'fr-CA', 'de', 'de-CH', 'el' 'hi', 'hu', 'id', 'it', 'ja', 'ko', 'ko-KR', 'lv', 'lt', 'ms', 'no', 'pl', 'pt', 'pt-BR', 'pt-PT', 'ro', 'ru', 'sk', 'es', 'es-419', 'sv', 'sv-SE', 'th', 'th-TH', 'tr', 'uk', 'vi'}
-deepgram_multi_languages = ['en', 'es']
+deepgram_nova2_multi_languages = ['en', 'es']
+deepgram_multi_languages = ["en", "en-US", "en-AU", "en-GB", "en-NZ", "en-IN", "es", "es-419", "fr", "fr-CA", "de", "hi", "ru", "pt", "pt-BR", "pt-PT", "ja", "it", "nl", "nl-BE"]
 
 def get_stt_service_for_language(language: str):
     # Deepgram's 'multi'
@@ -48,8 +49,8 @@ def get_stt_service_for_language(language: str):
     if language in deepgram_supported_languages:
         return STTService.deepgram, language
 
-    # Default to Soniox
-    return None, None
+    # Fallback to Deepgram en
+    return STTService.deepgram, 'en'
 
 
 async def send_initial_file_path(file_path: str, transcript_socket_async_send):
