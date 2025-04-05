@@ -16,6 +16,11 @@ export default function App() {
   const [enableTranscription, setEnableTranscription] = useState<boolean>(false);
   const [deepgramApiKey, setDeepgramApiKey] = useState<string>('');
   const [transcription, setTranscription] = useState<string>('');
+  
+  // Backend WebSocket state
+  const [backendWsConnected, setBackendWsConnected] = useState<boolean>(false);
+  const backendWsRef = useRef<WebSocket | null>(null);
+  const [backendWsUrl, setBackendWsUrl] = useState<string>('wss://ae01-2406-7400-63-307b-fdf3-6c45-bda1-2b68.ngrok-free.app/ws');
 
   // Transcription processing state
   const websocketRef = useRef<WebSocket | null>(null);
@@ -213,6 +218,57 @@ export default function App() {
     }
   };
 
+  /**
+   * Connect to the backend WebSocket server
+   */
+  const connectToBackendWs = () => {
+    if (backendWsRef.current && backendWsRef.current.readyState === WebSocket.OPEN) {
+      console.log('Already connected to backend WebSocket');
+      return;
+    }
+
+    try {
+      console.log(`Connecting to backend WebSocket at ${backendWsUrl}`);
+      const ws = new WebSocket(backendWsUrl);
+
+      ws.onopen = () => {
+        console.log('Backend WebSocket connection established');
+        setBackendWsConnected(true);
+      };
+
+      ws.onmessage = (event) => {
+        console.log('Received message from backend:', event.data);
+      };
+
+      ws.onerror = (error) => {
+        console.error('Backend WebSocket error:', error);
+        setBackendWsConnected(false);
+      };
+
+      ws.onclose = () => {
+        console.log('Backend WebSocket connection closed');
+        setBackendWsConnected(false);
+      };
+
+      backendWsRef.current = ws;
+    } catch (error) {
+      console.error('Error connecting to backend WebSocket:', error);
+      setBackendWsConnected(false);
+    }
+  };
+
+  /**
+   * Disconnect from the backend WebSocket server
+   */
+  const disconnectFromBackendWs = () => {
+    if (backendWsRef.current) {
+      backendWsRef.current.close();
+      backendWsRef.current = null;
+      setBackendWsConnected(false);
+    }
+  };
+
+  // Modified startAudioListener to also send to our backend
   const startAudioListener = async () => {
     try {
       if (!connected || !omiConnection.isConnected()) {
@@ -241,6 +297,12 @@ export default function App() {
         // If transcription is enabled and active, add to buffer for WebSocket
         if (bytes.length > 0 && isTranscribing.current) {
           audioBufferRef.current.push(new Uint8Array(bytes));
+        }
+
+        // Send to our backend WebSocket if connected
+        if (bytes.length > 0 && backendWsConnected && backendWsRef.current && 
+            backendWsRef.current.readyState === WebSocket.OPEN) {
+          backendWsRef.current.send(new Uint8Array(bytes));
         }
       });
 
@@ -534,6 +596,30 @@ export default function App() {
             </TouchableOpacity>
           </View>
         )}
+
+        {/* Backend WebSocket section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Backend WebSocket</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Backend WebSocket URL"
+            value={backendWsUrl}
+            onChangeText={setBackendWsUrl}
+          />
+          <View style={styles.row}>
+            <TouchableOpacity
+              style={[styles.button, backendWsConnected ? styles.buttonDanger : styles.button]}
+              onPress={backendWsConnected ? disconnectFromBackendWs : connectToBackendWs}
+            >
+              <Text style={styles.buttonText}>
+                {backendWsConnected ? 'Disconnect from Backend' : 'Connect to Backend'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.status}>
+            Status: {backendWsConnected ? 'Connected' : 'Disconnected'}
+          </Text>
+        </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Bluetooth Connection</Text>
@@ -1028,5 +1114,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
     lineHeight: 20,
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 5,
+    padding: 10,
+    marginBottom: 10,
+    width: '100%',
+  },
+  status: {
+    marginTop: 5,
+    fontSize: 14,
+    color: '#666',
   },
 });
