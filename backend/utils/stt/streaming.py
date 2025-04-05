@@ -3,6 +3,7 @@ import os
 import random
 import time
 from typing import List
+from enum import Enum
 
 import websockets
 from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
@@ -14,6 +15,41 @@ headers = {
     "Authorization": f"Token {os.getenv('DEEPGRAM_API_KEY')}",
     "Content-Type": "audio/*"
 }
+
+class STTService(str, Enum):
+    deepgram = "deepgram"
+    soniox = "soniox"
+    speechmatics = "speechmatics"
+
+    @staticmethod
+    def get_model_name(value):
+        if value == STTService.deepgram:
+            return 'deepgram_streaming'
+        elif value == STTService.soniox:
+            return 'soniox_streaming'
+        elif value == STTService.speechmatics:
+            return 'speechmatics_streaming'
+
+
+# Languages supported by Soniox
+soniox_supported_languages = ['multi','en', 'af', 'sq', 'ar', 'az', 'eu', 'be', 'bn', 'bs', 'bg', 'ca', 'zh', 'hr', 'cs', 'da', 'nl', 'et', 'fi', 'fr', 'gl', 'de', 'el', 'gu', 'he', 'hi', 'hu', 'id', 'it', 'ja', 'kn', 'kk', 'ko', 'lv', 'lt', 'mk', 'ms', 'ml', 'mr', 'no', 'fa', 'pl', 'pt', 'pa', 'ro', 'ru', 'sr', 'sk', 'sl', 'es', 'sw', 'sv', 'tl', 'ta', 'te', 'th', 'tr', 'uk', 'ur', 'vi', 'cy']
+soniox_multi_languages = soniox_supported_languages
+
+# Languages supported by Deepgram, nova-2-general model
+deepgram_supported_languages = {'multi','bg','ca', 'zh', 'zh-CN', 'zh-Hans', 'zh-TW', 'zh-Hant', 'zh-HK', 'cs', 'da', 'da-DK', 'nl', 'en', 'en-US', 'en-AU', 'en-GB', 'en-NZ', 'en-IN', 'et', 'fi', 'nl-BE', 'fr', 'fr-CA', 'de', 'de-CH', 'el' 'hi', 'hu', 'id', 'it', 'ja', 'ko', 'ko-KR', 'lv', 'lt', 'ms', 'no', 'pl', 'pt', 'pt-BR', 'pt-PT', 'ro', 'ru', 'sk', 'es', 'es-419', 'sv', 'sv-SE', 'th', 'th-TH', 'tr', 'uk', 'vi'}
+deepgram_multi_languages = ['en', 'es']
+
+def get_stt_service_for_language(language: str):
+    # Deepgram's 'multi'
+    if language in deepgram_multi_languages:
+        return STTService.deepgram, 'multi'
+
+    # Deepgram
+    if language in deepgram_supported_languages:
+        return STTService.deepgram, language
+
+    # Default to Soniox
+    return None, None
 
 
 async def send_initial_file_path(file_path: str, transcript_socket_async_send):
@@ -35,6 +71,7 @@ async def send_initial_file_path(file_path: str, transcript_socket_async_send):
 async def send_initial_file(data: List[List[int]], transcript_socket):
     print('send_initial_file2')
     start = time.time()
+
     # Reading and sending in chunks
     for i in range(0, len(data)):
         chunk = data[i]
@@ -190,10 +227,6 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
     except Exception as e:
         raise Exception(f'Could not open socket: {e}')
 
-
-soniox_valid_languages = ['en', 'auto']
-
-
 async def process_audio_soniox(stream_transcript, sample_rate: int, language: str, uid: str, preseconds: int = 0):
     # Soniox supports diarization primarily for English
     api_key = os.getenv('SONIOX_API_KEY')
@@ -217,7 +250,7 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
         'sample_rate': sample_rate,
         'num_channels': 1,
         'enable_speaker_tags': True,
-        'language_hints': [language] if language != 'auto' else [],
+        'language_hints': [language] if language != 'multi' else [],
     }
 
     # Add speaker identification if available

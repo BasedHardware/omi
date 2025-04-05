@@ -113,7 +113,7 @@ class SpeechLanguageSheet extends StatelessWidget {
             ),
             const SizedBox(width: 4),
             Text(
-              SharedPreferencesUtil().recordingsLanguage.toUpperCase(),
+              SharedPreferencesUtil().userPrimaryLanguage.toUpperCase(),
               style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
             ),
           ],
