@@ -901,11 +901,6 @@ class CaptureProvider extends ChangeNotifier
     );
   }
 
-  /// Retry connecting to the transcription service after language is set
-  Future<void> retryAfterLanguageSet() async {
-    await _resetState();
-  }
-
   Future<bool> _writeToStorage(String deviceId, int numFile, int command, int offset) async {
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
@@ -920,10 +915,5 @@ class CaptureProvider extends ChangeNotifier
       return [];
     }
     return connection.getStorageList();
-  }
-
-  void _setsdCardReady(bool value) {
-    sdCardReady = value;
-    notifyListeners();
   }
 }

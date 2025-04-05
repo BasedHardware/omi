@@ -51,23 +51,20 @@ async def _listen(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = None
 ):
-    # Convert 'auto' to 'multi' for consistency
-    language = 'multi' if language == 'auto' else language
-
-    # Determine the best STT service
-    stt_service, language_for_stt = get_stt_service_for_language(language)
-
-    print('_listen', uid, language, sample_rate, codec, include_speech_profile, stt_service, language_for_stt)
-
-    if not stt_service or not language_for_stt:
-        await websocket.close(code=1008, reason=f"The language is not supported, {language}")
-        return
+    print('_listen', uid, language, sample_rate, codec, include_speech_profile, stt_service)
 
     if not uid or len(uid) <= 0:
         await websocket.close(code=1008, reason="Bad uid")
         return
 
-    # Use the language_for_stt variable for STT processing
+    # Convert 'auto' to 'multi' for consistency
+    language = 'multi' if language == 'auto' else language
+
+    # Determine the best STT service
+    stt_service, language_for_stt = get_stt_service_for_language(language)
+    if not stt_service or not language_for_stt:
+        await websocket.close(code=1008, reason=f"The language is not supported, {language}")
+        return
 
     try:
         await websocket.accept()
