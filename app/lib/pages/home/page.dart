@@ -157,7 +157,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   @override
   void initState() {
     SharedPreferencesUtil().onboardingCompleted = true;
-
+    
     // Navigate uri
     Uri? navigateToUri;
     var pageAlias = "home";

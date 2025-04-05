@@ -164,3 +164,37 @@ def get_default_payment_method(uid: str):
     user_data = user_ref.get().to_dict()
     return user_data.get('default_payment_method', None)
 
+# **************************************
+# ************* Language ***************
+# **************************************
+
+def get_user_language_preference(uid: str) -> str:
+    """
+    Get the user's preferred language.
+    
+    Args:
+        uid: User ID
+        
+    Returns:
+        Language code (e.g., 'en', 'vi') or empty string if not set
+    """
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get()
+    
+    if user_doc.exists:
+        user_data = user_doc.to_dict()
+        return user_data.get('language', '')
+    
+    return ''  # Return empty string if not set
+
+
+def set_user_language_preference(uid: str, language: str) -> None:
+    """
+    Set the user's preferred language.
+    
+    Args:
+        uid: User ID
+        language: Language code (e.g., 'en', 'vi')
+    """
+    user_ref = db.collection('users').document(uid)
+    user_ref.set({'language': language}, merge=True)

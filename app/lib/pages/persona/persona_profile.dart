@@ -137,11 +137,11 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                       child: GestureDetector(
                         onTap: () async {
                           MixpanelManager().pageOpened('Settings');
-                          String language = SharedPreferencesUtil().recordingsLanguage;
+                          String language = SharedPreferencesUtil().userPrimaryLanguage;
                           bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
                           String transcriptModel = SharedPreferencesUtil().transcriptionModel;
                           await routeToPage(context, const SettingsPage());
-                          if (language != SharedPreferencesUtil().recordingsLanguage ||
+                          if (language != SharedPreferencesUtil().userPrimaryLanguage ||
                               hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
                               transcriptModel != SharedPreferencesUtil().transcriptionModel) {
                             if (context.mounted) {
