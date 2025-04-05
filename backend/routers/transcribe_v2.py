@@ -197,16 +197,16 @@ async def _websocket_util(
 
         _send_message_event(ConversationEvent(event_type="memory_created", memory=conversation, messages=messages))
 
-    async def finalize_processing_memories(processing: List[dict]):
+    async def finalize_processing_conversations(processing: List[dict]):
         # handle edge case of conversation was actually processing? maybe later, doesn't hurt really anyway.
         # also fix from getMemories endpoint?
-        print('finalize_processing_memories len(processing):', len(processing), uid)
+        print('finalize_processing_conversations len(processing):', len(processing), uid)
         for conversation in processing:
             await _create_conversation(conversation)
 
     # Process processing conversations
     processing = conversations_db.get_processing_conversations(uid)
-    asyncio.create_task(finalize_processing_memories(processing))
+    asyncio.create_task(finalize_processing_conversations(processing))
 
     # Send last completed conversation to client
     async def send_last_conversation():

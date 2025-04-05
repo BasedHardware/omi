@@ -51,23 +51,20 @@ async def _listen(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = None
 ):
-    # Convert 'auto' to 'multi' for consistency
-    language = 'multi' if language == 'auto' else language
-
-    # Determine the best STT service
-    stt_service, language_for_stt, stt_model = get_stt_service_for_language(language)
-
-    print('_listen', uid, language, sample_rate, codec, include_speech_profile, stt_service, language_for_stt)
-
-    if not stt_service or not language_for_stt:
-        await websocket.close(code=1008, reason=f"The language is not supported, {language}")
-        return
+    print('_listen', uid, language, sample_rate, codec, include_speech_profile, stt_service)
 
     if not uid or len(uid) <= 0:
         await websocket.close(code=1008, reason="Bad uid")
         return
 
-    # Use the language_for_stt variable for STT processing
+    # Convert 'auto' to 'multi' for consistency
+    language = 'multi' if language == 'auto' else language
+
+    # Determine the best STT service
+    stt_service, language_for_stt, stt_model = get_stt_service_for_language(language)
+    if not stt_service or not language_for_stt:
+        await websocket.close(code=1008, reason=f"The language is not supported, {language}")
+        return
 
     try:
         await websocket.accept()
@@ -185,16 +182,16 @@ async def _listen(
 
         _send_message_event(ConversationEvent(event_type="memory_created", memory=conversation, messages=messages))
 
-    async def finalize_processing_memories(processing: List[dict]):
+    async def finalize_processing_conversations(processing: List[dict]):
         # handle edge case of conversation was actually processing? maybe later, doesn't hurt really anyway.
         # also fix from getMemories endpoint?
-        print('finalize_processing_memories len(processing):', len(processing), uid)
+        print('finalize_processing_conversations len(processing):', len(processing), uid)
         for conversation in processing:
             await _create_conversation(conversation)
 
     # Process processing conversations
     processing = conversations_db.get_processing_conversations(uid)
-    asyncio.create_task(finalize_processing_memories(processing))
+    asyncio.create_task(finalize_processing_conversations(processing))
 
     # Send last completed conversation to client
     async def send_last_conversation():
