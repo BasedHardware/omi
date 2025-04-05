@@ -23,6 +23,7 @@ from utils.conversations.location import get_google_maps_location
 from utils.conversations.process_conversation import process_conversation
 from utils.plugins import trigger_external_integrations
 from utils.stt.streaming import *
+from utils.stt.streaming import get_stt_service_for_language, STTService
 from utils.stt.streaming import process_audio_soniox, process_audio_dg, process_audio_speechmatics, send_initial_file_path
 from utils.webhooks import get_audio_bytes_webhook_seconds
 from utils.pusher import connect_to_trigger_pusher
@@ -31,21 +32,6 @@ from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists
 
 router = APIRouter()
-
-class STTService(str, Enum):
-    deepgram = "deepgram"
-    soniox = "soniox"
-    speechmatics = "speechmatics"
-
-    @staticmethod
-    def get_model_name(value):
-        if value == STTService.deepgram:
-            return 'deepgram_streaming'
-        elif value == STTService.soniox:
-            return 'soniox_streaming'
-        elif value == STTService.speechmatics:
-            return 'speechmatics_streaming'
-
 
 def retrieve_in_progress_conversation(uid):
     conversation_id = redis_db.get_in_progress_conversation_id(uid)
@@ -63,21 +49,21 @@ def retrieve_in_progress_conversation(uid):
 
 async def _listen(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
-        channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = STTService.soniox
+        channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = None
 ):
+    # Convert 'auto' to 'multi' for consistency
+    language = 'multi' if language == 'auto' else language
 
-    print('_listen', uid, language, sample_rate, codec, include_speech_profile)
+    # Determine the best STT service
+    stt_service, language_for_stt = get_stt_service_for_language(language)
+
+    print('_listen', uid, language, sample_rate, codec, include_speech_profile, stt_service, language_for_stt)
 
     if not uid or len(uid) <= 0:
         await websocket.close(code=1008, reason="Bad uid")
         return
 
-    # If language is 'auto', always use Soniox which supports auto language detection
-    # Otherwise, fallback to Deepgram if not
-    if language == 'auto':
-        stt_service = STTService.soniox
-    else:
-        stt_service = STTService.deepgram
+    # Use the language_for_stt variable for STT processing
 
     try:
         await websocket.accept()
@@ -344,10 +330,10 @@ async def _listen(
             # DEEPGRAM
             if stt_service == STTService.deepgram:
                 deepgram_socket = await process_audio_dg(
-                    stream_transcript, language, sample_rate, 1, preseconds=speech_profile_duration
+                    stream_transcript, language_for_stt, sample_rate, 1, preseconds=speech_profile_duration
                 )
                 if speech_profile_duration:
-                    deepgram_socket2 = await process_audio_dg(stream_transcript, language, sample_rate, 1)
+                    deepgram_socket2 = await process_audio_dg(stream_transcript, language_for_stt, sample_rate, 1)
 
                     async def deepgram_socket_send(data):
                         return deepgram_socket.send(data)
@@ -357,7 +343,7 @@ async def _listen(
             # SONIOX
             elif stt_service == STTService.soniox:
                 soniox_socket = await process_audio_soniox(
-                    stream_transcript, sample_rate, language,
+                    stream_transcript, sample_rate, language_for_stt,
                     uid if include_speech_profile else None,
                     preseconds=speech_profile_duration
                 )
@@ -367,7 +353,7 @@ async def _listen(
                 print("file_path", file_path)
                 if speech_profile_duration and file_path:
                     soniox_socket2 = await process_audio_soniox(
-                        stream_transcript, sample_rate, language,
+                        stream_transcript, sample_rate, language_for_stt,
                         uid if include_speech_profile else None
                     )
 
@@ -376,7 +362,7 @@ async def _listen(
             # SPEECHMATICS
             elif stt_service == STTService.speechmatics:
                 speechmatics_socket = await process_audio_speechmatics(
-                    stream_transcript, sample_rate, language, preseconds=speech_profile_duration
+                    stream_transcript, sample_rate, language_for_stt, preseconds=speech_profile_duration
                 )
                 if speech_profile_duration:
                     asyncio.create_task(send_initial_file_path(file_path, speechmatics_socket.send))
@@ -695,6 +681,6 @@ async def _listen(
 @router.websocket("/v3/listen")
 async def listen_handler(
         websocket: WebSocket, uid: str = Depends(auth.get_current_user_uid), language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
-        channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = STTService.soniox
+        channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = None
 ):
-    await _listen(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, stt_service)
+    await _listen(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, None)
