@@ -31,7 +31,6 @@ class HomeProvider extends ChangeNotifier {
     'Russian': 'ru',
     'Japanese': 'ja',
     'German': 'de',
-    'English/Spanish': 'multi',
     // Other languages alphabetically
     'Bulgarian': 'bg',
     'Catalan': 'ca',
