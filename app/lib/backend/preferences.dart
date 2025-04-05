@@ -465,6 +465,8 @@ class SharedPreferencesUtil {
     await remove('userPrimaryLanguage');
     await remove('hasSetPrimaryLanguage');
 
+    await remove('onboardingCompleted');
+
     // Keep settings like language, analytics opt-in, etc.
     // as these are user preferences that should persist across logins
   }

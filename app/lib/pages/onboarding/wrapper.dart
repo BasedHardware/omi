@@ -10,6 +10,7 @@ import 'package:omi/pages/onboarding/auth.dart';
 import 'package:omi/pages/onboarding/find_device/page.dart';
 import 'package:omi/pages/onboarding/name/name_widget.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
+import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/onboarding/welcome/page.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -35,7 +36,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   @override
   void initState() {
     //TODO: Change from tab controller to default controller and use provider (part of instabug cleanup) @mdmohsin7
-    _controller = TabController(length: hasSpeechProfile ? 5 : 6, vsync: this);
+    _controller = TabController(length: hasSpeechProfile ? 6 : 7, vsync: this);
     _controller!.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (isSignedIn()) {
@@ -101,6 +102,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           FirebaseAuth.instance.currentUser!.uid,
         );
         MixpanelManager().onboardingStepCompleted('Name');
+      }),
+      PrimaryLanguageWidget(goNext: () {
+        _goNext();
+        MixpanelManager().onboardingStepCompleted('Primary Language');
       }),
       PermissionsWidget(
         goNext: () {
