@@ -132,7 +132,6 @@ class CaptureProvider extends ChangeNotifier
   Future<void> onRecordProfileSettingChanged() async {
     await _resetState();
   }
-  
 
   Future<void> changeAudioRecordProfile({
     required BleAudioCodec audioCodec,
@@ -159,9 +158,8 @@ class CaptureProvider extends ChangeNotifier
     debugPrint('is ws null: ${_socket == null}');
 
     // Connect to the transcript socket
-    String language = SharedPreferencesUtil().hasSetPrimaryLanguage 
-        ? SharedPreferencesUtil().userPrimaryLanguage 
-        : "auto";
+    String language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     _socket = await ServiceManager.instance()
         .socket
         .conversation(codec: codec, sampleRate: sampleRate, language: language, force: force);
@@ -366,9 +364,8 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
     var codec = SharedPreferencesUtil().deviceCodec;
-    var language = SharedPreferencesUtil().hasSetPrimaryLanguage 
-        ? SharedPreferencesUtil().userPrimaryLanguage 
-        : "auto";
+    var language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     if (language != _socket?.language || codec != _socket?.codec || _socket?.state != SocketServiceState.connected) {
       await _initiateWebsocket(audioCodec: codec, force: true);
     }
@@ -457,7 +454,7 @@ class CaptureProvider extends ChangeNotifier
   Future streamDeviceRecording({BtDevice? device}) async {
     debugPrint("streamDeviceRecording $device");
     if (device != null) _updateRecordingDevice(device);
-    
+
     await _resetState();
   }
 
@@ -903,7 +900,7 @@ class CaptureProvider extends ChangeNotifier
       body: 'Your Sd Card data is now processed! Enter the app to see.',
     );
   }
-  
+
   /// Retry connecting to the transcription service after language is set
   Future<void> retryAfterLanguageSet() async {
     await _resetState();
