@@ -55,7 +55,7 @@ async def _listen(
     language = 'multi' if language == 'auto' else language
 
     # Determine the best STT service
-    stt_service, language_for_stt = get_stt_service_for_language(language)
+    stt_service, language_for_stt, stt_model = get_stt_service_for_language(language)
 
     print('_listen', uid, language, sample_rate, codec, include_speech_profile, stt_service, language_for_stt)
 
@@ -334,10 +334,9 @@ async def _listen(
             # DEEPGRAM
             if stt_service == STTService.deepgram:
                 deepgram_socket = await process_audio_dg(
-                    stream_transcript, language_for_stt, sample_rate, 1, preseconds=speech_profile_duration
-                )
+                    stream_transcript, language_for_stt, sample_rate, 1, preseconds=speech_profile_duration, model=stt_model,)
                 if speech_profile_duration:
-                    deepgram_socket2 = await process_audio_dg(stream_transcript, language_for_stt, sample_rate, 1)
+                    deepgram_socket2 = await process_audio_dg(stream_transcript, language_for_stt, sample_rate, 1, model=stt_model)
 
                     async def deepgram_socket_send(data):
                         return deepgram_socket.send(data)
