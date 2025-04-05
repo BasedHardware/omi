@@ -18,7 +18,6 @@ class HomeProvider extends ChangeNotifier {
   String recordingLanguage = SharedPreferencesUtil().recordingsLanguage;
 
   final Map<String, String> availableLanguages = {
-    'Auto Detection': 'auto',
     'Bulgarian': 'bg',
     'Catalan': 'ca',
     'Chinese (Mandarin, Simplified)': 'zh',
@@ -58,19 +57,6 @@ class HomeProvider extends ChangeNotifier {
     'Ukrainian': 'uk',
     'Vietnamese': 'vi',
   };
-
-  final autoDetectionSupportedLanguages = [
-    'English',
-    'Spanish',
-    'French',
-    'German',
-    'Hindi',
-    'Russian',
-    'Portuguese',
-    'Japanese',
-    'Italian',
-    'Dutch'
-  ];
 
   HomeProvider() {
     chatFieldFocusNode.addListener(_onFocusChange);
