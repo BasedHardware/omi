@@ -40,24 +40,16 @@ deepgram_supported_languages = {'multi','bg','ca', 'zh', 'zh-CN', 'zh-Hans', 'zh
 deepgram_multi_languages = ['en', 'es']
 
 def get_stt_service_for_language(language: str):
-    # Soniox with 'multi'
-    if language in soniox_multi_languages:
-        return STTService.soniox, 'multi'
-
     # Deepgram's 'multi'
     if language in deepgram_multi_languages:
         return STTService.deepgram, 'multi'
-
-    # Soniox
-    if language in soniox_supported_languages:
-        return STTService.soniox, language
 
     # Deepgram
     if language in deepgram_supported_languages:
         return STTService.deepgram, language
 
     # Default to Soniox
-    return STTService.soniox, 'multi'
+    return None, None
 
 
 async def send_initial_file_path(file_path: str, transcript_socket_async_send):

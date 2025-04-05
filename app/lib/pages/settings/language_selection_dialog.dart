@@ -9,57 +9,33 @@ import 'dart:io';
 class LanguageSelectionDialog {
   static Future<void> show(BuildContext context, {bool isRequired = false, bool forceShow = false}) async {
     final homeProvider = Provider.of<HomeProvider>(context, listen: false);
-    
+
     // If the user has already set a primary language and it's not required or forced, don't show the dialog
     if (homeProvider.hasSetPrimaryLanguage && !isRequired && !forceShow) {
       return;
     }
-    
+
     // If the user's primary language is empty, they haven't set one yet
     if (homeProvider.userPrimaryLanguage.isEmpty) {
       isRequired = true; // Make the dialog required if no language is set
     }
-    
-    // Create a list of the top 10 most popular languages
-    final topLanguages = [
-      MapEntry('English', 'en'),
-      MapEntry('Spanish', 'es'),
-      MapEntry('Chinese (Mandarin, Simplified)', 'zh'),
-      MapEntry('Hindi', 'hi'),
-      MapEntry('Arabic', 'ar'),
-      MapEntry('Portuguese', 'pt'),
-      MapEntry('Bengali', 'bn'),
-      MapEntry('Russian', 'ru'),
-      MapEntry('Japanese', 'ja'),
-      MapEntry('German', 'de'),
-    ];
-    
-    // Get the rest of the languages and sort them alphabetically
-    final otherLanguages = homeProvider.availableLanguages.entries
-        .where((lang) => !topLanguages.any((top) => top.value == lang.value))
-        .toList();
-    otherLanguages.sort((a, b) => a.key.compareTo(b.key));
-    
-    // Combine the lists with a separator
-    final languages = [...topLanguages, ...otherLanguages];
-    
+
+    // Use the availableLanguages directly as they're already ordered by popularity
+    final languages = homeProvider.availableLanguages.entries.toList();
+
     // Preset the selected language if the user has one
-    String? selectedLanguage = homeProvider.userPrimaryLanguage.isNotEmpty ? 
-        homeProvider.userPrimaryLanguage : null;
-    String? selectedLanguageName = selectedLanguage != null ? 
-        homeProvider.availableLanguages.entries
-            .firstWhere((element) => element.value == selectedLanguage)
-            .key : null;
+    String? selectedLanguage = homeProvider.userPrimaryLanguage.isNotEmpty ? homeProvider.userPrimaryLanguage : null;
+    String? selectedLanguageName = selectedLanguage != null
+        ? homeProvider.availableLanguages.entries.firstWhere((element) => element.value == selectedLanguage).key
+        : null;
     String searchQuery = '';
     List<MapEntry<String, String>> filteredLanguages = List.from(languages);
     final ScrollController _scrollController = ScrollController();
-    
+
     // Function to scroll to the selected language
     void scrollToSelectedLanguage() {
       if (selectedLanguage != null) {
-        final selectedIndex = filteredLanguages.indexWhere(
-          (lang) => lang.value == selectedLanguage
-        );
+        final selectedIndex = filteredLanguages.indexWhere((lang) => lang.value == selectedLanguage);
         if (selectedIndex != -1 && _scrollController.hasClients) {
           _scrollController.animateTo(
             selectedIndex * 56.0, // Approximate height of each list item
@@ -69,7 +45,7 @@ class LanguageSelectionDialog {
         }
       }
     }
-    
+
     if (Platform.isIOS) {
       // iOS style picker with search
       await showCupertinoModalPopup(
@@ -86,25 +62,22 @@ class LanguageSelectionDialog {
                   } else {
                     // Filter all languages
                     final filtered = languages.where((lang) {
-                      return lang.key.toLowerCase().contains(searchQuery) || 
-                             lang.value.toLowerCase().contains(searchQuery);
+                      return lang.key.toLowerCase().contains(searchQuery) ||
+                          lang.value.toLowerCase().contains(searchQuery);
                     }).toList();
-                    
-                    // Prioritize top languages in search results too
+
+                    // Keep the original order from availableLanguages
                     filtered.sort((a, b) {
-                      final aIsTop = topLanguages.any((top) => top.value == a.value);
-                      final bIsTop = topLanguages.any((top) => top.value == b.value);
-                      
-                      if (aIsTop && !bIsTop) return -1;
-                      if (!aIsTop && bIsTop) return 1;
-                      return a.key.compareTo(b.key);
+                      final aIndex = languages.indexOf(a);
+                      final bIndex = languages.indexOf(b);
+                      return aIndex.compareTo(bIndex);
                     });
-                    
+
                     filteredLanguages = filtered;
                   }
                 });
               }
-              
+
               return Container(
                 height: 300,
                 padding: const EdgeInsets.all(16),
@@ -148,7 +121,8 @@ class LanguageSelectionDialog {
                                   final success = await homeProvider.updateUserPrimaryLanguage(selectedLanguage!);
                                   if (success) {
                                     // Notify CaptureProvider to update recording settings
-                                    Provider.of<CaptureProvider>(context, listen: false).onRecordProfileSettingChanged();
+                                    Provider.of<CaptureProvider>(context, listen: false)
+                                        .onRecordProfileSettingChanged();
                                     Navigator.of(context).pop();
                                     AppSnackbar.showSnackbarSuccess('Language set to $selectedLanguageName');
                                   } else {
@@ -175,33 +149,14 @@ class LanguageSelectionDialog {
                       placeholderStyle: const TextStyle(color: Colors.grey),
                     ),
                     const SizedBox(height: 16),
-                    if (selectedLanguage != null)
-                      GestureDetector(
-                        onTap: () {
+                    // Auto-scroll to selected language when selection changes
+                    if (selectedLanguage != null) 
+                      Builder(builder: (context) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
                           scrollToSelectedLanguage();
-                        },
-                        child: Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.deepPurple.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.deepPurple.withOpacity(0.5)),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(CupertinoIcons.info_circle, color: Colors.deepPurple, size: 16),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'You selected: $selectedLanguageName',
-                                  style: const TextStyle(color: Colors.white),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                        });
+                        return const SizedBox.shrink();
+                      }),
                     Expanded(
                       child: filteredLanguages.isEmpty
                           ? const Center(
@@ -216,10 +171,9 @@ class LanguageSelectionDialog {
                                 key: PageStorageKey('language_list'),
                                 itemCount: filteredLanguages.length,
                                 itemBuilder: (context, index) {
-                                  
                                   final language = filteredLanguages[index];
                                   final isSelected = selectedLanguage == language.value;
-                                  
+
                                   return GestureDetector(
                                     onTap: () {
                                       setState(() {
@@ -290,25 +244,22 @@ class LanguageSelectionDialog {
                   } else {
                     // Filter all languages
                     final filtered = languages.where((lang) {
-                      return lang.key.toLowerCase().contains(searchQuery) || 
-                             lang.value.toLowerCase().contains(searchQuery);
+                      return lang.key.toLowerCase().contains(searchQuery) ||
+                          lang.value.toLowerCase().contains(searchQuery);
                     }).toList();
-                    
-                    // Prioritize top languages in search results too
+
+                    // Keep the original order from availableLanguages
                     filtered.sort((a, b) {
-                      final aIsTop = topLanguages.any((top) => top.value == a.value);
-                      final bIsTop = topLanguages.any((top) => top.value == b.value);
-                      
-                      if (aIsTop && !bIsTop) return -1;
-                      if (!aIsTop && bIsTop) return 1;
-                      return a.key.compareTo(b.key);
+                      final aIndex = languages.indexOf(a);
+                      final bIndex = languages.indexOf(b);
+                      return aIndex.compareTo(bIndex);
                     });
-                    
+
                     filteredLanguages = filtered;
                   }
                 });
               }
-              
+
               return AlertDialog(
                 backgroundColor: const Color(0xFF1A1A1A),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -371,18 +322,16 @@ class LanguageSelectionDialog {
                                 controller: _scrollController,
                                 itemCount: filteredLanguages.length,
                                 itemBuilder: (context, index) {
-                                  
                                   final language = filteredLanguages[index];
                                   final isSelected = selectedLanguage == language.value;
-                                  
+
                                   return ListTile(
                                     title: Text(
                                       language.key,
                                       style: const TextStyle(color: Colors.white),
                                     ),
-                                    trailing: isSelected
-                                        ? const Icon(Icons.check_circle, color: Colors.deepPurple)
-                                        : null,
+                                    trailing:
+                                        isSelected ? const Icon(Icons.check_circle, color: Colors.deepPurple) : null,
                                     selected: isSelected,
                                     selectedTileColor: Colors.deepPurple.withOpacity(0.2),
                                     shape: RoundedRectangleBorder(
@@ -404,44 +353,22 @@ class LanguageSelectionDialog {
                                 },
                               ),
                       ),
+                      // Auto-scroll to selected language when selection changes
                       if (selectedLanguage != null)
-                        GestureDetector(
-                          onTap: () {
-                            // Find the index of the selected language in the filtered list
-                            final selectedIndex = filteredLanguages.indexWhere(
-                              (lang) => lang.value == selectedLanguage
-                            );
+                        Builder(builder: (context) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            final selectedIndex =
+                                filteredLanguages.indexWhere((lang) => lang.value == selectedLanguage);
                             if (selectedIndex != -1 && _scrollController.hasClients) {
-                              // Scroll to the selected language
                               _scrollController.animateTo(
                                 selectedIndex * 56.0, // Approximate height of each list item
                                 duration: const Duration(milliseconds: 300),
                                 curve: Curves.easeInOut,
                               );
                             }
-                          },
-                          child: Container(
-                            margin: const EdgeInsets.only(top: 16),
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.deepPurple.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.deepPurple.withOpacity(0.5)),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.info_outline, color: Colors.deepPurple, size: 16),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'You selected: $selectedLanguageName',
-                                    style: const TextStyle(color: Colors.white),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                          });
+                          return const SizedBox.shrink();
+                        }),
                     ],
                   ),
                 ),
