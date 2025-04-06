@@ -17,7 +17,8 @@ import database.users as user_db
 from database import redis_db
 from database.redis_db import get_cached_user_geolocation
 from models.conversation import Conversation, TranscriptSegment, ConversationStatus, Structured, Geolocation
-from models.message_event import ConversationEvent, MessageEvent, MessageServiceStatusEvent, LastConversationEvent
+from models.message_event import ConversationEvent, MessageEvent, MessageServiceStatusEvent, LastConversationEvent, TranslationEvent
+from models.transcript_segment import Translation
 from utils.apps import is_audio_bytes_app_enabled
 from utils.conversations.location import get_google_maps_location
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
@@ -27,6 +28,8 @@ from utils.stt.streaming import get_stt_service_for_language, STTService
 from utils.stt.streaming import process_audio_soniox, process_audio_dg, process_audio_speechmatics, send_initial_file_path
 from utils.webhooks import get_audio_bytes_webhook_seconds
 from utils.pusher import connect_to_trigger_pusher
+from utils.transcription import translate_text
+
 
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists
@@ -483,6 +486,46 @@ async def _listen(
     # Transcripts
     #
     current_conversation_id = None
+    translation_enabled = not client_triggered_on_new_segment_only
+
+    async def translate(segments: List[TranscriptSegment]):
+        try:
+            translated_segments = []
+            for segment in segments:
+                language = 'vi' ## TODO: REMOVE
+                # Translate the text to the target language
+                translated_text = translate_text(language, segment.text)
+
+                # Create a Translation object
+                translation = Translation(
+                    lang=language,
+                    text=translated_text,
+                )
+
+                # Check if a translation for this language already exists
+                existing_translation_index = None
+                for i, trans in enumerate(segment.translations):
+                    if trans.lang == language:
+                        existing_translation_index = i
+                        break
+
+                # Replace existing translation or add a new one
+                if existing_translation_index is not None:
+                    segment.translations[existing_translation_index] = translation
+                else:
+                    segment.translations.append(translation)
+
+                translated_segments.append(segment)
+
+            # Send a translation event to the client with the translated segments
+            if websocket_active and len(translated_segments) > 0:
+                translation_event = TranslationEvent(
+                    segments=[segment.dict() for segment in translated_segments]
+                )
+                _send_message_event(translation_event)
+
+        except Exception as e:
+            print(f"Translation error: {e}", uid)
 
     async def stream_transcript_process():
         nonlocal websocket_active
@@ -491,6 +534,7 @@ async def _listen(
         nonlocal seconds_to_trim
         nonlocal current_conversation_id
         nonlocal client_triggered_on_new_segment_only
+        nonlocal translation_enabled
 
         while websocket_active or len(realtime_segment_buffers) > 0:
             try:
@@ -533,13 +577,15 @@ async def _listen(
                 else:
                     updates_segments = [segment.dict() for segment in conversation.transcript_segments[starts:ends]]
 
-                print("6")
-
                 await websocket.send_json(updates_segments)
 
                 # Send to external trigger
                 if transcript_send is not None:
                     transcript_send(updates_segments,current_conversation_id)
+
+                # Translate
+                if translation_enabled:
+                    await translate(conversation.transcript_segments[starts:ends])
 
             except Exception as e:
                 print(f'Could not process transcript: error {e}', uid)
