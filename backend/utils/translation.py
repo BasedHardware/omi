@@ -8,9 +8,41 @@ translation_cache = OrderedDict()
 MAX_CACHE_SIZE = 1000
 PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT")
 
+# Initialize the translation client globally
 client = translate_v3.TranslationServiceClient()
 parent = f"projects/{PROJECT_ID}/locations/global"
 mime_type = "text/plain"
+
+def detect_language(text: str) -> str | None:
+    """
+    Detects the language of the provided text using Google Cloud Translate API.
+
+    Args:
+        text: The text to detect language for
+
+    Returns:
+        The language code of the detected language (e.g., 'en', 'vi', 'fr') if confidence >= 1,
+        or None if no language with sufficient confidence is found
+    """
+    try:
+        # Call the Google Cloud Translate API to detect language
+        response = client.detect_language(
+            parent=parent,
+            content=text,
+            mime_type=mime_type
+        )
+
+        print(response)
+        # Return the language code only if confidence is >= 1
+        if response.languages and len(response.languages) > 0:
+            for language in response.languages:
+                if language.confidence >= 1:
+                    return language.language_code
+        
+        return None  # Return None if no language with confidence >= 1 is found
+    except Exception as e:
+        print(f"Language detection error: {e}")
+        return None  # Return None on error
 
 def get_cache_key(text_hash: str, dest_language: str) -> str:
     """Generate a cache key from text hash and language"""
