@@ -28,7 +28,7 @@ from utils.stt.streaming import get_stt_service_for_language, STTService
 from utils.stt.streaming import process_audio_soniox, process_audio_dg, process_audio_speechmatics, send_initial_file_path
 from utils.webhooks import get_audio_bytes_webhook_seconds
 from utils.pusher import connect_to_trigger_pusher
-from utils.transcription import translate_text
+from utils.translation import translate_text, detect_language
 
 
 from utils.other import endpoints as auth
@@ -492,7 +492,18 @@ async def _listen(
         try:
             translated_segments = []
             for segment in segments:
-                language = 'vi' ## TODO: REMOVE
+                language = 'en'  # TODO: REMOVE
+
+                # Check if the text is already in the target language
+                # Skip translation if the text language matches the target language
+                try:
+                    detected_lang = detect_language(segment.text)
+                    if detected_lang is not None and detected_lang == language:
+                        continue
+                except Exception as e:
+                    print(f"Language detection error: {e}")
+                    pass
+
                 # Translate the text to the target language
                 translated_text = translate_text(language, segment.text)
 
