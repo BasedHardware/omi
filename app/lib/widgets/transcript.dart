@@ -106,10 +106,26 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
               Align(
                 alignment: Alignment.centerLeft,
                 child: SelectionArea(
-                  child: Text(
-                    tryDecodingText(text),
-                    style: const TextStyle(letterSpacing: 0.0, color: Colors.grey),
-                    textAlign: TextAlign.left,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        tryDecodingText(text),
+                        style: const TextStyle(letterSpacing: 0.0, color: Colors.grey),
+                        textAlign: TextAlign.left,
+                      ),
+                      if (data.translations.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        ...data.translations.map((translation) => Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                tryDecodingText(translation.text),
+                                style: const TextStyle(letterSpacing: 0.0, color: Colors.grey),
+                                textAlign: TextAlign.left,
+                              ),
+                            ))
+                      ],
+                    ],
                   ),
                 ),
               ),

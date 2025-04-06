@@ -4,6 +4,10 @@ import uuid
 from pydantic import BaseModel, Field
 
 
+class Translation(BaseModel):
+    lang: str
+    text: str
+
 class TranscriptSegment(BaseModel):
     id: Optional[str] = None
     text: str
@@ -13,6 +17,7 @@ class TranscriptSegment(BaseModel):
     person_id: Optional[str] = None
     start: float
     end: float
+    translations: Optional[List[Translation]] = []
 
     def __init__(self, **data):
         super().__init__(**data)

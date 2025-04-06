@@ -555,6 +555,15 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
 
+    if (event.type == MessageEventType.translating) {
+      if (event.segments == null || event.segments?.isEmpty == true) {
+        debugPrint("No segments received in translating event. Content is: $event");
+        return;
+      }
+      _handleTranslationEvent(event.segments!);
+      return;
+    }
+
     if (event.type == MessageEventType.serviceStatus) {
       if (event.status == null) {
         return;
@@ -606,6 +615,24 @@ class CaptureProvider extends ChangeNotifier
       conversationProvider?.upsertConversation(conversation);
     } else {
       debugPrint("Failed to fetch last conversation: $memoryId");
+    }
+  }
+
+  void _handleTranslationEvent(List<TranscriptSegment> translatedSegments) {
+    try {
+      if (translatedSegments.isEmpty) return;
+      
+      debugPrint("Received ${translatedSegments.length} translated segments");
+      
+      // Update the segments with the translated ones
+      var remainSegments = TranscriptSegment.updateSegments(segments, translatedSegments);
+      if (remainSegments.isNotEmpty) {
+        debugPrint("Adding ${remainSegments.length} new translated segments");
+      }
+      
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error handling translation event: $e");
     }
   }
 

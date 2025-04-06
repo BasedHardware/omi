@@ -1,5 +1,33 @@
 import 'package:omi/backend/preferences.dart';
 
+class Translation {
+  String lang;
+  String text;
+
+  Translation({
+    required this.lang,
+    required this.text,
+  });
+
+  factory Translation.fromJson(Map<String, dynamic> json) {
+    return Translation(
+      lang: json['lang'] as String,
+      text: json['text'] as String,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'lang': lang,
+      'text': text,
+    };
+  }
+
+  static List<Translation> fromJsonList(List<dynamic> jsonList) {
+    return jsonList.map((e) => Translation.fromJson(e)).toList();
+  }
+}
+
 class TranscriptSegment {
   String id;
 
@@ -10,6 +38,7 @@ class TranscriptSegment {
   String? personId;
   double start;
   double end;
+  List<Translation> translations = [];
 
   TranscriptSegment({
     required this.id,
@@ -19,6 +48,7 @@ class TranscriptSegment {
     required this.personId,
     required this.start,
     required this.end,
+    required this.translations,
   }) {
     speakerId = speaker != null ? int.parse(speaker!.split('_')[1]) : 0;
   }
@@ -44,6 +74,7 @@ class TranscriptSegment {
       personId: json['person_id'],
       start: double.tryParse(json['start'].toString()) ?? 0.0,
       end: double.tryParse(json['end'].toString()) ?? 0.0,
+      translations: json['translations'] != null ? Translation.fromJsonList(json['translations'] as List<dynamic>) : [],
     );
   }
 
@@ -56,6 +87,7 @@ class TranscriptSegment {
       'is_user': isUser,
       'start': start,
       'end': end,
+      'translations': translations?.map((t) => t.toJson()).toList(),
     };
   }
 
