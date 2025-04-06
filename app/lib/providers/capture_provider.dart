@@ -618,7 +618,9 @@ class CaptureProvider extends ChangeNotifier
       FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
       _loadInProgressConversation();
     }
-    TranscriptSegment.combineSegments(segments, newSegments);
+    var remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
+    TranscriptSegment.combineSegments(segments, remainSegments);
+
     hasTranscripts = true;
     notifyListeners();
   }

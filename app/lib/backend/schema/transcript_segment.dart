@@ -1,7 +1,7 @@
 import 'package:omi/backend/preferences.dart';
 
 class TranscriptSegment {
-  int id = 0;
+  String id;
 
   String text;
   String? speaker;
@@ -12,6 +12,7 @@ class TranscriptSegment {
   double end;
 
   TranscriptSegment({
+    required this.id,
     required this.text,
     required this.speaker,
     required this.isUser,
@@ -36,6 +37,7 @@ class TranscriptSegment {
   // Factory constructor to create a new Message instance from a map
   factory TranscriptSegment.fromJson(Map<String, dynamic> json) {
     return TranscriptSegment(
+      id: json['id'] as String,
       text: json['text'] as String,
       speaker: (json['speaker'] ?? 'SPEAKER_00') as String,
       isUser: (json['is_user'] ?? false) as bool,
@@ -59,6 +61,29 @@ class TranscriptSegment {
 
   static List<TranscriptSegment> fromJsonList(List<dynamic> jsonList) {
     return jsonList.map((e) => TranscriptSegment.fromJson(e)).toList();
+  }
+
+  static List<TranscriptSegment> updateSegments(
+      List<TranscriptSegment> segments, List<TranscriptSegment> updateSegments) {
+    if (updateSegments.isEmpty) return [];
+
+    if (segments.isEmpty) return updateSegments;
+
+    // Replace existing segments with the same ID
+    Map<String, TranscriptSegment> updateSegmentMap = {};
+    for (var segment in updateSegments) {
+      updateSegmentMap[segment.id] = segment;
+    }
+    for (int i = 0; i < segments.length; i++) {
+      String segmentId = segments[i].id;
+      if (updateSegmentMap.containsKey(segmentId)) {
+        segments[i] = updateSegmentMap[segmentId]!;
+        updateSegmentMap.remove(segmentId);
+      }
+    }
+
+    // remaining
+    return updateSegments.where((segment) => updateSegmentMap.containsKey(segment.id)).toList();
   }
 
   static combineSegments(

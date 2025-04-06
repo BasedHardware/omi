@@ -8,8 +8,7 @@ from database.vector_db import delete_vector
 from models.conversation import *
 from models.conversation import SearchRequest
 
-from routers.transcribe_v2 import retrieve_in_progress_conversation
-from utils.conversations.process_conversation import process_conversation
+from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.conversations.search import search_conversations
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists

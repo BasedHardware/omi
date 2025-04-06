@@ -7,6 +7,7 @@ from typing import Union, Tuple, List
 
 from fastapi import HTTPException
 
+from database import redis_db
 import database.memories as memories_db
 import database.conversations as conversations_db
 import database.notifications as notification_db
@@ -219,7 +220,7 @@ def _update_personas_async(uid: str):
         threads = []
         for persona in personas:
             threads.append(threading.Thread(target=sync_update_persona_prompt, args=(persona,)))
-        
+
         [t.start() for t in threads]
         [t.join() for t in threads]
         print(f"[PERSONAS] Finished persona updates in background thread for uid={uid}")
@@ -409,3 +410,17 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
     send_notification(token, title, message, None)
 
     return
+
+
+def retrieve_in_progress_conversation(uid):
+    conversation_id = redis_db.get_in_progress_conversation_id(uid)
+    existing = None
+
+    if conversation_id:
+        existing = conversations_db.get_conversation(uid, conversation_id)
+        if existing and existing['status'] != 'in_progress':
+            existing = None
+
+    if not existing:
+        existing = conversations_db.get_in_progress_conversation(uid)
+    return existing
