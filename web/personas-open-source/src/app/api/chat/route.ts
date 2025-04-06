@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import OpenAI from 'openai';
+import { auth } from '@/lib/firebase';
 
 const getOpenAIClient = () => {
   return new OpenAI({
@@ -26,6 +27,16 @@ export async function POST(req: Request) {
       const botDoc = await getDoc(doc(db, 'plugins_data', botId));
       if (botDoc.exists()) {
         const bot = botDoc.data();
+
+        // Check if the persona is private
+        if (bot.private === true) {
+          // If the persona is private, only allow access to the owner
+          const user = auth.currentUser;
+          if (!user || user.uid !== bot.uid) {
+            return NextResponse.json({ message: "Persona is private" }, { status: 403 });
+          }
+        }
+
         chatPrompt = bot.chat_prompt ?? bot.persona_prompt;
         isInfluencer = bot.is_influencer ?? false;
       }
