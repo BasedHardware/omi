@@ -158,7 +158,8 @@ class CaptureProvider extends ChangeNotifier
     debugPrint('is ws null: ${_socket == null}');
 
     // Connect to the transcript socket
-    String language = SharedPreferencesUtil().recordingsLanguage;
+    String language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     _socket = await ServiceManager.instance()
         .socket
         .conversation(codec: codec, sampleRate: sampleRate, language: language, force: force);
@@ -363,7 +364,8 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
     var codec = SharedPreferencesUtil().deviceCodec;
-    var language = SharedPreferencesUtil().recordingsLanguage;
+    var language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     if (language != _socket?.language || codec != _socket?.codec || _socket?.state != SocketServiceState.connected) {
       await _initiateWebsocket(audioCodec: codec, force: true);
     }
@@ -452,6 +454,7 @@ class CaptureProvider extends ChangeNotifier
   Future streamDeviceRecording({BtDevice? device}) async {
     debugPrint("streamDeviceRecording $device");
     if (device != null) _updateRecordingDevice(device);
+
     await _resetState();
   }
 
@@ -912,10 +915,5 @@ class CaptureProvider extends ChangeNotifier
       return [];
     }
     return connection.getStorageList();
-  }
-
-  void _setsdCardReady(bool value) {
-    sdCardReady = value;
-    notifyListeners();
   }
 }

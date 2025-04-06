@@ -7,7 +7,7 @@ import 'package:omi/env/env.dart';
 
 Future<bool> createMemoryServer(String content, String visibility) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v2/facts',
+    url: '${Env.apiBaseUrl}v3/memories',
     headers: {},
     method: 'POST',
     body: json.encode({
@@ -22,7 +22,7 @@ Future<bool> createMemoryServer(String content, String visibility) async {
 
 Future<bool> updateMemoryVisibilityServer(String memoryId, String visibility) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/facts/$memoryId/visibility?value=$visibility',
+    url: '${Env.apiBaseUrl}v3/memories/$memoryId/visibility?value=$visibility',
     headers: {},
     method: 'PATCH',
     body: '',
@@ -34,7 +34,7 @@ Future<bool> updateMemoryVisibilityServer(String memoryId, String visibility) as
 
 Future<List<Memory>> getMemories({int limit = 100, int offset = 0}) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v2/facts?limit=$limit&offset=$offset',
+    url: '${Env.apiBaseUrl}v3/memories?limit=$limit&offset=$offset',
     headers: {},
     method: 'GET',
     body: '',
@@ -47,7 +47,7 @@ Future<List<Memory>> getMemories({int limit = 100, int offset = 0}) async {
 
 Future<bool> deleteMemoryServer(String memoryId) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/facts/$memoryId',
+    url: '${Env.apiBaseUrl}v3/memories/$memoryId',
     headers: {},
     method: 'DELETE',
     body: '',
@@ -59,7 +59,7 @@ Future<bool> deleteMemoryServer(String memoryId) async {
 
 Future<bool> deleteAllMemoriesServer() async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/facts',
+    url: '${Env.apiBaseUrl}v3/memories',
     headers: {},
     method: 'DELETE',
     body: '',
@@ -71,7 +71,7 @@ Future<bool> deleteAllMemoriesServer() async {
 
 Future<bool> reviewMemoryServer(String memoryId, bool value) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/facts/$memoryId/review?value=$value',
+    url: '${Env.apiBaseUrl}v3/memories/$memoryId/review?value=$value',
     headers: {},
     method: 'POST',
     body: '',
@@ -83,7 +83,7 @@ Future<bool> reviewMemoryServer(String memoryId, bool value) async {
 
 Future<bool> editMemoryServer(String memoryId, String value) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/facts/$memoryId?value=$value',
+    url: '${Env.apiBaseUrl}v3/memories/$memoryId?value=$value',
     headers: {},
     method: 'PATCH',
     body: '',

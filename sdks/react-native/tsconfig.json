@@ -2,7 +2,7 @@
   "compilerOptions": {
     "baseUrl": "./",
     "paths": {
-      "omi-react-native": ["./src/index"]
+      "@omiai/omi-react-native": ["./src/index"]
     },
     "allowUnreachableCode": false,
     "allowUnusedLabels": false,
@@ -23,6 +23,7 @@
     "skipLibCheck": true,
     "strict": true,
     "target": "esnext",
+    "declaration": true,
     "outDir": "lib"
   }
 }
