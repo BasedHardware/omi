@@ -5,9 +5,9 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_sound/flutter_sound.dart';
-import 'package:friend_private/services/devices.dart';
-import 'package:friend_private/services/sockets.dart';
-import 'package:friend_private/services/wals.dart';
+import 'package:omi/services/devices.dart';
+import 'package:omi/services/sockets.dart';
+import 'package:omi/services/wals.dart';
 
 class ServiceManager {
   late IMicRecorderService _mic;
@@ -188,12 +188,12 @@ class BackgroundService {
     Function()? onStop,
     Function()? onInitializing,
   }) {
-    // tracking service events
-    _service.on('recorder.ui.audioBytes').listen((event) {
+    StreamSubscription? recordAudioByteStream = _service.on('recorder.ui.audioBytes').listen((event) {
       Uint8List bytes = Uint8List.fromList(event!['data'].cast<int>());
       onByteReceived(bytes);
     });
-    _service.on('recorder.ui.stateUpdate').listen((event) {
+    StreamSubscription? recordStateStream;
+    recordStateStream = _service.on('recorder.ui.stateUpdate').listen((event) {
       if (event!['state'] == 'recording') {
         if (onRecording != null) {
           onRecording();
@@ -203,6 +203,11 @@ class BackgroundService {
           onInitializing();
         }
       } else if (event['state'] == 'stopped') {
+        // Close streams
+        recordAudioByteStream.cancel();
+        recordStateStream?.cancel();
+
+        // Callback
         if (onStop != null) {
           onStop();
         }

@@ -172,19 +172,19 @@ def download_postprocessing_audio(file_path: str, destination_file_path: str):
 
 
 # ************************************************
-# ************* MEMORIES RECORDINGS **************
+# *********** CONVERSATIONS RECORDINGS ***********
 # ************************************************
 
-def upload_memory_recording(file_path: str, uid: str, memory_id: str):
+def upload_conversation_recording(file_path: str, uid: str, conversation_id: str):
     bucket = storage_client.bucket(memories_recordings_bucket)
-    path = f'{uid}/{memory_id}.wav'
+    path = f'{uid}/{conversation_id}.wav'
     blob = bucket.blob(path)
     blob.upload_from_filename(file_path)
     return f'https://storage.googleapis.com/{memories_recordings_bucket}/{path}'
 
 
-def get_memory_recording_if_exists(uid: str, memory_id: str) -> str:
-    print('get_memory_recording_if_exists', uid, memory_id)
+def get_conversation_recording_if_exists(uid: str, memory_id: str) -> str:
+    print('get_conversation_recording_if_exists', uid, memory_id)
     bucket = storage_client.bucket(memories_recordings_bucket)
     path = f'{uid}/{memory_id}.wav'
     blob = bucket.blob(path)
@@ -195,7 +195,7 @@ def get_memory_recording_if_exists(uid: str, memory_id: str) -> str:
     return None
 
 
-def delete_all_memory_recordings(uid: str):
+def delete_all_conversation_recordings(uid: str):
     if not uid:
         return
     bucket = storage_client.bucket(memories_recordings_bucket)
@@ -268,16 +268,23 @@ def get_app_thumbnail_url(thumbnail_id: str) -> str:
 # **********************************
 # ************* CHAT FILES **************
 # **********************************
-def upload_multi_chat_files(files_name: List[str], uid: str):
+def upload_multi_chat_files(files_name: List[str], uid: str) -> dict:
+    """
+    Upload multiple files to Google Cloud Storage in the chat files bucket.
+
+    Args:
+        files_name: List of file paths to upload
+        uid: User ID to use as part of the storage path
+
+    Returns:
+        dict: A dictionary mapping original filenames to their Google Cloud Storage URLs
+    """
     bucket = storage_client.bucket(chat_files_bucket)
     result = transfer_manager.upload_many_from_filenames(bucket, files_name, source_directory="./", blob_name_prefix=f'{uid}/')
-    files = []
     dictFiles = {}
     for name, result in zip(files_name, result):
         if isinstance(result, Exception):
             print("Failed to upload {} due to exception: {}".format(name, result))
         else:
-            files.append(f'https://storage.googleapis.com/{chat_files_bucket}/{uid}/name')
             dictFiles[name] = f'https://storage.googleapis.com/{chat_files_bucket}/{uid}/{name}'
     return dictFiles
-

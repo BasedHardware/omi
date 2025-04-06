@@ -55,7 +55,7 @@ function setup_firebase() {
 function setup_firebase_with_service_account() {
   dart pub global activate flutterfire_cli
   flutterfire config \
-    --platforms="android,ios" \
+    --platforms="android,ios,web" \
     --out=lib/firebase_options_dev.dart \
     --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
     --android-app-id=com.friend.ios.dev \
@@ -67,7 +67,7 @@ function setup_firebase_with_service_account() {
     --yes
 
   flutterfire config \
-    --platforms="android,ios" \
+    --platforms="android,ios,web" \
     --out=lib/firebase_options_prod.dart \
     --ios-bundle-id=com.friend-app-with-wearable.ios12 \
     --android-app-id=com.friend.ios.dev \
@@ -78,6 +78,22 @@ function setup_firebase_with_service_account() {
     --ios-target="Runner" \
     --yes
 }
+
+######################################
+# Setup provisioning profile
+######################################
+function setup_provisioning_profile() {
+    # Only install fastlane if it doesn't exist
+    if ! command -v fastlane &> /dev/null; then
+        echo "Installing fastlane..."
+        brew install fastlane
+    fi
+    
+    MATCH_PASSWORD=omi fastlane match development --readonly \
+        --app_identifier com.friend-app-with-wearable.ios12.development \
+        --git_url "git@github.com:BasedHardware/omi-community-certs.git"
+}
+
 
 #################
 # Set up App .env
@@ -121,6 +137,7 @@ case "${1}" in
   ios)
     setup_firebase \
       && setup_app_env \
+      && setup_provisioning_profile \
       && build_ios
     ;;
   android)

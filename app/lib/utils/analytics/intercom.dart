@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/env/env.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/env.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 
 class IntercomManager {
@@ -66,7 +66,7 @@ class IntercomManager {
       'Apps Integrations Enabled Count': _preferences.enabledAppsIntegrationsCount,
       'Speaker Profile': _preferences.hasSpeakerProfile,
       'Calendar Enabled': _preferences.calendarEnabled,
-      'Recordings Language': _preferences.recordingsLanguage,
+      'Primary Language': _preferences.userPrimaryLanguage,
       'Authorized Storing Recordings': _preferences.permissionStoreRecordingsEnabled,
     });
   }

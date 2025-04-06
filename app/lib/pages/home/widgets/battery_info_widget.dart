@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/gen/assets.gen.dart';
-import 'package:friend_private/pages/capture/connect.dart';
-import 'package:friend_private/pages/home/device.dart';
-import 'package:friend_private/providers/device_provider.dart';
-import 'package:friend_private/providers/home_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/pages/capture/connect.dart';
+import 'package:omi/pages/home/device.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 
 class BatteryInfoWidget extends StatelessWidget {

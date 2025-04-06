@@ -3,6 +3,7 @@ import os
 import asyncio
 from datetime import datetime, timezone
 from typing import List
+from pydantic import ValidationError
 import requests
 from ulid import ULID
 from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header
@@ -22,13 +23,15 @@ from utils.apps import get_available_apps, get_available_app_by_id, get_approved
     is_permit_payment_plan_get, generate_persona_prompt, generate_persona_desc, get_persona_by_uid, \
     increment_username, generate_api_key
 
+from database.memories import migrate_memories
+
 from utils.llm import generate_description, generate_persona_intro_message
 
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
-from models.app import App, ActionType
+from models.app import App, ActionType, AppCreate, AppUpdate
 from utils.other.storage import upload_plugin_logo, delete_plugin_logo, upload_app_thumbnail, get_app_thumbnail_url
-from utils.social import get_twitter_profile, get_twitter_timeline, verify_latest_tweet, \
+from utils.social import get_twitter_profile, verify_latest_tweet, \
     upsert_persona_from_twitter_profile, add_twitter_to_persona
 
 router = APIRouter()
@@ -54,11 +57,11 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['approved'] = False
     data['deleted'] = False
     data['status'] = 'under-review'
-    data['name'] = data['name'].strip()
+    data['name'] = (data.get('name') or '').strip()
     data['id'] = str(ULID())
     if not data.get('author') and not data.get('email'):
         user = get_user_from_uid(uid)
-        data['author'] = user['display_name']
+        data['author'] = user.get('display_name', '')
         data['email'] = user['email']
     if not data.get('is_paid'):
         data['is_paid'] = False
@@ -86,7 +89,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
                 else:
                     external_integration['is_instructions_url'] = False
 
-        # Acitons
+        # Actions
         if actions := external_integration.get('actions'):
             for action in actions:
                 if not action.get('action'):
@@ -110,10 +113,14 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
                 len(ext_int['auth_steps']) == 1):
             ext_int['app_home_url'] = ext_int['auth_steps'][0]['url']
 
-    add_app_to_db(data)
+    try:
+        app = AppCreate.model_validate(data)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    add_app_to_db(app.model_dump(exclude_unset=True))
 
     # payment link
-    app = App(**data)
     upsert_app_payment_link(app.id, app.is_paid, app.price, app.payment_plan, app.uid)
 
     return {'status': 'ok', 'app_id': app.id}
@@ -127,12 +134,12 @@ async def create_persona(persona_data: str = Form(...), file: UploadFile = File(
     data['deleted'] = False
     data['status'] = 'under-review'
     data['category'] = 'personality-emulation'
-    data['name'] = data['name'].strip()
+    data['name'] = (data.get('name') or '').strip()
     data['id'] = str(ULID())
     data['uid'] = uid
     data['capabilities'] = ['persona']
     user = get_user_from_uid(uid)
-    data['author'] = user['display_name']
+    data['author'] = user.get('display_name', '')
     data['email'] = user['email']
 
     if 'username' not in data or data['username'] == '' or data['username'] is None:
@@ -152,7 +159,12 @@ async def create_persona(persona_data: str = Form(...), file: UploadFile = File(
     data['image'] = img_url
     data['created_at'] = datetime.now(timezone.utc)
 
-    add_app_to_db(data)
+    try:
+        app_create = AppCreate.model_validate(data)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    add_app_to_db(app_create.model_dump(exclude_unset=True))
 
     return {'status': 'ok', 'app_id': data['id'], 'username': data['username']}
 
@@ -188,7 +200,12 @@ async def update_persona(persona_id: str, persona_data: str = Form(...), file: U
             'omi' not in persona.get('connected_accounts', []):
         data['persona_prompt'] = await generate_persona_prompt(uid, persona)
 
-    update_app_in_db(data)
+    try:
+        update_app = AppUpdate.model_validate(data)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    update_app_in_db(update_app.model_dump(exclude_unset=True))
 
     if persona['approved'] and (persona['private'] is None or persona['private'] is False):
         delete_generic_cache('get_public_approved_apps_data')
@@ -253,11 +270,16 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
     # Generate persona prompt
     persona_data['persona_prompt'] = await generate_persona_prompt(uid, persona_data)
 
+    try:
+        persona_create = AppCreate.model_validate(persona_data)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
     # Save username
     save_username(persona_data['username'], uid)
 
     # Add persona to database
-    add_app_to_db(persona_data)
+    add_app_to_db(persona_create.model_dump(exclude_unset=True))
 
     return persona_data
 
@@ -304,8 +326,12 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
                 len(ext_int['auth_steps']) == 1):
             ext_int['app_home_url'] = ext_int['auth_steps'][0]['url']
 
-    # Warn: the user can update any fields, e.g. approved.
-    update_app_in_db(data)
+    try:
+        update_app = AppUpdate.model_validate(data)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    update_app_in_db(update_app.model_dump(exclude_unset=True))
 
     # payment link
     upsert_app_payment_link(data.get('id'), data.get('is_paid', False), data.get('price'), data.get('payment_plan'),
@@ -469,8 +495,8 @@ def change_app_visibility(app_id: str, private: bool, uid: str = Depends(auth.ge
 def get_notification_scopes():
     return [
         {'title': 'User Name', 'id': 'user_name'},
-        {'title': 'User Facts', 'id': 'user_facts'},
-        {'title': 'User Memories', 'id': 'user_context'},
+        {'title': 'User Memories', 'id': 'user_facts'},
+        {'title': 'User Conversations', 'id': 'user_context'},
         {'title': 'User Chat', 'id': 'user_chat'}
     ]
 
@@ -479,19 +505,41 @@ def get_notification_scopes():
 def get_plugin_capabilities():
     return [
         {'title': 'Chat', 'id': 'chat'},
-        {'title': 'Memories', 'id': 'memories'},
+        {'title': 'Conversations', 'id': 'memories'},
         {'title': 'External Integration', 'id': 'external_integration', 'triggers': [
             {'title': 'Audio Bytes', 'id': 'audio_bytes'},
-            {'title': 'Memory Creation', 'id': 'memory_creation'},
+            {'title': 'Conversation Creation', 'id': 'memory_creation'},
             {'title': 'Transcript Processed', 'id': 'transcript_processed'},
         ], 'actions': [
-            {'title': 'Create conversations', 'id': 'create_conversation', 'doc_url': 'https://docs.omi.me/docs/developer/apps/IntegrationActions'},
-            {'title': 'Create facts', 'id': 'create_facts', 'doc_url': 'https://docs.omi.me/docs/developer/apps/IntegrationActions'}
+            {
+                'title': 'Create conversations', 
+                'id': 'create_conversation', 
+                'doc_url': 'https://docs.omi.me/docs/developer/apps/Import',
+                'description': 'Extend user conversations by making a POST request to the OMI System.'
+            },
+            {
+                'title': 'Create memories', 
+                'id': 'create_facts', 
+                'doc_url': 'https://docs.omi.me/docs/developer/apps/Import',
+                'description': 'Create new memories for the user through the OMI System.'
+            },
+            {
+                'title': 'Read conversations', 
+                'id': 'read_conversations', 
+                'doc_url': 'https://docs.omi.me/docs/developer/apps/Import',
+                'description': 'Access and read all user conversations through the OMI System. This gives the app access to all conversation history.'
+            },
+            {
+                'title': 'Read memories', 
+                'id': 'read_memories', 
+                'doc_url': 'https://docs.omi.me/docs/developer/apps/Import',
+                'description': 'Access and read all user memories through the OMI System. This gives the app access to all stored memories.'
+            }
         ]},
         {'title': 'Notification', 'id': 'proactive_notification', 'scopes': [
             {'title': 'User Name', 'id': 'user_name'},
             {'title': 'User Facts', 'id': 'user_facts'},
-            {'title': 'User Memories', 'id': 'user_context'},
+            {'title': 'User Conversations', 'id': 'user_context'},
             {'title': 'User Chat', 'id': 'user_chat'}
         ]}
     ]
@@ -534,9 +582,20 @@ def generate_description_endpoint(data: dict, uid: str = Depends(auth.get_curren
 async def get_twitter_profile_data(handle: str, uid: str = Depends(auth.get_current_user_uid)):
     if handle.startswith('@'):
         handle = handle[1:]
-    res = await get_twitter_profile(handle)
-    if res['avatar']:
-        res['avatar'] = res['avatar'].replace('_normal', '')
+    profile = await get_twitter_profile(handle)
+
+    # Convert TwitterProfile to dict for response
+    res = {
+        "name": profile.name,
+        "profile": profile.profile,
+        "rest_id": profile.rest_id,
+        "avatar": profile.avatar,
+        "desc": profile.desc,
+        "friends": profile.friends,
+        "sub_count": profile.sub_count,
+        "id": profile.id,
+        "status": profile.status,
+    }
 
     # By user persona first
     persona = get_user_persona_by_uid(uid)
@@ -602,7 +661,8 @@ async def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid
     # Migrate app ownership in the database
     migrate_app_owner_id_db(uid, old_id)
 
-    # Start async task to update persona connected accounts
+    # Start async tasks to migrate facts and update persona connected accounts
+    asyncio.create_task(migrate_memories(old_id, uid))
     asyncio.create_task(update_omi_persona_connected_accounts(uid))
 
     return {"status": "ok", "message": "Migration started"}

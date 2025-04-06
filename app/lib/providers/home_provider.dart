@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/api/speech_profile.dart';
-import 'package:friend_private/backend/http/api/users.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/utils/analytics/analytics_manager.dart';
+import 'package:omi/backend/http/api/speech_profile.dart';
+import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/main.dart';
+import 'package:omi/pages/settings/language_selection_dialog.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 
 class HomeProvider extends ChangeNotifier {
   int selectedIndex = 0;
@@ -15,42 +17,45 @@ class HomeProvider extends ChangeNotifier {
   bool isConvoSearchFieldFocused = false;
   bool hasSpeakerProfile = true;
   bool isLoading = false;
-  String recordingLanguage = SharedPreferencesUtil().recordingsLanguage;
+  String userPrimaryLanguage = SharedPreferencesUtil().userPrimaryLanguage;
+  bool hasSetPrimaryLanguage = SharedPreferencesUtil().hasSetPrimaryLanguage;
 
+  // Available languages ordered by popularity
   final Map<String, String> availableLanguages = {
+    // Top languages first
+    'English': 'en',
+    'Spanish': 'es',
+    'Chinese (Mandarin, Simplified)': 'zh',
+    'Hindi': 'hi',
+    'Portuguese': 'pt',
+    'Russian': 'ru',
+    'Japanese': 'ja',
+    'German': 'de',
+    // Other languages alphabetically
     'Bulgarian': 'bg',
     'Catalan': 'ca',
-    'Chinese (Mandarin, Simplified)': 'zh',
     'Chinese (Mandarin, Traditional)': 'zh-TW',
     'Chinese (Cantonese, Traditional)': 'zh-HK',
     'Czech': 'cs',
     'Danish': 'da',
     'Dutch': 'nl',
-    'English': 'en',
-    'English/Spanish': 'multi',
     'Estonian': 'et',
     'Finnish': 'fi',
     'Flemish': 'nl-BE',
     'French': 'fr',
-    'German': 'de',
     'German (Switzerland)': 'de-CH',
     'Greek': 'el',
-    'Hindi': 'hi',
     'Hungarian': 'hu',
     'Indonesian': 'id',
     'Italian': 'it',
-    'Japanese': 'ja',
     'Korean': 'ko',
     'Latvian': 'lv',
     'Lithuanian': 'lt',
     'Malay': 'ms',
     'Norwegian': 'no',
     'Polish': 'pl',
-    'Portuguese': 'pt',
     'Romanian': 'ro',
-    'Russian': 'ru',
     'Slovak': 'sk',
-    'Spanish': 'es',
     'Swedish': 'sv',
     'Thai': 'th',
     'Turkish': 'tr',
@@ -93,14 +98,65 @@ class HomeProvider extends ChangeNotifier {
     SharedPreferencesUtil().hasSpeakerProfile = res;
     debugPrint('_setupHasSpeakerProfile: ${SharedPreferencesUtil().hasSpeakerProfile}');
     AnalyticsManager().setUserAttribute('Speaker Profile', SharedPreferencesUtil().hasSpeakerProfile);
+
     setIsLoading(false);
     notifyListeners();
   }
 
-  void setRecordingLanguage(String language) {
-    recordingLanguage = language;
-    SharedPreferencesUtil().recordingsLanguage = language;
+  Future<void> setupUserPrimaryLanguage() async {
+    try {
+      final language = await getUserPrimaryLanguage();
+      if (language == null) {
+        // User hasn't set a primary language yet
+        userPrimaryLanguage = '';
+        hasSetPrimaryLanguage = false;
+
+        // Show language dialog after a short delay to ensure UI is ready
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (MyApp.navigatorKey.currentContext != null) {
+            showLanguageDialogIfNeeded(MyApp.navigatorKey.currentContext!);
+          }
+        });
+      } else {
+        userPrimaryLanguage = language;
+        hasSetPrimaryLanguage = true;
+        SharedPreferencesUtil().userPrimaryLanguage = language;
+        SharedPreferencesUtil().hasSetPrimaryLanguage = true;
+        AnalyticsManager().setUserAttribute('Primary Language', language);
+      }
+      debugPrint('setupUserPrimaryLanguage: $language, hasSet: $hasSetPrimaryLanguage');
+    } catch (e) {
+      debugPrint('Error setting up user primary language: $e');
+      userPrimaryLanguage = '';
+      hasSetPrimaryLanguage = false;
+    }
     notifyListeners();
+    return;
+  }
+
+  void showLanguageDialogIfNeeded(BuildContext context) {
+    if (!hasSetPrimaryLanguage) {
+      LanguageSelectionDialog.show(context, isRequired: true);
+    }
+  }
+
+  Future<bool> updateUserPrimaryLanguage(String languageCode) async {
+    try {
+      final success = await setUserPrimaryLanguage(languageCode);
+      if (success) {
+        userPrimaryLanguage = languageCode;
+        hasSetPrimaryLanguage = true;
+        SharedPreferencesUtil().userPrimaryLanguage = languageCode;
+        SharedPreferencesUtil().hasSetPrimaryLanguage = true;
+        AnalyticsManager().setUserAttribute('Primary Language', languageCode);
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint('Error setting user primary language: $e');
+      return false;
+    }
   }
 
   String getLanguageName(String code) {

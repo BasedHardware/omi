@@ -12,13 +12,13 @@ from multipart.multipart import shutil
 import database.chat as chat_db
 from database.apps import record_app_usage
 from models.app import App
-from models.chat import ChatSession, Message, SendMessageRequest, MessageSender, ResponseMessage, MessageMemory, \
+from models.chat import ChatSession, Message, SendMessageRequest, MessageSender, ResponseMessage, MessageConversation, \
     FileChat
-from models.memory import Memory
+from models.conversation import Conversation
 from models.plugin import UsageHistoryType
 from routers.sync import retrieve_file_paths, decode_files_to_wav, retrieve_vad_segments
 from utils.apps import get_available_app_by_id
-from utils.chat import process_voice_message_segment, process_voice_message_segment_stream
+from utils.chat import process_voice_message_segment, process_voice_message_segment_stream, transcribe_voice_message_segment
 from utils.llm import initial_chat_message, initial_persona_chat_message
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
@@ -107,18 +107,18 @@ def send_message(
         ask_for_nps = callback_data.get('ask_for_nps', False)
 
         # cited extraction
-        cited_memory_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
-        if len(cited_memory_idxs) > 0:
+        cited_conversation_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
+        if len(cited_conversation_idxs) > 0:
             response = re.sub(r'\[\d+\]', '', response)
-        memories = [memories[i - 1] for i in cited_memory_idxs if 0 < i and i <= len(memories)]
+        memories = [memories[i - 1] for i in cited_conversation_idxs if 0 < i and i <= len(memories)]
 
         memories_id = []
-        # check if the items in the memories list are dict
+        # check if the items in the conversations list are dict
         if memories:
             converted_memories = []
             for m in memories[:5]:
                 if isinstance(m, dict):
-                    converted_memories.append(Memory(**m))
+                    converted_memories.append(Conversation(**m))
                 else:
                     converted_memories.append(m)
             memories_id = [m.id for m in converted_memories]
@@ -137,7 +137,7 @@ def send_message(
             chat_db.add_message_to_chat_session(uid, chat_session.id, ai_message.id)
 
         chat_db.add_message(uid, ai_message.dict())
-        ai_message.memories = [MessageMemory(**m) for m in (memories if len(memories) < 5 else memories[:5])]
+        ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
         if app_id:
             record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
 
@@ -212,18 +212,18 @@ def send_message_v1(
     response, ask_for_nps, memories = execute_graph_chat(uid, messages, app, cited=True)  # plugin
 
     # cited extraction
-    cited_memory_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
-    if len(cited_memory_idxs) > 0:
+    cited_conversation_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
+    if len(cited_conversation_idxs) > 0:
         response = re.sub(r'\[\d+\]', '', response)
-    memories = [memories[i - 1] for i in cited_memory_idxs if 0 < i and i <= len(memories)]
+    memories = [memories[i - 1] for i in cited_conversation_idxs if 0 < i and i <= len(memories)]
 
     memories_id = []
-    # check if the items in the memories list are dict
+    # check if the items in the conversations list are dict
     if memories:
         converted_memories = []
         for m in memories[:5]:
             if isinstance(m, dict):
-                converted_memories.append(Memory(**m))
+                converted_memories.append(Conversation(**m))
             else:
                 converted_memories.append(m)
         memories_id = [m.id for m in converted_memories]
@@ -382,7 +382,7 @@ def get_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_cu
     chat_session = chat_db.get_chat_session(uid, plugin_id=plugin_id)
     chat_session_id = chat_session['id'] if chat_session else None
 
-    messages = chat_db.get_messages(uid, limit=100, include_memories=True, plugin_id=plugin_id,
+    messages = chat_db.get_messages(uid, limit=100, include_conversations=True, plugin_id=plugin_id,
                                     chat_session_id=chat_session_id)
     print('get_messages', len(messages), plugin_id)
     if not messages:
@@ -435,6 +435,55 @@ async def create_voice_message_stream(files: List[UploadFile] = File(...),
         generate_stream(),
         media_type="text/event-stream"
     )
+
+
+@router.post("/v1/voice-message/transcribe")
+async def transcribe_voice_message(files: List[UploadFile] = File(...),
+                                   uid: str = Depends(auth.get_current_user_uid)):
+    # Check if files are empty
+    if not files or len(files) == 0:
+        raise HTTPException(status_code=400, detail='No files provided')
+    
+    wav_paths = []
+    other_file_paths = []
+    
+    # Process all files in a single loop
+    for file in files:
+        if file.filename.lower().endswith('.wav'):
+            # For WAV files, save directly to a temporary path
+            temp_path = f"/tmp/{uid}_{uuid.uuid4()}.wav"
+            with open(temp_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            wav_paths.append(temp_path)
+        else:
+            # For other files, collect paths for later conversion
+            path = retrieve_file_paths([file], uid)
+            if path:
+                other_file_paths.extend(path)
+    
+    # Convert other files to WAV if needed
+    if other_file_paths:
+        converted_wav_paths = decode_files_to_wav(other_file_paths)
+        if converted_wav_paths:
+            wav_paths.extend(converted_wav_paths)
+    
+    # Process all WAV files
+    for wav_path in wav_paths:
+        transcript = transcribe_voice_message_segment(wav_path)
+        
+        # Clean up temporary WAV files created directly
+        if wav_path.startswith(f"/tmp/{uid}_"):
+            try:
+                Path(wav_path).unlink()
+            except:
+                pass
+                
+        # If we got a transcript, return it
+        if transcript:
+            return {"transcript": transcript}
+    
+    # If we got here, no transcript was produced
+    raise HTTPException(status_code=400, detail='Failed to transcribe audio')
 
 
 @router.post('/v1/files', response_model=List[FileChat], tags=['chat'])
