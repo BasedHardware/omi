@@ -32,7 +32,6 @@ def detect_language(text: str) -> str | None:
             mime_type=mime_type
         )
 
-        print(response)
         # Return the language code only if confidence is >= 1
         if response.languages and len(response.languages) > 0:
             for language in response.languages:

@@ -39,7 +39,7 @@ router = APIRouter()
 async def _listen(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = None,
-        client_triggered_on_new_segment_only: bool = True
+        including_combined_segments: bool = False
 ):
     print('_listen', uid, language, sample_rate, codec, include_speech_profile, stt_service)
 
@@ -51,8 +51,8 @@ async def _listen(
     language = 'multi' if language == 'auto' else language
 
     # Determine the best STT service
-    stt_service, language_for_stt, stt_model = get_stt_service_for_language(language)
-    if not stt_service or not language_for_stt:
+    stt_service, stt_language, stt_model = get_stt_service_for_language(language)
+    if not stt_service or not stt_language:
         await websocket.close(code=1008, reason=f"The language is not supported, {language}")
         return
 
@@ -322,9 +322,9 @@ async def _listen(
             # DEEPGRAM
             if stt_service == STTService.deepgram:
                 deepgram_socket = await process_audio_dg(
-                    stream_transcript, language_for_stt, sample_rate, 1, preseconds=speech_profile_duration, model=stt_model,)
+                    stream_transcript, stt_language, sample_rate, 1, preseconds=speech_profile_duration, model=stt_model,)
                 if speech_profile_duration:
-                    deepgram_socket2 = await process_audio_dg(stream_transcript, language_for_stt, sample_rate, 1, model=stt_model)
+                    deepgram_socket2 = await process_audio_dg(stream_transcript, stt_language, sample_rate, 1, model=stt_model)
 
                     async def deepgram_socket_send(data):
                         return deepgram_socket.send(data)
@@ -334,7 +334,7 @@ async def _listen(
             # SONIOX
             elif stt_service == STTService.soniox:
                 soniox_socket = await process_audio_soniox(
-                    stream_transcript, sample_rate, language_for_stt,
+                    stream_transcript, sample_rate, stt_language,
                     uid if include_speech_profile else None,
                     preseconds=speech_profile_duration
                 )
@@ -344,7 +344,7 @@ async def _listen(
                 print("file_path", file_path)
                 if speech_profile_duration and file_path:
                     soniox_socket2 = await process_audio_soniox(
-                        stream_transcript, sample_rate, language_for_stt,
+                        stream_transcript, sample_rate, stt_language,
                         uid if include_speech_profile else None
                     )
 
@@ -353,7 +353,7 @@ async def _listen(
             # SPEECHMATICS
             elif stt_service == STTService.speechmatics:
                 speechmatics_socket = await process_audio_speechmatics(
-                    stream_transcript, sample_rate, language_for_stt, preseconds=speech_profile_duration
+                    stream_transcript, sample_rate, stt_language, preseconds=speech_profile_duration
                 )
                 if speech_profile_duration:
                     asyncio.create_task(send_initial_file_path(file_path, speechmatics_socket.send))
@@ -486,9 +486,9 @@ async def _listen(
     # Transcripts
     #
     current_conversation_id = None
-    translation_enabled = not client_triggered_on_new_segment_only
+    translation_enabled = including_combined_segments and stt_language == 'multi'
 
-    async def translate(segments: List[TranscriptSegment]):
+    async def translate(segments: List[TranscriptSegment], conversation_id: str):
         try:
             translated_segments = []
             for segment in segments:
@@ -528,6 +528,26 @@ async def _listen(
 
                 translated_segments.append(segment)
 
+            # Update the conversation in the database to persist translations
+            if len(translated_segments) > 0:
+                conversation = conversations_db.get_conversation(uid, conversation_id)
+                if conversation:
+                    should_updates = False
+                    for segment in translated_segments:
+                        for i, existing_segment in enumerate(conversation['transcript_segments']):
+                            if existing_segment['id'] == segment.id:
+                                conversation['transcript_segments'][i]['translations'] = segment.dict()['translations']
+                                should_updates = True
+                                break
+
+                    # Update the database
+                    if should_updates:
+                        conversations_db.update_conversation_segments(
+                            uid,
+                            conversation_id,
+                            conversation['transcript_segments']
+                        )
+
             # Send a translation event to the client with the translated segments
             if websocket_active and len(translated_segments) > 0:
                 translation_event = TranslationEvent(
@@ -544,7 +564,7 @@ async def _listen(
         nonlocal websocket
         nonlocal seconds_to_trim
         nonlocal current_conversation_id
-        nonlocal client_triggered_on_new_segment_only
+        nonlocal including_combined_segments
         nonlocal translation_enabled
 
         while websocket_active or len(realtime_segment_buffers) > 0:
@@ -583,10 +603,10 @@ async def _listen(
                 current_conversation_id = conversation.id
 
                 # Send to client
-                if client_triggered_on_new_segment_only:
-                    updates_segments = [segment.dict() for segment in transcript_segments]
-                else:
+                if including_combined_segments:
                     updates_segments = [segment.dict() for segment in conversation.transcript_segments[starts:ends]]
+                else:
+                    updates_segments = [segment.dict() for segment in transcript_segments]
 
                 await websocket.send_json(updates_segments)
 
@@ -596,7 +616,7 @@ async def _listen(
 
                 # Translate
                 if translation_enabled:
-                    await translate(conversation.transcript_segments[starts:ends])
+                    await translate(conversation.transcript_segments[starts:ends], conversation.id)
 
             except Exception as e:
                 print(f'Could not process transcript: error {e}', uid)
@@ -739,4 +759,4 @@ async def listen_handler(
         websocket: WebSocket, uid: str = Depends(auth.get_current_user_uid), language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = None
 ):
-    await _listen(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, None, client_triggered_on_new_segment_only=False)
+    await _listen(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, None, including_combined_segments=True)
