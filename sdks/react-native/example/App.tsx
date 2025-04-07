@@ -20,7 +20,8 @@ export default function App() {
   // Backend WebSocket state
   const [backendWsConnected, setBackendWsConnected] = useState<boolean>(false);
   const backendWsRef = useRef<WebSocket | null>(null);
-  const [backendWsUrl, setBackendWsUrl] = useState<string>('wss://ae01-2406-7400-63-307b-fdf3-6c45-bda1-2b68.ngrok-free.app/ws');
+  const [backendWsUrl, setBackendWsUrl] = useState<string>('wss://<insert-ngrok-url>.ngrok-free.app/ws');
+
 
   // Transcription processing state
   const websocketRef = useRef<WebSocket | null>(null);
@@ -60,13 +61,16 @@ export default function App() {
 
   const requestBluetoothPermission = async () => {
     try {
+      console.log('Requesting Bluetooth permissions...');
+      
       if (Platform.OS === 'ios') {
+        // On iOS, we need to attempt a scan which will trigger the permission dialog
         bleManagerRef.current?.startDeviceScan(null, null, (error) => {
           if (error) {
             console.error('Permission error:', error);
             setPermissionGranted(false);
             Alert.alert(
-              'Bluetooth Permission',
+              'Bluetooth Permission Denied',
               'Please enable Bluetooth permission in your device settings to use this feature.',
               [
                 { text: 'Cancel', style: 'cancel' },
@@ -75,6 +79,7 @@ export default function App() {
             );
           } else {
             setPermissionGranted(true);
+            Alert.alert('Bluetooth Permission', 'Bluetooth permission granted successfully!');
           }
           // Stop scanning immediately after permission check
           bleManagerRef.current?.stopDeviceScan();
@@ -88,7 +93,7 @@ export default function App() {
               console.error('Permission error:', error);
               setPermissionGranted(false);
               Alert.alert(
-                'Bluetooth Permission',
+                'Bluetooth Permission Denied',
                 'Please enable Bluetooth and Location permissions in your device settings to use this feature.',
                 [
                   { text: 'Cancel', style: 'cancel' },
@@ -97,6 +102,7 @@ export default function App() {
               );
             } else {
               setPermissionGranted(true);
+              Alert.alert('Bluetooth Permission', 'Bluetooth permissions granted successfully!');
             }
             // Stop scanning immediately after permission check
             bleManagerRef.current?.stopDeviceScan();
@@ -104,11 +110,13 @@ export default function App() {
         } catch (error) {
           console.error('Error requesting permissions:', error);
           setPermissionGranted(false);
+          Alert.alert('Permission Error', `Failed to request permissions: ${error}`);
         }
       }
     } catch (error) {
       console.error('Error in requestBluetoothPermission:', error);
       setPermissionGranted(false);
+      Alert.alert('Error', `An unexpected error occurred: ${error}`);
     }
   };
 
@@ -623,11 +631,21 @@ export default function App() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Bluetooth Connection</Text>
+          <View style={styles.row}>
+            <TouchableOpacity
+              style={[styles.button, styles.buttonFull, scanning ? styles.buttonWarning : null]}
+              onPress={scanning ? stopScan : startScan}
+            >
+              <Text style={styles.buttonText}>{scanning ? "Stop Scan" : "Scan for Devices"}</Text>
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity
-            style={[styles.button, scanning ? styles.buttonWarning : null]}
-            onPress={scanning ? stopScan : startScan}
+            style={[styles.button, permissionGranted ? styles.buttonSuccess : styles.buttonPrimary, { marginTop: 10 }]}
+            onPress={requestBluetoothPermission}
           >
-            <Text style={styles.buttonText}>{scanning ? "Stop Scan" : "Scan for Devices"}</Text>
+            <Text style={styles.buttonText}>
+              {permissionGranted ? "Permissions Granted" : "Request Bluetooth Permissions"}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -913,6 +931,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#A0A0A0',
     opacity: 0.7,
   },
+  buttonFull: {
+    flex: 1,
+  },
   buttonText: {
     color: 'white',
     fontSize: 16,
@@ -1132,5 +1153,11 @@ const styles = StyleSheet.create({
     marginTop: 5,
     fontSize: 14,
     color: '#666',
+  },
+  buttonSuccess: {
+    backgroundColor: '#4CD964',
+  },
+  buttonPrimary: {
+    backgroundColor: '#007AFF',
   },
 });
