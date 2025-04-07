@@ -1,0 +1,70 @@
+---
+title: "LED Status Indicators"
+description: "Understanding LED patterns and indicators on your Omi device, including battery level indication via double-tap."
+---
+
+# LED Status Indicators
+
+Omi devices use LED indicators to communicate device status. This guide will help you understand what different LED colors and patterns mean.
+
+## General Status Indicators
+
+| LED Pattern | Meaning |
+|-------------|---------|
+| **Blue solid** | Device is connected to a phone via Bluetooth |
+| **Red solid** | Device is recording but not connected to a phone |
+| **Green blinking** (while charging) | Battery is charging |
+| **Green solid** (while charging) | Battery is fully charged (100%) |
+| **Red blinking** | Battery is low (below 20%) |
+| **Red-Green-Blue sequence** | Boot sequence, device is starting up |
+
+## Checking Battery Level (Double-Tap)
+
+You can check your battery level at any time by double-tapping the device button. The device will display the battery level through LED blinks.
+
+### Battery Level Indication
+
+When you double-tap the button, the device will display the battery percentage through a color-coded LED sequence:
+
+#### For battery levels below 20%
+- **Fast red blinking** for 3 seconds
+
+#### For battery levels between 21% and 65%
+- **Red LED blinks**:
+  - 1 blink: 21-30%
+  - 2 blinks: 31-40%
+  - 3 blinks: 41-50%
+
+#### For battery levels between 51% and 80%
+- **Yellow LED blinks** (red and green LEDs together):
+  - 1 blink: 51-60%
+  - 2 blinks: 61-70%
+  - 3 blinks: 71-80%
+
+#### For battery levels above 80%
+- **Green LED blinks**:
+  - 1 blink: 81-90%
+  - 2 blinks: 91-99%
+  - Solid green for 3 seconds: 100%
+
+## Note About Battery Charging
+
+The device may stop charging at 95-96% to extend battery life. This is by design and helps preserve the long-term health of your battery.
+
+## Button Functions
+
+| Button Action | Function |
+|---------------|----------|
+| **Single tap** | Enter sleep mode / wake from sleep |
+| **Double tap** | Show battery level |
+| **Long press** | Reserved for future functions |
+
+## Troubleshooting LED Patterns
+
+If you see unusual LED patterns:
+
+- **Alternating red and blue rapidly**: There may be a connectivity issue
+- **All LEDs flashing simultaneously**: May indicate a firmware or hardware error
+- **No LED response when pressing button**: Battery may be completely depleted
+
+For any persistent issues, please contact support or check the troubleshooting section in the documentation.

@@ -76,29 +76,62 @@ static void boot_led_sequence(void)
 void set_led_state()
 {
     // Recording and connected state - BLUE
+    uint16_t battery_millivolt;
+    uint8_t battery_percentage;
 
-    if(usb_charge)
+    // Check battery level first
+    if (battery_get_millivolt(&battery_millivolt) == 0 &&
+        battery_get_percentage(&battery_percentage, battery_millivolt) == 0 &&
+        battery_percentage < 20)
     {
+        // Battery is low - blinking red
         is_charging = !is_charging;
         if(is_charging)
         {
+            set_led_red(true);
+        }
+        else
+        {
+            set_led_red(false);
+        }
+        return;
+    }
+
+    if(usb_charge)
+    {
+        if (battery_get_millivolt(&battery_millivolt) == 0 &&
+            battery_get_percentage(&battery_percentage, battery_millivolt) == 0 &&
+            battery_percentage == 100)
+        {
+            // Battery is fully charged - solid green
             set_led_green(true);
         }
         else
         {
-            set_led_green(false);
+            // Battery is charging but not full - blinking green
+            is_charging = !is_charging;
+            if(is_charging)
+            {
+                set_led_green(true);
+            }
+            else
+            {
+                set_led_green(false);
+            }
         }
     }
     else
     {
         set_led_green(false);
     }
+
     if(is_off)
     {
         set_led_red(false);
         set_led_blue(false);
         return;
     }
+
     if (is_connected)
     {
         set_led_blue(true);
