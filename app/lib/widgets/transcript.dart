@@ -133,7 +133,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                 return AlertDialog(
                                   title: const Text('Translation Notice'),
                                   content: const Text(
-                                    'Omi will translate the conversation into your primary language. Translation results are only for reference.',
+                                    'Omi translates conversations into your primary language. Update it anytime in Settings →  Profiles.',
                                     style: TextStyle(fontSize: 14),
                                   ),
                                   actions: [
