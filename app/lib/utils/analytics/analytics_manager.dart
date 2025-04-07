@@ -1,4 +1,4 @@
-import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/analytics/intercom_manager.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 
 class AnalyticsManager {

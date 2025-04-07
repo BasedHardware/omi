@@ -43,7 +43,7 @@ import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
-import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/analytics/intercom_manager.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/features/calendar.dart';
 import 'package:omi/utils/logger.dart';

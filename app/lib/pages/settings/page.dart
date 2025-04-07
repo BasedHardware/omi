@@ -9,7 +9,8 @@ import 'package:omi/pages/settings/profile.dart';
 import 'package:omi/pages/settings/widgets.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
-import 'package:intercom_flutter/intercom_flutter.dart';
+import 'package:omi/utils/analytics/intercom_manager.dart';
+
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
@@ -62,7 +63,7 @@ class _SettingsPageState extends State<SettingsPage> {
         getItemAddOn2(
           'Need Help? Chat with us',
           () async {
-            await Intercom.instance.displayMessenger();
+            await IntercomManager().displayMessenger();
           },
           icon: Icons.chat,
         ),
@@ -88,7 +89,7 @@ class _SettingsPageState extends State<SettingsPage> {
         getItemAddOn2(
           'Guides & Tutorials',
           () async {
-            await Intercom.instance.displayHelpCenter();
+            await IntercomManager().displayHelpCenter();
           },
           icon: Icons.help_outline_outlined,
         ),
@@ -143,7 +144,7 @@ class _SettingsPageState extends State<SettingsPage> {
         getItemAddOn2(
           'Need Help? Chat with us',
           () async {
-            await Intercom.instance.displayMessenger();
+            await IntercomManager().displayMessenger();
           },
           icon: Icons.chat,
         ),

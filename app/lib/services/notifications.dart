@@ -14,7 +14,8 @@ import 'package:omi/backend/http/api/notifications.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/home/page.dart';
-import 'package:intercom_flutter/intercom_flutter.dart';
+import 'package:omi/utils/analytics/intercom_manager.dart';
+
 
 class NotificationService {
   NotificationService._();
@@ -126,7 +127,7 @@ class NotificationService {
     if (token == null) return;
     String timeZone = await getTimeZone();
     if (FirebaseAuth.instance.currentUser != null && token.isNotEmpty) {
-      await Intercom.instance.sendTokenToIntercom(token);
+      await IntercomManager().sendTokenToIntercom(token);
       await saveFcmTokenServer(token: token, timeZone: timeZone);
     }
   }

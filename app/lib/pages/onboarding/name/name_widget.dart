@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:gradient_borders/gradient_borders.dart';
-import 'package:intercom_flutter/intercom_flutter.dart';
+import 'package:omi/utils/analytics/intercom_manager.dart';
+
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/utils/analytics/intercom_manager.dart';
 import 'package:provider/provider.dart';
 
 class NameWidget extends StatefulWidget {
@@ -117,7 +119,7 @@ class _NameWidgetState extends State<NameWidget> {
               ),
             ),
             onTap: () {
-              Intercom.instance.displayMessenger();
+              IntercomManager().displayMessenger();
             },
           ),
         ],
