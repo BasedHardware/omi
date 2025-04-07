@@ -123,7 +123,54 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                 style: const TextStyle(letterSpacing: 0.0, color: Colors.grey),
                                 textAlign: TextAlign.left,
                               ),
-                            ))
+                            )),
+                        const SizedBox(height: 4),
+                        GestureDetector(
+                          onTap: () {
+                            showDialog(
+                              context: context,
+                              builder: (BuildContext context) {
+                                return AlertDialog(
+                                  title: const Text('Translation Notice'),
+                                  content: const Text(
+                                    'Omi will translate the conversation into your primary language. Translation results are only for reference.',
+                                    style: TextStyle(fontSize: 14),
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      child: const Text('OK'),
+                                      onPressed: () {
+                                        Navigator.of(context).pop();
+                                      },
+                                    ),
+                                  ],
+                                );
+                              },
+                            );
+                          },
+                          child: Opacity(
+                            opacity: 0.5,
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.check_circle,
+                                  size: 12,
+                                  color: Colors.grey,
+                                ),
+                                SizedBox(width: 4),
+                                Text(
+                                  'translated by omi',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ],
                     ],
                   ),
