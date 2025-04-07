@@ -104,6 +104,10 @@ class HomeProvider extends ChangeNotifier {
   }
 
   Future<void> setupUserPrimaryLanguage() async {
+    if (SharedPreferencesUtil().hasSetPrimaryLanguage && SharedPreferencesUtil().userPrimaryLanguage.isNotEmpty) {
+      return;
+    }
+
     try {
       final language = await getUserPrimaryLanguage();
       if (language == null) {

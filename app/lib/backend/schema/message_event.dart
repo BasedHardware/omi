@@ -1,5 +1,6 @@
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
 
 enum MessageEventType {
   // newMemoryCreating('new_memory_creating'),
@@ -13,6 +14,7 @@ enum MessageEventType {
   conversationBackwardSynced('conversation_backward_synced'),
   serviceStatus('service_status'),
   lastConversation('last_conversation'),
+  translating('translating'),
   unknown('unknown'),
   ;
 
@@ -49,6 +51,7 @@ class ServerMessageEvent {
   String? status;
   String? statusText;
   String? memoryId;
+  List<TranscriptSegment>? segments;
 
   ServerMessageEvent(
     this.type,
@@ -58,6 +61,7 @@ class ServerMessageEvent {
     this.status,
     this.statusText,
     this.memoryId,
+    this.segments,
   );
 
   static ServerMessageEvent fromJson(Map<String, dynamic> json) {
@@ -77,6 +81,9 @@ class ServerMessageEvent {
       json['status'],
       json['status_text'],
       json['memory_id'] ?? json['conversation_id'],
+      json['segments'] != null 
+          ? (json['segments'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList()
+          : null,
     );
   }
 }

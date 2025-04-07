@@ -156,7 +156,7 @@ int main(void)
         return err;
     }
 
-    err == battery_charge_start();
+    err = battery_charge_start();
     if (err)
     {
         LOG_ERR("Battery failed to start (err %d)", err);
