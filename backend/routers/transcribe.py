@@ -17,39 +17,29 @@ import database.users as user_db
 from database import redis_db
 from database.redis_db import get_cached_user_geolocation
 from models.conversation import Conversation, TranscriptSegment, ConversationStatus, Structured, Geolocation
-from models.message_event import ConversationEvent, MessageEvent, MessageServiceStatusEvent, LastConversationEvent
+from models.message_event import ConversationEvent, MessageEvent, MessageServiceStatusEvent, LastConversationEvent, TranslationEvent
+from models.transcript_segment import Translation
 from utils.apps import is_audio_bytes_app_enabled
 from utils.conversations.location import get_google_maps_location
-from utils.conversations.process_conversation import process_conversation
+from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.plugins import trigger_external_integrations
 from utils.stt.streaming import *
 from utils.stt.streaming import get_stt_service_for_language, STTService
 from utils.stt.streaming import process_audio_soniox, process_audio_dg, process_audio_speechmatics, send_initial_file_path
 from utils.webhooks import get_audio_bytes_webhook_seconds
 from utils.pusher import connect_to_trigger_pusher
+from utils.translation import translate_text, detect_language
+
 
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists
 
 router = APIRouter()
 
-def retrieve_in_progress_conversation(uid):
-    conversation_id = redis_db.get_in_progress_conversation_id(uid)
-    existing = None
-
-    if conversation_id:
-        existing = conversations_db.get_conversation(uid, conversation_id)
-        if existing and existing['status'] != 'in_progress':
-            existing = None
-
-    if not existing:
-        existing = conversations_db.get_in_progress_conversation(uid)
-    return existing
-
-
 async def _listen(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
-        channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = None
+        channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = None,
+        including_combined_segments: bool = False
 ):
     print('_listen', uid, language, sample_rate, codec, include_speech_profile, stt_service)
 
@@ -61,8 +51,8 @@ async def _listen(
     language = 'multi' if language == 'auto' else language
 
     # Determine the best STT service
-    stt_service, language_for_stt = get_stt_service_for_language(language)
-    if not stt_service or not language_for_stt:
+    stt_service, stt_language, stt_model = get_stt_service_for_language(language)
+    if not stt_service or not stt_language:
         await websocket.close(code=1008, reason=f"The language is not supported, {language}")
         return
 
@@ -248,17 +238,18 @@ async def _listen(
     _send_message_event(MessageServiceStatusEvent(status="in_progress_memories_processing", status_text="Processing Memories"))
     _process_in_progess_memories()
 
-    def _get_or_create_in_progress_conversation(segments: List[dict]):
+    def _upsert_in_progress_conversation(segments: List[TranscriptSegment], finished_at: datetime):
         if existing := retrieve_in_progress_conversation(uid):
             conversation = Conversation(**existing)
-            conversation.transcript_segments = TranscriptSegment.combine_segments(
-                conversation.transcript_segments, [TranscriptSegment(**segment) for segment in segments]
-            )
+            conversation.transcript_segments, (starts, ends) = TranscriptSegment.combine_segments(conversation.transcript_segments, segments)
+            conversations_db.update_conversation_segments(uid, conversation.id,
+                                                          [segment.dict() for segment in conversation.transcript_segments])
+            conversations_db.update_conversation_finished_at(uid, conversation.id, finished_at)
             redis_db.set_in_progress_conversation_id(uid, conversation.id)
-            # current_conversation_id = conversation.id
-            return conversation
+            return conversation, (starts, ends)
 
-        started_at = datetime.now(timezone.utc) - timedelta(seconds=segments[0]['end'] - segments[0]['start'])
+        # new
+        started_at = datetime.now(timezone.utc) - timedelta(seconds=segments[0].end - segments[0].start)
         conversation = Conversation(
             id=str(uuid.uuid4()),
             uid=uid,
@@ -267,13 +258,13 @@ async def _listen(
             created_at=started_at,
             started_at=started_at,
             finished_at=datetime.now(timezone.utc),
-            transcript_segments=[TranscriptSegment(**segment) for segment in segments],
+            transcript_segments=segments,
             status=ConversationStatus.in_progress,
         )
         print('_get_in_progress_conversation new', conversation, uid)
         conversations_db.upsert_conversation(uid, conversation_data=conversation.dict())
         redis_db.set_in_progress_conversation_id(uid, conversation.id)
-        return conversation
+        return conversation, (0, len(segments))
 
     async def create_conversation_on_segment_received_task(finished_at: datetime):
         nonlocal conversation_creation_task
@@ -331,10 +322,9 @@ async def _listen(
             # DEEPGRAM
             if stt_service == STTService.deepgram:
                 deepgram_socket = await process_audio_dg(
-                    stream_transcript, language_for_stt, sample_rate, 1, preseconds=speech_profile_duration
-                )
+                    stream_transcript, stt_language, sample_rate, 1, preseconds=speech_profile_duration, model=stt_model,)
                 if speech_profile_duration:
-                    deepgram_socket2 = await process_audio_dg(stream_transcript, language_for_stt, sample_rate, 1)
+                    deepgram_socket2 = await process_audio_dg(stream_transcript, stt_language, sample_rate, 1, model=stt_model)
 
                     async def deepgram_socket_send(data):
                         return deepgram_socket.send(data)
@@ -344,7 +334,7 @@ async def _listen(
             # SONIOX
             elif stt_service == STTService.soniox:
                 soniox_socket = await process_audio_soniox(
-                    stream_transcript, sample_rate, language_for_stt,
+                    stream_transcript, sample_rate, stt_language,
                     uid if include_speech_profile else None,
                     preseconds=speech_profile_duration
                 )
@@ -354,7 +344,7 @@ async def _listen(
                 print("file_path", file_path)
                 if speech_profile_duration and file_path:
                     soniox_socket2 = await process_audio_soniox(
-                        stream_transcript, sample_rate, language_for_stt,
+                        stream_transcript, sample_rate, stt_language,
                         uid if include_speech_profile else None
                     )
 
@@ -363,7 +353,7 @@ async def _listen(
             # SPEECHMATICS
             elif stt_service == STTService.speechmatics:
                 speechmatics_socket = await process_audio_speechmatics(
-                    stream_transcript, sample_rate, language_for_stt, preseconds=speech_profile_duration
+                    stream_transcript, sample_rate, stt_language, preseconds=speech_profile_duration
                 )
                 if speech_profile_duration:
                     asyncio.create_task(send_initial_file_path(file_path, speechmatics_socket.send))
@@ -496,6 +486,77 @@ async def _listen(
     # Transcripts
     #
     current_conversation_id = None
+    translation_enabled = including_combined_segments and stt_language == 'multi'
+
+    async def translate(segments: List[TranscriptSegment], conversation_id: str):
+        try:
+            translated_segments = []
+            for segment in segments:
+                language = 'en'  # TODO: REMOVE
+
+                # Check if the text is already in the target language
+                # Skip translation if the text language matches the target language
+                try:
+                    detected_lang = detect_language(segment.text)
+                    if detected_lang is not None and detected_lang == language:
+                        continue
+                except Exception as e:
+                    print(f"Language detection error: {e}")
+                    pass
+
+                # Translate the text to the target language
+                translated_text = translate_text(language, segment.text)
+
+                # Create a Translation object
+                translation = Translation(
+                    lang=language,
+                    text=translated_text,
+                )
+
+                # Check if a translation for this language already exists
+                existing_translation_index = None
+                for i, trans in enumerate(segment.translations):
+                    if trans.lang == language:
+                        existing_translation_index = i
+                        break
+
+                # Replace existing translation or add a new one
+                if existing_translation_index is not None:
+                    segment.translations[existing_translation_index] = translation
+                else:
+                    segment.translations.append(translation)
+
+                translated_segments.append(segment)
+
+            # Update the conversation in the database to persist translations
+            if len(translated_segments) > 0:
+                conversation = conversations_db.get_conversation(uid, conversation_id)
+                if conversation:
+                    should_updates = False
+                    for segment in translated_segments:
+                        for i, existing_segment in enumerate(conversation['transcript_segments']):
+                            if existing_segment['id'] == segment.id:
+                                conversation['transcript_segments'][i]['translations'] = segment.dict()['translations']
+                                should_updates = True
+                                break
+
+                    # Update the database
+                    if should_updates:
+                        conversations_db.update_conversation_segments(
+                            uid,
+                            conversation_id,
+                            conversation['transcript_segments']
+                        )
+
+            # Send a translation event to the client with the translated segments
+            if websocket_active and len(translated_segments) > 0:
+                translation_event = TranslationEvent(
+                    segments=[segment.dict() for segment in translated_segments]
+                )
+                _send_message_event(translation_event)
+
+        except Exception as e:
+            print(f"Translation error: {e}", uid)
 
     async def stream_transcript_process():
         nonlocal websocket_active
@@ -503,6 +564,8 @@ async def _listen(
         nonlocal websocket
         nonlocal seconds_to_trim
         nonlocal current_conversation_id
+        nonlocal including_combined_segments
+        nonlocal translation_enabled
 
         while websocket_active or len(realtime_segment_buffers) > 0:
             try:
@@ -533,23 +596,28 @@ async def _listen(
                         segment["end"] -= seconds_to_trim
                         segments[i] = segment
 
-                # Combine
-                segments = [segment.dict() for segment in
-                            TranscriptSegment.combine_segments([], [TranscriptSegment(**segment) for segment in segments])]
+                transcript_segments, _ = TranscriptSegment.combine_segments([], [TranscriptSegment(**segment) for segment in segments])
+
+                # can trigger race condition? increase soniox utterance?
+                conversation, (starts, ends) = _upsert_in_progress_conversation(transcript_segments, finished_at)
+                current_conversation_id = conversation.id
 
                 # Send to client
-                await websocket.send_json(segments)
+                if including_combined_segments:
+                    updates_segments = [segment.dict() for segment in conversation.transcript_segments[starts:ends]]
+                else:
+                    updates_segments = [segment.dict() for segment in transcript_segments]
+
+                await websocket.send_json(updates_segments)
 
                 # Send to external trigger
                 if transcript_send is not None:
-                    transcript_send(segments,current_conversation_id)
+                    transcript_send(updates_segments,current_conversation_id)
 
-                # can trigger race condition? increase soniox utterance?
-                conversation = _get_or_create_in_progress_conversation(segments)
-                current_conversation_id = conversation.id
-                conversations_db.update_conversation_segments(uid, conversation.id,
-                                                              [s.dict() for s in conversation.transcript_segments])
-                conversations_db.update_conversation_finished_at(uid, conversation.id, finished_at)
+                # Translate
+                if translation_enabled:
+                    await translate(conversation.transcript_segments[starts:ends], conversation.id)
+
             except Exception as e:
                 print(f'Could not process transcript: error {e}', uid)
 
@@ -680,8 +748,15 @@ async def _listen(
                 print(f"Error closing Pusher: {e}", uid)
 
 @router.websocket("/v3/listen")
-async def listen_handler(
+async def listen_handler_v3(
         websocket: WebSocket, uid: str = Depends(auth.get_current_user_uid), language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = None
 ):
     await _listen(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, None)
+
+@router.websocket("/v4/listen")
+async def listen_handler(
+        websocket: WebSocket, uid: str = Depends(auth.get_current_user_uid), language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
+        channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = None
+):
+    await _listen(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, None, including_combined_segments=True)
