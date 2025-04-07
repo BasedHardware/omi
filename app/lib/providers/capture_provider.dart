@@ -555,6 +555,15 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
 
+    if (event.type == MessageEventType.translating) {
+      if (event.segments == null || event.segments?.isEmpty == true) {
+        debugPrint("No segments received in translating event. Content is: $event");
+        return;
+      }
+      _handleTranslationEvent(event.segments!);
+      return;
+    }
+
     if (event.type == MessageEventType.serviceStatus) {
       if (event.status == null) {
         return;
@@ -609,6 +618,24 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
+  void _handleTranslationEvent(List<TranscriptSegment> translatedSegments) {
+    try {
+      if (translatedSegments.isEmpty) return;
+      
+      debugPrint("Received ${translatedSegments.length} translated segments");
+      
+      // Update the segments with the translated ones
+      var remainSegments = TranscriptSegment.updateSegments(segments, translatedSegments);
+      if (remainSegments.isNotEmpty) {
+        debugPrint("Adding ${remainSegments.length} new translated segments");
+      }
+      
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error handling translation event: $e");
+    }
+  }
+
   @override
   void onSegmentReceived(List<TranscriptSegment> newSegments) {
     if (newSegments.isEmpty) return;
@@ -618,7 +645,9 @@ class CaptureProvider extends ChangeNotifier
       FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
       _loadInProgressConversation();
     }
-    TranscriptSegment.combineSegments(segments, newSegments);
+    var remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
+    TranscriptSegment.combineSegments(segments, remainSegments);
+
     hasTranscripts = true;
     notifyListeners();
   }
