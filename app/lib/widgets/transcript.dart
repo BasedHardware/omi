@@ -106,10 +106,73 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
               Align(
                 alignment: Alignment.centerLeft,
                 child: SelectionArea(
-                  child: Text(
-                    tryDecodingText(text),
-                    style: const TextStyle(letterSpacing: 0.0, color: Colors.grey),
-                    textAlign: TextAlign.left,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        tryDecodingText(text),
+                        style: const TextStyle(letterSpacing: 0.0, color: Colors.grey),
+                        textAlign: TextAlign.left,
+                      ),
+                      if (data.translations.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        ...data.translations.map((translation) => Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                tryDecodingText(translation.text),
+                                style: const TextStyle(letterSpacing: 0.0, color: Colors.grey),
+                                textAlign: TextAlign.left,
+                              ),
+                            )),
+                        const SizedBox(height: 4),
+                        GestureDetector(
+                          onTap: () {
+                            showDialog(
+                              context: context,
+                              builder: (BuildContext context) {
+                                return AlertDialog(
+                                  title: const Text('Translation Notice'),
+                                  content: const Text(
+                                    'Omi translates conversations into your primary language. Update it anytime in Settings →  Profiles.',
+                                    style: TextStyle(fontSize: 14),
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      child: const Text('OK'),
+                                      onPressed: () {
+                                        Navigator.of(context).pop();
+                                      },
+                                    ),
+                                  ],
+                                );
+                              },
+                            );
+                          },
+                          child: Opacity(
+                            opacity: 0.5,
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.check_circle,
+                                  size: 12,
+                                  color: Colors.grey,
+                                ),
+                                SizedBox(width: 4),
+                                Text(
+                                  'translated by omi',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ),
