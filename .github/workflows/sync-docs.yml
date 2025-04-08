@@ -1,4 +1,4 @@
-name: Sync Multiple Files to Mintlify docs
+name: Sync Mintlify Docs back to Github
 
 on:
   push:
