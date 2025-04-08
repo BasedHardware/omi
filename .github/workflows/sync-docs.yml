@@ -81,3 +81,11 @@ jobs:
           base: main
           committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
           author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+
+      - name: Auto-merge PR
+        if: steps.create_pr.outputs.pull-request-operation == 'created'
+        run: |
+          gh pr merge --squash --delete-branch --admin "$PR_URL"
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+          PR_URL: ${{ steps.create_pr.outputs.pull-request-url }}
