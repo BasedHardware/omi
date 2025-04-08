@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-class Platform {
+class PlatformUtil {
   static bool get isWeb => kIsWeb;
   static bool get isNotWeb => !kIsWeb;
   static bool get isIOS => !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;

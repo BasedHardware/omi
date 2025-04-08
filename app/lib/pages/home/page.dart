@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/backend/http/api/users.dart';
@@ -255,7 +254,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     super.initState();
 
     // After init
-    FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
+    ForegroundUtil.addTaskDataCallback(_onReceiveTaskData);
   }
 
   void _listenToMessagesFromNotification() {
