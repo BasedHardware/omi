@@ -30,6 +30,7 @@ import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -273,7 +274,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   Widget build(BuildContext context) {
     return MyUpgradeAlert(
       upgrader: _upgrader,
-      dialogStyle: Platform.isIOS ? UpgradeDialogStyle.cupertino : UpgradeDialogStyle.material,
+      dialogStyle: PlatformUtil.isIOS ? UpgradeDialogStyle.cupertino : UpgradeDialogStyle.material,
       child: Consumer<ConnectivityProvider>(
         builder: (ctx, connectivityProvider, child) {
           bool isConnected = connectivityProvider.isConnected;

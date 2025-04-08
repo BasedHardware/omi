@@ -15,6 +15,7 @@ import 'package:omi/backend/schema/message.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/utils/analytics/intercom_manager.dart';
+import 'package:omi/utils/platform.dart';
 
 
 class NotificationService {
@@ -38,6 +39,7 @@ class NotificationService {
   final AwesomeNotifications _awesomeNotifications = AwesomeNotifications();
 
   Future<void> initialize() async {
+    if (PlatformUtil.isWeb) return;
     await _initializeAwesomeNotifications();
     // Calling it here because the APNS token can sometimes arrive early or it might take some time (like a few seconds)
     // Reference: https://github.com/firebase/flutterfire/issues/12244#issuecomment-1969286794
@@ -94,6 +96,7 @@ class NotificationService {
   }
 
   Future<bool> requestNotificationPermissions() async {
+    if (PlatformUtil.isWeb) return false;
     bool isAllowed = await _awesomeNotifications.isNotificationAllowed();
     if (!isAllowed) {
       isAllowed = await _awesomeNotifications.requestPermissionToSendNotifications();
@@ -105,6 +108,7 @@ class NotificationService {
   // Whereever this method is awaited, it will cause the app to not move forwared in execution due to it being a method call.
   // This was also the culprit when we had the app freeze on splash screen.
   Future<void> register() async {
+    if (PlatformUtil.isWeb) return;
     try {
       await platform.invokeMethod(
         'setNotificationOnKillService',
@@ -133,7 +137,8 @@ class NotificationService {
   }
 
   void saveNotificationToken() async {
-    if (Platform.isIOS) {
+    if (PlatformUtil.isWeb) return;
+    if (PlatformUtil.isIOS) {
       await _firebaseMessaging.getAPNSToken();
     }
     String? token = await _firebaseMessaging.getToken();
@@ -151,6 +156,7 @@ class NotificationService {
     int notificationId = 1,
     Map<String, String?>? payload,
   }) async {
+    if (PlatformUtil.isWeb) return;
     var allowed = await _awesomeNotifications.isNotificationAllowed();
     debugPrint('createNotification: $allowed');
     if (!allowed) return;
@@ -162,10 +168,11 @@ class NotificationService {
 
   // FIXME: Causes the different behavior on android and iOS
   bool _shouldShowForegroundNotificationOnFCMMessageReceived() {
-    return Platform.isAndroid;
+    return PlatformUtil.isAndroid;
   }
 
   Future<void> listenForMessages() async {
+    if (PlatformUtil.isWeb) return;
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       final data = message.data;
       final noti = message.notification;
@@ -205,6 +212,7 @@ class NotificationService {
       {required RemoteNotification noti,
       NotificationLayout layout = NotificationLayout.Default,
       Map<String, String?>? payload}) async {
+    if (PlatformUtil.isWeb) return;
     final id = Random().nextInt(10000);
     showNotification(id: id, title: noti.title!, body: noti.body!, layout: layout, payload: payload);
   }
@@ -219,6 +227,7 @@ class NotificationUtil {
   }
 
   static Future<void> initializeIsolateReceivePort() async {
+    if (PlatformUtil.isWeb) return;
     receivePort = ReceivePort('Notification action port in main isolate');
     receivePort!.listen((serializedData) {
       final receivedAction = ReceivedAction().fromMap(serializedData);

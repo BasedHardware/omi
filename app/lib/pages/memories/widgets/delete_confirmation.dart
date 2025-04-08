@@ -2,13 +2,14 @@ import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:omi/utils/platform.dart';
 
 class DeleteConfirmation {
   static Future<bool> show(BuildContext context, {String? title, String? content}) async {
     title ??= 'Delete memory?';
     content ??= 'This action cannot be undone.';
 
-    if (Platform.isIOS) {
+    if (PlatformUtil.isIOS) {
       return await showCupertinoDialog<bool>(
             context: context,
             builder: (context) => CupertinoAlertDialog(

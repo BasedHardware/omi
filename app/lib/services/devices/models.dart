@@ -46,7 +46,7 @@ Future<List<BluetoothService>> getBleServices(String deviceId) async {
       return [];
     } else {
       // TODO: need to be fixed for open glass
-      // if (Platform.isAndroid && device.servicesList.isNotEmpty) return device.servicesList;
+      // if (PlatformUtil.isAndroid && device.servicesList.isNotEmpty) return device.servicesList;
       if (device.servicesList.isNotEmpty) return device.servicesList;
       return await device.discoverServices();
     }

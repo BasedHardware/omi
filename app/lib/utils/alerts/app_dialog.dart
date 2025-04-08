@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/main.dart';
+import 'package:omi/utils/platform.dart';
 
 class AppDialog {
   static _getDialog({
@@ -36,7 +37,7 @@ class AppDialog {
               ),
             ),
           ];
-    if (Platform.isIOS) {
+    if (PlatformUtil.isIOS) {
       return CupertinoAlertDialog(
         title: Text(title),
         content: Text(content),

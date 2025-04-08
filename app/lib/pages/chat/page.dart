@@ -20,6 +20,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:gradient_borders/gradient_borders.dart';
@@ -177,10 +178,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
                                   double bottomPadding = chatIndex == 0
                                       ? provider.selectedFiles.isNotEmpty
-                                          ? (Platform.isAndroid
+                                          ? (PlatformUtil.isAndroid
                                               ? MediaQuery.sizeOf(context).height * 0.32
                                               : MediaQuery.sizeOf(context).height * 0.3)
-                                          : (Platform.isAndroid
+                                          : (PlatformUtil.isAndroid
                                               ? MediaQuery.sizeOf(context).height * 0.21
                                               : MediaQuery.sizeOf(context).height * 0.19)
                                       : 0;

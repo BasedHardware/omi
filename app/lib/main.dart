@@ -86,7 +86,7 @@ Future<bool> _init() async {
 
   await GrowthbookUtil.init();
   CalendarUtil.init();
-  ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
+  if(PlatformUtil.isNotWeb) ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   return isAuth;
 }
 
@@ -329,6 +329,12 @@ class _DeciderWidgetState extends State<DeciderWidget> {
   }
 
   void openAppLink(Uri uri) async {
+    // Add this check before accessing path segments
+    if (uri.pathSegments.isEmpty) {
+      debugPrint('URI has no path segments: $uri');
+      return;
+    }
+
     if (uri.pathSegments.first == 'apps') {
       if (mounted) {
         var app = await context.read<AppProvider>().getAppFromId(uri.pathSegments[1]);
@@ -359,7 +365,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
         context.read<HomeProvider>().setupHasSpeakerProfile();
         context.read<HomeProvider>().setupUserPrimaryLanguage();
         try {
-          await IntercomManager.instance.intercom.loginIdentifiedUser(
+          await IntercomManager().loginIdentifiedUser(
             userId: SharedPreferencesUtil().uid,
           );
         } catch (e) {
@@ -370,9 +376,9 @@ class _DeciderWidgetState extends State<DeciderWidget> {
         context.read<AppProvider>().setAppsFromCache();
         context.read<MessageProvider>().refreshMessages();
       } else {
-        await IntercomManager.instance.intercom.loginUnidentifiedUser();
+        await IntercomManager().loginUnidentifiedUser();
       }
-      IntercomManager.instance.setUserAttributes();
+      IntercomManager().setUserAttributes();
     });
     super.initState();
   }

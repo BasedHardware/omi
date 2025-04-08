@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/auth_provider.dart';
+import 'package:omi/utils/platform.dart';
 import 'package:omi/widgets/sign_in_button.dart';
 import 'package:provider/provider.dart';
 
@@ -38,7 +39,7 @@ class _AuthComponentState extends State<AuthComponent> {
                 ),
               ),
               SizedBox(height: MediaQuery.of(context).textScaleFactor > 1.0 ? 18 : 32),
-              if (Platform.isIOS) ...[
+              if (PlatformUtil.isIOS) ...[
                 SignInButton.withApple(
                   title: 'Sign in with Apple',
                   onTap: () async {

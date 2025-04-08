@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/utils/platform.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:omi/utils/analytics/intercom_manager.dart';
@@ -27,7 +28,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            Platform.isAndroid
+            PlatformUtil.isAndroid
                 ? CheckboxListTile(
                     value: provider.hasBackgroundPermission,
                     onChanged: (s) async {
@@ -163,7 +164,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                             padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                             onPressed: () async {
                               provider.setLoading(true);
-                              if (Platform.isAndroid) {
+                              if (PlatformUtil.isAndroid) {
                                 if (!provider.hasBackgroundPermission) {
                                   await provider.askForBackgroundPermissions();
                                 }

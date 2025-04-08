@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:growthbook_sdk_flutter/growthbook_sdk_flutter.dart';
+import 'package:omi/utils/platform.dart';
 
 class GrowthbookUtil {
   static final GrowthbookUtil _instance = GrowthbookUtil._internal();
@@ -20,7 +21,7 @@ class GrowthbookUtil {
     print('GrowthbookUtil init');
     var attr = {
       'id': SharedPreferencesUtil().uid,
-      'device': Platform.isAndroid ? 'android' : 'ios',
+      'device': PlatformUtil.isAndroid ? 'android' : 'ios',
     };
     _gb = await GBSDKBuilderApp(
       apiKey: Env.growthbookApiKey!,

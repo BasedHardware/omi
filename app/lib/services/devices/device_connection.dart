@@ -9,6 +9,7 @@ import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/frame_connection.dart';
 import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/utils/platform.dart';
 
 class DeviceConnectionFactory {
   static DeviceConnection? create(
@@ -82,7 +83,7 @@ abstract class DeviceConnection {
     }
 
     // Mtu
-    if (Platform.isAndroid && bleDevice.mtuNow < 512) {
+    if (PlatformUtil.isAndroid && bleDevice.mtuNow < 512) {
       await bleDevice.requestMtu(512); // This might fix the code 133 error
     }
 
