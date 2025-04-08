@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/flavors.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -43,6 +44,9 @@ Future<http.Response?> makeApiCall({
     }
 
     final client = http.Client();
+
+    url = "https://cors-anywhere.herokuapp.com/$url";
+    headers["Origin"]= 'http://localhost:53844';
 
     http.Response? response = await _performRequest(client, url, headers, body, method);
     if (response.statusCode == 401) {

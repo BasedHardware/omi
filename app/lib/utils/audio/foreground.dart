@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
@@ -66,27 +65,27 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
 class ForegroundUtil {
   // Add this new method
   static void sendDataToTask(Object data) {
-    if(PlatformUtil.isWeb) return;
+    if (PlatformUtil.isWeb) return;
     FlutterForegroundTask.sendDataToTask(data);
   }
-  
+
   static void addTaskDataCallback(Function(Object) callback) {
-    if(PlatformUtil.isWeb) return;
+    if (PlatformUtil.isWeb) return;
     FlutterForegroundTask.addTaskDataCallback(callback);
   }
-  
+
   static void initCommunicationPort() {
-    if(PlatformUtil.isWeb) return;
+    if (PlatformUtil.isWeb) return;
     FlutterForegroundTask.initCommunicationPort();
   }
 
   static requestIgnoreBatteryOptimization() async {
-    if(PlatformUtil.isWeb) return;
-    await FlutterForegroundTask.requestIgnoreBatteryOptimization(); 
+    if (PlatformUtil.isWeb) return;
+    await FlutterForegroundTask.requestIgnoreBatteryOptimization();
   }
 
   static Future<void> requestPermissions() async {
-    if(PlatformUtil.isWeb) return;
+    if (PlatformUtil.isWeb) return;
     // Android 13+, you need to allow notification permission to display foreground service notification.
     //
     // iOS: If you need notification, ask for permission.
@@ -107,12 +106,12 @@ class ForegroundUtil {
   }
 
   Future<bool?> get isIgnoringBatteryOptimizations async {
-    if(PlatformUtil.isWeb) null;
+    if (PlatformUtil.isWeb) null;
     return await FlutterForegroundTask.isIgnoringBatteryOptimizations;
   }
 
   static Future<void> initializeForegroundService() async {
-    if(PlatformUtil.isWeb) return;
+    if (PlatformUtil.isWeb) return;
     if (await FlutterForegroundTask.isRunningService) return;
     debugPrint('initializeForegroundService');
     // await Location().requestPermission();
@@ -144,7 +143,8 @@ class ForegroundUtil {
     );
   }
 
-  static Future<ServiceRequestResult> startForegroundTask() async {
+  static Future<ServiceRequestResult?> startForegroundTask() async {
+    if (PlatformUtil.isWeb) return null;
     debugPrint('startForegroundTask');
     if (await FlutterForegroundTask.isRunningService) {
       return FlutterForegroundTask.restartService();
@@ -158,6 +158,7 @@ class ForegroundUtil {
   }
 
   static Future<void> stopForegroundTask() async {
+    if (PlatformUtil.isWeb) return;
     debugPrint('stopForegroundTask');
     if (await FlutterForegroundTask.isRunningService) {
       await FlutterForegroundTask.stopService();
