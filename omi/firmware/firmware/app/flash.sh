@@ -14,11 +14,8 @@ if [ ! -f "$FILE" ]; then
   exit 1
 fi
 
-<<<<<<< Updated upstream
-=======
 echo "📄 Firmware file path: $FILE"
 
->>>>>>> Stashed changes
 MOD_TIME=$(stat -f "%m" "$FILE")
 NOW=$(date +%s)
 DELTA=$((NOW - MOD_TIME))
