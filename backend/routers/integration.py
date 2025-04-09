@@ -160,7 +160,7 @@ async def create_memories_via_integration(
 
     # Check if the app has the capability external_integration > action > create_facts
     if not apps_utils.app_has_action(app, 'create_facts'):
-        raise HTTPException(status_code=403, detail="App does not have the capability to create facts")
+        raise HTTPException(status_code=403, detail="App does not have the capability to create memories")
 
     # Validate that text is provided or explicit facts are provided
     if (not fact_data.text or len(fact_data.text.strip()) == 0) and \
