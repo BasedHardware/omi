@@ -74,25 +74,37 @@ function ChatContent() {
         const botDoc = await getDoc(doc(db, 'plugins_data', botId));
         if (botDoc.exists()) {
           const data = botDoc.data();
+
+          // Check if the persona is private
+          if (data.private === true) {
+            // If the persona is private, only allow access to the owner
+            const user = auth.currentUser;
+            if (!user || user.uid !== data.uid) {
+              // Redirect to home page or show error message
+              router.push('/');
+              return;
+            }
+          }
+
           let category = data.category;
-          
+
           // If connected_accounts exists, determine category from it
           if (category !== 'linkedin' && category !== 'twitter' && data.connected_accounts) {
             if (data.connected_accounts.includes('omi')) {
               category = 'omi';
-            } 
+            }
             else if (category !== 'twitter' && category !== 'linkedin') {
               if (data.connected_accounts.includes('twitter')) {
                 category = 'twitter';
               } else if (data.connected_accounts.includes('linkedin')) {
                 category = 'linkedin';
-              } 
+              }
               else {
                 category = data.connected_accounts[0];
               }
             }
           }
-          
+
           setBotData({
             name: data.name,
             avatar: data.avatar,
@@ -451,7 +463,7 @@ function ChatContent() {
           try {
             const personaRef = doc(db, 'plugins_data', personaId);
             const personaSnap = await getDoc(personaRef);
-            
+
             if (personaSnap.exists() && !personaSnap.data().uid) {
               // Only update the uid field
               await setDoc(personaRef, { uid: user.uid }, { merge: true });
@@ -460,7 +472,7 @@ function ChatContent() {
             console.error(`Error updating persona ${personaId}:`, error);
           }
         }
-        
+
         // Clear the created personas list after updating ownership
         localStorage.removeItem('createdPersonas');
 
@@ -550,14 +562,14 @@ function ChatContent() {
   );
 
   const inputRef = useRef<HTMLInputElement>(null);
-  
+
   const getStoreUrl = useMemo(() => {
     if (typeof window !== 'undefined') {
       // Check if user is on iOS
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
       // Check if user is on Android
       const isAndroid = /Android/.test(navigator.userAgent);
-      
+
       if (isIOS) {
         return 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163';
       } else if (isAndroid) {
@@ -734,7 +746,7 @@ function ChatContent() {
             <Send className="h-5 w-5" />
           </Button>
         </div>
-        
+
         <div className="flex justify-center mt-5 mb-6 sm:mb-2">
           <Button
             onClick={() => window.open(getStoreUrl, '_blank')}
@@ -743,7 +755,7 @@ function ChatContent() {
             Chat with My Own Clone!
           </Button>
         </div>
-        
+
         <div className="max-w-4xl mx-auto mt-4">
           <div className="flex flex-col sm:flex-row justify-between text-xs text-gray-500">
             <div className="flex gap-2 mb-2 sm:mb-0">
