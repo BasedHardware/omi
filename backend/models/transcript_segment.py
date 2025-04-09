@@ -1,10 +1,15 @@
 from datetime import timedelta
 from typing import Optional, List
-
+import uuid
 from pydantic import BaseModel, Field
 
 
+class Translation(BaseModel):
+    lang: str
+    text: str
+
 class TranscriptSegment(BaseModel):
+    id: Optional[str] = None
     text: str
     speaker: Optional[str] = 'SPEAKER_00'
     speaker_id: Optional[int] = None
@@ -12,9 +17,12 @@ class TranscriptSegment(BaseModel):
     person_id: Optional[str] = None
     start: float
     end: float
+    translations: Optional[List[Translation]] = []
 
     def __init__(self, **data):
         super().__init__(**data)
+        if not self.id:
+            self.id = str(uuid.uuid4())
         self.speaker_id = int(self.speaker.split('_')[1]) if self.speaker else 0
 
     def get_timestamp_string(self):
@@ -61,6 +69,10 @@ class TranscriptSegment(BaseModel):
             else:
                 joined_similar_segments.append(new_segment)
 
+        # updates range [starts, ends)
+        starts = len(segments)
+        ends = 0
+
         if (segments and
                 (segments[-1].speaker == joined_similar_segments[0].speaker or
                  (segments[-1].is_user and joined_similar_segments[0].is_user)) and
@@ -68,8 +80,10 @@ class TranscriptSegment(BaseModel):
             segments[-1].text += f' {joined_similar_segments[0].text}'
             segments[-1].end = joined_similar_segments[0].end
             joined_similar_segments.pop(0)
+            starts = len(segments)-1
 
         segments.extend(joined_similar_segments)
+        ends = len(segments)
 
         # Speechmatics specific issue with punctuation
         for i, segment in enumerate(segments):
@@ -80,7 +94,8 @@ class TranscriptSegment(BaseModel):
                 .replace(' .', '.')
                 .replace(' ?', '?')
             )
-        return segments
+
+        return segments, (starts,ends)
 
 
 class ImprovedTranscriptSegment(BaseModel):

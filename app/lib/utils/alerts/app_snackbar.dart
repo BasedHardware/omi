@@ -23,7 +23,7 @@ class AppSnackbar {
   static void showSnackbarSuccess(String message, {Duration? duration}) {
     showSnackbar(
       message,
-      color: Colors.green,
+      color: Colors.green.shade700,
       duration: duration,
     );
   }

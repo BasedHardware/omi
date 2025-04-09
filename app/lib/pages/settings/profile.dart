@@ -4,11 +4,14 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/payments/payments_page.dart';
 import 'package:omi/pages/settings/change_name_widget.dart';
+import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/pages/settings/people.dart';
 import 'package:omi/pages/settings/privacy.dart';
 import 'package:omi/pages/speech_profile/page.dart';
+import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:provider/provider.dart';
 
 import 'delete_account.dart';
 
@@ -100,6 +103,32 @@ class _ProfilePageState extends State<ProfilePage> {
                     return const ChangeNameWidget();
                   },
                 ).whenComplete(() => setState(() {}));
+              },
+            ),
+            Consumer<HomeProvider>(
+              builder: (context, homeProvider, _) {
+                final languageName = homeProvider.userPrimaryLanguage.isNotEmpty
+                    ? homeProvider.availableLanguages.entries
+                        .firstWhere(
+                          (element) => element.value == homeProvider.userPrimaryLanguage,
+                        )
+                        .key
+                    : 'Not set';
+                
+                return ListTile(
+                  contentPadding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
+                  title: const Text('Primary Language', style: TextStyle(color: Colors.white)),
+                  subtitle: Text(languageName),
+                  trailing: const Icon(Icons.language, size: 20),
+                  onTap: () async {
+                    MixpanelManager().pageOpened('Profile Change Language');
+                    // Force the dialog to show even if the user has already set a language
+                    await LanguageSelectionDialog.show(context, isRequired: false, forceShow: true);
+                    // Refresh the UI after language is updated
+                    await homeProvider.setupUserPrimaryLanguage();
+                    setState(() {});
+                  },
+                );
               },
             ),
             const SizedBox(height: 56),

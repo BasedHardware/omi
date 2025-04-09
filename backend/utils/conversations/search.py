@@ -46,7 +46,7 @@ def search_conversations(
             'page': page,
         }
 
-        results = client.collections['memories'].documents.search(search_parameters)
+        results = client.collections['conversations'].documents.search(search_parameters)
         memories = []
         for item in results['hits']:
             item['document']['created_at'] = datetime.utcfromtimestamp(item['document']['created_at']).isoformat()
