@@ -9,6 +9,7 @@ import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
+import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:provider/provider.dart';
 
 class ConversationCapturingPage extends StatefulWidget {
@@ -144,25 +145,6 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
             ),
             body: Column(
               children: [
-                TabBar(
-                  indicatorSize: TabBarIndicatorSize.label,
-                  isScrollable: false,
-                  padding: EdgeInsets.zero,
-                  indicatorPadding: EdgeInsets.zero,
-                  controller: _controller,
-                  labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
-                  tabs: [
-                    Tab(
-                      text: conversationSource == ConversationSource.openglass
-                          ? 'Photos'
-                          : conversationSource == ConversationSource.screenpipe
-                              ? 'Raw Data'
-                              : 'Transcript',
-                    ),
-                    const Tab(text: 'Summary')
-                  ],
-                  indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
-                ),
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -170,9 +152,11 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                       controller: _controller,
                       physics: const NeverScrollableScrollPhysics(),
                       children: [
+                        // Transcript tab
                         ListView(
                           shrinkWrap: true,
                           children: [
+                            const SizedBox(height: 16),
                             provider.segments.isEmpty
                                 ? Column(
                                     children: [
@@ -189,11 +173,13 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                     provider.segments,
                                     [],
                                     deviceProvider.connectedDevice,
-                                  )
+                                  ),
+                            const SizedBox(height: 100), // Add space at bottom for the floating bar
                           ],
                         ),
+                        // Summary tab
                         Padding(
-                          padding: const EdgeInsets.only(top: 140),
+                          padding: const EdgeInsets.only(top: 40),
                           child: ListView(
                             shrinkWrap: true,
                             children: [
@@ -223,78 +209,73 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
               ],
             ),
             floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-            floatingActionButton: provider.segments.isEmpty
-                ? const SizedBox()
-                : Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      AnimatedContainer(
+            floatingActionButton: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                provider.segments.isEmpty
+                    ? const SizedBox()
+                    : AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
-                        height: _controller?.index == 0 ? 0 : 30,
+                        height: 30,
                         child: Text(
                           _elapsedTime > 0 ? convertToHHMMSS(_elapsedTime) : "",
                           style: const TextStyle(fontSize: 16, color: Colors.white),
                         ),
                       ),
-                      Container(
-                        height: 60,
-                        width: 60,
-                        margin: const EdgeInsets.only(bottom: 10),
-                        decoration: const BoxDecoration(
-                          color: Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                        child: InkWell(
-                          onTap: () {
-                            if (provider.segments.isNotEmpty) {
-                              if (!showSummarizeConfirmation) {
-                                context.read<CaptureProvider>().forceProcessingCurrentConversation();
-                                Navigator.of(context).pop();
-                                return;
-                              }
-                              showDialog(
-                                  context: context,
-                                  builder: (context) {
-                                    return StatefulBuilder(
-                                      builder: (context, setState) {
-                                        return ConfirmationDialog(
-                                          title: "Finished Conversation?",
-                                          description:
-                                              "Are you sure you want to stop recording and summarize the conversation now?",
-                                          checkboxValue: !showSummarizeConfirmation,
-                                          checkboxText: "Don't ask me again",
-                                          onCheckboxChanged: (value) {
-                                            if (value != null) {
-                                              setState(() {
-                                                showSummarizeConfirmation = !value;
-                                              });
-                                            }
-                                          },
-                                          onCancel: () {
-                                            Navigator.of(context).pop();
-                                          },
-                                          onConfirm: () {
-                                            SharedPreferencesUtil().showSummarizeConfirmation =
-                                                showSummarizeConfirmation;
-                                            context.read<CaptureProvider>().forceProcessingCurrentConversation();
-                                            Navigator.of(context).pop();
-                                            Navigator.of(context).pop();
-                                          },
-                                        );
+                const SizedBox(height: 8),
+                provider.segments.isEmpty
+                    ? const SizedBox()
+                    : ConversationBottomBar(
+                        mode: ConversationBottomBarMode.recording,
+                        selectedTabIndex: _controller!.index,
+                        hasSegments: provider.segments.isNotEmpty,
+                        onTabSelected: (index) {
+                          _controller!.animateTo(index);
+                          setState(() {});
+                        },
+                        onStopPressed: () {
+                          if (provider.segments.isNotEmpty) {
+                            if (!showSummarizeConfirmation) {
+                              context.read<CaptureProvider>().forceProcessingCurrentConversation();
+                              Navigator.of(context).pop();
+                              return;
+                            }
+                            showDialog(
+                              context: context,
+                              builder: (context) {
+                                return StatefulBuilder(
+                                  builder: (context, setState) {
+                                    return ConfirmationDialog(
+                                      title: "Finished Conversation?",
+                                      description: "Are you sure you want to stop recording and summarize the conversation now?",
+                                      checkboxValue: !showSummarizeConfirmation,
+                                      checkboxText: "Don't ask me again",
+                                      onCheckboxChanged: (value) {
+                                        if (value != null) {
+                                          setState(() {
+                                            showSummarizeConfirmation = !value;
+                                          });
+                                        }
+                                      },
+                                      onCancel: () {
+                                        Navigator.of(context).pop();
+                                      },
+                                      onConfirm: () {
+                                        SharedPreferencesUtil().showSummarizeConfirmation = showSummarizeConfirmation;
+                                        context.read<CaptureProvider>().forceProcessingCurrentConversation();
+                                        Navigator.of(context).pop();
+                                        Navigator.of(context).pop();
                                       },
                                     );
-                                  });
-                            }
-                          },
-                          child: const Icon(
-                            Icons.stop,
-                            color: Colors.white,
-                            size: 34,
-                          ),
-                        ),
+                                  },
+                                );
+                              },
+                            );
+                          }
+                        },
                       ),
-                    ],
-                  ),
+              ],
+            ),
           ),
         );
       },

@@ -13,6 +13,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/widgets/expandable_text.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/photos_grid.dart';
@@ -118,7 +119,25 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                       icon: const Icon(Icons.arrow_back_rounded, size: 24.0),
                     ),
                     const SizedBox(width: 4),
-                    Expanded(child: Text("${provider.structured.getEmoji()}")),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          if (provider.titleController != null && provider.titleFocusNode != null) {
+                            provider.titleFocusNode!.requestFocus();
+                            // Select all text in the title field
+                            provider.titleController!.selection = TextSelection(
+                              baseOffset: 0,
+                              extentOffset: provider.titleController!.text.length,
+                            );
+                          }
+                        },
+                        child: Text(
+                          provider.structured.title,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 18),
+                        ),
+                      ),
+                    ),
                     IconButton(
                       onPressed: () async {
                         await showModalBottomSheet(
@@ -143,58 +162,26 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                 );
               }),
             ),
-            // floatingActionButton: Selector<ConversationDetailProvider, int>(
-            //     selector: (context, provider) => provider.selectedTab,
-            //     builder: (context, selectedTab, child) {
-            //       return selectedTab == 0
-            //           ? FloatingActionButton(
-            //               backgroundColor: Colors.black,
-            //               elevation: 8,
-            //               shape: const RoundedRectangleBorder(
-            //                   borderRadius: BorderRadius.all(Radius.circular(32)),
-            //                   side: BorderSide(color: Colors.grey, width: 1)),
-            //               onPressed: () {
-            //                 var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
-            //                 Clipboard.setData(ClipboardData(text: provider.conversation.getTranscript(generate: true)));
-            //                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            //                   content: Text('Transcript copied to clipboard'),
-            //                   duration: Duration(seconds: 1),
-            //                 ));
-            //                 MixpanelManager().copiedConversationDetails(provider.conversation, source: 'Transcript');
-            //               },
-            //               child: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
-            //             )
-            //           : const SizedBox.shrink();
-            //     }),
+            // Removed floating action button as we now have the more button in the bottom bar
             body: Stack(
               children: [
                 Column(
                   children: [
-                    TabBar(
-                      indicatorSize: TabBarIndicatorSize.label,
-                      isScrollable: false,
-                      onTap: (value) {
-                        context.read<ConversationDetailProvider>().updateSelectedTab(value);
-                      },
-                      padding: EdgeInsets.zero,
-                      indicatorPadding: EdgeInsets.zero,
-                      labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
-                      tabs: [
-                        Selector<ConversationDetailProvider, ConversationSource?>(
-                            selector: (context, provider) => provider.conversation.source,
-                            builder: (context, conversationSource, child) {
-                              return Tab(
-                                text: conversationSource == ConversationSource.openglass
-                                    ? 'Photos'
-                                    : conversationSource == ConversationSource.screenpipe
-                                        ? 'Raw Data'
-                                        : 'Transcript',
-                              );
-                            }),
-                        const Tab(text: 'Summary')
-                      ],
-                      indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
-                    ),
+                    // TabBar is now hidden since we're using the bottom bar for navigation
+                    SizedBox(
+                        height: 0,
+                        child: TabBar(
+                          indicatorSize: TabBarIndicatorSize.label,
+                          isScrollable: false,
+                          onTap: (value) {
+                            context.read<ConversationDetailProvider>().updateSelectedTab(value);
+                          },
+                          padding: EdgeInsets.zero,
+                          indicatorPadding: EdgeInsets.zero,
+                          labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
+                          tabs: const [Tab(text: ''), Tab(text: '')],
+                          indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
+                        )),
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -221,80 +208,89 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                     ),
                   ],
                 ),
-              ],
-            ),
-
-            bottomNavigationBar: Container(
-              padding: const EdgeInsets.only(left: 30.0, right: 30, bottom: 50, top: 10),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12.0),
-                color: Colors.grey.shade900,
-                gradient: LinearGradient(
-                  colors: [Colors.black54, Colors.black.withOpacity(0)],
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
+                
+                // Floating bottom bar
+                Positioned(
+                  bottom: 16,
+                  left: 0,
+                  right: 0,
+                  child: Consumer<ConversationDetailProvider>(
+                    builder: (context, provider, child) {
+                      return ConversationBottomBar(
+                        mode: ConversationBottomBarMode.detail,
+                        selectedTabIndex: provider.selectedTab,
+                        hasSegments: provider.conversation.transcriptSegments.isNotEmpty,
+                        onTabSelected: (index) {
+                          DefaultTabController.of(context).animateTo(index);
+                          provider.updateSelectedTab(index);
+                        },
+                        onStopPressed: () {
+                          // Empty since we don't show the stop button in detail mode
+                        },
+                      );
+                    },
+                  ),
                 ),
-              ),
-              child:
-                  Selector<ConversationDetailProvider, ({bool shouldShow, int count})>(selector: (context, provider) {
-                return (
-                  count: provider.conversation.unassignedSegmentsLength(),
-                  shouldShow: provider.showUnassignedFloatingButton && (provider.selectedTab == 0),
-                );
-              }, builder: (context, value, child) {
-                if (value.count == 0 || !value.shouldShow) return const SizedBox.shrink();
-                return Material(
-                  elevation: 8,
-                  borderRadius: BorderRadius.circular(16),
-                  color: Colors.grey.shade900,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 4,
-                      horizontal: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      color: Colors.grey.shade900,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
-                          spreadRadius: 1,
-                          blurRadius: 2,
-                          offset: const Offset(0, 1),
+                
+                // Unassigned segments notification - positioned above the bottom bar
+                Positioned(
+                  bottom: 88, // Position above the bottom bar
+                  left: 16,
+                  right: 16,
+                  child: Selector<ConversationDetailProvider, ({bool shouldShow, int count})>(
+                    selector: (context, provider) {
+                      return (
+                        count: provider.conversation.unassignedSegmentsLength(),
+                        shouldShow: provider.showUnassignedFloatingButton && (provider.selectedTab == 0),
+                      );
+                    },
+                    builder: (context, value, child) {
+                      if (value.count == 0 || !value.shouldShow) return const SizedBox.shrink();
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 8,
+                          horizontal: 16,
                         ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            InkWell(
-                              onTap: () {
-                                var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
-                                provider.setShowUnassignedFloatingButton(false);
-                              },
-                              child: const Icon(
-                                Icons.close,
-                                color: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              "${value.count} unassigned segment${value.count == 1 ? '' : 's'}",
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                              ),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          color: Colors.grey.shade900,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.3),
+                              spreadRadius: 1,
+                              blurRadius: 2,
+                              offset: const Offset(0, 1),
                             ),
                           ],
                         ),
-                        Row(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const SizedBox(width: 8),
+                            Row(
+                              children: [
+                                InkWell(
+                                  onTap: () {
+                                    var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+                                    provider.setShowUnassignedFloatingButton(false);
+                                  },
+                                  child: const Icon(
+                                    Icons.close,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  "${value.count} unassigned segment${value.count == 1 ? '' : 's'}",
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ],
+                            ),
                             ElevatedButton(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.white24,
+                                backgroundColor: Colors.deepPurple.withOpacity(0.5),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(16),
                                 ),
@@ -322,16 +318,17 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 "Tag",
                                 style: TextStyle(
                                   color: Colors.white,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
                             ),
                           ],
                         ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
-                );
-              }),
+                ),
+              ],
             ),
           ),
         ),
@@ -359,57 +356,9 @@ class SummaryTab extends StatelessWidget {
                   const GetSummaryWidgets(),
                   data.item1 ? const ReprocessDiscardedWidget() : const GetAppsWidgets(),
                   const GetGeolocationWidgets(),
-                  const SizedBox(height: 120)
+                  const SizedBox(height: 150)
                 ],
               ),
-              data.item2
-                  ? Align(
-                      alignment: Alignment.bottomLeft,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.black,
-                          shape: BoxShape.rectangle,
-                          border: Border.all(color: Colors.grey.shade500),
-                          borderRadius: BorderRadius.circular(32),
-                        ),
-                        padding: const EdgeInsets.all(16),
-                        margin: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-                        width: 260,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            const Text(
-                              'Was the summary good?',
-                              style: TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.w500),
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                IconButton(
-                                  onPressed: () {
-                                    data.item3(0);
-                                    AppSnackbar.showSnackbar('Thank you for your feedback!');
-                                  },
-                                  icon: const Icon(Icons.thumb_down_alt_outlined, size: 30, color: Colors.red),
-                                ),
-                                const SizedBox(width: 32),
-                                IconButton(
-                                  onPressed: () {
-                                    data.item3(1);
-                                    AppSnackbar.showSnackbar('Thank you for your feedback!');
-                                  },
-                                  icon: const Icon(Icons.thumb_up_alt_outlined, size: 30, color: Colors.green),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  : const SizedBox.shrink()
             ],
           );
         },
@@ -481,7 +430,7 @@ class TranscriptWidgets extends StatelessWidget {
                         },
                       );
                     }),
-            const SizedBox(height: 32)
+            const SizedBox(height: 100)
           ],
         );
       },

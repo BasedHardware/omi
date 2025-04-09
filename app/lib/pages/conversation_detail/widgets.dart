@@ -9,6 +9,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/page.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/test_prompts.dart';
@@ -72,44 +73,7 @@ class GetSummaryWidgets extends StatelessWidget {
               style: const TextStyle(color: Colors.grey, fontSize: 16),
             ),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                GestureDetector(
-                  onTap: conversation.onTagPressed(context),
-                  child: Container(
-                    decoration:
-                        BoxDecoration(color: conversation.getTagColor(), borderRadius: BorderRadius.circular(16)),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    child: Text(
-                      conversation.getTag(),
-                      style: Theme.of(context).textTheme.titleLarge!.copyWith(color: conversation.getTagTextColor()),
-                      maxLines: 1,
-                    ),
-                  ),
-                )
-              ],
-            ),
-            const SizedBox(height: 40),
-            conversation.discarded
-                ? const SizedBox.shrink()
-                : Text('Overview', style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26)),
-            conversation.discarded
-                ? const SizedBox.shrink()
-                : ((conversation.geolocation != null) ? const SizedBox(height: 8) : const SizedBox.shrink()),
             conversation.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
-            conversation.discarded
-                ? const SizedBox.shrink()
-                : SelectionArea(
-                    child: Text(
-                      conversation.structured.overview.decodeString,
-                      style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-                    ),
-                  ),
-            conversation.discarded ? const SizedBox.shrink() : const SizedBox(height: 40),
-            const ActionItemsListWidget(),
-            conversation.structured.actionItems.isNotEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
-            const EventsListWidget(),
-            conversation.structured.events.isNotEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
           ],
         );
       },
@@ -240,88 +204,6 @@ class ActionItemsListWidget extends StatelessWidget {
   }
 }
 
-class EventsListWidget extends StatelessWidget {
-  const EventsListWidget({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<ConversationDetailProvider>(
-      builder: (context, provider, child) {
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            provider.conversation.structured.events.isNotEmpty &&
-                    !(provider.conversation.structured.events
-                        .where((e) =>
-                            e.startsAt.isBefore(provider.conversation.startedAt!.add(const Duration(hours: 6))) &&
-                            e.startsAt.add(Duration(minutes: e.duration)).isBefore(provider.conversation.startedAt!))
-                        .isNotEmpty)
-                ? Row(
-                    children: [
-                      Icon(Icons.event, color: Colors.grey.shade300),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Events',
-                        style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
-                      )
-                    ],
-                  )
-                : const SizedBox.shrink(),
-            ListView.builder(
-              itemCount: provider.conversation.structured.events.length,
-              shrinkWrap: true,
-              itemBuilder: (context, idx) {
-                var event = provider.conversation.structured.events[idx];
-                if (event.startsAt.isBefore(provider.conversation.startedAt!.add(const Duration(hours: 6))) &&
-                    event.startsAt.add(Duration(minutes: event.duration)).isBefore(provider.conversation.startedAt!)) {
-                  return const SizedBox.shrink();
-                }
-                return ListTile(
-                  onTap: () {
-                    AppSnackbar.showSnackbar(
-                      'This integration is being deprecated. Please use the new Google Calendar app.',
-                    );
-                  },
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    event.title.decodeString,
-                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                  ),
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(top: 4.0),
-                    child: Text(
-                      '${dateTimeFormat('MMM d, yyyy', event.startsAt)} at ${dateTimeFormat('h:mm a', event.startsAt)} ~ ${minutesConversion(event.duration)}',
-                      style: const TextStyle(color: Colors.grey, fontSize: 15),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-String minutesConversion(int minutes) {
-  if (minutes < 60) {
-    return '$minutes minutes';
-  } else if (minutes < 1440) {
-    var hrs = minutes / 60;
-    if (hrs % 1 == 0) {
-      return '${hrs.toInt()} hours';
-    }
-    return '${minutes / 60} hour${hrs > 1 ? 's' : ''}';
-  } else {
-    var days = minutes / 1440;
-    if (days % 1 == 0) {
-      return '${days.toInt()} days';
-    }
-    return '${minutes / 1440} day${days > 1 ? 's' : ''}';
-  }
-}
-
 class GetEditTextField extends StatefulWidget {
   final String conversationId;
   final String content;
@@ -433,6 +315,154 @@ class ReprocessDiscardedWidget extends StatelessWidget {
   }
 }
 
+class AppDetailWidget extends StatelessWidget {
+  final dynamic appResponse;
+  final App? app;
+  final bool isExpanded; // Kept for compatibility but not used
+  final VoidCallback onToggleExpand; // Kept for compatibility but not used
+  final ServerConversation conversation;
+
+  const AppDetailWidget({
+    super.key,
+    required this.appResponse,
+    required this.app,
+    required this.isExpanded,
+    required this.onToggleExpand,
+    required this.conversation,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final String content = appResponse.content is String ? (appResponse.content as String).trim() : "";
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Main content first - always expanded
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: SelectableText(
+              content,
+              style: TextStyle(
+                color: Colors.grey.shade300,
+                fontSize: 16,
+                height: 1.4,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ),
+
+          // App info in a more subtle format below the content
+          GestureDetector(
+            onTap: () async {
+              if (app != null) {
+                MixpanelManager().pageOpened('App Detail');
+                await routeToPage(context, AppDetailPage(app: app!));
+              }
+            },
+            child: Padding(
+              padding: const EdgeInsets.only(top: 12, left: 4),
+              child: Row(
+                children: [
+                  // App icon
+                  app != null
+                      ? CachedNetworkImage(
+                          imageUrl: app!.getImageUrl(),
+                          imageBuilder: (context, imageProvider) {
+                            return CircleAvatar(
+                              backgroundColor: Colors.white,
+                              radius: 12,
+                              backgroundImage: imageProvider,
+                            );
+                          },
+                          errorWidget: (context, url, error) {
+                            return const CircleAvatar(
+                              backgroundColor: Colors.white,
+                              radius: 12,
+                              child: Icon(Icons.error_outline_rounded, size: 12),
+                            );
+                          },
+                          progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
+                            backgroundColor: Colors.white,
+                            radius: 12,
+                            child: CircularProgressIndicator(
+                              value: progress.progress,
+                              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                              strokeWidth: 2,
+                            ),
+                          ),
+                        )
+                      : Container(
+                          decoration: BoxDecoration(
+                            image: DecorationImage(
+                              image: AssetImage(Assets.images.background.path),
+                              fit: BoxFit.cover,
+                            ),
+                            borderRadius: const BorderRadius.all(Radius.circular(12.0)),
+                          ),
+                          height: 24,
+                          width: 24,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Image.asset(
+                                Assets.images.herologo.path,
+                                height: 16,
+                                width: 16,
+                              ),
+                            ],
+                          ),
+                        ),
+
+                  const SizedBox(width: 8),
+
+                  // App name and description with arrow
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                app != null ? app!.name.decodeString : 'Unknown App',
+                                maxLines: 1,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              if (app != null)
+                                Text(
+                                  app!.description.decodeString,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(
+                          child: Icon(Icons.arrow_forward_ios, color: Colors.white, size: 20),
+                          width: 42,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class GetAppsWidgets extends StatelessWidget {
   const GetAppsWidgets({super.key});
 
@@ -448,161 +478,44 @@ class GetAppsWidgets extends StatelessWidget {
           children: provider.conversation.appResults.isEmpty
               ? [child!]
               : [
-                  // TODO: include a way to trigger specific apps
+                  // Show only the first app
                   if (provider.conversation.appResults.isNotEmpty &&
                       !provider.conversation.discarded &&
                       provider.appResponseExpanded.isNotEmpty) ...[
-                    provider.conversation.structured.actionItems.isEmpty
-                        ? const SizedBox(height: 40)
-                        : const SizedBox.shrink(),
-                    Text(
-                      'Apps 🧑‍💻',
-                      style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
-                      textAlign: TextAlign.start,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Summary',
+                          style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
+                          textAlign: TextAlign.start,
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
+                          onPressed: () {
+                            final String content = provider.conversation.appResults[0].content is String
+                                ? (provider.conversation.appResults[0].content as String).trim()
+                                : "";
+                            Clipboard.setData(ClipboardData(text: content));
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                              content: Text('Summary copied to clipboard'),
+                              duration: Duration(seconds: 1),
+                            ));
+                            MixpanelManager().copiedConversationDetails(provider.conversation, source: 'App Response');
+                          },
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 24),
-                    if (provider.conversation.appResults.isNotEmpty)
-                      ...provider.conversation.appResults.mapIndexed(
-                        (i, appResponse) {
-                          if (appResponse.content.length < 5) return const SizedBox.shrink();
-                          App? app = provider.appsList.firstWhereOrNull((element) => element.id == appResponse.appId);
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 40),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.start,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                app != null
-                                    ? ListTile(
-                                        contentPadding: EdgeInsets.zero,
-                                        leading: CachedNetworkImage(
-                                          imageUrl: app.getImageUrl(),
-                                          imageBuilder: (context, imageProvider) {
-                                            return CircleAvatar(
-                                              backgroundColor: Colors.white,
-                                              radius: 16,
-                                              backgroundImage: imageProvider,
-                                            );
-                                          },
-                                          errorWidget: (context, url, error) {
-                                            return const CircleAvatar(
-                                              backgroundColor: Colors.white,
-                                              radius: 16,
-                                              child: Icon(Icons.error_outline_rounded),
-                                            );
-                                          },
-                                          progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
-                                            backgroundColor: Colors.white,
-                                            radius: 16,
-                                            child: CircularProgressIndicator(
-                                              value: progress.progress,
-                                              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-                                            ),
-                                          ),
-                                        ),
-                                        title: Text(
-                                          app.name.decodeString,
-                                          maxLines: 1,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w500,
-                                            color: Colors.white,
-                                            fontSize: 16,
-                                          ),
-                                        ),
-                                        subtitle: Padding(
-                                          padding: const EdgeInsets.only(top: 4.0),
-                                          child: Text(
-                                            app.description.decodeString,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(color: Colors.grey, fontSize: 14),
-                                          ),
-                                        ),
-                                        trailing: IconButton(
-                                          icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
-                                          onPressed: () {
-                                            Clipboard.setData(ClipboardData(text: appResponse.content.trim()));
-                                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                                              content: Text('App response copied to clipboard'),
-                                            ));
-                                            MixpanelManager().copiedConversationDetails(provider.conversation,
-                                                source: 'App Response');
-                                          },
-                                        ),
-                                      )
-                                    : ListTile(
-                                        contentPadding: EdgeInsets.zero,
-                                        leading: Container(
-                                          decoration: BoxDecoration(
-                                            image: DecorationImage(
-                                              image: AssetImage(Assets.images.background.path),
-                                              fit: BoxFit.cover,
-                                            ),
-                                            borderRadius: const BorderRadius.all(Radius.circular(16.0)),
-                                          ),
-                                          height: 30,
-                                          width: 30,
-                                          child: Stack(
-                                            alignment: Alignment.center,
-                                            children: [
-                                              Image.asset(
-                                                Assets.images.herologo.path,
-                                                height: 24,
-                                                width: 24,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        title: const Text(
-                                          'Unknown App',
-                                          maxLines: 1,
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w500,
-                                            color: Colors.white,
-                                            fontSize: 16,
-                                          ),
-                                        ),
-                                        subtitle: const Padding(
-                                          padding: EdgeInsets.only(top: 4.0),
-                                          child: Text(
-                                            'This app is private/deleted, or is not available at the moment',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(color: Colors.grey, fontSize: 14),
-                                          ),
-                                        ),
-                                        trailing: IconButton(
-                                          icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
-                                          onPressed: () {
-                                            Clipboard.setData(ClipboardData(text: appResponse.content.trim()));
-                                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                                              content: Text('App response copied to clipboard'),
-                                            ));
-                                            MixpanelManager().copiedConversationDetails(provider.conversation,
-                                                source: 'App Response');
-                                          },
-                                        ),
-                                      ),
-                                ExpandableTextWidget(
-                                  text: appResponse.content.decodeString.trim(),
-                                  isExpanded: provider.appResponseExpanded[i],
-                                  toggleExpand: () {
-                                    debugPrint('appResponseExpanded: ${provider.appResponseExpanded}');
-                                    if (!provider.appResponseExpanded[i]) {
-                                      MixpanelManager()
-                                          .appResultExpanded(provider.conversation, appResponse.appId ?? '');
-                                    }
-                                    provider.updateAppResponseExpanded(i);
-                                  },
-                                  style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-                                  maxLines: 6,
-                                  // Change this to 6 if you want the initial max lines to be 6
-                                  linkColor: Colors.white,
-                                ),
-                              ],
-                            ),
-                          );
-                        },
+                    if (provider.conversation.appResults.isNotEmpty &&
+                        provider.conversation.appResults[0].content != null &&
+                        provider.conversation.appResults[0].content.length >= 5)
+                      AppDetailWidget(
+                        appResponse: provider.conversation.appResults[0],
+                        app: provider.appsList
+                            .firstWhereOrNull((element) => element.id == provider.conversation.appResults[0].appId),
+                        isExpanded: true, // Always expanded
+                        onToggleExpand: () {}, // Empty function since we don't need to toggle
+                        conversation: provider.conversation,
                       ),
                   ],
                   const SizedBox(height: 8)
