@@ -252,8 +252,8 @@ async def get_memories_via_integration(
     if not apps_utils.app_has_action(app, 'read_memories'):
         raise HTTPException(status_code=403, detail="App does not have the capability to read memories")
 
-    facts = memory_db.get_memories(uid, limit=limit, offset=offset)
-    memory_items = [integration_models.MemoryItem(**fact) for fact in facts]
+    memories = memory_db.get_memories(uid, limit=limit, offset=offset)
+    memory_items = [integration_models.MemoryItem(**fact) for fact in memories]
 
     return {"memories": memory_items}
 

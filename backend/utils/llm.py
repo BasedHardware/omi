@@ -1366,7 +1366,7 @@ def new_memories_extractor(
         response: Memories = chain.invoke({
             'user_name': user_name,
             'conversation': content,
-            'facts_str': memories_str,
+            'memories_str': memories_str,
             'format_instructions': parser.get_format_instructions(),
         })
         # for fact in response:
@@ -1394,7 +1394,7 @@ def extract_memories_from_text(
             'user_name': user_name,
             'text_content': text,
             'text_source': text_source,
-            'facts_str': memories_str,
+            'memories_str': memories_str,
             'format_instructions': parser.get_format_instructions(),
         })
         return response.facts
