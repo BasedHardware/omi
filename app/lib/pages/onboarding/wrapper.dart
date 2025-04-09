@@ -95,9 +95,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           SharedPreferencesUtil().verifiedPersonaId = null;
           MixpanelManager().onboardingStepCompleted('Auth');
           context.read<HomeProvider>().setupHasSpeakerProfile();
-          IntercomManager.instance.intercom.loginIdentifiedUser(
-            userId: SharedPreferencesUtil().uid,
-          );
+          IntercomManager().loginIdentifiedUser(userId: SharedPreferencesUtil().uid);
           if (SharedPreferencesUtil().onboardingCompleted) {
             routeToPage(context, const HomePageWrapper(), replace: true);
           } else {
@@ -107,7 +105,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       ),
       NameWidget(goNext: () {
         _goNext();
-        IntercomManager.instance.updateUser(
+        IntercomManager().updateUser(
           FirebaseAuth.instance.currentUser!.email,
           FirebaseAuth.instance.currentUser!.displayName,
           FirebaseAuth.instance.currentUser!.uid,

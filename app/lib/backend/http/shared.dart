@@ -46,7 +46,7 @@ Future<http.Response?> makeApiCall({
     final client = http.Client();
 
     url = "https://cors-anywhere.herokuapp.com/$url";
-    headers["Origin"]= 'http://localhost:53844';
+    headers["Origin"] = 'http://localhost:53844';
 
     http.Response? response = await _performRequest(client, url, headers, body, method);
     if (response.statusCode == 401) {
@@ -72,6 +72,8 @@ Future<http.Response?> makeApiCall({
             message: 'Authentication failed. Please sign in again.');
       }
     }
+      debugPrint('HTTP request response: ${response.reasonPhrase}');
+      debugPrint('HTTP request response: ${response.body}');
 
     return response;
   } catch (e, stackTrace) {
