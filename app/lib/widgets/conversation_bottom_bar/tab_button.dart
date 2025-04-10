@@ -3,6 +3,7 @@ import 'package:omi/widgets/conversation_bottom_bar/app_image.dart';
 
 class TabButton extends StatelessWidget {
   final IconData? icon;
+  final Widget? customIcon;
   final bool isSelected;
   final VoidCallback onTap;
   final String? label;
@@ -15,6 +16,7 @@ class TabButton extends StatelessWidget {
   const TabButton({
     Key? key,
     this.icon,
+    this.customIcon,
     required this.isSelected,
     required this.onTap,
     this.label,
@@ -43,7 +45,13 @@ class TabButton extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (icon != null)
+                if (customIcon != null)
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: customIcon,
+                  )
+                else if (icon != null)
                   Icon(
                     icon,
                     color: isSelected ? Colors.white : Colors.grey.shade400,
