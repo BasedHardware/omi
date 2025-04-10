@@ -541,10 +541,8 @@ class GetAppsWidgets extends StatelessWidget {
                 child: MaterialButton(
                   onPressed: () async {
                     final provider = context.read<ConversationDetailProvider>();
-                    provider.loadingReprocessConversation = true;
-                    provider.notifyListeners();
+                    provider.clearSelectedAppForReprocessing();
                     await provider.reprocessConversation();
-                    MixpanelManager().pageOpened('Memory Detail Generate Summary');
                   },
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   child: const Padding(
