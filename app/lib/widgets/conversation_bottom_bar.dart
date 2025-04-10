@@ -165,4 +165,3 @@ class ConversationBottomBar extends StatelessWidget {
   }
 
 }
-}
