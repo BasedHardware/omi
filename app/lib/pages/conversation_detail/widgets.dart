@@ -340,33 +340,24 @@ class AppResultDetailWidget extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Main content first - always expanded
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
-            child: content.isEmpty 
-              ? Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey.withOpacity(0.3)),
-                  ),
-                  child: const Row(
+            child: content.isEmpty
+                ? const Row(
                     children: [
                       Icon(Icons.info_outline, color: Colors.grey, size: 18),
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          "No content available for this result",
+                          "No content available for this app",
                           style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
                         ),
                       ),
                     ],
+                  )
+                : SelectionArea(
+                    child: getMarkdownWidget(context, content),
                   ),
-                )
-              : SelectionArea(
-                  child: getMarkdownWidget(context, content),
-                ),
           ),
 
           // App info in a more subtle format below the content
