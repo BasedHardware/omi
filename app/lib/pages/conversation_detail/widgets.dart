@@ -14,6 +14,7 @@ import 'package:omi/pages/apps/page.dart';
 import 'package:omi/pages/chat/widgets/markdown_message_widget.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/test_prompts.dart';
+import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
