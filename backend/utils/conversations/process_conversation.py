@@ -133,38 +133,38 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
     [t.join() for t in threads]
 
 
-def _extract_facts(uid: str, conversation: Conversation):
+def _extract_memories(uid: str, conversation: Conversation):
     # TODO: maybe instead (once they can edit them) we should not tie it this hard
     memories_db.delete_memories_for_conversation(uid, conversation.id)
 
-    new_facts: List[Memory] = []
+    new_memories: List[Memory] = []
 
-    # Extract facts based on conversation source
+    # Extract memories based on conversation source
     if conversation.source == ConversationSource.external_integration:
         text_content = conversation.external_data.get('text')
         if text_content and len(text_content) > 0:
             text_source = conversation.external_data.get('text_source', 'other')
-            new_facts = extract_memories_from_text(uid, text_content, text_source)
+            new_memories = extract_memories_from_text(uid, text_content, text_source)
     else:
         # For regular conversations with transcript segments
-        new_facts = new_memories_extractor(uid, conversation.transcript_segments)
+        new_memories = new_memories_extractor(uid, conversation.transcript_segments)
 
-    parsed_facts = []
-    for fact in new_facts:
-        parsed_facts.append(MemoryDB.from_memory(fact, uid, conversation.id, conversation.structured.category, False))
-        print('_extract_facts:', fact.category.value.upper(), '|', fact.content)
+    parsed_memories = []
+    for fact in new_memories:
+        parsed_memories.append(MemoryDB.from_memory(fact, uid, conversation.id, conversation.structured.category, False))
+        print('_extract_memories:', fact.category.value.upper(), '|', fact.content)
 
-    if len(parsed_facts) == 0:
-        print(f"No facts extracted for conversation {conversation.id}")
+    if len(parsed_memories) == 0:
+        print(f"No memories extracted for conversation {conversation.id}")
         return
 
-    print(f"Saving {len(parsed_facts)} facts for conversation {conversation.id}")
-    memories_db.save_memories(uid, [fact.dict() for fact in parsed_facts])
+    print(f"Saving {len(parsed_memories)} memories for conversation {conversation.id}")
+    memories_db.save_memories(uid, [fact.dict() for fact in parsed_memories])
 
 
-def send_new_facts_notification(token: str, facts: [MemoryDB]):
-    facts_str = ", ".join([fact.content for fact in facts])
-    message = f"New facts {facts_str}"
+def send_new_memories_notification(token: str, memories: [MemoryDB]):
+    memories_str = ", ".join([memory.content for memory in memories])
+    message = f"New memories {memories_str}"
     ai_message = NotificationMessage(
         text=message,
         from_integration='false',
@@ -236,7 +236,7 @@ def process_conversation(
     if not discarded:
         _trigger_apps(uid, conversation, is_reprocess=is_reprocess)
         threading.Thread(target=save_structured_vector, args=(uid, conversation,)).start() if not is_reprocess else None
-        threading.Thread(target=_extract_facts, args=(uid, conversation)).start()
+        threading.Thread(target=_extract_memories, args=(uid, conversation)).start()
 
     conversation.status = ConversationStatus.completed
     conversations_db.upsert_conversation(uid, conversation.dict())
