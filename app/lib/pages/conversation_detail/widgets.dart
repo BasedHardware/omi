@@ -8,6 +8,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/page.dart';
@@ -318,7 +319,7 @@ class ReprocessDiscardedWidget extends StatelessWidget {
 }
 
 class AppDetailWidget extends StatelessWidget {
-  final dynamic appResponse;
+  final AppResponse appResponse;
   final App? app;
   final bool isExpanded; // Kept for compatibility but not used
   final VoidCallback onToggleExpand; // Kept for compatibility but not used
@@ -499,14 +500,13 @@ class GetAppsWidgets extends StatelessWidget {
                         ),
                       ],
                     ),
-                    if (summarizedApp.content != null && summarizedApp.content.length >= 5)
-                      AppDetailWidget(
-                        appResponse: summarizedApp,
-                        app: provider.appsList.firstWhereOrNull((element) => element.id == summarizedApp.appId),
-                        isExpanded: true, // Always expanded
-                        onToggleExpand: () {}, // Empty function since we don't need to toggle
-                        conversation: provider.conversation,
-                      ),
+                    AppDetailWidget(
+                      appResponse: summarizedApp,
+                      app: provider.appsList.firstWhereOrNull((element) => element.id == summarizedApp.appId),
+                      isExpanded: true, // Always expanded
+                      onToggleExpand: () {}, // Empty function since we don't need to toggle
+                      conversation: provider.conversation,
+                    ),
                   ],
                   const SizedBox(height: 8)
                 ],
