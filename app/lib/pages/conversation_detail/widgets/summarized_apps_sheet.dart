@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
+import 'package:omi/pages/apps/page.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -76,6 +77,7 @@ class SummarizedAppsBottomSheet extends StatelessWidget {
                               if (currentAppId != null) {
                                 Navigator.pop(context);
                                 final provider = context.read<ConversationDetailProvider>();
+                                provider.clearSelectedAppForReprocessing();
                                 await provider.reprocessConversation();
                                 return;
                               }
@@ -99,11 +101,8 @@ class SummarizedAppsBottomSheet extends StatelessWidget {
                             trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
                             onTap: () {
                               Navigator.pop(context);
-                              Navigator.pop(context);
-                              context.read<HomeProvider>().setIndex(2);
-                              if (context.read<HomeProvider>().onSelectedIndexChanged != null) {
-                                context.read<HomeProvider>().onSelectedIndexChanged!(2);
-                              }
+                              routeToPage(context, const AppsPage(showAppBar: true));
+                              MixpanelManager().pageOpened('Detail Apps');
                             },
                           ),
 

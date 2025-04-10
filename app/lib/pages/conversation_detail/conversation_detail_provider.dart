@@ -114,6 +114,11 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     selectedAppForReprocessing = app;
     notifyListeners();
   }
+  
+  void clearSelectedAppForReprocessing() {
+    selectedAppForReprocessing = null;
+    notifyListeners();
+  }
 
   void updateReprocessConversationId(String id) {
     reprocessConversationId = id;

@@ -120,9 +120,11 @@ class ConversationBottomBar extends StatelessWidget {
                               icon: app == null && reprocessingApp == null ? Icons.sticky_note_2 : null,
                               isSelected: selectedTab == ConversationTab.summary,
                               onTap: () => onTabSelected(ConversationTab.summary),
-                              label: isReprocessing && reprocessingApp != null ? reprocessingApp.name : app?.name,
-                              appImage: isReprocessing && reprocessingApp != null
-                                  ? reprocessingApp.getImageUrl()
+                              label: isReprocessing 
+                                  ? (reprocessingApp?.name ?? "Auto") 
+                                  : (app?.name ?? "Summary"),
+                              appImage: isReprocessing
+                                  ? (reprocessingApp != null ? reprocessingApp.getImageUrl() : Assets.images.herologo.path)
                                   : (app != null ? app.getImageUrl() : null),
                               showDropdownArrow: selectedTab == ConversationTab.summary,
                               isLoading: isReprocessing,
@@ -298,7 +300,7 @@ class ConversationBottomBar extends StatelessWidget {
                             fontSize: 12,
                           ),
                           maxLines: 1,
-                          overflow: TextOverflow.clip,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ),

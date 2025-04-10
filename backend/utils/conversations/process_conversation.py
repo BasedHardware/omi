@@ -1,3 +1,4 @@
+import os
 import datetime
 import random
 import threading
@@ -13,7 +14,7 @@ import database.conversations as conversations_db
 import database.notifications as notification_db
 import database.tasks as tasks_db
 import database.trends as trends_db
-from database.apps import record_app_usage, get_omi_personas_by_uid_db
+from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
 from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
 from models.memories import MemoryDB, Memory
@@ -28,7 +29,7 @@ from utils.llm import obtain_emotional_message, retrieve_metadata_fields_from_tr
     get_app_result, should_discard_conversation, summarize_experience_text, new_memories_extractor, \
     trends_extractor, get_email_structure, get_post_structure, get_message_structure, \
     retrieve_metadata_from_email, retrieve_metadata_from_post, retrieve_metadata_from_message, \
-    retrieve_metadata_from_text, \
+    retrieve_metadata_from_text, select_best_app_for_conversation, \
     extract_memories_from_text
 from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
@@ -114,18 +115,55 @@ def _get_conversation_obj(uid: str, structured: Structured,
     return conversation
 
 
+# Get default conversation summary app IDs from environment variable
+CONVERSATION_SUMMARIZED_APP_IDS = os.getenv('CONVERSATION_SUMMARIZED_APP_IDS', 'summary_assistant,action_item_extractor,insight_analyzer').split(',')
+
+# Function to get default memory apps
+def get_default_conversation_summarized_apps():
+    default_apps = []
+    for app_id in CONVERSATION_SUMMARIZED_APP_IDS:
+        app_data = get_app_by_id_db(app_id.strip())
+        if app_data:
+            default_apps.append(App(**app_data))
+
+    return default_apps
+
 def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = False, app_id: Optional[str] = None):
     apps: List[App] = get_available_apps(uid)
-    
+    conversation_apps = [app for app in apps if app.works_with_memories() and app.enabled]
+    filtered_apps = []
+
     # If app_id is provided, only use that specific app
     if app_id:
-        filtered_apps = [app for app in apps if app.id == app_id and app.works_with_memories() and app.enabled]
-        # Clear existing app results if reprocessing with a specific app
-        if is_reprocess:
-            conversation.apps_results = []
+        filtered_apps = [app for app in conversation_apps if app.id == app_id]
     else:
-        filtered_apps = [app for app in apps if app.works_with_memories() and app.enabled]
-    
+        # If user has no enabled conversation apps, use default apps
+        if not conversation_apps:
+            filtered_apps = get_default_conversation_summarized_apps()
+        else:
+            filtered_apps = conversation_apps
+
+        # Select the best app for this conversation
+        if filtered_apps and len(filtered_apps) > 0:
+            best_app = select_best_app_for_conversation(conversation, filtered_apps)
+            if best_app:
+                print(f"Selected best app for conversation: {best_app.name}")
+            else:
+                best_app = filtered_apps[0]
+
+            # enabled
+            user_enabled = set(redis_db.get_enabled_plugins(uid))
+            if best_app.id not in user_enabled:
+                redis_db.enable_app(uid, best_app.id)
+
+            filtered_apps = [best_app]
+
+    if len(filtered_apps) == 0:
+        print("All apps had got filtered out", uid)
+
+    # Clear existing app results
+    conversation.apps_results = []
+
     threads = []
 
     def execute_app(app):

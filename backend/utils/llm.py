@@ -1562,6 +1562,67 @@ class OutputQuestion(BaseModel):
     question: str = Field(description='The extracted user question from the conversation.')
 
 
+class BestAppSelection(BaseModel):
+    app_id: str = Field(description='The ID of the best app for processing this conversation.')
+
+def select_best_app_for_conversation(conversation: Conversation, apps: List[App]) -> Optional[App]:
+    """Select the best app for the given conversation based on its content and structure."""
+    if not apps:
+        return None
+    
+    # If only one app is available, return it
+    if len(apps) == 1:
+        return apps[0]
+    
+    # Use LLM to select the best app
+    conversation_summary = f"""
+    Title: {conversation.structured.title}
+    Category: {conversation.structured.category.value}
+    Overview: {conversation.structured.overview}
+    """
+    
+    # Format apps as XML to handle complex content better
+    apps_xml = "<apps>\n"
+    for app in apps:
+        apps_xml += f"""  <app>
+    <id>{app.id}</id>
+    <name>{app.name}</name>
+    <description>{app.description}</description>
+    <memory_prompt>{app.memory_prompt if app.memory_prompt else ''}</memory_prompt>
+  </app>\n"""
+    apps_xml += "</apps>"
+    
+    prompt = f"""
+    You are tasked with selecting the most appropriate app to process a conversation.
+    
+    <conversation>
+    {conversation_summary}
+    </conversation>
+    
+    {apps_xml}
+    
+    Based on the conversation content and the apps' descriptions and purposes, 
+    which app ID would be the best fit for processing this conversation?
+    Respond with only the app ID from the list provided.
+    """
+
+    print(prompt)
+    
+    try:
+        with_parser = llm_mini.with_structured_output(BestAppSelection)
+        response: BestAppSelection = with_parser.invoke(prompt)
+        selected_app_id = response.app_id
+        
+        # Find the app with the matching ID
+        for app in apps:
+            if app.id == selected_app_id:
+                return app
+    except Exception as e:
+        print(f"Error selecting best app: {e}")
+    
+    # Default to the first app if selection fails
+    return apps[0]
+
 def extract_question_from_conversation(messages: List[Message]) -> str:
     # user last messages
     print("extract_question_from_conversation")
