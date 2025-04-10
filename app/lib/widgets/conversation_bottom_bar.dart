@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
 import 'package:provider/provider.dart';
@@ -120,12 +121,13 @@ class ConversationBottomBar extends StatelessWidget {
                               icon: app == null && reprocessingApp == null ? Icons.sticky_note_2 : null,
                               isSelected: selectedTab == ConversationTab.summary,
                               onTap: () => onTabSelected(ConversationTab.summary),
-                              label: isReprocessing 
-                                  ? (reprocessingApp?.name ?? "Auto") 
-                                  : (app?.name ?? "Summary"),
+                              label: isReprocessing ? (reprocessingApp?.name ?? "Auto") : (app?.name ?? "Summary"),
                               appImage: isReprocessing
-                                  ? (reprocessingApp != null ? reprocessingApp.getImageUrl() : Assets.images.herologo.path)
+                                  ? (reprocessingApp != null
+                                      ? reprocessingApp.getImageUrl()
+                                      : Assets.images.herologo.path)
                                   : (app != null ? app.getImageUrl() : null),
+                              isLocalAsset: isReprocessing && reprocessingApp == null,
                               showDropdownArrow: selectedTab == ConversationTab.summary,
                               isLoading: isReprocessing,
                               onDropdownPressed: () {
@@ -161,6 +163,7 @@ class ConversationBottomBar extends StatelessWidget {
     required VoidCallback onTap,
     String? label,
     String? appImage,
+    bool isLocalAsset = false,
     bool showDropdownArrow = false,
     bool isLoading = false,
     VoidCallback? onDropdownPressed,
@@ -199,33 +202,41 @@ class ConversationBottomBar extends StatelessWidget {
                           child: Stack(
                             alignment: Alignment.center,
                             children: [
-                              if (appImage != null)
-                                Opacity(
-                                  opacity: 0.5,
-                                  child: CachedNetworkImage(
-                                    imageUrl: appImage,
-                                    imageBuilder: (context, imageProvider) => Container(
-                                      width: 24,
-                                      height: 24,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        image: DecorationImage(
-                                          image: imageProvider,
+                              Opacity(
+                                opacity: 0.5,
+                                child: isLocalAsset
+                                    ? ClipOval(
+                                        child: Image.asset(
+                                          appImage!,
+                                          height: 24,
+                                          width: 24,
                                           fit: BoxFit.cover,
                                         ),
+                                      )
+                                    : CachedNetworkImage(
+                                        imageUrl: appImage!,
+                                        imageBuilder: (context, imageProvider) => Container(
+                                          width: 24,
+                                          height: 24,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            image: DecorationImage(
+                                              image: imageProvider,
+                                              fit: BoxFit.cover,
+                                            ),
+                                          ),
+                                        ),
+                                        errorWidget: (context, url, error) => Container(
+                                          width: 24,
+                                          height: 24,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: Colors.grey.shade800,
+                                          ),
+                                          child: const Icon(Icons.error_outline, size: 16, color: Colors.white),
+                                        ),
                                       ),
-                                    ),
-                                    errorWidget: (context, url, error) => Container(
-                                      width: 24,
-                                      height: 24,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: Colors.grey.shade800,
-                                      ),
-                                      child: const Icon(Icons.error_outline, size: 16, color: Colors.white),
-                                    ),
-                                  ),
-                                ),
+                              ),
                               SizedBox(
                                 width: 24,
                                 height: 24,
@@ -237,47 +248,56 @@ class ConversationBottomBar extends StatelessWidget {
                             ],
                           ),
                         )
-                      : CachedNetworkImage(
-                          imageUrl: appImage,
-                          imageBuilder: (context, imageProvider) => Container(
-                            width: 24,
-                            height: 24,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              image: DecorationImage(
-                                image: imageProvider,
+                      : isLocalAsset
+                          ? ClipOval(
+                              child: Image.asset(
+                                appImage!,
+                                height: 24,
+                                width: 24,
                                 fit: BoxFit.cover,
                               ),
-                            ),
-                          ),
-                          placeholder: (context, url) => Container(
-                            width: 24,
-                            height: 24,
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.grey,
-                            ),
-                            child: const Center(
-                              child: SizedBox(
-                                width: 12,
-                                height: 12,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            )
+                          : CachedNetworkImage(
+                              imageUrl: appImage!,
+                              imageBuilder: (context, imageProvider) => Container(
+                                width: 24,
+                                height: 24,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  image: DecorationImage(
+                                    image: imageProvider,
+                                    fit: BoxFit.cover,
+                                  ),
                                 ),
                               ),
+                              placeholder: (context, url) => Container(
+                                width: 24,
+                                height: 24,
+                                decoration: const BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.grey,
+                                ),
+                                child: const Center(
+                                  child: SizedBox(
+                                    width: 12,
+                                    height: 12,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              errorWidget: (context, url, error) => Container(
+                                width: 24,
+                                height: 24,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.grey.shade800,
+                                ),
+                                child: const Icon(Icons.error_outline, size: 16, color: Colors.white),
+                              ),
                             ),
-                          ),
-                          errorWidget: (context, url, error) => Container(
-                            width: 24,
-                            height: 24,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.grey.shade800,
-                            ),
-                            child: const Icon(Icons.error_outline, size: 16, color: Colors.white),
-                          ),
-                        ),
                 if (label != null) ...[
                   const SizedBox(width: 4),
                   Flexible(
