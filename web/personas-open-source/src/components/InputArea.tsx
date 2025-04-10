@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 interface InputAreaProps {
   handle: string;
   handleInputChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  handleCreatePersona: () => void;
+  handleCreatePersona: (inputHandle?: string) => void;
   isCreating: boolean;
 }
 
@@ -18,9 +18,9 @@ export const InputArea: React.FC<InputAreaProps> = ({ handle, handleInputChange,
   <>
     {/* Create Section */}
     <div className="text-center max-w-md mx-auto mb-8">
-      <h1 className="text-4xl md:text-5xl font-serif mb-3 md:mb-4">AI personas</h1>
+      <h1 className="text-4xl md:text-5xl font-serif mb-3 md:mb-4">Your Personal AI</h1>
       <p className="text-gray-400 text-sm md:text-base mb-8 md:mb-12">
-        Create new AI Twitter/Linkedin personalities!
+      Train an AI based on your Twitter or Linkedin
       </p>
     </div>
     
@@ -34,10 +34,10 @@ export const InputArea: React.FC<InputAreaProps> = ({ handle, handleInputChange,
       />
       <Button
         className="w-full rounded-full bg-white text-black hover:bg-gray-200"
-        onClick={handleCreatePersona}
+        onClick={() => handleCreatePersona(handle)}
         disabled={isCreating}
       >
-        {isCreating ? 'Creating...' : 'Create AI Persona'}
+        {isCreating ? 'Creating...' : 'Train Personal AI'}
       </Button>
     </div>
   </>
