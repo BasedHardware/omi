@@ -45,7 +45,14 @@ class TabButton extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (customIcon != null)
+                if (appImage != null)
+                  AppImage(
+                    imageUrl: appImage!,
+                    isLocalAsset: isLocalAsset,
+                    isLoading: isLoading,
+                    size: 24,
+                  )
+                else if (customIcon != null)
                   SizedBox(
                     width: 24,
                     height: 24,
@@ -55,13 +62,6 @@ class TabButton extends StatelessWidget {
                   Icon(
                     icon,
                     color: isSelected ? Colors.white : Colors.grey.shade400,
-                    size: 24,
-                  )
-                else if (appImage != null)
-                  AppImage(
-                    imageUrl: appImage!,
-                    isLocalAsset: isLocalAsset,
-                    isLoading: isLoading,
                     size: 24,
                   ),
                 if (label != null) ...[
