@@ -62,6 +62,12 @@ def create_memory(uid: str, data: dict):
     memory_ref.set(data)
     # TODO: remove after migration
     new_memories_ref = user_ref.collection(memories_collection)
+    if 'memory_id' in data:
+        data['conversation_id'] = data['memory_id']
+        del data['memory_id']
+    if 'memory_category' in data:
+        data['conversation_category'] = data['memory_category']
+        del data['memory_category']
     new_memory_ref = new_memories_ref.document(data['id'])
     new_memory_ref.set(data)
     ##############################
@@ -78,6 +84,12 @@ def save_memories(uid: str, data: List[dict]):
     # TODO: remove after migration
     new_memories_ref = user_ref.collection(memories_collection)
     for memory in data:
+        if 'memory_id' in memory:
+            memory['conversation_id'] = memory['memory_id']
+            del memory['memory_id']
+        if 'memory_category' in memory:
+            memory['conversation_category'] = memory['memory_category']
+            del memory['memory_category']
         memory_ref = new_memories_ref.document(memory['id'])
         batch.set(memory_ref, memory)
     batch.commit()
