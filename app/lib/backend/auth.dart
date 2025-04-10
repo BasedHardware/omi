@@ -111,7 +111,7 @@ Future<UserCredential?> signInWithGoogle() async {
     debugPrint('Signing in with Google');
     // Trigger the authentication flow
     final GoogleSignInAccount? googleUser = await GoogleSignIn(scopes: ['profile', 'email'],
-      clientId: "1031333818730-l9meebge7tpc0qmquvq6t5qpoe09o1ra.apps.googleusercontent.com",
+      // clientId: "1031333818730-l9meebge7tpc0qmquvq6t5qpoe09o1ra.apps.googleusercontent.com",
     ).signIn();
     debugPrint('Google User: $googleUser');
 
@@ -145,7 +145,7 @@ Future<UserCredential?> signInWithGoogle() async {
       SharedPreferencesUtil().givenName = givenName;
       SharedPreferencesUtil().familyName = familyName;
     }
-    // To reduce unnecessary invoking on getIdToken() on web 
+    // To reduce unnecessary invoking of getIdToken() on web 
     IdTokenResult? tokenResult = await FirebaseAuth.instance.currentUser?.getIdTokenResult();
     SharedPreferencesUtil().authToken = await FirebaseAuth.instance.currentUser?.getIdToken()?? '';
     SharedPreferencesUtil().tokenExpirationTime =  tokenResult?.expirationTime?.millisecondsSinceEpoch ?? 0 ;

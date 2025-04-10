@@ -2,17 +2,19 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/env/env.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
-import 'package:web_socket_channel/io.dart';
+import 'package:omi/services/sockets/universal_socket/universal_socket.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 
 enum WebsocketConnectionStatus { notConnected, connected, failed, closed, error }
 
 // TODO: Implement from pure socket
 class SdCardSocketService {
-  IOWebSocketChannel? sdCardChannel;
+  WebSocketChannel? sdCardChannel;
   WebsocketConnectionStatus sdCardConnectionState = WebsocketConnectionStatus.notConnected;
   Timer? _reconnectionTimer;
   SdCardSocketService();
@@ -65,7 +67,7 @@ class SdCardSocketService {
     });
   }
 
-  Future<IOWebSocketChannel?> openSdCardStream({
+  Future<WebSocketChannel?> openSdCardStream({
     required VoidCallback onWebsocketConnectionSuccess,
     required void Function(dynamic) onWebsocketConnectionFailed,
     required void Function(int?, String?) onWebsocketConnectionClosed,
@@ -79,9 +81,11 @@ class SdCardSocketService {
     //     '&include_speech_profile=$includeSpeechProfile&new_memory_watch=$newMemoryWatch&stt_service=${SharedPreferencesUtil().transcriptionModel}';
     var params = '?uid=${SharedPreferencesUtil().uid}&bt_connected_time=$btConnectedTime';
     debugPrint('btConnectedTime: $btConnectedTime');
-    IOWebSocketChannel channel = IOWebSocketChannel.connect(
-      Uri.parse('${Env.apiBaseUrl!.replaceAll('https', 'wss')}sdcard_stream$params'),
-      // headers: {'Authorization': await getAuthHeader()},
+    final channel = await createUniversalSocket(
+      '${Env.apiBaseUrl!.replaceAll('https', 'wss')}sdcard_stream$params',
+      headers: {'Authorization': await getAuthHeader()},
+      pingInterval: const Duration(seconds: 20),
+      connectTimeout: const Duration(seconds: 30),
     );
 
     await channel.ready.then((v) {

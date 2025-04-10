@@ -4,7 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
-import 'package:omi/services/sockets/universal_socket/universal_socket_web.dart';
+import 'package:omi/services/sockets/universal_socket/universal_socket.dart';
 import 'package:web_socket_channel/status.dart' as socket_channel_status;
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:omi/backend/http/shared.dart';
@@ -123,6 +123,7 @@ class PureSocket implements IPureSocket {
       pingInterval: const Duration(seconds: 20),
       connectTimeout: const Duration(seconds: 30),
     );
+
     if (_channel?.ready == null) {
       return false;
     }

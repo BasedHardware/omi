@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:omi/gen/assets.gen.dart';
@@ -129,7 +130,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       return;
     }
     debugPrint(event);
-    InstabugLog.logInfo(event);
+    if(PlatformUtil.isNotWeb) InstabugLog.logInfo(event);
   }
 
   ///Screens with respect to subpage

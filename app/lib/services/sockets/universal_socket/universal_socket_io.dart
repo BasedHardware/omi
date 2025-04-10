@@ -1,7 +1,7 @@
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-Future<WebSocketChannel> createUniversalSocket(String url, {Map<String, dynamic>? headers}) async {
+Future<WebSocketChannel> createUniversalSocket(String url, {Map<String, dynamic>? headers, required Duration pingInterval, required Duration connectTimeout}) async {
   return IOWebSocketChannel.connect(
     url,
     headers: headers,

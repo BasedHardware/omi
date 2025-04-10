@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -20,7 +19,8 @@ class ServiceManager {
 
   static ServiceManager _create() {
     ServiceManager sm = ServiceManager();
-    sm._mic = MicRecorderBackgroundService(
+    
+    sm._mic = PlatformUtil.isWeb ?  MicRecorderService(isInBG: false):  MicRecorderBackgroundService(
       runner: BackgroundService(),
     );
     sm._device = DeviceService();
