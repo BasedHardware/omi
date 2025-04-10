@@ -38,6 +38,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final focusTitleField = FocusNode();
   final focusOverviewField = FocusNode();
+  TabController? _controller;
+  ConversationTab selectedTab = ConversationTab.summary;
 
   // TODO: use later for onboarding transcript segment edits
   // late AnimationController _animationController;
@@ -45,6 +47,15 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
   @override
   void initState() {
+    super.initState();
+
+    _controller = TabController(length: 2, vsync: this, initialIndex: 1); // Start with summary tab
+    _controller!.addListener(() {
+      setState(() {
+        selectedTab = _controller!.index == 0 ? ConversationTab.transcript : ConversationTab.summary;
+      });
+    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
       await provider.initConversation();
@@ -66,6 +77,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
   @override
   void dispose() {
+    _controller?.dispose();
     focusTitleField.dispose();
     focusOverviewField.dispose();
     super.dispose();
@@ -75,261 +87,243 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   Widget build(BuildContext context) {
     return PopScope(
       canPop: true,
-      child: DefaultTabController(
-        length: 2,
-        initialIndex: 1,
-        child: MessageListener<ConversationDetailProvider>(
-          showError: (error) {
-            if (error == 'REPROCESS_FAILED') {
-              ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Error while processing conversation. Please try again later.')));
-            }
-          },
-          showInfo: (info) {
-            if (info == 'REPROCESS_SUCCESS') {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Conversation processed! 🚀', style: TextStyle(color: Colors.white))),
-              );
-            }
-          },
-          child: Scaffold(
-            key: scaffoldKey,
-            extendBody: true,
+      child: MessageListener<ConversationDetailProvider>(
+        showError: (error) {
+          if (error == 'REPROCESS_FAILED') {
+            ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Error while processing conversation. Please try again later.')));
+          }
+        },
+        showInfo: (info) {
+          if (info == 'REPROCESS_SUCCESS') {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Conversation processed! 🚀', style: TextStyle(color: Colors.white))),
+            );
+          }
+        },
+        child: Scaffold(
+          key: scaffoldKey,
+          extendBody: true,
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          appBar: AppBar(
+            automaticallyImplyLeading: false,
             backgroundColor: Theme.of(context).colorScheme.primary,
-            appBar: AppBar(
-              automaticallyImplyLeading: false,
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              title: Consumer<ConversationDetailProvider>(builder: (context, provider, child) {
-                return Row(
-                  mainAxisSize: MainAxisSize.max,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    IconButton(
-                      onPressed: () {
-                        if (widget.isFromOnboarding) {
-                          SchedulerBinding.instance.addPostFrameCallback((_) {
-                            Navigator.pushAndRemoveUntil(context,
-                                MaterialPageRoute(builder: (context) => const HomePageWrapper()), (route) => false);
-                          });
-                        } else {
-                          Navigator.pop(context);
+            title: Consumer<ConversationDetailProvider>(builder: (context, provider, child) {
+              return Row(
+                mainAxisSize: MainAxisSize.max,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  IconButton(
+                    onPressed: () {
+                      if (widget.isFromOnboarding) {
+                        SchedulerBinding.instance.addPostFrameCallback((_) {
+                          Navigator.pushAndRemoveUntil(context,
+                              MaterialPageRoute(builder: (context) => const HomePageWrapper()), (route) => false);
+                        });
+                      } else {
+                        Navigator.pop(context);
+                      }
+                    },
+                    icon: const Icon(Icons.arrow_back_rounded, size: 24.0),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        if (provider.titleController != null && provider.titleFocusNode != null) {
+                          provider.titleFocusNode!.requestFocus();
+                          // Select all text in the title field
+                          provider.titleController!.selection = TextSelection(
+                            baseOffset: 0,
+                            extentOffset: provider.titleController!.text.length,
+                          );
                         }
                       },
-                      icon: const Icon(Icons.arrow_back_rounded, size: 24.0),
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () {
-                          if (provider.titleController != null && provider.titleFocusNode != null) {
-                            provider.titleFocusNode!.requestFocus();
-                            // Select all text in the title field
-                            provider.titleController!.selection = TextSelection(
-                              baseOffset: 0,
-                              extentOffset: provider.titleController!.text.length,
-                            );
-                          }
-                        },
-                        child: Text(
-                          provider.structured.title,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 18),
-                        ),
+                      child: Text(
+                        provider.structured.title,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 18),
                       ),
                     ),
-                    IconButton(
-                      onPressed: () async {
-                        await showModalBottomSheet(
-                          context: context,
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.only(
-                              topLeft: Radius.circular(16),
-                              topRight: Radius.circular(16),
-                            ),
-                          ),
-                          builder: (context) {
-                            return const ShowOptionsBottomSheet();
-                          },
-                        ).whenComplete(() {
-                          provider.toggleShareOptionsInSheet(false);
-                          provider.toggleDevToolsInSheet(false);
-                        });
-                      },
-                      icon: const Icon(Icons.more_horiz),
-                    ),
-                  ],
-                );
-              }),
-            ),
-            // Removed floating action button as we now have the more button in the bottom bar
-            body: Stack(
-              children: [
-                Column(
-                  children: [
-                    // TabBar is now hidden since we're using the bottom bar for navigation
-                    SizedBox(
-                        height: 0,
-                        child: TabBar(
-                          indicatorSize: TabBarIndicatorSize.label,
-                          isScrollable: false,
-                          onTap: (value) {
-                            context.read<ConversationDetailProvider>().updateSelectedTab(value);
-                          },
-                          padding: EdgeInsets.zero,
-                          indicatorPadding: EdgeInsets.zero,
-                          labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
-                          tabs: const [Tab(text: ''), Tab(text: '')],
-                          indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
-                        )),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Builder(builder: (context) {
-                          return TabBarView(
-                            physics: const NeverScrollableScrollPhysics(),
-                            children: [
-                              Selector<ConversationDetailProvider, ConversationSource?>(
-                                selector: (context, provider) => provider.conversation.source,
-                                builder: (context, source, child) {
-                                  return ListView(
-                                    shrinkWrap: true,
-                                    children: source == ConversationSource.openglass
-                                        ? [const PhotosGridComponent(), const SizedBox(height: 32)]
-                                        : [const TranscriptWidgets()],
-                                  );
-                                },
-                              ),
-                              const SummaryTab(),
-                            ],
-                          );
-                        }),
-                      ),
-                    ),
-                  ],
-                ),
-                
-                // Floating bottom bar
-                Positioned(
-                  bottom: 16,
-                  left: 0,
-                  right: 0,
-                  child: Consumer<ConversationDetailProvider>(
-                    builder: (context, provider, child) {
-                      return ConversationBottomBar(
-                        mode: ConversationBottomBarMode.detail,
-                        selectedTabIndex: provider.selectedTab,
-                        hasSegments: provider.conversation.transcriptSegments.isNotEmpty,
-                        onTabSelected: (index) {
-                          DefaultTabController.of(context).animateTo(index);
-                          provider.updateSelectedTab(index);
-                        },
-                        onStopPressed: () {
-                          // Empty since we don't show the stop button in detail mode
-                        },
-                      );
-                    },
                   ),
-                ),
-                
-                // Unassigned segments notification - positioned above the bottom bar
-                Positioned(
-                  bottom: 88, // Position above the bottom bar
-                  left: 16,
-                  right: 16,
-                  child: Selector<ConversationDetailProvider, ({bool shouldShow, int count})>(
-                    selector: (context, provider) {
-                      return (
-                        count: provider.conversation.unassignedSegmentsLength(),
-                        shouldShow: provider.showUnassignedFloatingButton && (provider.selectedTab == 0),
-                      );
+                  IconButton(
+                    onPressed: () async {
+                      await showModalBottomSheet(
+                        context: context,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(16),
+                            topRight: Radius.circular(16),
+                          ),
+                        ),
+                        builder: (context) {
+                          return const ShowOptionsBottomSheet();
+                        },
+                      ).whenComplete(() {
+                        provider.toggleShareOptionsInSheet(false);
+                        provider.toggleDevToolsInSheet(false);
+                      });
                     },
-                    builder: (context, value, child) {
-                      if (value.count == 0 || !value.shouldShow) return const SizedBox.shrink();
-                      return Container(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 8,
-                          horizontal: 16,
-                        ),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          color: Colors.grey.shade900,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.3),
-                              spreadRadius: 1,
-                              blurRadius: 2,
-                              offset: const Offset(0, 1),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    icon: const Icon(Icons.more_horiz),
+                  ),
+                ],
+              );
+            }),
+          ),
+          // Removed floating action button as we now have the more button in the bottom bar
+          body: Stack(
+            children: [
+              Column(
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Builder(builder: (context) {
+                        return TabBarView(
+                          controller: _controller,
+                          physics: const NeverScrollableScrollPhysics(),
                           children: [
-                            Row(
-                              children: [
-                                InkWell(
-                                  onTap: () {
-                                    var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
-                                    provider.setShowUnassignedFloatingButton(false);
-                                  },
-                                  child: const Icon(
-                                    Icons.close,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  "${value.count} unassigned segment${value.count == 1 ? '' : 's'}",
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.deepPurple.withOpacity(0.5),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                              ),
-                              onPressed: () {
-                                var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
-                                var speakerId = provider.conversation.speakerWithMostUnassignedSegments();
-                                var segmentIdx = provider.conversation.firstSegmentIndexForSpeaker(speakerId);
-                                showModalBottomSheet(
-                                  context: context,
-                                  isScrollControlled: true,
-                                  backgroundColor: Colors.black,
-                                  shape: const RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                                  ),
-                                  builder: (context) {
-                                    return NameSpeakerBottomSheet(
-                                      segmentIdx: segmentIdx,
-                                      speakerId: speakerId,
-                                    );
-                                  },
+                            Selector<ConversationDetailProvider, ConversationSource?>(
+                              selector: (context, provider) => provider.conversation.source,
+                              builder: (context, source, child) {
+                                return ListView(
+                                  shrinkWrap: true,
+                                  children: source == ConversationSource.openglass
+                                      ? [const PhotosGridComponent(), const SizedBox(height: 32)]
+                                      : [const TranscriptWidgets()],
                                 );
                               },
-                              child: const Text(
-                                "Tag",
-                                style: TextStyle(
+                            ),
+                            const SummaryTab(),
+                          ],
+                        );
+                      }),
+                    ),
+                  ),
+                ],
+              ),
+
+              // Floating bottom bar
+              Positioned(
+                bottom: 16,
+                left: 0,
+                right: 0,
+                child: Consumer<ConversationDetailProvider>(
+                  builder: (context, provider, child) {
+                    return ConversationBottomBar(
+                      mode: ConversationBottomBarMode.detail,
+                      selectedTab: selectedTab,
+                      hasSegments: provider.conversation.transcriptSegments.isNotEmpty,
+                      onTabSelected: (tab) {
+                        int index = tab == ConversationTab.transcript ? 0 : 1;
+                        _controller!.animateTo(index);
+                      },
+                      onStopPressed: () {
+                        // Empty since we don't show the stop button in detail mode
+                      },
+                    );
+                  },
+                ),
+              ),
+
+              // Unassigned segments notification - positioned above the bottom bar
+              Positioned(
+                bottom: 88, // Position above the bottom bar
+                left: 16,
+                right: 16,
+                child: Selector<ConversationDetailProvider, ({bool shouldShow, int count})>(
+                  selector: (context, provider) {
+                    return (
+                      count: provider.conversation.unassignedSegmentsLength(),
+                      shouldShow: provider.showUnassignedFloatingButton && (selectedTab == ConversationTab.transcript),
+                    );
+                  },
+                  builder: (context, value, child) {
+                    if (value.count == 0 || !value.shouldShow) return const SizedBox.shrink();
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 8,
+                        horizontal: 16,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        color: Colors.grey.shade900,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.3),
+                            spreadRadius: 1,
+                            blurRadius: 2,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              InkWell(
+                                onTap: () {
+                                  var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+                                  provider.setShowUnassignedFloatingButton(false);
+                                },
+                                child: const Icon(
+                                  Icons.close,
                                   color: Colors.white,
-                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
+                              const SizedBox(width: 8),
+                              Text(
+                                "${value.count} unassigned segment${value.count == 1 ? '' : 's'}",
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.deepPurple.withOpacity(0.5),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
                             ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+                            onPressed: () {
+                              var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+                              var speakerId = provider.conversation.speakerWithMostUnassignedSegments();
+                              var segmentIdx = provider.conversation.firstSegmentIndexForSpeaker(speakerId);
+                              showModalBottomSheet(
+                                context: context,
+                                isScrollControlled: true,
+                                backgroundColor: Colors.black,
+                                shape: const RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                                ),
+                                builder: (context) {
+                                  return NameSpeakerBottomSheet(
+                                    segmentIdx: segmentIdx,
+                                    speakerId: speakerId,
+                                  );
+                                },
+                              );
+                            },
+                            child: const Text(
+                              "Tag",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -379,17 +373,6 @@ class TranscriptWidgets extends StatelessWidget {
           physics: const NeverScrollableScrollPhysics(),
           children: [
             SizedBox(height: provider.conversation.transcriptSegments.isEmpty ? 16 : 0),
-            // provider.memory.isPostprocessing()
-            //     ? Container(
-            //         padding: const EdgeInsets.all(16),
-            //         decoration: BoxDecoration(
-            //           color: Colors.grey.shade800,
-            //           borderRadius: BorderRadius.circular(8),
-            //         ),
-            //         child: Text('🚨 Memory still processing. Please wait before reassigning segments.',
-            //             style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3)),
-            //       )
-            //     : const SizedBox(height: 0),
             SizedBox(height: provider.conversation.transcriptSegments.isEmpty ? 16 : 0),
             provider.conversation.transcriptSegments.isEmpty
                 ? ExpandableTextWidget(
@@ -408,7 +391,6 @@ class TranscriptWidgets extends StatelessWidget {
                     topMargin: false,
                     canDisplaySeconds: provider.canDisplaySeconds,
                     isConversationDetail: true,
-                    // editSegment: (_) {},
                     editSegment: (i, j) {
                       final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                       if (!connectivityProvider.isConnected) {

@@ -5,17 +5,22 @@ enum ConversationBottomBarMode {
   detail // For viewing completed conversations
 }
 
+enum ConversationTab {
+  transcript,
+  summary
+}
+
 class ConversationBottomBar extends StatelessWidget {
   final ConversationBottomBarMode mode;
-  final int selectedTabIndex;
-  final Function(int) onTabSelected;
+  final ConversationTab selectedTab;
+  final Function(ConversationTab) onTabSelected;
   final VoidCallback onStopPressed;
   final bool hasSegments;
 
   const ConversationBottomBar({
     super.key,
     required this.mode,
-    required this.selectedTabIndex,
+    required this.selectedTab,
     required this.onTabSelected,
     required this.onStopPressed,
     this.hasSegments = true,
@@ -57,8 +62,8 @@ class ConversationBottomBar extends StatelessWidget {
                 _buildTabButton(
                   context: context,
                   icon: Icons.graphic_eq_rounded,
-                  isSelected: selectedTabIndex == 0,
-                  onTap: () => onTabSelected(0),
+                  isSelected: selectedTab == ConversationTab.transcript,
+                  onTap: () => onTabSelected(ConversationTab.transcript),
                 ),
 
                 // Stop button - only show in recording mode
@@ -84,7 +89,7 @@ class ConversationBottomBar extends StatelessWidget {
                         borderRadius: BorderRadius.circular(20),
                         onTap: onStopPressed,
                         child: const Icon(
-                          Icons.pause_rounded,
+                          Icons.stop_rounded,
                           color: Colors.white,
                           size: 24,
                         ),
@@ -97,8 +102,8 @@ class ConversationBottomBar extends StatelessWidget {
                   _buildTabButton(
                     context: context,
                     icon: Icons.sticky_note_2,
-                    isSelected: selectedTabIndex == 1,
-                    onTap: () => onTabSelected(1),
+                    isSelected: selectedTab == ConversationTab.summary,
+                    onTap: () => onTabSelected(ConversationTab.summary),
                   ),
               ],
             ),

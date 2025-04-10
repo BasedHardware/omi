@@ -24,7 +24,6 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   int conversationIdx = 0;
   DateTime selectedDate = DateTime.now();
 
-  int selectedTab = 1;
   bool isLoading = false;
   bool loadingReprocessConversation = false;
   String reprocessConversationId = '';
@@ -94,11 +93,6 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   void setProviders(AppProvider provider, ConversationProvider conversationProvider) {
     this.conversationProvider = conversationProvider;
     appProvider = provider;
-    notifyListeners();
-  }
-
-  updateSelectedTab(int index) {
-    selectedTab = index;
     notifyListeners();
   }
 

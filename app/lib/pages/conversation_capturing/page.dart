@@ -28,25 +28,12 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   final scaffoldKey = GlobalKey<ScaffoldState>();
   TabController? _controller;
   late bool showSummarizeConfirmation;
-  Timer? _timer;
-  int _elapsedTime = 0;
 
   @override
   void initState() {
     _controller = TabController(length: 2, vsync: this, initialIndex: 0);
     _controller!.addListener(() => setState(() {}));
     showSummarizeConfirmation = SharedPreferencesUtil().showSummarizeConfirmation;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final captureProvider = context.read<CaptureProvider>();
-      if (captureProvider.segments.isNotEmpty) {
-        if (captureProvider.inProgressConversation != null) {
-          setState(() {
-            _elapsedTime = convertDateTimeToSeconds(captureProvider.inProgressConversation!.createdAt);
-          });
-        }
-        _startTimer();
-      }
-    });
     super.initState();
   }
 
@@ -67,14 +54,6 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     return '${twoDigits(hours)}:${twoDigits(minutes)}:${twoDigits(remainingSeconds)}';
   }
 
-  void _startTimer() {
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        _elapsedTime++;
-      });
-    });
-  }
-
   void _pushNewConversation(BuildContext context, conversation) async {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await Navigator.of(context).pushReplacement(MaterialPageRoute(
@@ -86,27 +65,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   }
 
   @override
-  dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Consumer2<CaptureProvider, DeviceProvider>(
       builder: (context, provider, deviceProvider, child) {
-        // Track memory
-        // if ((provider.memoryProvider?.memories ?? []).isNotEmpty &&
-        //     (provider.memoryProvider!.memories.first.id != widget.topMemoryId || widget.topMemoryId == null)) {
-        //   _pushNewMemory(context, provider.memoryProvider!.memories.first);
-        // }
-
-        // Conversation source
         var conversationSource = ConversationSource.omi;
-        // var captureProvider = context.read<CaptureProvider>();
-        // if (captureProvider.isGlasses) {
-        //   memorySource = MemorySource.openglass;
-        // }
         return PopScope(
           canPop: true,
           child: Scaffold(
@@ -214,23 +176,14 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
               children: [
                 provider.segments.isEmpty
                     ? const SizedBox()
-                    : AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        height: 30,
-                        child: Text(
-                          _elapsedTime > 0 ? convertToHHMMSS(_elapsedTime) : "",
-                          style: const TextStyle(fontSize: 16, color: Colors.white),
-                        ),
-                      ),
-                const SizedBox(height: 8),
-                provider.segments.isEmpty
-                    ? const SizedBox()
                     : ConversationBottomBar(
                         mode: ConversationBottomBarMode.recording,
-                        selectedTabIndex: _controller!.index,
+                        selectedTab: _controller!.index == 0 
+                            ? ConversationTab.transcript 
+                            : ConversationTab.summary,
                         hasSegments: provider.segments.isNotEmpty,
-                        onTabSelected: (index) {
-                          _controller!.animateTo(index);
+                        onTabSelected: (tab) {
+                          _controller!.animateTo(tab == ConversationTab.transcript ? 0 : 1);
                           setState(() {});
                         },
                         onStopPressed: () {
@@ -247,7 +200,8 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                   builder: (context, setState) {
                                     return ConfirmationDialog(
                                       title: "Finished Conversation?",
-                                      description: "Are you sure you want to stop recording and summarize the conversation now?",
+                                      description:
+                                          "Are you sure you want to stop recording and summarize the conversation now?\n\nHints: Conversation is summarized after 2 minutes of no speech.",
                                       checkboxValue: !showSummarizeConfirmation,
                                       checkboxText: "Don't ask me again",
                                       onCheckboxChanged: (value) {
