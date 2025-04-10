@@ -541,6 +541,8 @@ class GetAppsWidgets extends StatelessWidget {
                 child: MaterialButton(
                   onPressed: () async {
                     final provider = context.read<ConversationDetailProvider>();
+                    provider.loadingReprocessConversation = true;
+                    provider.notifyListeners();
                     provider.clearSelectedAppForReprocessing();
                     await provider.reprocessConversation();
                   },
