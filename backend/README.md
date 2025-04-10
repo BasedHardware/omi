@@ -288,3 +288,93 @@ To fix the PyOgg library directly:
    with open(file_path, 'w') as f:
        f.write(content)
    ```
+
+## Environment Variables Structure
+
+The backend environment variables are now organized into **required** and **optional** categories to simplify setup:
+
+### Required Environment Variables
+
+These variables are essential for core functionality:
+
+1. **Firebase/Google Cloud Authentication**
+   ```
+   GOOGLE_APPLICATION_CREDENTIALS=google-credentials.json
+   GOOGLE_CLOUD_PROJECT=your-project-id
+   ```
+   These are required for user authentication and database access.
+
+2. **Database Connection (Redis)**
+   ```
+   REDIS_DB_HOST=your-redis-host
+   REDIS_DB_PORT=your-redis-port
+   REDIS_DB_PASSWORD=your-redis-password
+   ```
+   Redis is used for caching and temporary data storage.
+
+3. **API Keys for Core Services**
+   ```
+   OPENAI_API_KEY=your-openai-api-key
+   DEEPGRAM_API_KEY=your-deepgram-api-key
+   ADMIN_KEY=your-admin-key
+   ```
+   These keys enable core functionality like chat, transcription, and admin access.
+
+4. **Base API URL**
+   ```
+   BASE_API_URL=your-api-base-url
+   ```
+   This is the URL where your backend can be accessed, used for callbacks and client connections.
+
+### Optional Environment Variables
+
+These variables enable additional features but are not required for core functionality:
+
+1. **Vector Search and Embeddings (Pinecone)**
+   ```
+   PINECONE_API_KEY=your-pinecone-api-key
+   PINECONE_INDEX_NAME=your-pinecone-index-name
+   ```
+   Used for advanced memory retrieval and search features. If not provided, a local mock implementation will be used.
+
+2. **Full-Text Search (Typesense)**
+   ```
+   TYPESENSE_HOST=your-typesense-host
+   TYPESENSE_HOST_PORT=your-typesense-port
+   TYPESENSE_API_KEY=your-typesense-api-key
+   ```
+   Enables advanced conversation search features. If not configured, a mock implementation will return empty search results.
+
+3. **Google Cloud Storage**
+   ```
+   BUCKET_SPEECH_PROFILES=your-speech-profiles-bucket-name
+   BUCKET_BACKUPS=your-backups-bucket-name
+   BUCKET_PLUGINS_LOGOS=your-plugins-logos-bucket-name
+   ```
+   Used for storing various files. If not configured, local file storage will be used as a fallback.
+
+4. **Additional AI Services**
+   ```
+   HUGGINGFACE_TOKEN=your-huggingface-token
+   SONIOX_API_KEY=your-soniox-api-key
+   HUME_API_KEY=your-hume-api-key
+   HUME_CALLBACK_URL=your-hume-callback-url
+   ```
+   Provides additional AI capabilities. Mock implementations will be used if not configured.
+
+5. **Integration Services**
+   ```
+   GITHUB_TOKEN=your-github-token
+   WORKFLOW_API_KEY=your-workflow-api-key
+   ```
+   Used for external integrations.
+
+6. **Payment Processing**
+   ```
+   STRIPE_API_KEY=your-stripe-api-key
+   STRIPE_WEBHOOK_SECRET=your-stripe-webhook-secret
+   STRIPE_CONNECT_WEBHOOK_SECRET=your-stripe-connect-webhook-secret
+   ```
+   Required only if you need to process payments.
+
+The system is designed to work with just the required variables, with graceful fallbacks for optional services. This makes development and testing much easier, especially when you don't need all the optional services.

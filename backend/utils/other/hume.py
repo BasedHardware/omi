@@ -1,4 +1,5 @@
 import os
+import time
 
 import requests
 
@@ -193,10 +194,41 @@ class HumeClient:
         return {"result": HumeJobResponseModel.from_dict(resp.json())}
 
 
-hume_client = HumeClient(
-    api_key=os.getenv('HUME_API_KEY'),
-    callback_url=os.getenv('HUME_CALLBACK_URL'),
-)
+class MockHumeClient:
+    """A mock implementation of the HumeClient for development and when API keys aren't available"""
+
+    def __init__(self):
+        print("Using MockHumeClient - Hume API calls will return empty results")
+
+    def request_user_expression_mersurement(self, urls):
+        """Mock implementation that returns a success response with empty data"""
+        print(f"MOCK: Hume API called with {len(urls)} URLs")
+        return {
+            "result": HumeJobResponseModel.from_dict({
+                "id": "mock-job-id-" + str(int(time.time()))
+            })
+        }
+
+# Initialize the Hume client based on available environment variables
+hume_api_key = os.getenv('HUME_API_KEY')
+hume_callback_url = os.getenv('HUME_CALLBACK_URL')
+
+if hume_api_key and hume_callback_url:
+    # Both API key and callback URL are available
+    hume_client = HumeClient(
+        api_key=hume_api_key,
+        callback_url=hume_callback_url,
+    )
+    print("Hume API client initialized with provided credentials")
+else:
+    # Missing one or both required parameters
+    if hume_api_key:
+        print("WARNING: HUME_CALLBACK_URL is not set. Using mock Hume client.")
+    elif hume_callback_url:
+        print("WARNING: HUME_API_KEY is not set. Using mock Hume client.")
+    else:
+        print("INFO: Hume API is not configured. Using mock client.")
+    hume_client = MockHumeClient()
 
 
 def get_hume():
