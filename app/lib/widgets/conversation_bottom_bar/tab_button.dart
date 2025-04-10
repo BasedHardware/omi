@@ -72,7 +72,7 @@ class TabButton extends StatelessWidget {
                         },
                         blendMode: BlendMode.dstIn,
                         child: Text(
-                          label,
+                          label ?? '',
                           style: TextStyle(
                             color: isSelected ? Colors.white : Colors.grey.shade400,
                             fontSize: 12,
