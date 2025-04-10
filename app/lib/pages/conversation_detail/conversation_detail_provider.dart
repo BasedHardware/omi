@@ -32,9 +32,25 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   final scaffoldKey = GlobalKey<ScaffoldState>();
   List<App> get appsList => appProvider?.apps ?? [];
 
-  Structured get structured => conversationProvider!.groupedConversations[selectedDate]![conversationIdx].structured;
+  Structured get structured {
+    return conversation.structured;
+  }
 
-  ServerConversation get conversation => conversationProvider!.groupedConversations[selectedDate]![conversationIdx];
+  ServerConversation? _cachedConversation;
+  ServerConversation get conversation {
+    if (conversationProvider == null || 
+        !conversationProvider!.groupedConversations.containsKey(selectedDate) ||
+        conversationProvider!.groupedConversations[selectedDate] == null ||
+        conversationProvider!.groupedConversations[selectedDate]!.length <= conversationIdx) {
+      // Return cached conversation if available, otherwise create an empty one
+      if (_cachedConversation == null) {
+        throw StateError("No conversation available");
+      }
+      return _cachedConversation!;
+    }
+    _cachedConversation = conversationProvider!.groupedConversations[selectedDate]![conversationIdx];
+    return _cachedConversation!;
+  }
   List<bool> appResponseExpanded = [];
 
   TextEditingController? titleController;

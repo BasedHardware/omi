@@ -150,7 +150,7 @@ def get_app_result(transcript: str, app: App) -> str:
     Make sure to be concise and clear.
     '''
 
-    response = llm_mini.invoke(prompt)
+    response = llm_medium.invoke(prompt)
     content = response.content.replace('```json', '').replace('```', '')
     if len(content) < 5:
         return ''

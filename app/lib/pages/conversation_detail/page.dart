@@ -179,7 +179,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                           physics: const NeverScrollableScrollPhysics(),
                           children: [
                             Selector<ConversationDetailProvider, ConversationSource?>(
-                              selector: (context, provider) => provider.conversation.source,
+                              selector: (context, provider) => provider.conversation?.source,
                               builder: (context, source, child) {
                                 return ListView(
                                   shrinkWrap: true,
@@ -205,10 +205,11 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                 right: 0,
                 child: Consumer<ConversationDetailProvider>(
                   builder: (context, provider, child) {
+                    final conversation = provider.conversation;
                     return ConversationBottomBar(
                       mode: ConversationBottomBarMode.detail,
                       selectedTab: selectedTab,
-                      hasSegments: provider.conversation.transcriptSegments.isNotEmpty,
+                      hasSegments: conversation != null && conversation.transcriptSegments.isNotEmpty,
                       onTabSelected: (tab) {
                         int index = tab == ConversationTab.transcript ? 0 : 1;
                         _controller!.animateTo(index);
@@ -221,102 +222,110 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                 ),
               ),
 
-              // Unassigned segments notification - positioned above the bottom bar
-              Positioned(
-                bottom: 88, // Position above the bottom bar
-                left: 16,
-                right: 16,
-                child: Selector<ConversationDetailProvider, ({bool shouldShow, int count})>(
-                  selector: (context, provider) {
-                    return (
-                      count: provider.conversation.unassignedSegmentsLength(),
-                      shouldShow: provider.showUnassignedFloatingButton && (selectedTab == ConversationTab.transcript),
-                    );
-                  },
-                  builder: (context, value, child) {
-                    if (value.count == 0 || !value.shouldShow) return const SizedBox.shrink();
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 8,
-                        horizontal: 16,
-                      ),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        color: Colors.grey.shade900,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.3),
-                            spreadRadius: 1,
-                            blurRadius: 2,
-                            offset: const Offset(0, 1),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              InkWell(
-                                onTap: () {
-                                  var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
-                                  provider.setShowUnassignedFloatingButton(false);
-                                },
-                                child: const Icon(
-                                  Icons.close,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                "${value.count} unassigned segment${value.count == 1 ? '' : 's'}",
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ],
-                          ),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.deepPurple.withOpacity(0.5),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                            onPressed: () {
-                              var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
-                              var speakerId = provider.conversation.speakerWithMostUnassignedSegments();
-                              var segmentIdx = provider.conversation.firstSegmentIndexForSpeaker(speakerId);
-                              showModalBottomSheet(
-                                context: context,
-                                isScrollControlled: true,
-                                backgroundColor: Colors.black,
-                                shape: const RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                                ),
-                                builder: (context) {
-                                  return NameSpeakerBottomSheet(
-                                    segmentIdx: segmentIdx,
-                                    speakerId: speakerId,
-                                  );
-                                },
-                              );
-                            },
-                            child: const Text(
-                              "Tag",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
+              // thinh's comment: temporary disabled
+              //// Unassigned segments notification - positioned above the bottom bar
+              //Positioned(
+              //  bottom: 88, // Position above the bottom bar
+              //  left: 16,
+              //  right: 16,
+              //  child: Selector<ConversationDetailProvider, ({bool shouldShow, int count})>(
+              //    selector: (context, provider) {
+              //      final conversation = provider.conversation;
+              //      if (conversation == null) {
+              //        return (
+              //          count: 0,
+              //          shouldShow: false,
+              //        );
+              //      }
+              //      return (
+              //        count: conversation.unassignedSegmentsLength(),
+              //        shouldShow: provider.showUnassignedFloatingButton && (selectedTab == ConversationTab.transcript),
+              //      );
+              //    },
+              //    builder: (context, value, child) {
+              //      if (value.count == 0 || !value.shouldShow) return const SizedBox.shrink();
+              //      return Container(
+              //        padding: const EdgeInsets.symmetric(
+              //          vertical: 8,
+              //          horizontal: 16,
+              //        ),
+              //        decoration: BoxDecoration(
+              //          borderRadius: BorderRadius.circular(16),
+              //          color: Colors.grey.shade900,
+              //          boxShadow: [
+              //            BoxShadow(
+              //              color: Colors.black.withOpacity(0.3),
+              //              spreadRadius: 1,
+              //              blurRadius: 2,
+              //              offset: const Offset(0, 1),
+              //            ),
+              //          ],
+              //        ),
+              //        child: Row(
+              //          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              //          children: [
+              //            Row(
+              //              children: [
+              //                InkWell(
+              //                  onTap: () {
+              //                    var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+              //                    provider.setShowUnassignedFloatingButton(false);
+              //                  },
+              //                  child: const Icon(
+              //                    Icons.close,
+              //                    color: Colors.white,
+              //                  ),
+              //                ),
+              //                const SizedBox(width: 8),
+              //                Text(
+              //                  "${value.count} unassigned segment${value.count == 1 ? '' : 's'}",
+              //                  style: const TextStyle(
+              //                    color: Colors.white,
+              //                    fontSize: 16,
+              //                  ),
+              //                ),
+              //              ],
+              //            ),
+              //            ElevatedButton(
+              //              style: ElevatedButton.styleFrom(
+              //                backgroundColor: Colors.deepPurple.withOpacity(0.5),
+              //                shape: RoundedRectangleBorder(
+              //                  borderRadius: BorderRadius.circular(16),
+              //                ),
+              //              ),
+              //              onPressed: () {
+              //                var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+              //                var speakerId = provider.conversation.speakerWithMostUnassignedSegments();
+              //                var segmentIdx = provider.conversation.firstSegmentIndexForSpeaker(speakerId);
+              //                showModalBottomSheet(
+              //                  context: context,
+              //                  isScrollControlled: true,
+              //                  backgroundColor: Colors.black,
+              //                  shape: const RoundedRectangleBorder(
+              //                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              //                  ),
+              //                  builder: (context) {
+              //                    return NameSpeakerBottomSheet(
+              //                      segmentIdx: segmentIdx,
+              //                      speakerId: speakerId,
+              //                    );
+              //                  },
+              //                );
+              //              },
+              //              child: const Text(
+              //                "Tag",
+              //                style: TextStyle(
+              //                  color: Colors.white,
+              //                  fontWeight: FontWeight.bold,
+              //                ),
+              //              ),
+              //            ),
+              //          ],
+              //        ),
+              //      );
+              //    },
+              //  ),
+              //),
             ],
           ),
         ),
@@ -362,52 +371,56 @@ class TranscriptWidgets extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<ConversationDetailProvider>(
       builder: (context, provider, child) {
-        return ListView(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          children: [
-            SizedBox(height: provider.conversation.transcriptSegments.isEmpty ? 16 : 0),
-            SizedBox(height: provider.conversation.transcriptSegments.isEmpty ? 16 : 0),
-            provider.conversation.transcriptSegments.isEmpty
-                ? ExpandableTextWidget(
-                    text: (provider.conversation.externalIntegration?.text ?? '').decodeString,
-                    maxLines: 1000,
-                    linkColor: Colors.grey.shade300,
-                    style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-                    toggleExpand: () {
-                      provider.toggleIsTranscriptExpanded();
-                    },
-                    isExpanded: provider.isTranscriptExpanded,
-                  )
-                : TranscriptWidget(
-                    segments: provider.conversation.transcriptSegments,
-                    horizontalMargin: false,
-                    topMargin: false,
-                    canDisplaySeconds: provider.canDisplaySeconds,
-                    isConversationDetail: true,
-                    editSegment: (i, j) {
-                      final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-                      if (!connectivityProvider.isConnected) {
-                        ConnectivityProvider.showNoInternetDialog(context);
-                        return;
-                      }
-                      showModalBottomSheet(
-                        context: context,
-                        isScrollControlled: true,
-                        backgroundColor: Colors.black,
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                        ),
-                        builder: (context) {
-                          return NameSpeakerBottomSheet(
-                            speakerId: j,
-                            segmentIdx: i,
-                          );
-                        },
-                      );
-                    }),
-            const SizedBox(height: 100)
-          ],
+        final segments = provider.conversation.transcriptSegments;
+
+        if (segments.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.only(top: 32),
+            child: ExpandableTextWidget(
+              text: (provider.conversation.externalIntegration?.text ?? '').decodeString,
+              maxLines: 1000,
+              linkColor: Colors.grey.shade300,
+              style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+              toggleExpand: () {
+                provider.toggleIsTranscriptExpanded();
+              },
+              isExpanded: provider.isTranscriptExpanded,
+            ),
+          );
+        }
+
+        // Use a Container with fixed height for large lists to enable proper scrolling
+        return Container(
+          height: segments.length > 100 ? MediaQuery.of(context).size.height - 64 : null,
+          child: TranscriptWidget(
+            segments: segments,
+            horizontalMargin: false,
+            topMargin: false,
+            canDisplaySeconds: provider.canDisplaySeconds,
+            isConversationDetail: true,
+            bottomMargin: 200,
+            editSegment: (i, j) {
+              final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+              if (!connectivityProvider.isConnected) {
+                ConnectivityProvider.showNoInternetDialog(context);
+                return;
+              }
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.black,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                builder: (context) {
+                  return NameSpeakerBottomSheet(
+                    speakerId: j,
+                    segmentIdx: i,
+                  );
+                },
+              );
+            },
+          ),
         );
       },
     );

@@ -130,11 +130,16 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                       ),
                                     ],
                                   )
-                                : getTranscriptWidget(
-                                    false,
-                                    provider.segments,
-                                    [],
-                                    deviceProvider.connectedDevice,
+                                : Container(
+                                    height: provider.segments.length > 100 
+                                        ? MediaQuery.of(context).size.height - 200 
+                                        : null,
+                                    child: getTranscriptWidget(
+                                      false,
+                                      provider.segments,
+                                      [],
+                                      deviceProvider.connectedDevice,
+                                    ),
                                   ),
                             const SizedBox(height: 100), // Add space at bottom for the floating bar
                           ],
