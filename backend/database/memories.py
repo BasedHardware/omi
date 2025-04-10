@@ -6,6 +6,8 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
 
+memories_collection = 'memories'
+
 
 def get_memories(uid: str, limit: int = 100, offset: int = 0):
     print('get_memories', uid, limit, offset)
@@ -58,6 +60,17 @@ def create_memory(uid: str, data: dict):
     memories_ref = user_ref.collection('facts')
     memory_ref = memories_ref.document(data['id'])
     memory_ref.set(data)
+    # TODO: remove after migration
+    new_memories_ref = user_ref.collection(memories_collection)
+    if 'memory_id' in data:
+        data['conversation_id'] = data['memory_id']
+        del data['memory_id']
+    if 'memory_category' in data:
+        data['conversation_category'] = data['memory_category']
+        del data['memory_category']
+    new_memory_ref = new_memories_ref.document(data['id'])
+    new_memory_ref.set(data)
+    ##############################
 
 
 def save_memories(uid: str, data: List[dict]):
@@ -68,6 +81,19 @@ def save_memories(uid: str, data: List[dict]):
         memory_ref = memories_ref.document(memory['id'])
         batch.set(memory_ref, memory)
     batch.commit()
+    # TODO: remove after migration
+    new_memories_ref = user_ref.collection(memories_collection)
+    for memory in data:
+        if 'memory_id' in memory:
+            memory['conversation_id'] = memory['memory_id']
+            del memory['memory_id']
+        if 'memory_category' in memory:
+            memory['conversation_category'] = memory['memory_category']
+            del memory['memory_category']
+        memory_ref = new_memories_ref.document(memory['id'])
+        batch.set(memory_ref, memory)
+    batch.commit()
+    ##############################
 
 
 def delete_memories(uid: str):
@@ -77,6 +103,12 @@ def delete_memories(uid: str):
     for doc in memories_ref.stream():
         batch.delete(doc.reference)
     batch.commit()
+    # TODO: remove after migration
+    new_memories_ref = user_ref.collection(memories_collection)
+    for doc in new_memories_ref.stream():
+        batch.delete(doc.reference)
+    batch.commit()
+    ##############################
 
 
 def get_memory(uid: str, memory_id: str):
@@ -91,6 +123,11 @@ def review_memory(uid: str, memory_id: str, value: bool):
     memories_ref = user_ref.collection('facts')
     memory_ref = memories_ref.document(memory_id)
     memory_ref.update({'reviewed': True, 'user_review': value})
+    # TODO: remove after migration
+    new_memories_ref = user_ref.collection(memories_collection)
+    new_memory_ref = new_memories_ref.document(memory_id)
+    new_memory_ref.update({'reviewed': True, 'user_review': value})
+    ##############################
 
 
 def change_memory_visibility(uid: str, memory_id: str, value: str):
@@ -98,6 +135,11 @@ def change_memory_visibility(uid: str, memory_id: str, value: str):
     memories_ref = user_ref.collection('facts')
     memory_ref = memories_ref.document(memory_id)
     memory_ref.update({'visibility': value})
+    # TODO: remove after migration
+    new_memories_ref = user_ref.collection(memories_collection)
+    new_memory_ref = new_memories_ref.document(memory_id)
+    new_memory_ref.update({'visibility': value})
+    ##############################
 
 
 def edit_memory(uid: str, memory_id: str, value: str):
@@ -105,6 +147,11 @@ def edit_memory(uid: str, memory_id: str, value: str):
     memories_ref = user_ref.collection('facts')
     memory_ref = memories_ref.document(memory_id)
     memory_ref.update({'content': value, 'edited': True, 'updated_at': datetime.now(timezone.utc)})
+    # TODO: remove after migration
+    new_memories_ref = user_ref.collection(memories_collection)
+    new_memory_ref = new_memories_ref.document(memory_id)
+    new_memory_ref.update({'content': value, 'edited': True, 'updated_at': datetime.now(timezone.utc)})
+    ##############################
 
 
 def delete_memory(uid: str, memory_id: str):
@@ -112,6 +159,11 @@ def delete_memory(uid: str, memory_id: str):
     memories_ref = user_ref.collection('facts')
     memory_ref = memories_ref.document(memory_id)
     memory_ref.update({'deleted': True})
+    # TODO: remove after migration
+    new_memories_ref = user_ref.collection(memories_collection)
+    new_memory_ref = new_memories_ref.document(memory_id)
+    new_memory_ref.update({'deleted': True})
+    ##############################
 
 
 def delete_all_memories(uid: str):
@@ -122,6 +174,14 @@ def delete_all_memories(uid: str):
     for doc in query.stream():
         batch.update(doc.reference, {'deleted': True})
     batch.commit()
+    # TODO: remove after migration
+    new_memories_ref = user_ref.collection(memories_collection)
+    query = new_memories_ref.where(filter=FieldFilter('deleted', '==', False))
+    batch = db.batch()
+    for doc in query.stream():
+        batch.update(doc.reference, {'deleted': True})
+    batch.commit()
+    ##############################
 
 
 def delete_memories_for_conversation(uid: str, memory_id: str):

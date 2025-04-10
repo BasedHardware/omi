@@ -783,3 +783,23 @@ def validate_app_integration(params: ValidationParams) -> dict:
             + f"{action_desc or action_type.replace('_', ' ')}",
         )
     return app_data
+
+
+def app_can_create_memories(app: dict) -> bool:
+    """Check if an app can create memories (facts)."""
+    return app_has_action(app, "create_memories") or app_has_action(app, "create_facts")
+
+
+def app_can_read_memories(app: dict) -> bool:
+    """Check if an app can read memories (facts)."""
+    return app_has_action(app, "read_memories") or app_has_action(app, "read_facts")
+
+
+def app_can_read_conversations(app: dict) -> bool:
+    """Check if an app can read conversations."""
+    return app_has_action(app, "read_conversations")
+
+
+def app_can_create_conversation(app: dict) -> bool:
+    """Check if an app can create a conversation."""
+    return app_has_action(app, "create_conversation")

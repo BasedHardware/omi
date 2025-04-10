@@ -20,7 +20,7 @@ export const InputArea: React.FC<InputAreaProps> = ({ handle, handleInputChange,
     <div className="text-center max-w-md mx-auto mb-8">
       <h1 className="text-4xl md:text-5xl font-serif mb-3 md:mb-4">AI personas</h1>
       <p className="text-gray-400 text-sm md:text-base mb-8 md:mb-12">
-        Create new AI Twitter/Linkedin personalities
+        Create new AI Twitter/Linkedin personalities!
       </p>
     </div>
     

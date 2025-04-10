@@ -224,8 +224,8 @@ async def get_memories_via_integration(
     }
     _ = validate_app_integration(params)
 
-    facts = memory_db.get_memories(uid, limit=limit, offset=offset)
-    memory_items = [integration_models.MemoryItem(**fact) for fact in facts]
+    memories = memory_db.get_memories(uid, limit=limit, offset=offset)
+    memory_items = [integration_models.MemoryItem(**fact) for fact in memories]
 
     return {"memories": memory_items}
 
