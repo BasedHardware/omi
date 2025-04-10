@@ -470,18 +470,16 @@ class GetAppsWidgets extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<ConversationDetailProvider>(
       builder: (context, provider, child) {
+        final summarizedApp = provider.getSummarizedApp();
         return Column(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.start,
-          crossAxisAlignment:
-              provider.conversation.appResults.isEmpty ? CrossAxisAlignment.center : CrossAxisAlignment.start,
-          children: provider.conversation.appResults.isEmpty
+          crossAxisAlignment: summarizedApp == null ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+          children: summarizedApp == null
               ? [child!]
               : [
-                  // Show only the first app
-                  if (provider.conversation.appResults.isNotEmpty &&
-                      !provider.conversation.discarded &&
-                      provider.appResponseExpanded.isNotEmpty) ...[
+                  // Show the summarized app
+                  if (!provider.conversation.discarded) ...[
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -493,9 +491,8 @@ class GetAppsWidgets extends StatelessWidget {
                         IconButton(
                           icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
                           onPressed: () {
-                            final String content = provider.conversation.appResults[0].content is String
-                                ? (provider.conversation.appResults[0].content as String).trim()
-                                : "";
+                            final String content =
+                                summarizedApp.content is String ? (summarizedApp.content as String).trim() : "";
                             Clipboard.setData(ClipboardData(text: content));
                             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                               content: Text('Summary copied to clipboard'),
@@ -506,13 +503,10 @@ class GetAppsWidgets extends StatelessWidget {
                         ),
                       ],
                     ),
-                    if (provider.conversation.appResults.isNotEmpty &&
-                        provider.conversation.appResults[0].content != null &&
-                        provider.conversation.appResults[0].content.length >= 5)
+                    if (summarizedApp.content != null && summarizedApp.content.length >= 5)
                       AppDetailWidget(
-                        appResponse: provider.conversation.appResults[0],
-                        app: provider.appsList
-                            .firstWhereOrNull((element) => element.id == provider.conversation.appResults[0].appId),
+                        appResponse: summarizedApp,
+                        app: provider.appsList.firstWhereOrNull((element) => element.id == summarizedApp.appId),
                         isExpanded: true, // Always expanded
                         onToggleExpand: () {}, // Empty function since we don't need to toggle
                         conversation: provider.conversation,

@@ -257,4 +257,13 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     assignConversationTranscriptSegment(conversationId, segmentIdx);
     notifyListeners();
   }
+  
+  /// Returns the first app result from the conversation if available
+  /// This is typically the summary of the conversation
+  AppResponse? getSummarizedApp() {
+    if (conversation.appResults.isNotEmpty) {
+      return conversation.appResults[0];
+    }
+    return null;
+  }
 }
