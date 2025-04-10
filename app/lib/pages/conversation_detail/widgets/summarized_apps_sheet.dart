@@ -71,8 +71,15 @@ class SummarizedAppsBottomSheet extends StatelessWidget {
                             context,
                             null,
                             currentAppId == null,
-                            () {
-                              // No action needed as this is the default
+                            () async {
+                              // If an app was previously selected, reprocess with no specific app
+                              if (currentAppId != null) {
+                                Navigator.pop(context);
+                                final provider = context.read<ConversationDetailProvider>();
+                                await provider.reprocessConversation();
+                                return;
+                              }
+                              // Otherwise just close the sheet
                               Navigator.pop(context);
                             },
                           ),
@@ -107,7 +114,16 @@ class SummarizedAppsBottomSheet extends StatelessWidget {
                                     context,
                                     app,
                                     app.id == currentAppId,
-                                    () {
+                                    () async {
+                                      // If this is a different app than currently selected, reprocess with this app
+                                      if (app.id != currentAppId) {
+                                        Navigator.pop(context);
+                                        final provider = context.read<ConversationDetailProvider>();
+                                        provider.setSelectedAppForReprocessing(app);
+                                        await provider.reprocessConversation(appId: app.id);
+                                        return;
+                                      }
+                                      // Otherwise just show app details
                                       MixpanelManager().pageOpened('App Detail');
                                       routeToPage(context, AppDetailPage(app: app));
                                     },

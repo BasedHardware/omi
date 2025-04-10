@@ -3,7 +3,7 @@ import random
 import threading
 import uuid
 from datetime import timezone
-from typing import Union, Tuple, List
+from typing import Union, Tuple, List, Optional
 
 from fastapi import HTTPException
 
@@ -114,10 +114,18 @@ def _get_conversation_obj(uid: str, structured: Structured,
     return conversation
 
 
-def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = False):
+def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = False, app_id: Optional[str] = None):
     apps: List[App] = get_available_apps(uid)
-    filtered_apps = [app for app in apps if app.works_with_memories() and app.enabled]
-    conversation.apps_results = []
+    
+    # If app_id is provided, only use that specific app
+    if app_id:
+        filtered_apps = [app for app in apps if app.id == app_id and app.works_with_memories() and app.enabled]
+        # Clear existing app results if reprocessing with a specific app
+        if is_reprocess:
+            conversation.apps_results = []
+    else:
+        filtered_apps = [app for app in apps if app.works_with_memories() and app.enabled]
+    
     threads = []
 
     def execute_app(app):
@@ -228,13 +236,13 @@ def _update_personas_async(uid: str):
 
 def process_conversation(
         uid: str, language_code: str, conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
-        force_process: bool = False, is_reprocess: bool = False
+        force_process: bool = False, is_reprocess: bool = False, app_id: Optional[str] = None
 ) -> Conversation:
     structured, discarded = _get_structured(uid, language_code, conversation, force_process)
     conversation = _get_conversation_obj(uid, structured, conversation)
 
     if not discarded:
-        _trigger_apps(uid, conversation, is_reprocess=is_reprocess)
+        _trigger_apps(uid, conversation, is_reprocess=is_reprocess, app_id=app_id)
         threading.Thread(target=save_structured_vector, args=(uid, conversation,)).start() if not is_reprocess else None
         threading.Thread(target=_extract_memories, args=(uid, conversation)).start()
 

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
 import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
 
 enum ConversationBottomBarMode {
   recording, // During active recording (no summary icon)
@@ -110,23 +111,31 @@ class ConversationBottomBar extends StatelessWidget {
 
                       return Row(
                         children: [
-                          _buildTabButton(
-                            context: context,
-                            icon: app == null ? Icons.sticky_note_2 : null,
-                            isSelected: selectedTab == ConversationTab.summary,
-                            onTap: () => onTabSelected(ConversationTab.summary),
-                            label: app?.name,
-                            appImage: app != null ? app.getImageUrl() : null,
-                            showDropdownArrow: selectedTab == ConversationTab.summary,
-                            onDropdownPressed: () {
-                              showModalBottomSheet(
-                                context: context,
-                                isScrollControlled: true,
-                                backgroundColor: Colors.transparent,
-                                builder: (context) => _buildSummarizedAppsSheet(context),
-                              );
-                            },
-                          ),
+                          Consumer<ConversationDetailProvider>(builder: (context, detailProvider, _) {
+                            final isReprocessing = detailProvider.loadingReprocessConversation;
+                            final reprocessingApp = detailProvider.selectedAppForReprocessing;
+
+                            return _buildTabButton(
+                              context: context,
+                              icon: app == null && reprocessingApp == null ? Icons.sticky_note_2 : null,
+                              isSelected: selectedTab == ConversationTab.summary,
+                              onTap: () => onTabSelected(ConversationTab.summary),
+                              label: isReprocessing && reprocessingApp != null ? reprocessingApp.name : app?.name,
+                              appImage: isReprocessing && reprocessingApp != null
+                                  ? reprocessingApp.getImageUrl()
+                                  : (app != null ? app.getImageUrl() : null),
+                              showDropdownArrow: selectedTab == ConversationTab.summary,
+                              isLoading: isReprocessing,
+                              onDropdownPressed: () {
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: Colors.transparent,
+                                  builder: (context) => _buildSummarizedAppsSheet(context),
+                                );
+                              },
+                            );
+                          }),
                         ],
                       );
                     },
@@ -151,6 +160,7 @@ class ConversationBottomBar extends StatelessWidget {
     String? label,
     String? appImage,
     bool showDropdownArrow = false,
+    bool isLoading = false,
     VoidCallback? onDropdownPressed,
   }) {
     return Container(
@@ -176,58 +186,121 @@ class ConversationBottomBar extends StatelessWidget {
                     size: 24,
                   )
                 else if (appImage != null)
-                  CachedNetworkImage(
-                    imageUrl: appImage,
-                    imageBuilder: (context, imageProvider) => Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        image: DecorationImage(
-                          image: imageProvider,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                    ),
-                    placeholder: (context, url) => Container(
-                      width: 24,
-                      height: 24,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.grey,
-                      ),
-                      child: const Center(
-                        child: SizedBox(
-                          width: 12,
-                          height: 12,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  isLoading
+                      ? Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.transparent,
+                          ),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              if (appImage != null)
+                                Opacity(
+                                  opacity: 0.5,
+                                  child: CachedNetworkImage(
+                                    imageUrl: appImage,
+                                    imageBuilder: (context, imageProvider) => Container(
+                                      width: 24,
+                                      height: 24,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        image: DecorationImage(
+                                          image: imageProvider,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      ),
+                                    ),
+                                    errorWidget: (context, url, error) => Container(
+                                      width: 24,
+                                      height: 24,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: Colors.grey.shade800,
+                                      ),
+                                      child: const Icon(Icons.error_outline, size: 16, color: Colors.white),
+                                    ),
+                                  ),
+                                ),
+                              SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : CachedNetworkImage(
+                          imageUrl: appImage,
+                          imageBuilder: (context, imageProvider) => Container(
+                            width: 24,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              image: DecorationImage(
+                                image: imageProvider,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                          placeholder: (context, url) => Container(
+                            width: 24,
+                            height: 24,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.grey,
+                            ),
+                            child: const Center(
+                              child: SizedBox(
+                                width: 12,
+                                height: 12,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              ),
+                            ),
+                          ),
+                          errorWidget: (context, url, error) => Container(
+                            width: 24,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.grey.shade800,
+                            ),
+                            child: const Icon(Icons.error_outline, size: 16, color: Colors.white),
                           ),
                         ),
-                      ),
-                    ),
-                    errorWidget: (context, url, error) => Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.grey.shade800,
-                      ),
-                      child: const Icon(Icons.error_outline, size: 16, color: Colors.white),
-                    ),
-                  ),
                 if (label != null) ...[
                   const SizedBox(width: 4),
                   Flexible(
-                    child: Text(
-                      label,
-                      style: TextStyle(
-                        color: isSelected ? Colors.white : Colors.grey.shade400,
-                        fontSize: 12,
-                        overflow: TextOverflow.ellipsis,
+                    child: Container(
+                      width: 60,
+                      child: ShaderMask(
+                        shaderCallback: (Rect bounds) {
+                          return LinearGradient(
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                            colors: [Colors.white, Colors.transparent],
+                            stops: [0.8, 1.0],
+                          ).createShader(bounds);
+                        },
+                        blendMode: BlendMode.dstIn,
+                        child: Text(
+                          label,
+                          style: TextStyle(
+                            color: isSelected ? Colors.white : Colors.grey.shade400,
+                            fontSize: 12,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.clip,
+                        ),
                       ),
-                      maxLines: 1,
                     ),
                   ),
                 ],

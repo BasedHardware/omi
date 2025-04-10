@@ -27,6 +27,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   bool isLoading = false;
   bool loadingReprocessConversation = false;
   String reprocessConversationId = '';
+  App? selectedAppForReprocessing;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
   List<App> appsList = [];
@@ -103,6 +104,14 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   updateReprocessConversationLoadingState(bool loading) {
     loadingReprocessConversation = loading;
+    if (!loading) {
+      selectedAppForReprocessing = null;
+    }
+    notifyListeners();
+  }
+  
+  void setSelectedAppForReprocessing(App app) {
+    selectedAppForReprocessing = app;
     notifyListeners();
   }
 
@@ -216,12 +225,12 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
-  Future<bool> reprocessConversation() async {
-    debugPrint('_reProcessConversation');
+  Future<bool> reprocessConversation({String? appId}) async {
+    debugPrint('_reProcessConversation with appId: $appId');
     updateReprocessConversationLoadingState(true);
     updateReprocessConversationId(conversation.id);
     try {
-      var updatedConversation = await reProcessConversationServer(conversation.id);
+      var updatedConversation = await reProcessConversationServer(conversation.id, appId: appId);
       MixpanelManager().reProcessConversation(conversation);
       updateReprocessConversationLoadingState(false);
       updateReprocessConversationId('');

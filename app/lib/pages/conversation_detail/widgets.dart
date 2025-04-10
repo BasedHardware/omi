@@ -11,6 +11,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/page.dart';
+import 'package:omi/pages/chat/widgets/markdown_message_widget.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/test_prompts.dart';
 import 'package:omi/pages/settings/developer.dart';
@@ -344,14 +345,8 @@ class AppDetailWidget extends StatelessWidget {
           // Main content first - always expanded
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
-            child: SelectableText(
-              content,
-              style: TextStyle(
-                color: Colors.grey.shade300,
-                fontSize: 16,
-                height: 1.4,
-                letterSpacing: 0.2,
-              ),
+            child: SelectionArea(
+              child: getMarkdownWidget(context, content),
             ),
           ),
 
@@ -583,7 +578,7 @@ class GetGeolocationWidgets extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '${geolocation.address}',
+                  '${geolocation.address?.decodeString}',
                   style: TextStyle(color: Colors.grey.shade300),
                 ),
                 const SizedBox(height: 8),
@@ -952,42 +947,42 @@ class GetSheetMainOptions extends StatelessWidget {
             ),
             child: Column(
               children: [
-                ListTile(
-                  title: Text(provider.conversation.discarded ? 'Summarize' : 'Re-summarize'),
-                  leading: provider.loadingReprocessConversation
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                      : const Icon(Icons.refresh),
-                  onTap: provider.loadingReprocessConversation
-                      ? null
-                      : () async {
-                          final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-                          if (connectivityProvider.isConnected) {
-                            await provider.reprocessConversation();
-                            if (context.mounted) {
-                              Navigator.pop(context);
-                            }
-                          } else {
-                            showDialog(
-                              builder: (c) => getDialog(
-                                context,
-                                () => Navigator.pop(context),
-                                () => Navigator.pop(context),
-                                'Unable to Re-summarize Conversation',
-                                'Please check your internet connection and try again.',
-                                singleButton: true,
-                                okButtonText: 'OK',
-                              ),
-                              context: context,
-                            );
-                          }
-                        },
-                ),
+                //ListTile(
+                //  title: Text(provider.conversation.discarded ? 'Summarize' : 'Re-summarize'),
+                //  leading: provider.loadingReprocessConversation
+                //      ? const SizedBox(
+                //          width: 24,
+                //          height: 24,
+                //          child: CircularProgressIndicator(
+                //            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                //          ),
+                //        )
+                //      : const Icon(Icons.refresh),
+                //  onTap: provider.loadingReprocessConversation
+                //      ? null
+                //      : () async {
+                //          final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                //          if (connectivityProvider.isConnected) {
+                //            await provider.reprocessConversation();
+                //            if (context.mounted) {
+                //              Navigator.pop(context);
+                //            }
+                //          } else {
+                //            showDialog(
+                //              builder: (c) => getDialog(
+                //                context,
+                //                () => Navigator.pop(context),
+                //                () => Navigator.pop(context),
+                //                'Unable to Re-summarize Conversation',
+                //                'Please check your internet connection and try again.',
+                //                singleButton: true,
+                //                okButtonText: 'OK',
+                //              ),
+                //              context: context,
+                //            );
+                //          }
+                //        },
+                //),
                 ListTile(
                   title: const Text('Delete'),
                   leading: const Icon(

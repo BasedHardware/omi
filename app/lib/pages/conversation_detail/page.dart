@@ -94,13 +94,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                 const SnackBar(content: Text('Error while processing conversation. Please try again later.')));
           }
         },
-        showInfo: (info) {
-          if (info == 'REPROCESS_SUCCESS') {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Conversation processed! 🚀', style: TextStyle(color: Colors.white))),
-            );
-          }
-        },
+        showInfo: (info) {},
         child: Scaffold(
           key: scaffoldKey,
           extendBody: true,
