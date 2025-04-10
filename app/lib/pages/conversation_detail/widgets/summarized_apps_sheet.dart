@@ -86,26 +86,6 @@ class SummarizedAppsBottomSheet extends StatelessWidget {
                             },
                           ),
 
-                          // Enable Apps option
-                          ListTile(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                            leading: const Icon(Icons.apps, color: Colors.white, size: 24),
-                            title: const Text(
-                              'Enable Apps',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w500,
-                                fontSize: 16,
-                              ),
-                            ),
-                            trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-                            onTap: () {
-                              Navigator.pop(context);
-                              routeToPage(context, const AppsPage(showAppBar: true));
-                              MixpanelManager().pageOpened('Detail Apps');
-                            },
-                          ),
-
                           // List of installed apps
                           ...provider.appsList
                               .where((app) => app.worksWithMemories() && app.enabled)
@@ -126,8 +106,27 @@ class SummarizedAppsBottomSheet extends StatelessWidget {
                                       MixpanelManager().pageOpened('App Detail');
                                       routeToPage(context, AppDetailPage(app: app));
                                     },
-                                  ))
-                              .toList(),
+                                  )),
+
+                          // Enable Apps option
+                          ListTile(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                            leading: const Icon(Icons.apps, color: Colors.white, size: 24),
+                            title: const Text(
+                              'Enable Apps',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w500,
+                                fontSize: 16,
+                              ),
+                            ),
+                            trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                            onTap: () {
+                              Navigator.pop(context);
+                              routeToPage(context, const AppsPage(showAppBar: true));
+                              MixpanelManager().pageOpened('Detail Apps');
+                            },
+                          ),
                         ],
                       ),
                     ),

@@ -30,7 +30,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   App? selectedAppForReprocessing;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
-  List<App> appsList = [];
+  List<App> get appsList => appProvider?.apps ?? [];
 
   Structured get structured => conversationProvider!.groupedConversations[selectedDate]![conversationIdx].structured;
 
@@ -109,12 +109,12 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     }
     notifyListeners();
   }
-  
+
   void setSelectedAppForReprocessing(App app) {
     selectedAppForReprocessing = app;
     notifyListeners();
   }
-  
+
   void clearSelectedAppForReprocessing() {
     selectedAppForReprocessing = null;
     notifyListeners();
@@ -211,7 +211,6 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         await populatePhotosData();
       });
     }
-    appsList = appProvider!.apps;
     if (!conversation.discarded) {
       getHasConversationSummaryRating(conversation.id).then((value) {
         hasConversationSummaryRatingSet = value;
@@ -271,7 +270,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     assignConversationTranscriptSegment(conversationId, segmentIdx);
     notifyListeners();
   }
-  
+
   /// Returns the first app result from the conversation if available
   /// This is typically the summary of the conversation
   AppResponse? getSummarizedApp() {
