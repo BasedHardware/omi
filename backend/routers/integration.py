@@ -93,7 +93,7 @@ async def create_conversation_via_integration(
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
     # Check if the app has the capability external_integration > action > create_conversation
-    if not apps_utils.app_has_action(app, 'create_conversation'):
+    if not apps_utils.app_can_create_conversation(app):
         raise HTTPException(status_code=403, detail="App does not have the capability to create conversations")
 
     # Time
@@ -158,9 +158,9 @@ async def create_memories_via_integration(
     if app_id not in enabled_plugins:
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
-    # Check if the app has the capability external_integration > action > create_facts
-    if not apps_utils.app_has_action(app, 'create_facts'):
-        raise HTTPException(status_code=403, detail="App does not have the capability to create facts")
+    # Check if the app has the capability external_integration > action > create_memories / create_facts
+    if not apps_utils.app_can_create_memories(app):
+        raise HTTPException(status_code=403, detail="App does not have the capability to create memories")
 
     # Validate that text is provided or explicit facts are provided
     if (not fact_data.text or len(fact_data.text.strip()) == 0) and \
@@ -201,9 +201,9 @@ async def create_facts_via_integration(
     if app_id not in enabled_plugins:
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
-    # Check if the app has the capability external_integration > action > create_facts
-    if not apps_utils.app_has_action(app, 'create_facts'):
-        raise HTTPException(status_code=403, detail="App does not have the capability to create facts")
+    # Check if the app has the capability external_integration > action > create_facts / create_memories
+    if not apps_utils.app_can_create_memories(app):
+        raise HTTPException(status_code=403, detail="App does not have the capability to create memories")
 
     # Validate that text is provided or explicit facts are provided
     if (not fact_data.text or len(fact_data.text.strip()) == 0) and \
@@ -249,11 +249,11 @@ async def get_memories_via_integration(
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
     # Check if the app has the capability to read memories
-    if not apps_utils.app_has_action(app, 'read_memories'):
+    if not apps_utils.app_can_read_memories(app):
         raise HTTPException(status_code=403, detail="App does not have the capability to read memories")
 
-    facts = memory_db.get_memories(uid, limit=limit, offset=offset)
-    memory_items = [integration_models.MemoryItem(**fact) for fact in facts]
+    memories = memory_db.get_memories(uid, limit=limit, offset=offset)
+    memory_items = [integration_models.MemoryItem(**fact) for fact in memories]
 
     return {"memories": memory_items}
 
@@ -300,7 +300,7 @@ async def get_conversations_via_integration(
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
     # Check if the app has the capability to read conversations
-    if not apps_utils.app_has_action(app, 'read_conversations'):
+    if not apps_utils.app_can_read_conversations(app):
         raise HTTPException(status_code=403, detail="App does not have the capability to read conversations")
 
     # Convert string dates to datetime objects if needed
@@ -381,7 +381,7 @@ async def search_conversations_via_integration(
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
     # Check if the app has the capability to read conversations
-    if not apps_utils.app_has_action(app, 'read_conversations'):
+    if not apps_utils.app_can_read_conversations(app):
         raise HTTPException(status_code=403, detail="App does not have the capability to read conversations")
 
     # Convert ISO datetime strings to Unix timestamps if provided
