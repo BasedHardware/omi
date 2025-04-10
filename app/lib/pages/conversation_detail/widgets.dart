@@ -318,14 +318,14 @@ class ReprocessDiscardedWidget extends StatelessWidget {
   }
 }
 
-class AppDetailWidget extends StatelessWidget {
+class AppResultDetailWidget extends StatelessWidget {
   final AppResponse appResponse;
   final App? app;
   final bool isExpanded; // Kept for compatibility but not used
   final VoidCallback onToggleExpand; // Kept for compatibility but not used
   final ServerConversation conversation;
 
-  const AppDetailWidget({
+  const AppResultDetailWidget({
     super.key,
     required this.appResponse,
     required this.app,
@@ -500,7 +500,7 @@ class GetAppsWidgets extends StatelessWidget {
                         ),
                       ],
                     ),
-                    AppDetailWidget(
+                    AppResultDetailWidget(
                       appResponse: summarizedApp,
                       app: provider.appsList.firstWhereOrNull((element) => element.id == summarizedApp.appId),
                       isExpanded: true, // Always expanded
