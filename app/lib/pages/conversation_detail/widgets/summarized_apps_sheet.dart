@@ -131,6 +131,7 @@ class _AppsList extends StatelessWidget {
           app: null,
           isSelected: currentAppId == null,
           onTap: () => _handleAutoAppTap(context),
+          trailingIcon: const Icon(Icons.autorenew, color: Colors.white, size: 20),
         ),
 
         // List of installed apps
@@ -178,11 +179,13 @@ class _AppListItem extends StatelessWidget {
   final App? app;
   final bool isSelected;
   final VoidCallback onTap;
+  final Widget? trailingIcon;
 
   const _AppListItem({
     required this.app,
     required this.isSelected,
     required this.onTap,
+    this.trailingIcon,
   });
 
   @override
@@ -206,7 +209,9 @@ class _AppListItem extends StatelessWidget {
               style: const TextStyle(color: Colors.grey, fontSize: 12),
             )
           : null,
-      trailing: isSelected ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+      trailing: isSelected 
+          ? const Icon(Icons.check, color: Colors.white, size: 20) 
+          : trailingIcon,
       selected: isSelected,
       onTap: onTap,
     );
