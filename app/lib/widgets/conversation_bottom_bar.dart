@@ -1,5 +1,6 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
@@ -137,7 +138,11 @@ class ConversationBottomBar extends StatelessWidget {
         final reprocessingApp = detailProvider.selectedAppForReprocessing;
 
         return TabButton(
-          icon: app == null && reprocessingApp == null ? Icons.sticky_note_2 : null,
+          icon: null,
+          customIcon: app == null && reprocessingApp == null ? SvgPicture.asset(
+            Assets.images.aiMagic.path,
+            color: Colors.white,
+          ) : null,
           isSelected: selectedTab == ConversationTab.summary,
           onTap: () => onTabSelected(ConversationTab.summary),
           label: isReprocessing ? (reprocessingApp?.name ?? "Auto") : (app?.name ?? "Summary"),
