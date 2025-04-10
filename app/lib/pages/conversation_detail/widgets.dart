@@ -321,16 +321,12 @@ class ReprocessDiscardedWidget extends StatelessWidget {
 class AppResultDetailWidget extends StatelessWidget {
   final AppResponse appResponse;
   final App? app;
-  final bool isExpanded; // Kept for compatibility but not used
-  final VoidCallback onToggleExpand; // Kept for compatibility but not used
   final ServerConversation conversation;
 
   const AppResultDetailWidget({
     super.key,
     required this.appResponse,
     required this.app,
-    required this.isExpanded,
-    required this.onToggleExpand,
     required this.conversation,
   });
 
@@ -503,8 +499,6 @@ class GetAppsWidgets extends StatelessWidget {
                     AppResultDetailWidget(
                       appResponse: summarizedApp,
                       app: provider.appsList.firstWhereOrNull((element) => element.id == summarizedApp.appId),
-                      isExpanded: true, // Always expanded
-                      onToggleExpand: () {}, // Empty function since we don't need to toggle
                       conversation: provider.conversation,
                     ),
                   ],
