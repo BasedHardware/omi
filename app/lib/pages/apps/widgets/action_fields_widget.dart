@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class ActionFieldsWidget extends StatelessWidget {
@@ -24,7 +24,7 @@ class ActionFieldsWidget extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(left: 8.0, bottom: 12.0),
                   child: Text(
-                    'Actions',
+                    'Import',
                     style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                   ),
                 ),
@@ -67,9 +67,16 @@ class ActionFieldsWidget extends StatelessWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      actionType.id == 'create_conversation'
+                                      actionType.description ?? 
+                                        (actionType.id == 'create_conversation'
                                           ? 'Extend user conversations by making a POST request to the OMI System.'
-                                          : 'Enable this action for your app.',
+                                          : actionType.id == 'create_facts'
+                                              ? 'Create new memories for the user through the OMI System.'
+                                              : actionType.id == 'read_conversations'
+                                                  ? 'Access and read all user conversations through the OMI System. This gives the app access to all conversation history.'
+                                                  : actionType.id == 'read_memories'
+                                                      ? 'Access and read all user memories through the OMI System. This gives the app access to all stored memories.'
+                                                      : 'Enable this action for your app.'),
                                       style: TextStyle(
                                         color: Colors.grey.shade400,
                                         fontSize: 14,
@@ -81,7 +88,7 @@ class ActionFieldsWidget extends StatelessWidget {
                                         if (actionType.docUrl != null) {
                                           launchUrl(Uri.parse(actionType.docUrl!));
                                         } else {
-                                          launchUrl(Uri.parse('https://docs.omi.me/actions/${actionType.id}'));
+                                          launchUrl(Uri.parse('https://docs.omi.me/docs/developer/apps/Import'));
                                         }
                                       },
                                       child: Text(

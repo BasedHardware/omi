@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
-import 'package:friend_private/backend/http/api/payments.dart';
-import 'package:friend_private/utils/alerts/app_snackbar.dart';
+import 'package:omi/backend/http/api/payments.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 
 import 'models/payment_method_config.dart';
 

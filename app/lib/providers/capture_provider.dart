@@ -5,26 +5,26 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/http/api/conversations.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/backend/schema/message_event.dart';
-import 'package:friend_private/backend/schema/structured.dart';
-import 'package:friend_private/backend/schema/transcript_segment.dart';
-import 'package:friend_private/providers/conversation_provider.dart';
-import 'package:friend_private/providers/message_provider.dart';
-import 'package:friend_private/services/devices.dart';
-import 'package:friend_private/services/notifications.dart';
-import 'package:friend_private/services/services.dart';
-import 'package:friend_private/services/sockets/pure_socket.dart';
-import 'package:friend_private/services/sockets/sdcard_socket.dart';
-import 'package:friend_private/services/sockets/transcription_connection.dart';
-import 'package:friend_private/services/wals.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/enums.dart';
-import 'package:friend_private/utils/logger.dart';
+import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/message.dart';
+import 'package:omi/backend/schema/message_event.dart';
+import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/message_provider.dart';
+import 'package:omi/services/devices.dart';
+import 'package:omi/services/notifications.dart';
+import 'package:omi/services/services.dart';
+import 'package:omi/services/sockets/pure_socket.dart';
+import 'package:omi/services/sockets/sdcard_socket.dart';
+import 'package:omi/services/sockets/transcription_connection.dart';
+import 'package:omi/services/wals.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
@@ -133,12 +133,15 @@ class CaptureProvider extends ChangeNotifier
     await _resetState();
   }
 
-  Future<void> changeAudioRecordProfile([
-    BleAudioCodec? audioCodec,
+  Future<void> changeAudioRecordProfile({
+    required BleAudioCodec audioCodec,
     int? sampleRate,
-  ]) async {
+  }) async {
     debugPrint("changeAudioRecordProfile");
     await _resetState();
+
+    // New codec
+    SharedPreferencesUtil().deviceCodec = audioCodec;
     await _initiateWebsocket(audioCodec: audioCodec, sampleRate: sampleRate);
   }
 
@@ -155,7 +158,8 @@ class CaptureProvider extends ChangeNotifier
     debugPrint('is ws null: ${_socket == null}');
 
     // Connect to the transcript socket
-    String language = SharedPreferencesUtil().recordingsLanguage;
+    String language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     _socket = await ServiceManager.instance()
         .socket
         .conversation(codec: codec, sampleRate: sampleRate, language: language, force: force);
@@ -272,9 +276,9 @@ class CaptureProvider extends ChangeNotifier
   Future<void> _resetState() async {
     debugPrint('resetState');
     _cleanupCurrentState();
-    await _recheckCodecChange();
-    await _ensureSocketConnection();
-    await _initiateFriendAudioStreaming();
+    await _recheckDeviceCodecChange();
+    await _ensureDeviceSocketConnection();
+    await _initiateDeviceAudioStreaming();
     await initiateStorageBytesStreaming(); // ??
     notifyListeners();
   }
@@ -342,35 +346,41 @@ class CaptureProvider extends ChangeNotifier
     return connection.getBleButtonState();
   }
 
-  Future<bool> _recheckCodecChange() async {
-    if (_recordingDevice != null) {
-      BleAudioCodec newCodec = await _getAudioCodec(_recordingDevice!.id);
-      if (SharedPreferencesUtil().deviceCodec != newCodec) {
-        debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $newCodec');
-        await SharedPreferencesUtil().setDeviceCodec(newCodec);
-        return true;
-      }
+  Future<bool> _recheckDeviceCodecChange() async {
+    if (_recordingDevice == null) {
+      return false;
+    }
+    BleAudioCodec newCodec = await _getAudioCodec(_recordingDevice!.id);
+    if (SharedPreferencesUtil().deviceCodec != newCodec) {
+      debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $newCodec');
+      await SharedPreferencesUtil().setDeviceCodec(newCodec);
+      return true;
     }
     return false;
   }
 
-  Future<void> _ensureSocketConnection() async {
+  Future<void> _ensureDeviceSocketConnection() async {
+    if (_recordingDevice == null) {
+      return;
+    }
     var codec = SharedPreferencesUtil().deviceCodec;
-    var language = SharedPreferencesUtil().recordingsLanguage;
+    var language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     if (language != _socket?.language || codec != _socket?.codec || _socket?.state != SocketServiceState.connected) {
       await _initiateWebsocket(audioCodec: codec, force: true);
     }
   }
 
-  Future<void> _initiateFriendAudioStreaming() async {
-    if (_recordingDevice == null) return;
-
+  Future<void> _initiateDeviceAudioStreaming() async {
+    if (_recordingDevice == null) {
+      return;
+    }
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
     if (SharedPreferencesUtil().deviceCodec != codec) {
       debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $codec');
       SharedPreferencesUtil().deviceCodec = codec;
       notifyInfo('FIM_CHANGE');
-      await _ensureSocketConnection();
+      await _ensureDeviceSocketConnection();
     }
 
     // Why is the _recordingDevice null at this point?
@@ -419,7 +429,7 @@ class CaptureProvider extends ChangeNotifier
     await Permission.microphone.request();
 
     // prepare
-    await changeAudioRecordProfile(BleAudioCodec.pcm16, 16000);
+    await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
 
     // record
     await ServiceManager.instance().mic.start(onByteReceived: (bytes) {
@@ -444,6 +454,7 @@ class CaptureProvider extends ChangeNotifier
   Future streamDeviceRecording({BtDevice? device}) async {
     debugPrint("streamDeviceRecording $device");
     if (device != null) _updateRecordingDevice(device);
+
     await _resetState();
   }
 
@@ -482,7 +493,6 @@ class CaptureProvider extends ChangeNotifier
           t.cancel();
           return;
         }
-
         await _initiateWebsocket();
       });
     }
@@ -517,7 +527,7 @@ class CaptureProvider extends ChangeNotifier
   void onMessageEventReceived(ServerMessageEvent event) {
     if (event.type == MessageEventType.conversationProcessingStarted) {
       if (event.conversation == null) {
-        debugPrint("Memory data not received in event. Content is: $event");
+        debugPrint("Conversation data not received in event. Content is: $event");
         return;
       }
       conversationProvider!.addProcessingConversation(event.conversation!);
@@ -538,10 +548,19 @@ class CaptureProvider extends ChangeNotifier
 
     if (event.type == MessageEventType.lastConversation) {
       if (event.memoryId == null) {
-        debugPrint("Memory ID not received in last_memory event. Content is: $event");
+        debugPrint("Conversation ID not received in last_memory event. Content is: $event");
         return;
       }
       _handleLastConvoEvent(event.memoryId!);
+      return;
+    }
+
+    if (event.type == MessageEventType.translating) {
+      if (event.segments == null || event.segments?.isEmpty == true) {
+        debugPrint("No segments received in translating event. Content is: $event");
+        return;
+      }
+      _handleTranslationEvent(event.segments!);
       return;
     }
 
@@ -599,6 +618,24 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
+  void _handleTranslationEvent(List<TranscriptSegment> translatedSegments) {
+    try {
+      if (translatedSegments.isEmpty) return;
+      
+      debugPrint("Received ${translatedSegments.length} translated segments");
+      
+      // Update the segments with the translated ones
+      var remainSegments = TranscriptSegment.updateSegments(segments, translatedSegments);
+      if (remainSegments.isNotEmpty) {
+        debugPrint("Adding ${remainSegments.length} new translated segments");
+      }
+      
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error handling translation event: $e");
+    }
+  }
+
   @override
   void onSegmentReceived(List<TranscriptSegment> newSegments) {
     if (newSegments.isEmpty) return;
@@ -608,7 +645,9 @@ class CaptureProvider extends ChangeNotifier
       FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
       _loadInProgressConversation();
     }
-    TranscriptSegment.combineSegments(segments, newSegments);
+    var remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
+    TranscriptSegment.combineSegments(segments, remainSegments);
+
     hasTranscripts = true;
     notifyListeners();
   }
@@ -905,10 +944,5 @@ class CaptureProvider extends ChangeNotifier
       return [];
     }
     return connection.getStorageList();
-  }
-
-  void _setsdCardReady(bool value) {
-    sdCardReady = value;
-    notifyListeners();
   }
 }

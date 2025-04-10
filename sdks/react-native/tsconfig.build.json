@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig",
+  "exclude": ["example"],
+  "compilerOptions": {
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "skipLibCheck": true
+  }
+}

@@ -3,11 +3,11 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/person.dart';
-import 'package:friend_private/providers/people_provider.dart';
-import 'package:friend_private/providers/connectivity_provider.dart';
-import 'package:friend_private/widgets/dialog.dart';
-import 'package:friend_private/widgets/extensions/functions.dart';
+import 'package:omi/backend/schema/person.dart';
+import 'package:omi/providers/people_provider.dart';
+import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/widgets/dialog.dart';
+import 'package:omi/widgets/extensions/functions.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
 

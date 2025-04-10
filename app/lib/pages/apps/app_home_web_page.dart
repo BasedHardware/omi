@@ -1,7 +1,10 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
+import 'package:omi/utils/browser.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/backend/preferences.dart';
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/backend/preferences.dart';
 
 class AppHomeWebPage extends StatefulWidget {
   final App app;
@@ -37,6 +40,7 @@ class _AppHomeWebPageState extends State<AppHomeWebPage> with SingleTickerProvid
     ));
     _animationController.forward();
     _controller = WebViewController()
+      ..setUserAgent(topUserAgents[Random().nextInt(topUserAgents.length)])
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
         NavigationDelegate(

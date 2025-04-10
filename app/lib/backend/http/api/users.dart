@@ -2,10 +2,10 @@ import 'dart:convert';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/backend/schema/geolocation.dart';
-import 'package:friend_private/backend/schema/person.dart';
-import 'package:friend_private/env/env.dart';
+import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/geolocation.dart';
+import 'package:omi/backend/schema/person.dart';
+import 'package:omi/env/env.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
 Future<bool> updateUserGeolocation({required Geolocation geolocation}) async {
@@ -279,4 +279,40 @@ Future<bool> getHasConversationSummaryRating(String conversationId) async {
   } catch (e) {
     return false;
   }
+}
+
+// User language preference API calls
+Future<String?> getUserPrimaryLanguage() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/language',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return null;
+  debugPrint('getUserPrimaryLanguage response: ${response.body}');
+
+  try {
+    var jsonResponse = jsonDecode(response.body);
+    // Return null if language is null or empty
+    if (jsonResponse['language'] == null || jsonResponse['language'] == '') {
+      return null;
+    }
+    return jsonResponse['language'] as String?;
+  } catch (e) {
+    debugPrint('Error parsing getUserPrimaryLanguage response: $e');
+    return null;
+  }
+}
+
+Future<bool> setUserPrimaryLanguage(String languageCode) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/language',
+    headers: {},
+    method: 'PATCH',
+    body: jsonEncode({'language': languageCode}),
+  );
+  if (response == null) return false;
+  debugPrint('setUserPrimaryLanguage response: ${response.body}');
+  return response.statusCode == 200;
 }

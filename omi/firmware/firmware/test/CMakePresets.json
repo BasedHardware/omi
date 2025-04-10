@@ -1,0 +1,26 @@
+{
+    "version": 2,
+	"cmakeMinimumRequired": {
+		"major": 3,
+		"minor": 20,
+		"patch": 0
+	},
+	"configurePresets": [
+		{
+			"name": "build_OMI2_test",
+			"displayName": "Devkit V2",
+			"configuration": "Debug",
+			"hidden": false,
+			"description": "Debug build for devkit v2 device with EVT test",
+			"generator": "Ninja",
+			"binaryDir": "${sourceDir}/build/build_OMI2_test",
+			"cacheVariables": {
+				"CMAKE_EXPORT_COMPILE_COMMANDS": "YES",
+				"CMAKE_BUILD_TYPE": "Debug",
+				"BOARD": "omi_nrf5340/nrf5340/cpuapp",
+				"CACHED_CONF_FILE": "${sourceDir}/omi2.conf",
+				"CONF_FILE": "${sourceDir}/omi2.conf"
+            }
+		}
+    ]
+}

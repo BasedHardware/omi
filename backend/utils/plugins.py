@@ -13,7 +13,7 @@ from database.redis_db import get_enabled_plugins, get_generic_cache, \
     set_generic_cache, get_plugins_reviews, get_plugins_installs_count
 from models.app import App
 from models.chat import Message
-from models.memory import Memory, MemorySource
+from models.conversation import Conversation, ConversationSource
 from models.notification_message import NotificationMessage
 from models.plugin import Plugin, UsageHistoryType
 from utils.apps import get_available_apps, weighted_rating
@@ -23,7 +23,7 @@ from utils.llm import (
     get_proactive_message
 )
 from database.vector_db import query_vectors_by_metadata
-import database.memories as memories_db
+import database.conversations as conversations_db
 
 PROACTIVE_NOTI_LIMIT_SECONDS = 30  # 1 noti / 30s
 
@@ -168,14 +168,14 @@ def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:
 # ************* EXTERNAL INTEGRATIONS **************
 # **************************************************
 
-def trigger_external_integrations(uid: str, memory: Memory) -> list:
-    """ON MEMORY CREATED"""
-    if not memory or memory.discarded:
+def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
+    """ON CONVERSATION CREATED"""
+    if not conversation or conversation.discarded:
         return []
 
     apps: List[App] = get_available_apps(uid)
     filtered_apps = [app for app in apps if
-                     app.triggers_on_memory_creation() and app.enabled and not app.deleted]
+                     app.triggers_on_conversation_creation() and app.enabled and not app.deleted]
     if not filtered_apps:
         return []
 
@@ -186,11 +186,11 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
         if not app.external_integration.webhook_url:
             return
 
-        memory_dict = memory.as_dict_cleaned_dates()
+        conversation_dict = conversation.as_dict_cleaned_dates()
 
         # Ignore external data on workflow
-        if memory.source == MemorySource.workflow and 'external_data' in memory_dict:
-            memory_dict['external_data'] = None
+        if conversation.source == ConversationSource.workflow and 'external_data' in conversation_dict:
+            conversation_dict['external_data'] = None
 
         url = app.external_integration.webhook_url
         if '?' in url:
@@ -199,7 +199,7 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
             url += '?uid=' + uid
 
         try:
-            response = requests.post(url, json=memory_dict, timeout=30, )  # TODO: failing?
+            response = requests.post(url, json=conversation_dict, timeout=30, )  # TODO: failing?
             if response.status_code != 200:
                 print('App integration failed', app.id, 'status:', response.status_code, 'result:', response.text[:100])
                 return
@@ -207,10 +207,10 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
             if app.uid is not None:
                 if app.uid != uid:
                     record_app_usage(uid, app.id, UsageHistoryType.memory_created_external_integration,
-                                     memory_id=memory.id)
+                                     conversation_id=conversation.id)
             else:
                 record_app_usage(uid, app.id, UsageHistoryType.memory_created_external_integration,
-                                 memory_id=memory.id)
+                                 conversation_id=conversation.id)
 
             # print('response', response.json())
             if message := response.json().get('message', ''):
@@ -229,16 +229,16 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
     for key, message in results.items():
         if not message:
             continue
-        messages.append(add_plugin_message(message, key, uid, memory.id))
+        messages.append(add_plugin_message(message, key, uid, conversation.id))
     return messages
 
 
-async def trigger_realtime_integrations(uid: str, segments: list[dict], memory_id: str | None):
+async def trigger_realtime_integrations(uid: str, segments: list[dict], conversation_id: str | None):
     print("trigger_realtime_integrations", uid)
     """REALTIME STREAMING"""
     # TODO: don't retrieve token before knowing if to notify
     token = notification_db.get_token_only(uid)
-    _trigger_realtime_integrations(uid, token, segments, memory_id)
+    _trigger_realtime_integrations(uid, token, segments, conversation_id)
 
 
 async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
@@ -267,7 +267,7 @@ def _retrieve_contextual_memories(uid: str, user_context):
         entities=filters.get("entities", []),
         dates=filters.get("dates", []),
     )
-    return memories_db.get_memories_by_id(uid, memories_id)
+    return conversations_db.get_conversations_by_id(uid, memories_id)
 
 
 def _hit_proactive_notification_rate_limits(uid: str, plugin: App):
@@ -319,7 +319,7 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
     if 'user_context' in filter_scopes:
         memories = _retrieve_contextual_memories(uid, data.get('context', {}))
         if len(memories) > 0:
-            context = Memory.memories_to_string(memories)
+            context = Conversation.conversations_to_string(memories)
 
     # messages
     messages = []
@@ -376,7 +376,7 @@ def _trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
     return results
 
 
-def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], memory_id: str | None) -> dict:
+def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], conversation_id: str | None) -> dict:
     apps: List[App] = get_available_apps(uid)
     filtered_apps = [
         app for app in apps if
@@ -405,8 +405,8 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], m
                       response.text[:100])
                 return
 
-            if (app.uid is None or app.uid != uid) and memory_id is not None:
-                record_app_usage(uid, app.id, UsageHistoryType.transcript_processed_external_integration, memory_id=memory_id)
+            if (app.uid is None or app.uid != uid) and conversation_id is not None:
+                record_app_usage(uid, app.id, UsageHistoryType.transcript_processed_external_integration, conversation_id=conversation_id)
 
             response_data = response.json()
             if not response_data:

@@ -4,16 +4,16 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from database.memories import get_in_progress_memory, get_memory
+from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import cache_user_geolocation, set_user_webhook_db, get_user_webhook_db, disable_user_webhook_db, \
     enable_user_webhook_db, user_webhook_status_db
 from database.users import *
-from models.memory import Geolocation, Memory
+from models.conversation import Geolocation, Conversation
 from models.other import Person, CreatePerson
 from models.users import WebhookType
 from utils.llm import followup_question_prompt
 from utils.other import endpoints as auth
-from utils.other.storage import delete_all_memory_recordings, get_user_person_speech_samples, \
+from utils.other.storage import delete_all_conversation_recordings, get_user_person_speech_samples, \
     delete_user_person_speech_samples
 from utils.webhooks import webhook_first_time_setup
 
@@ -110,7 +110,7 @@ def get_store_recording_permission(uid: str = Depends(auth.get_current_user_uid)
 @router.delete('/v1/users/store-recording-permission', tags=['v1'])
 def delete_permission_and_recordings(uid: str = Depends(auth.get_current_user_uid)):
     set_user_store_recording_permission(uid, False)
-    delete_all_memory_recordings(uid)
+    delete_all_conversation_recordings(uid)
     return {'status': 'ok'}
 
 
@@ -183,12 +183,12 @@ def delete_person_endpoint(person_id: str, uid: str = Depends(auth.get_current_u
 @router.delete('/v1/joan/{memory_id}/followup-question', tags=['v1'], status_code=204)
 def delete_person_endpoint(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
     if memory_id == '0':
-        memory = get_in_progress_memory(uid)
+        memory = get_in_progress_conversation(uid)
         if not memory:
             raise HTTPException(status_code=400, detail='No memory in progres')
     else:
-        memory = get_memory(uid, memory_id)
-    memory = Memory(**memory)
+        memory = get_conversation(uid, memory_id)
+    memory = Conversation(**memory)
     return {'result': followup_question_prompt(memory.transcript_segments)}
 
 
@@ -202,7 +202,7 @@ def set_memory_summary_rating(
         value: int,  # 0, 1, -1 (shown)
         uid: str = Depends(auth.get_current_user_uid),
 ):
-    set_memory_summary_rating_score(uid, memory_id, value)
+    set_conversation_summary_rating_score(uid, memory_id, value)
     return {'status': 'ok'}
 
 
@@ -211,7 +211,7 @@ def get_memory_summary_rating(
         memory_id: str,
         _: str = Depends(auth.get_current_user_uid),
 ):
-    rating = get_memory_summary_rating_score(memory_id)
+    rating = get_conversation_summary_rating_score(memory_id)
     # TODO: later ask reason, a set of options, if user says good, whats the best, if bad, whats the worst
     if not rating:
         return {'has_rating': False}
@@ -225,4 +225,27 @@ def set_chat_message_analytics(
         uid: str = Depends(auth.get_current_user_uid),
 ):
     set_chat_message_rating_score(uid, message_id, value)
+    return {'status': 'ok'}
+
+
+# ***************************************
+# ************* Language ****************
+# ***************************************
+
+@router.get('/v1/users/language', tags=['v1'])
+def get_user_language(uid: str = Depends(auth.get_current_user_uid)):
+    """Get the user's preferred language."""
+    language = get_user_language_preference(uid)
+    if not language:
+        return {'language': None}
+    return {'language': language}
+
+
+@router.patch('/v1/users/language', tags=['v1'])
+def set_user_language(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+    """Set the user's preferred language (e.g., 'en', 'vi', etc.)."""
+    language = data.get('language')
+    if not language:
+        raise HTTPException(status_code=400, detail="Language is required")
+    set_user_language_preference(uid, language)
     return {'status': 'ok'}

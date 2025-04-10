@@ -8,13 +8,13 @@ import websockets
 
 from database.redis_db import get_user_webhook_db, user_webhook_status_db, disable_user_webhook_db, \
     enable_user_webhook_db, set_user_webhook_db
-from models.memory import Memory
+from models.conversation import Conversation
 from models.users import WebhookType
 import database.notifications as notification_db
 from utils.notifications import send_notification
 
 
-def memory_created_webhook(uid, memory: Memory):
+def conversation_created_webhook(uid, memory: Conversation):
     toggled = user_webhook_status_db(uid, WebhookType.memory_created)
     if toggled:
         webhook_url = get_user_webhook_db(uid, WebhookType.memory_created)

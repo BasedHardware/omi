@@ -40,6 +40,7 @@ const sidebars = {
             'developer/apps/PromptBased',
             'developer/apps/Integrations',
             'developer/apps/audiostreaming',
+            'developer/apps/Import',
             'developer/apps/Submitting',
           ]
         },
@@ -61,6 +62,16 @@ const sidebars = {
           label: 'Firmware',
           items: [
             'developer/Compile_firmware',
+          ]
+        },
+             {
+          type: 'category',
+          label: 'SDK',
+          items: [
+             'developer/sdk/sdk',
+            'developer/sdk/python',
+             'developer/sdk/ReactNative',
+           'developer/sdk/swift'
           ]
         },
         
