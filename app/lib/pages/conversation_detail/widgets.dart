@@ -540,11 +540,13 @@ class GetAppsWidgets extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: MaterialButton(
-                  onPressed: () async {
-                    final provider = context.read<ConversationDetailProvider>();
-                    provider.loadingReprocessConversation = true;
-                    provider.clearSelectedAppForReprocessing();
-                    await provider.reprocessConversation();
+                  onPressed: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (context) => const SummarizedAppsBottomSheet(),
+                    );
                   },
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   child: const Padding(
