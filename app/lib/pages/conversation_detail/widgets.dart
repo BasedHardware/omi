@@ -344,15 +344,36 @@ class AppResultDetailWidget extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: content.isEmpty
-                ? const Row(
+                ? Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.info_outline, color: Colors.grey, size: 18),
-                      SizedBox(width: 8),
+                      const Icon(Icons.info_outline, color: Colors.grey, size: 18),
+                      const SizedBox(width: 8),
                       Expanded(
-                        child: Text(
-                          "No content available for this app. Try another app for better results.",
-                          style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+                        child: RichText(
+                          text: TextSpan(
+                            style: const TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+                            children: [
+                              const TextSpan(text: "No content available for this app. "),
+                              TextSpan(
+                                text: "Try another app",
+                                style: const TextStyle(
+                                  decoration: TextDecoration.underline,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                recognizer: TapGestureRecognizer()
+                                  ..onTap = () {
+                                    showModalBottomSheet(
+                                      context: context,
+                                      isScrollControlled: true,
+                                      backgroundColor: Colors.transparent,
+                                      builder: (context) => const SummarizedAppsBottomSheet(),
+                                    );
+                                  },
+                              ),
+                              const TextSpan(text: " for better results."),
+                            ],
+                          ),
                         ),
                       ),
                     ],
