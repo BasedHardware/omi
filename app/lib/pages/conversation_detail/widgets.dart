@@ -343,40 +343,25 @@ class AppResultDetailWidget extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: content.isEmpty
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.info_outline, color: Colors.grey, size: 18),
-                          SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              "No content available for this app",
-                              style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
-                            ),
+                ? Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.grey, size: 18),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            "No content available for this app. Try another app for better results.",
+                            style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          showModalBottomSheet(
-                            context: context,
-                            isScrollControlled: true,
-                            backgroundColor: Colors.transparent,
-                            builder: (context) => const SummarizedAppsBottomSheet(),
-                          );
-                        },
-                        icon: const Icon(Icons.app_registration, size: 16),
-                        label: const Text("Try another app"),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.grey.shade800,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   )
                 : SelectionArea(
                     child: getMarkdownWidget(context, content),
