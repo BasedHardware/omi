@@ -343,14 +343,37 @@ class AppResultDetailWidget extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: content.isEmpty
-                ? const Row(
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.info_outline, color: Colors.grey, size: 18),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          "No content available for this app",
-                          style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+                      const Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.grey, size: 18),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              "No content available for this app",
+                              style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          showModalBottomSheet(
+                            context: context,
+                            isScrollControlled: true,
+                            backgroundColor: Colors.transparent,
+                            builder: (context) => const SummarizedAppsBottomSheet(),
+                          );
+                        },
+                        icon: const Icon(Icons.app_registration, size: 16),
+                        label: const Text("Try another app"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey.shade800,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         ),
                       ),
                     ],
