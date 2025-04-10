@@ -22,6 +22,7 @@ from models.transcript_segment import Translation
 from utils.apps import is_audio_bytes_app_enabled
 from utils.conversations.location import get_google_maps_location
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
+from utils.other.task import safe_create_task
 from utils.plugins import trigger_external_integrations
 from utils.stt.streaming import *
 from utils.stt.streaming import get_stt_service_for_language, STTService
@@ -329,7 +330,7 @@ async def _listen(
                     async def deepgram_socket_send(data):
                         return deepgram_socket.send(data)
 
-                    asyncio.create_task(send_initial_file_path(file_path, deepgram_socket_send))
+                    safe_create_task(send_initial_file_path(file_path, deepgram_socket_send))
 
             # SONIOX
             elif stt_service == STTService.soniox:
@@ -348,7 +349,7 @@ async def _listen(
                         uid if include_speech_profile else None
                     )
 
-                    asyncio.create_task(send_initial_file_path(file_path, soniox_socket.send))
+                    safe_create_task(send_initial_file_path(file_path, soniox_socket.send))
                     print('speech_profile soniox duration', speech_profile_duration, uid)
             # SPEECHMATICS
             elif stt_service == STTService.speechmatics:
@@ -356,7 +357,7 @@ async def _listen(
                     stream_transcript, sample_rate, stt_language, preseconds=speech_profile_duration
                 )
                 if speech_profile_duration:
-                    asyncio.create_task(send_initial_file_path(file_path, speechmatics_socket.send))
+                    safe_create_task(send_initial_file_path(file_path, speechmatics_socket.send))
                     print('speech_profile speechmatics duration', speech_profile_duration, uid)
 
         except Exception as e:
