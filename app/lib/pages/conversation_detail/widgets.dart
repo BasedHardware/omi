@@ -517,7 +517,7 @@ class GetAppsWidgets extends StatelessWidget {
         children: [
           const SizedBox(height: 32),
           Text(
-            'No apps were triggered\nfor this conversation.',
+            'No summary available\nfor this conversation.',
             style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
             textAlign: TextAlign.center,
           ),
@@ -539,14 +539,15 @@ class GetAppsWidgets extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: MaterialButton(
-                  onPressed: () {
-                    routeToPage(context, const AppsPage(showAppBar: true));
-                    MixpanelManager().pageOpened('Memory Detail Apps');
+                  onPressed: () async {
+                    final provider = context.read<ConversationDetailProvider>();
+                    await provider.reprocessConversation();
+                    MixpanelManager().pageOpened('Memory Detail Generate Summary');
                   },
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   child: const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                      child: Text('Enable Apps', style: TextStyle(color: Colors.white, fontSize: 16))),
+                      child: Text('Generate Summary', style: TextStyle(color: Colors.white, fontSize: 16))),
                 ),
               ),
             ],
