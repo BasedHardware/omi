@@ -146,6 +146,11 @@ backend/scripts/rag/visualizations/
 
 backend/google-credentials.json
 backend/google-credentials-dev.json
+backend/.firebaserc
+backend/firebase.json
+backend/firestore.indexes.json
+backend/firestore.rules
+backend/storage.rules
 
 startup-script.sh
 /app/lib/firebase_options_dev.dart
