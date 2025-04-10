@@ -383,108 +383,109 @@ class AppResultDetailWidget extends StatelessWidget {
                   ),
           ),
 
-          // App info in a more subtle format below the content
-          GestureDetector(
-            onTap: () async {
-              if (app != null) {
-                MixpanelManager().pageOpened('App Detail');
-                await routeToPage(context, AppDetailPage(app: app!));
-              }
-            },
-            child: Padding(
-              padding: const EdgeInsets.only(top: 12, left: 4),
-              child: Row(
-                children: [
-                  // App icon
-                  app != null
-                      ? CachedNetworkImage(
-                          imageUrl: app!.getImageUrl(),
-                          imageBuilder: (context, imageProvider) {
-                            return CircleAvatar(
+          // App info in a more subtle format below the content - only show if content is not empty
+          if (content.isNotEmpty)
+            GestureDetector(
+              onTap: () async {
+                if (app != null) {
+                  MixpanelManager().pageOpened('App Detail');
+                  await routeToPage(context, AppDetailPage(app: app!));
+                }
+              },
+              child: Padding(
+                padding: const EdgeInsets.only(top: 12, left: 4),
+                child: Row(
+                  children: [
+                    // App icon
+                    app != null
+                        ? CachedNetworkImage(
+                            imageUrl: app!.getImageUrl(),
+                            imageBuilder: (context, imageProvider) {
+                              return CircleAvatar(
+                                backgroundColor: Colors.white,
+                                radius: 12,
+                                backgroundImage: imageProvider,
+                              );
+                            },
+                            errorWidget: (context, url, error) {
+                              return const CircleAvatar(
+                                backgroundColor: Colors.white,
+                                radius: 12,
+                                child: Icon(Icons.error_outline_rounded, size: 12),
+                              );
+                            },
+                            progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
                               backgroundColor: Colors.white,
                               radius: 12,
-                              backgroundImage: imageProvider,
-                            );
-                          },
-                          errorWidget: (context, url, error) {
-                            return const CircleAvatar(
-                              backgroundColor: Colors.white,
-                              radius: 12,
-                              child: Icon(Icons.error_outline_rounded, size: 12),
-                            );
-                          },
-                          progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
-                            backgroundColor: Colors.white,
-                            radius: 12,
-                            child: CircularProgressIndicator(
-                              value: progress.progress,
-                              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-                              strokeWidth: 2,
-                            ),
-                          ),
-                        )
-                      : Container(
-                          decoration: BoxDecoration(
-                            image: DecorationImage(
-                              image: AssetImage(Assets.images.background.path),
-                              fit: BoxFit.cover,
-                            ),
-                            borderRadius: const BorderRadius.all(Radius.circular(12.0)),
-                          ),
-                          height: 24,
-                          width: 24,
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              Image.asset(
-                                Assets.images.herologo.path,
-                                height: 16,
-                                width: 16,
+                              child: CircularProgressIndicator(
+                                value: progress.progress,
+                                valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                                strokeWidth: 2,
                               ),
-                            ],
-                          ),
-                        ),
-
-                  const SizedBox(width: 8),
-
-                  // App name and description with arrow
-                  Expanded(
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                app != null ? app!.name.decodeString : 'Unknown App',
-                                maxLines: 1,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.white,
-                                  fontSize: 14,
+                            ),
+                          )
+                        : Container(
+                            decoration: BoxDecoration(
+                              image: DecorationImage(
+                                image: AssetImage(Assets.images.background.path),
+                                fit: BoxFit.cover,
+                              ),
+                              borderRadius: const BorderRadius.all(Radius.circular(12.0)),
+                            ),
+                            height: 24,
+                            width: 24,
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                Image.asset(
+                                  Assets.images.herologo.path,
+                                  height: 16,
+                                  width: 16,
                                 ),
-                              ),
-                              if (app != null)
+                              ],
+                            ),
+                          ),
+
+                    const SizedBox(width: 8),
+
+                    // App name and description with arrow
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
                                 Text(
-                                  app!.description.decodeString,
+                                  app != null ? app!.name.decodeString : 'Unknown App',
                                   maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                  ),
                                 ),
-                            ],
+                                if (app != null)
+                                  Text(
+                                    app!.description.decodeString,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                  ),
+                              ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(
-                          child: Icon(Icons.arrow_forward_ios, color: Colors.white, size: 20),
-                          width: 42,
-                        ),
-                      ],
+                          const SizedBox(
+                            child: Icon(Icons.arrow_forward_ios, color: Colors.white, size: 20),
+                            width: 42,
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
