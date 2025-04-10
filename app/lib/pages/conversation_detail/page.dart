@@ -343,7 +343,7 @@ class SummaryTab extends StatelessWidget {
                 children: [
                   const GetSummaryWidgets(),
                   data.item1 ? const ReprocessDiscardedWidget() : const GetAppsWidgets(),
-                  const GetGeolocationWidgets(),
+                  //const GetGeolocationWidgets(),
                   const SizedBox(height: 150)
                 ],
               ),

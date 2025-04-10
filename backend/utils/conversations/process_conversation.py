@@ -167,10 +167,11 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
     threads = []
 
     def execute_app(app):
-        if result := get_app_result(conversation.get_transcript(False), app).strip():
-            conversation.apps_results.append(AppResult(app_id=app.id, content=result))
-            if not is_reprocess:
-                record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, conversation_id=conversation.id)
+        # allow empty
+        result = get_app_result(conversation.get_transcript(False), app).strip()
+        conversation.apps_results.append(AppResult(app_id=app.id, content=result))
+        if not is_reprocess:
+            record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, conversation_id=conversation.id)
 
     for app in filtered_apps:
         threads.append(threading.Thread(target=execute_app, args=(app,)))

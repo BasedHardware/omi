@@ -1588,12 +1588,12 @@ def select_best_app_for_conversation(conversation: Conversation, apps: List[App]
     <id>{app.id}</id>
     <name>{app.name}</name>
     <description>{app.description}</description>
-    <memory_prompt>{app.memory_prompt if app.memory_prompt else ''}</memory_prompt>
+    <conversation_prompt>{app.memory_prompt if app.memory_prompt else ''}</conversation_prompt>
   </app>\n"""
     apps_xml += "</apps>"
     
     prompt = f"""
-    You are tasked with selecting the most appropriate app to process a conversation.
+    You are assigned the task of identifying the most suitable app to analyze a given conversation on technological advancements.
     
     <conversation>
     {conversation_summary}
@@ -1601,9 +1601,11 @@ def select_best_app_for_conversation(conversation: Conversation, apps: List[App]
     
     {apps_xml}
     
-    Based on the conversation content and the apps' descriptions and purposes, 
-    which app ID would be the best fit for processing this conversation?
-    Respond with only the app ID from the list provided.
+    Task:
+
+    Evaluate the conversation's content and the described functionalities and purposes of each app. \
+    Determine the app ID that best aligns with processing this conversation, focusing on the conversation’s themes and the app's strengths.\
+    Provide only the app ID that represents the best match.
     """
 
     print(prompt)

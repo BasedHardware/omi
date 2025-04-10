@@ -2,10 +2,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/gen/assets.gen.dart';
-import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/page.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
-import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:provider/provider.dart';
@@ -30,7 +28,6 @@ class SummarizedAppsBottomSheet extends StatelessWidget {
               scrollController: scrollController,
               children: [
                 const _SheetHeader(),
-                
                 Expanded(
                   child: _AppsList(
                     provider: provider,
@@ -120,16 +117,14 @@ class _AppsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final availableApps = provider.appsList
-        .where((app) => app.worksWithMemories() && app.enabled)
-        .toList();
+    final availableApps = provider.appsList.where((app) => app.worksWithMemories() && app.enabled).toList();
 
     return ListView(
       children: [
         // Auto option
         _AppListItem(
           app: null,
-          isSelected: currentAppId == null,
+          isSelected: false,
           onTap: () => _handleAutoAppTap(context),
           trailingIcon: const Icon(Icons.autorenew, color: Colors.white, size: 20),
         ),
@@ -148,16 +143,11 @@ class _AppsList extends StatelessWidget {
   }
 
   void _handleAutoAppTap(BuildContext context) async {
-    // If an app was previously selected, reprocess with no specific app
-    if (currentAppId != null) {
-      Navigator.pop(context);
-      final provider = context.read<ConversationDetailProvider>();
-      provider.clearSelectedAppForReprocessing();
-      await provider.reprocessConversation();
-      return;
-    }
-    // Otherwise just close the sheet
     Navigator.pop(context);
+    final provider = context.read<ConversationDetailProvider>();
+    provider.clearSelectedAppForReprocessing();
+    await provider.reprocessConversation();
+    return;
   }
 
   void _handleAppTap(BuildContext context, App app) async {
@@ -169,9 +159,6 @@ class _AppsList extends StatelessWidget {
       await provider.reprocessConversation(appId: app.id);
       return;
     }
-    // Otherwise just show app details
-    MixpanelManager().pageOpened('App Detail');
-    routeToPage(context, AppDetailPage(app: app));
   }
 }
 
@@ -209,9 +196,7 @@ class _AppListItem extends StatelessWidget {
               style: const TextStyle(color: Colors.grey, fontSize: 12),
             )
           : null,
-      trailing: isSelected 
-          ? const Icon(Icons.check, color: Colors.white, size: 20) 
-          : trailingIcon,
+      trailing: isSelected ? const Icon(Icons.check, color: Colors.white, size: 20) : trailingIcon,
       selected: isSelected,
       onTap: onTap,
     );

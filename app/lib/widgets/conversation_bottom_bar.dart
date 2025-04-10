@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:omi/backend/schema/app.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
@@ -69,10 +70,7 @@ class ConversationBottomBar extends StatelessWidget {
             _buildTranscriptTab(),
 
             // Stop button or Summary tab
-            if (mode == ConversationBottomBarMode.recording)
-              _buildStopButton()
-            else
-              _buildSummaryTab(context),
+            if (mode == ConversationBottomBarMode.recording) _buildStopButton() else _buildSummaryTab(context),
           ],
         ),
       ),
@@ -131,7 +129,7 @@ class ConversationBottomBar extends StatelessWidget {
     );
   }
 
-  Widget _buildSummaryTabContent(BuildContext context, ConversationDetailProvider provider, dynamic app) {
+  Widget _buildSummaryTabContent(BuildContext context, ConversationDetailProvider provider, App? app) {
     return Consumer<ConversationDetailProvider>(
       builder: (context, detailProvider, _) {
         final isReprocessing = detailProvider.loadingReprocessConversation;
@@ -139,17 +137,17 @@ class ConversationBottomBar extends StatelessWidget {
 
         return TabButton(
           icon: null,
-          customIcon: app == null && reprocessingApp == null ? SvgPicture.asset(
-            Assets.images.aiMagic.path,
-            color: Colors.white,
-          ) : null,
+          customIcon: app == null && reprocessingApp == null
+              ? SvgPicture.asset(
+                  Assets.images.aiMagic.path,
+                  color: Colors.white,
+                )
+              : null,
           isSelected: selectedTab == ConversationTab.summary,
           onTap: () => onTabSelected(ConversationTab.summary),
           label: isReprocessing ? (reprocessingApp?.name ?? "Auto") : (app?.name ?? "Summary"),
           appImage: isReprocessing
-              ? (reprocessingApp != null
-                  ? reprocessingApp.getImageUrl()
-                  : Assets.images.herologo.path)
+              ? (reprocessingApp != null ? reprocessingApp.getImageUrl() : Assets.images.herologo.path)
               : (app != null ? app.getImageUrl() : null),
           isLocalAsset: isReprocessing && reprocessingApp == null,
           showDropdownArrow: selectedTab == ConversationTab.summary,
@@ -166,5 +164,4 @@ class ConversationBottomBar extends StatelessWidget {
       },
     );
   }
-
 }
