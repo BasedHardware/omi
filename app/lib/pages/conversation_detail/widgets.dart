@@ -541,6 +541,8 @@ class GetAppsWidgets extends StatelessWidget {
                 child: MaterialButton(
                   onPressed: () async {
                     final provider = context.read<ConversationDetailProvider>();
+                    provider.loadingReprocessConversation = true;
+                    provider.notifyListeners();
                     await provider.reprocessConversation();
                     MixpanelManager().pageOpened('Memory Detail Generate Summary');
                   },
