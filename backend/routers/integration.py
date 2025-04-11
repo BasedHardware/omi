@@ -65,12 +65,12 @@ def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
     return True, remaining, reset_time, 0
 
 
-@router.post('/v2/integrations/{app_id}/user/conversations', response_model=integration_models.EmptyResponse,
+@router.post('/v2/integrations/{app_id}/user/conversations', response_model=integration_models.ConversationCreateResponse,
              tags=['integration', 'conversations'])
 async def create_conversation_via_integration(
     request: Request,
     app_id: str,
-    create_memory: conversation_models.ExternalIntegrationCreateConversation,
+    create_conversation: conversation_models.ExternalIntegrationCreateConversation,
     uid: str,
     authorization: Optional[str] = Header(None)
 ):
@@ -97,38 +97,40 @@ async def create_conversation_via_integration(
         raise HTTPException(status_code=403, detail="App does not have the capability to create conversations")
 
     # Time
-    started_at = create_memory.started_at if create_memory.started_at is not None else datetime.now(timezone.utc)
-    finished_at = create_memory.finished_at if create_memory.finished_at is not None else started_at + \
+    started_at = create_conversation.started_at if create_conversation.started_at is not None else datetime.now(timezone.utc)
+    finished_at = create_conversation.finished_at if create_conversation.finished_at is not None else started_at + \
         timedelta(seconds=300)  # 5 minutes
-    create_memory.started_at = started_at
-    create_memory.finished_at = finished_at
+    create_conversation.started_at = started_at
+    create_conversation.finished_at = finished_at
 
     # Geo
-    geolocation = create_memory.geolocation
+    geolocation = create_conversation.geolocation
     if geolocation and not geolocation.google_place_id:
-        create_memory.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
-    create_memory.geolocation = geolocation
+        create_conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
+    create_conversation.geolocation = geolocation
 
     # Language
-    language_code = create_memory.language
+    language_code = create_conversation.language
     if not language_code:
         language_code = 'en'  # Default to English
-        create_memory.language = language_code
+        create_conversation.language = language_code
 
     # Set source to external_integration
-    create_memory.source = conversation_models.ConversationSource.external_integration
+    create_conversation.source = conversation_models.ConversationSource.external_integration
 
     # Set app_id
-    create_memory.app_id = app_id
+    create_conversation.app_id = app_id
 
     # Process
-    memory = process_conversation(uid, language_code, create_memory)
+    conversation = process_conversation(uid, language_code, create_conversation)
 
     # Always trigger integration
-    trigger_external_integrations(uid, memory)
+    trigger_external_integrations(uid, conversation)
 
-    # Empty response
-    return {}
+    return integration_models.ConversationCreateResponse(
+        status='Ok',
+        conversation_id=conversation.id
+    )
 
 
 @router.post('/v2/integrations/{app_id}/user/memories', response_model=integration_models.EmptyResponse,
