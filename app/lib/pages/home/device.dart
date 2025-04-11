@@ -1,9 +1,10 @@
+
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/services.dart';
-import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/analytics/intercom_manager.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/widgets/device_widget.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';

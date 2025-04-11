@@ -43,11 +43,13 @@ import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
-import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/analytics/intercom_manager.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/features/calendar.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:omi/utils/platform.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'package:posthog_flutter/posthog_flutter.dart';
@@ -55,15 +57,20 @@ import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
 Future<bool> _init() async {
+
+  await Firebase.initializeApp(
+    name: PlatformUtil.isWeb
+        ? '[DEFAULT]'
+        : F.env == Environment.prod
+            ? "prod"
+            : "dev",
+    options: F.env == Environment.prod
+        ? prod.DefaultFirebaseOptions.currentPlatform
+        : dev.DefaultFirebaseOptions.currentPlatform,
+  );
+
   // Service manager
   ServiceManager.init();
-
-  // Firebase
-  if (F.env == Environment.prod) {
-    await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform, name: 'prod');
-  } else {
-    await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform, name: 'dev');
-  }
 
   await IntercomManager().initIntercom();
   await NotificationService.instance.initialize();
@@ -79,7 +86,7 @@ Future<bool> _init() async {
 
   await GrowthbookUtil.init();
   CalendarUtil.init();
-  ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
+  if(PlatformUtil.isNotWeb) ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   return isAuth;
 }
 
@@ -98,7 +105,7 @@ void main() async {
   } else {
     Env.init(DevEnv());
   }
-  FlutterForegroundTask.initCommunicationPort();
+ ForegroundUtil.initCommunicationPort();
   if (Env.posthogApiKey != null) {
     await initPostHog();
   }
@@ -217,7 +224,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => MemoriesProvider()),
         ],
         builder: (context, child) {
-          return WithForegroundTask(
+          return ForegroundTask(
             child: MaterialApp(
               navigatorObservers: [
                 if (Env.instabugApiKey != null) InstabugNavigatorObserver(),
@@ -289,6 +296,17 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 }
 
+Widget ForegroundTask({required MaterialApp child}) {
+  if(PlatformUtil.isWeb) {
+    return child; 
+  }else {
+    return WithForegroundTask(
+     child: child,
+    );
+  }
+
+}
+
 class DeciderWidget extends StatefulWidget {
   const DeciderWidget({super.key});
 
@@ -311,6 +329,12 @@ class _DeciderWidgetState extends State<DeciderWidget> {
   }
 
   void openAppLink(Uri uri) async {
+    // Add this check before accessing path segments
+    if (uri.pathSegments.isEmpty) {
+      debugPrint('URI has no path segments: $uri');
+      return;
+    }
+
     if (uri.pathSegments.first == 'apps') {
       if (mounted) {
         var app = await context.read<AppProvider>().getAppFromId(uri.pathSegments[1]);
@@ -341,7 +365,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
         context.read<HomeProvider>().setupHasSpeakerProfile();
         context.read<HomeProvider>().setupUserPrimaryLanguage();
         try {
-          await IntercomManager.instance.intercom.loginIdentifiedUser(
+          await IntercomManager().loginIdentifiedUser(
             userId: SharedPreferencesUtil().uid,
           );
         } catch (e) {
@@ -352,9 +376,9 @@ class _DeciderWidgetState extends State<DeciderWidget> {
         context.read<AppProvider>().setAppsFromCache();
         context.read<MessageProvider>().refreshMessages();
       } else {
-        await IntercomManager.instance.intercom.loginUnidentifiedUser();
+        await IntercomManager().loginUnidentifiedUser();
       }
-      IntercomManager.instance.setUserAttributes();
+      IntercomManager().setUserAttributes();
     });
     super.initState();
   }

@@ -182,28 +182,28 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
       1, // Mono channel
     );
 
-    try {
-      final transcript = await transcribeVoiceMessage(audioFile);
-      if (mounted) {
-        setState(() {
-          _transcript = transcript;
-          _state = RecordingState.transcribeSuccess;
-          _isProcessing = false;
-        });
-        if (transcript.isNotEmpty) {
-          widget.onTranscriptReady(transcript);
-        }
-      }
-    } catch (e) {
-      debugPrint('Error processing recording: $e');
-      if (mounted) {
-        setState(() {
-          _state = RecordingState.transcribeFailed;
-          _isProcessing = false;
-        });
-      }
-      AppSnackbar.showSnackbarError('Failed to transcribe audio');
-    }
+    // try {
+    //   final transcript = await transcribeVoiceMessage(audioFile);
+    //   if (mounted) {
+    //     setState(() {
+    //       _transcript = transcript;
+    //       _state = RecordingState.transcribeSuccess;
+    //       _isProcessing = false;
+    //     });
+    //     if (transcript.isNotEmpty) {
+    //       widget.onTranscriptReady(transcript);
+    //     }
+    //   }
+    // } catch (e) {
+    //   debugPrint('Error processing recording: $e');
+    //   if (mounted) {
+    //     setState(() {
+    //       _state = RecordingState.transcribeFailed;
+    //       _isProcessing = false;
+    //     });
+    //   }
+    //   AppSnackbar.showSnackbarError('Failed to transcribe audio');
+    // }
   }
 
   void _retry() {

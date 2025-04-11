@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:omi/utils/platform.dart';
 
 String dateTimeFormat(String format, DateTime? dateTime, {String? locale}) {
   if (dateTime == null) return '';
@@ -10,7 +11,7 @@ String dateTimeFormat(String format, DateTime? dateTime, {String? locale}) {
 }
 
 Future routeToPage(BuildContext context, Widget page, {bool replace = false}) {
-  var route = Platform.isIOS ? CupertinoPageRoute(builder: (c) => page) : MaterialPageRoute(builder: (c) => page);
+  var route = PlatformUtil.isIOS ? CupertinoPageRoute(builder: (c) => page) : MaterialPageRoute(builder: (c) => page);
   if (replace) {
     if (context.mounted) {
       return Navigator.of(context).pushAndRemoveUntil(route, (route) => false);

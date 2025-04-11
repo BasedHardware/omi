@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -20,6 +19,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:gradient_borders/gradient_borders.dart';
@@ -177,10 +177,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
                                   double bottomPadding = chatIndex == 0
                                       ? provider.selectedFiles.isNotEmpty
-                                          ? (Platform.isAndroid
+                                          ? (PlatformUtil.isAndroid
                                               ? MediaQuery.sizeOf(context).height * 0.32
                                               : MediaQuery.sizeOf(context).height * 0.3)
-                                          : (Platform.isAndroid
+                                          : (PlatformUtil.isAndroid
                                               ? MediaQuery.sizeOf(context).height * 0.21
                                               : MediaQuery.sizeOf(context).height * 0.19)
                                       : 0;
@@ -368,25 +368,40 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                               width: MediaQuery.sizeOf(context).width * 0.2,
                                               decoration: BoxDecoration(
                                                 color: Colors.grey[800],
-                                                image: provider.selectedFileTypes[idx] == 'image'
-                                                    ? DecorationImage(
-                                                        image: FileImage(provider.selectedFiles[idx]),
-                                                        fit: BoxFit.cover,
-                                                      )
-                                                    : null,
                                                 borderRadius: BorderRadius.circular(10),
                                               ),
                                               child: Stack(
                                                 children: [
-                                                  provider.selectedFileTypes[idx] != 'image'
-                                                      ? const Center(
-                                                          child: Icon(
-                                                            Icons.insert_drive_file,
-                                                            color: Colors.white,
-                                                            size: 30,
+                                                  if (provider.selectedFileTypes[idx] == 'image')
+                                                    FutureBuilder<Uint8List>(
+                                                      future: provider.selectedFiles[idx].readAsBytes(),
+                                                      builder: (context, snapshot) {
+                                                        if (snapshot.hasData) {
+                                                          return Container(
+                                                            decoration: BoxDecoration(
+                                                              borderRadius: BorderRadius.circular(10),
+                                                              image: DecorationImage(
+                                                                image: MemoryImage(snapshot.data!),
+                                                                fit: BoxFit.cover,
+                                                              ),
+                                                            ),
+                                                          );
+                                                        }
+                                                        return const Center(
+                                                          child: CircularProgressIndicator(
+                                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
                                                           ),
-                                                        )
-                                                      : Container(),
+                                                        );
+                                                      },
+                                                    )
+                                                  else
+                                                    const Center(
+                                                      child: Icon(
+                                                        Icons.insert_drive_file,
+                                                        color: Colors.white,
+                                                        size: 30,
+                                                      ),
+                                                    ),
                                                   if (provider.isFileUploading(provider.selectedFiles[idx].path))
                                                     Container(
                                                       color: Colors.black.withOpacity(0.5),

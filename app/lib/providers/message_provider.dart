@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:collection/collection.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -27,7 +25,7 @@ class MessageProvider extends ChangeNotifier {
 
   String firstTimeLoadingText = '';
 
-  List<File> selectedFiles = [];
+  List<XFile> selectedFiles = [];
   List<String> selectedFileTypes = [];
   List<MessageFile> uploadedFiles = [];
   bool isUploadingFiles = false;
@@ -86,7 +84,7 @@ class MessageProvider extends ChangeNotifier {
   void captureImage() async {
     var res = await ImagePicker().pickImage(source: ImageSource.camera);
     if (res != null) {
-      selectedFiles.add(File(res.path));
+      selectedFiles.add(res);
       selectedFileTypes.add('image');
       var index = selectedFiles.length - 1;
       await uploadFiles([selectedFiles[index]], appProvider?.selectedChatAppId);
@@ -99,42 +97,30 @@ class MessageProvider extends ChangeNotifier {
       AppSnackbar.showSnackbarError('You can only select up to 4 images');
       return;
     }
-    List res = [];
+    List<XFile?> res = [];
     if (4 - selectedFiles.length == 1) {
       res = [await ImagePicker().pickImage(source: ImageSource.gallery)];
     } else {
       res = await ImagePicker().pickMultiImage(limit: 4 - selectedFiles.length);
     }
     if (res.isNotEmpty) {
-      List<File> files = [];
-      for (var r in res) {
-        files.add(File(r.path));
-      }
-      if (files.isNotEmpty) {
-        selectedFiles.addAll(files);
-        selectedFileTypes.addAll(res.map((e) => 'image'));
-        await uploadFiles(files, appProvider?.selectedChatAppId);
-      }
+      selectedFiles.addAll(res.nonNulls);
+      selectedFileTypes.addAll(res.map((e) => 'image'));
+      await uploadFiles([...res.nonNulls], appProvider?.selectedChatAppId);
       notifyListeners();
     }
   }
 
   void selectFile() async {
     var res = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowMultiple: true,
-        allowedExtensions: ['jpeg', 'md', 'pdf', 'gif', 'doc', 'png', 'pptx', 'txt', 'xlsx', 'webp']);
+      type: FileType.custom,
+      allowMultiple: true,
+      allowedExtensions: ['jpeg', 'md', 'pdf', 'gif', 'doc', 'png', 'pptx', 'txt', 'xlsx', 'webp'],
+    );
     if (res != null) {
-      List<File> files = [];
-      for (var r in res.files) {
-        files.add(File(r.path!));
-      }
-      if (files.isNotEmpty) {
-        selectedFiles.addAll(files);
-        selectedFileTypes.addAll(res.files.map((e) => 'file'));
-        await uploadFiles(files, appProvider?.selectedChatAppId);
-      }
-
+      selectedFiles.addAll(res.xFiles.nonNulls);
+      selectedFileTypes.addAll(res.files.map((e) => 'file'));
+      await uploadFiles([...res.xFiles.nonNulls], appProvider?.selectedChatAppId);
       notifyListeners();
     }
   }
@@ -157,9 +143,10 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> uploadFiles(List<File> files, String? appId) async {
+  Future<void> uploadFiles(List<XFile> files, String? appId) async {
     if (files.isNotEmpty) {
       setMultiUploadingFileStatus(files.map((e) => e.path).toList(), true);
+
       var res = await uploadFilesServer(files, appId: appId);
       if (res != null) {
         uploadedFiles.addAll(res);
@@ -279,51 +266,51 @@ class MessageProvider extends ChangeNotifier {
     messages.insert(0, message);
     notifyListeners();
 
-    try {
-      bool firstChunkRecieved = false;
-      await for (var chunk in sendVoiceMessageStreamServer([file])) {
-        if (!firstChunkRecieved && [MessageChunkType.data, MessageChunkType.done].contains(chunk.type)) {
-          firstChunkRecieved = true;
-          if (onFirstChunkRecived != null) {
-            onFirstChunkRecived();
-          }
-        }
+    // try {
+    //   bool firstChunkRecieved = false;
+    //   await for (var chunk in sendVoiceMessageStreamServer([file])) {
+    //     if (!firstChunkRecieved && [MessageChunkType.data, MessageChunkType.done].contains(chunk.type)) {
+    //       firstChunkRecieved = true;
+    //       if (onFirstChunkRecived != null) {
+    //         onFirstChunkRecived();
+    //       }
+    //     }
 
-        if (chunk.type == MessageChunkType.think) {
-          message.thinkings.add(chunk.text);
-          notifyListeners();
-          continue;
-        }
+    //     if (chunk.type == MessageChunkType.think) {
+    //       message.thinkings.add(chunk.text);
+    //       notifyListeners();
+    //       continue;
+    //     }
 
-        if (chunk.type == MessageChunkType.data) {
-          message.text += chunk.text;
-          notifyListeners();
-          continue;
-        }
+    //     if (chunk.type == MessageChunkType.data) {
+    //       message.text += chunk.text;
+    //       notifyListeners();
+    //       continue;
+    //     }
 
-        if (chunk.type == MessageChunkType.done) {
-          message = chunk.message!;
-          messages[0] = message;
-          notifyListeners();
-          continue;
-        }
+    //     if (chunk.type == MessageChunkType.done) {
+    //       message = chunk.message!;
+    //       messages[0] = message;
+    //       notifyListeners();
+    //       continue;
+    //     }
 
-        if (chunk.type == MessageChunkType.message) {
-          messages.insert(1, chunk.message!);
-          notifyListeners();
-          continue;
-        }
+    //     if (chunk.type == MessageChunkType.message) {
+    //       messages.insert(1, chunk.message!);
+    //       notifyListeners();
+    //       continue;
+    //     }
 
-        if (chunk.type == MessageChunkType.error) {
-          message.text = chunk.text;
-          notifyListeners();
-          continue;
-        }
-      }
-    } catch (e) {
-      message.text = ServerMessageChunk.failedMessage().text;
-      notifyListeners();
-    }
+    //     if (chunk.type == MessageChunkType.error) {
+    //       message.text = chunk.text;
+    //       notifyListeners();
+    //       continue;
+    //     }
+    //   }
+    // } catch (e) {
+    //   message.text = ServerMessageChunk.failedMessage().text;
+    //   notifyListeners();
+    // }
 
     setShowTypingIndicator(false);
   }

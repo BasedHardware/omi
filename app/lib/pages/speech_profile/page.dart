@@ -12,12 +12,13 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/services/services.dart';
-import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/analytics/intercom_manager.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/device_widget.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
-import 'package:intercom_flutter/intercom_flutter.dart';
+import 'package:omi/utils/analytics/intercom_manager.dart';
+
 import 'package:provider/provider.dart';
 
 import 'percentage_bar_progress.dart';

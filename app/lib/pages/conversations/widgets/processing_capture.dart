@@ -85,10 +85,16 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           context,
           () => Navigator.pop(context),
           () async {
-            Navigator.pop(context);
-            provider.updateRecordingState(RecordingState.initialising);
-            await provider.streamRecording();
-            MixpanelManager().phoneMicRecordingStarted();
+            try {
+              Navigator.pop(context);
+              provider.updateRecordingState(RecordingState.initialising);
+              await provider.streamRecording();
+              MixpanelManager().phoneMicRecordingStarted();
+            } catch (e, stackTrace) {
+              debugPrint('Error starting recording: $e $stackTrace');
+          provider.updateRecordingState(RecordingState.error);
+
+            }
           },
           'Limited Capabilities',
           'Recording with your phone microphone has a few limitations, including but not limited to: speaker profiles, background reliability.',

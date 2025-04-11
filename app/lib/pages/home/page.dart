@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/backend/http/api/users.dart';
@@ -31,6 +31,7 @@ import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -129,7 +130,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       return;
     }
     debugPrint(event);
-    InstabugLog.logInfo(event);
+    if(PlatformUtil.isNotWeb) InstabugLog.logInfo(event);
   }
 
   ///Screens with respect to subpage
@@ -255,7 +256,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     super.initState();
 
     // After init
-    FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
+    ForegroundUtil.addTaskDataCallback(_onReceiveTaskData);
   }
 
   void _listenToMessagesFromNotification() {
@@ -274,7 +275,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   Widget build(BuildContext context) {
     return MyUpgradeAlert(
       upgrader: _upgrader,
-      dialogStyle: Platform.isIOS ? UpgradeDialogStyle.cupertino : UpgradeDialogStyle.material,
+      dialogStyle: PlatformUtil.isIOS ? UpgradeDialogStyle.cupertino : UpgradeDialogStyle.material,
       child: Consumer<ConnectivityProvider>(
         builder: (ctx, connectivityProvider, child) {
           bool isConnected = connectivityProvider.isConnected;

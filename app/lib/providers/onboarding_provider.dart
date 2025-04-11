@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -17,6 +16,7 @@ import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/audio/foreground.dart';
+import 'package:omi/utils/platform.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class OnboardingProvider extends BaseProvider with MessageNotifierMixin implements IDeviceServiceSubsciption {
@@ -81,12 +81,12 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
   Future askForBluetoothPermissions() async {
     FlutterBluePlus.setLogLevel(LogLevel.info, color: true);
-    if (Platform.isIOS) {
+    if (PlatformUtil.isIOS) {
       PermissionStatus bleStatus = await Permission.bluetooth.request();
       debugPrint('bleStatus: $bleStatus');
       updateBluetoothPermission(bleStatus.isGranted);
     } else {
-      if (Platform.isAndroid) {
+      if (PlatformUtil.isAndroid) {
         if (FlutterBluePlus.adapterStateNow != BluetoothAdapterState.on) {
           try {
             await FlutterBluePlus.turnOn();
@@ -114,10 +114,12 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   Future askForBackgroundPermissions() async {
-    await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+    await ForegroundUtil.requestIgnoreBatteryOptimization(); // Use abstraction
     var isAllowed = await ForegroundUtil().isIgnoringBatteryOptimizations;
-    updateBackgroundPermission(isAllowed);
-    notifyListeners();
+    if (isAllowed != null) {
+      updateBackgroundPermission(isAllowed);
+      notifyListeners();
+    }
   }
 
   Future<(bool, PermissionStatus)> askForLocationPermissions() async {

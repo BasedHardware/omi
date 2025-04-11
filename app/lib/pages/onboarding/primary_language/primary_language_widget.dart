@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gradient_borders/gradient_borders.dart';
-import 'package:intercom_flutter/intercom_flutter.dart';
+import 'package:omi/utils/analytics/intercom_manager.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:provider/provider.dart';
@@ -355,7 +356,7 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
               ),
             ),
             onTap: () {
-              Intercom.instance.displayMessenger();
+              IntercomManager().displayMessenger();
             },
           ),
         ],
