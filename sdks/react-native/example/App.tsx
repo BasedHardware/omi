@@ -16,6 +16,12 @@ export default function App() {
   const [enableTranscription, setEnableTranscription] = useState<boolean>(false);
   const [deepgramApiKey, setDeepgramApiKey] = useState<string>('');
   const [transcription, setTranscription] = useState<string>('');
+  
+  // Backend WebSocket state
+  const [backendWsConnected, setBackendWsConnected] = useState<boolean>(false);
+  const backendWsRef = useRef<WebSocket | null>(null);
+  const [backendWsUrl, setBackendWsUrl] = useState<string>('wss://<insert-ngrok-url>.ngrok-free.app/ws');
+
 
   // Transcription processing state
   const websocketRef = useRef<WebSocket | null>(null);
@@ -55,13 +61,16 @@ export default function App() {
 
   const requestBluetoothPermission = async () => {
     try {
+      console.log('Requesting Bluetooth permissions...');
+      
       if (Platform.OS === 'ios') {
+        // On iOS, we need to attempt a scan which will trigger the permission dialog
         bleManagerRef.current?.startDeviceScan(null, null, (error) => {
           if (error) {
             console.error('Permission error:', error);
             setPermissionGranted(false);
             Alert.alert(
-              'Bluetooth Permission',
+              'Bluetooth Permission Denied',
               'Please enable Bluetooth permission in your device settings to use this feature.',
               [
                 { text: 'Cancel', style: 'cancel' },
@@ -70,6 +79,7 @@ export default function App() {
             );
           } else {
             setPermissionGranted(true);
+            Alert.alert('Bluetooth Permission', 'Bluetooth permission granted successfully!');
           }
           // Stop scanning immediately after permission check
           bleManagerRef.current?.stopDeviceScan();
@@ -83,7 +93,7 @@ export default function App() {
               console.error('Permission error:', error);
               setPermissionGranted(false);
               Alert.alert(
-                'Bluetooth Permission',
+                'Bluetooth Permission Denied',
                 'Please enable Bluetooth and Location permissions in your device settings to use this feature.',
                 [
                   { text: 'Cancel', style: 'cancel' },
@@ -92,6 +102,7 @@ export default function App() {
               );
             } else {
               setPermissionGranted(true);
+              Alert.alert('Bluetooth Permission', 'Bluetooth permissions granted successfully!');
             }
             // Stop scanning immediately after permission check
             bleManagerRef.current?.stopDeviceScan();
@@ -99,11 +110,13 @@ export default function App() {
         } catch (error) {
           console.error('Error requesting permissions:', error);
           setPermissionGranted(false);
+          Alert.alert('Permission Error', `Failed to request permissions: ${error}`);
         }
       }
     } catch (error) {
       console.error('Error in requestBluetoothPermission:', error);
       setPermissionGranted(false);
+      Alert.alert('Error', `An unexpected error occurred: ${error}`);
     }
   };
 
@@ -213,6 +226,57 @@ export default function App() {
     }
   };
 
+  /**
+   * Connect to the backend WebSocket server
+   */
+  const connectToBackendWs = () => {
+    if (backendWsRef.current && backendWsRef.current.readyState === WebSocket.OPEN) {
+      console.log('Already connected to backend WebSocket');
+      return;
+    }
+
+    try {
+      console.log(`Connecting to backend WebSocket at ${backendWsUrl}`);
+      const ws = new WebSocket(backendWsUrl);
+
+      ws.onopen = () => {
+        console.log('Backend WebSocket connection established');
+        setBackendWsConnected(true);
+      };
+
+      ws.onmessage = (event) => {
+        console.log('Received message from backend:', event.data);
+      };
+
+      ws.onerror = (error) => {
+        console.error('Backend WebSocket error:', error);
+        setBackendWsConnected(false);
+      };
+
+      ws.onclose = () => {
+        console.log('Backend WebSocket connection closed');
+        setBackendWsConnected(false);
+      };
+
+      backendWsRef.current = ws;
+    } catch (error) {
+      console.error('Error connecting to backend WebSocket:', error);
+      setBackendWsConnected(false);
+    }
+  };
+
+  /**
+   * Disconnect from the backend WebSocket server
+   */
+  const disconnectFromBackendWs = () => {
+    if (backendWsRef.current) {
+      backendWsRef.current.close();
+      backendWsRef.current = null;
+      setBackendWsConnected(false);
+    }
+  };
+
+  // Modified startAudioListener to also send to our backend
   const startAudioListener = async () => {
     try {
       if (!connected || !omiConnection.isConnected()) {
@@ -241,6 +305,12 @@ export default function App() {
         // If transcription is enabled and active, add to buffer for WebSocket
         if (bytes.length > 0 && isTranscribing.current) {
           audioBufferRef.current.push(new Uint8Array(bytes));
+        }
+
+        // Send to our backend WebSocket if connected
+        if (bytes.length > 0 && backendWsConnected && backendWsRef.current && 
+            backendWsRef.current.readyState === WebSocket.OPEN) {
+          backendWsRef.current.send(new Uint8Array(bytes));
         }
       });
 
@@ -535,13 +605,47 @@ export default function App() {
           </View>
         )}
 
+        {/* Backend WebSocket section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Backend WebSocket</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Backend WebSocket URL"
+            value={backendWsUrl}
+            onChangeText={setBackendWsUrl}
+          />
+          <View style={styles.row}>
+            <TouchableOpacity
+              style={[styles.button, backendWsConnected ? styles.buttonDanger : styles.button]}
+              onPress={backendWsConnected ? disconnectFromBackendWs : connectToBackendWs}
+            >
+              <Text style={styles.buttonText}>
+                {backendWsConnected ? 'Disconnect from Backend' : 'Connect to Backend'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.status}>
+            Status: {backendWsConnected ? 'Connected' : 'Disconnected'}
+          </Text>
+        </View>
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Bluetooth Connection</Text>
+          <View style={styles.row}>
+            <TouchableOpacity
+              style={[styles.button, styles.buttonFull, scanning ? styles.buttonWarning : null]}
+              onPress={scanning ? stopScan : startScan}
+            >
+              <Text style={styles.buttonText}>{scanning ? "Stop Scan" : "Scan for Devices"}</Text>
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity
-            style={[styles.button, scanning ? styles.buttonWarning : null]}
-            onPress={scanning ? stopScan : startScan}
+            style={[styles.button, permissionGranted ? styles.buttonSuccess : styles.buttonPrimary, { marginTop: 10 }]}
+            onPress={requestBluetoothPermission}
           >
-            <Text style={styles.buttonText}>{scanning ? "Stop Scan" : "Scan for Devices"}</Text>
+            <Text style={styles.buttonText}>
+              {permissionGranted ? "Permissions Granted" : "Request Bluetooth Permissions"}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -827,6 +931,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#A0A0A0',
     opacity: 0.7,
   },
+  buttonFull: {
+    flex: 1,
+  },
   buttonText: {
     color: 'white',
     fontSize: 16,
@@ -1028,5 +1135,29 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
     lineHeight: 20,
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 5,
+    padding: 10,
+    marginBottom: 10,
+    width: '100%',
+  },
+  status: {
+    marginTop: 5,
+    fontSize: 14,
+    color: '#666',
+  },
+  buttonSuccess: {
+    backgroundColor: '#4CD964',
+  },
+  buttonPrimary: {
+    backgroundColor: '#007AFF',
   },
 });
