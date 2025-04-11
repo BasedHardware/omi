@@ -185,9 +185,12 @@ async def _listen(
 
     # Send last completed conversation to client
     async def send_last_conversation():
-        last_conversation = conversations_db.get_last_completed_conversation(uid)
-        if last_conversation:
-            await _send_message_event(LastConversationEvent(memory_id=last_conversation['id']))
+        try:
+            last_conversation = conversations_db.get_last_completed_conversation(uid)
+            if last_conversation:
+                await _send_message_event(LastConversationEvent(memory_id=last_conversation['id']))
+        except Exception as err:
+            print(f"Error in send_last_conversation: {err}")
     asyncio.create_task(send_last_conversation())
 
     async def _create_current_conversation():

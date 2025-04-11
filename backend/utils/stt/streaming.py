@@ -58,19 +58,22 @@ def get_stt_service_for_language(language: str):
 
 
 async def send_initial_file_path(file_path: str, transcript_socket_async_send):
-    print('send_initial_file_path')
-    start = time.time()
-    # Reading and sending in chunks
-    with open(file_path, "rb") as file:
-        while True:
-            chunk = file.read(320)
-            if not chunk:
-                break
-            # print('Uploading', len(chunk))
-            await transcript_socket_async_send(bytes(chunk))
-            await asyncio.sleep(0.0001)  # if it takes too long to transcribe
+    try:
+        print('send_initial_file_path')
+        start = time.time()
+        # Reading and sending in chunks
+        with open(file_path, "rb") as file:
+            while True:
+                chunk = file.read(320)
+                if not chunk:
+                    break
+                # print('Uploading', len(chunk))
+                await transcript_socket_async_send(bytes(chunk))
+                await asyncio.sleep(0.0001)  # if it takes too long to transcribe
 
-    print('send_initial_file_path', time.time() - start)
+        print('send_initial_file_path', time.time() - start)
+    except Exception as e:
+        print(f"send_initial_file_path error: {e}")
 
 
 async def send_initial_file(data: List[List[int]], transcript_socket):
