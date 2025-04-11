@@ -134,6 +134,18 @@ export default function HomePage() {
   const [availablePlatforms] = useState({ twitter: true, linkedin: true });
   const [platformSelectionMode] = useState<'create' | 'add'>('create');
 
+  // Handle profile parameter on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const profileParam = params.get('profile');
+    
+    if (profileParam) {
+      const cleanHandle = extractHandle(profileParam);
+      setHandle(cleanHandle);
+      handleCreatePersona(cleanHandle);
+    }
+  }, []);
+
   const handleInputChange = (e: { target: { value: SetStateAction<string>; }; }) => {
     setHandle(e.target.value);
   };
@@ -231,74 +243,31 @@ export default function HomePage() {
     return null;
   };
 
-  // handleCreatePersona function using redirectToChat in all cases.
-  const handleCreatePersona = async () => {
-    setIsCreating(true);
+  // Modified handleCreatePersona to accept an optional handle parameter
+  const handleCreatePersona = async (inputHandle?: string) => {
+    if (isCreating) return;
     
+    const handleToUse = (inputHandle || handle || '').toString();
+    if (!handleToUse || handleToUse.trim() === '') {
+      toast.error('Please enter a handle');
+      return;
+    }
+
     try {
-      const trimmedInput = handle.trim();
-      const cleanHandle = extractHandle(trimmedInput);
-      if (!cleanHandle) {
-        toast.error('Invalid handle or URL');
-        return;
-      }
-      
+      setIsCreating(true);
+      const cleanHandle = extractHandle(handleToUse);
       let twitterResult = false;
       let linkedinResult = false;
       let existingId: string | null = null;
-      
-      // If input is specifically a Twitter URL
-      if (isTwitterInput(trimmedInput)) {
+
+      // Check if it's a specific platform URL
+      if (isTwitterInput(handleToUse)) {
         existingId = await checkExistingProfile(cleanHandle, 'twitter');
         if (existingId) {
-          twitterResult = true;
-          toast.success('Profile already exists, redirecting...');
           redirectToChat(existingId);
           return;
-        } else {
-          twitterResult = await fetchTwitterProfile(cleanHandle);
-          if (twitterResult) {
-            existingId = await checkExistingProfile(cleanHandle, 'twitter');
-            if (existingId) {
-              redirectToChat(existingId);
-              return;
-            }
-          }
         }
-      } 
-      // If input is specifically a LinkedIn URL
-      else if (isLinkedinInput(trimmedInput)) {
-        existingId = await checkExistingProfile(cleanHandle, 'linkedin');
-        if (existingId) {
-          linkedinResult = true;
-          toast.success('Profile already exists, redirecting...');
-          redirectToChat(existingId);
-          return;
-        } else {
-          linkedinResult = await fetchLinkedinProfile(cleanHandle);
-          if (linkedinResult) {
-            existingId = await checkExistingProfile(cleanHandle, 'linkedin');
-            if (existingId) {
-              redirectToChat(existingId);
-              return;
-            }
-          }
-        }
-      } 
-      // If input is a generic handle, try both platforms
-      else {
-        // Try Twitter first
         twitterResult = await fetchTwitterProfile(cleanHandle);
-
-        // Then try LinkedIn
-        linkedinResult = await fetchLinkedinProfile(cleanHandle);
-
-        // Handle the case where both platforms have results
-        if (twitterResult && linkedinResult) {
-          setPendingCleanHandle(cleanHandle);
-          setShowPlatformModal(true);
-          return;
-        }
         if (twitterResult) {
           const docId = await getProfileDocId(cleanHandle, 'twitter');
           if (docId) {
@@ -306,6 +275,33 @@ export default function HomePage() {
           }
           return;
         }
+      } else if (isLinkedinInput(handleToUse)) {
+        existingId = await checkExistingProfile(cleanHandle, 'linkedin');
+        if (existingId) {
+          redirectToChat(existingId);
+          return;
+        }
+        linkedinResult = await fetchLinkedinProfile(cleanHandle);
+        if (linkedinResult) {
+          const docId = await getProfileDocId(cleanHandle, 'linkedin');
+          if (docId) {
+            redirectToChat(docId);
+          }
+          return;
+        }
+      } else {
+        // Try Twitter first
+        twitterResult = await fetchTwitterProfile(cleanHandle);
+        if (twitterResult) {
+          const docId = await getProfileDocId(cleanHandle, 'twitter');
+          if (docId) {
+            redirectToChat(docId);
+          }
+          return;
+        }
+
+        // Then try LinkedIn
+        linkedinResult = await fetchLinkedinProfile(cleanHandle);
         if (linkedinResult) {
           const docId = await getProfileDocId(cleanHandle, 'linkedin');
           if (docId) {
@@ -315,7 +311,6 @@ export default function HomePage() {
         }
       }
       
-      // If we got here, no profiles were found or created
       if (!twitterResult && !linkedinResult) {
         toast.error('No profiles found for the given handle.');
       }
@@ -658,7 +653,7 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
 
   return (
     <div className="min-h-screen bg-black text-white">
-      <PreorderBanner botName="your favorite personal" />
+      {/* <PreorderBanner botName="your favorite personal" /> */}
       <Header />
       <div className="flex flex-col items-center px-4 py-8 md:py-16">
         <InputArea
