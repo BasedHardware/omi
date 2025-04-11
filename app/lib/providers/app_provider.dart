@@ -1,4 +1,5 @@
 import 'package:collection/collection.dart';
+import 'package:flutter/widgets.dart';
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -69,28 +70,43 @@ class AppProvider extends BaseProvider {
 
   void addOrRemoveFilter(String filter, String filterGroup) {
     if (filters.containsKey(filterGroup)) {
-      filters[filterGroup] = filter;
+      if (filters[filterGroup] == filter) {
+        filters.remove(filterGroup);
+      } else {
+        filters[filterGroup] = filter;
+      }
     } else {
       filters.addAll({filterGroup: filter});
     }
+    filterApps();
     notifyListeners();
   }
 
   void addOrRemoveCategoryFilter(Category category) {
     if (filters.containsKey('Category')) {
-      filters['Category'] = category;
+      if (filters['Category'] == category) {
+        filters.remove('Category');
+      } else {
+        filters['Category'] = category;
+      }
     } else {
       filters.addAll({'Category': category});
     }
+    filterApps();
     notifyListeners();
   }
 
   void addOrRemoveCapabilityFilter(AppCapability capability) {
     if (filters.containsKey('Capabilities')) {
-      filters['Capabilities'] = capability;
+      if (filters['Capabilities'] == capability) {
+        filters.remove('Capabilities');
+      } else {
+        filters['Capabilities'] = capability;
+      }
     } else {
       filters.addAll({'Capabilities': capability});
     }
+    filterApps();
     notifyListeners();
   }
 
@@ -108,11 +124,13 @@ class AppProvider extends BaseProvider {
 
   void clearFilters() {
     filters.clear();
+    filterApps();
     notifyListeners();
   }
 
   void removeFilter(String filterGroup) {
     filters.remove(filterGroup);
+    filterApps();
     notifyListeners();
   }
 
@@ -125,58 +143,57 @@ class AppProvider extends BaseProvider {
   }
 
   void searchApps(String query) {
-    if (query.isEmpty) {
-      filteredApps = apps;
-      searchQuery = '';
-    } else {
-      searchQuery = query;
-      filteredApps = apps.where((app) => app.name.toLowerCase().contains(query.toLowerCase())).toList();
-    }
+    searchQuery = query.toLowerCase();
+    filterApps();
     notifyListeners();
   }
 
   void filterApps() {
-    if (!isFilterActive()) {
-      filteredApps = apps;
-      return;
-    }
-    filteredApps = apps;
+    Iterable<App> currentlyFiltered = apps;
+
     filters.forEach((key, value) {
       switch (key) {
         case 'Apps':
           if (value == 'Installed Apps') {
-            filteredApps = filteredApps.where((app) => app.enabled).toList();
+            currentlyFiltered = currentlyFiltered.where((app) => app.enabled);
           } else if (value == 'My Apps') {
-            filteredApps = filteredApps.where((app) => app.isOwner(SharedPreferencesUtil().uid)).toList();
-          }
-          break;
-        case 'Sort':
-          if (value == 'A-Z') {
-            filteredApps.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-          } else if (value == 'Z-A') {
-            filteredApps.sort((a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()));
-          } else if (value == 'Highest Rating') {
-            filteredApps.sort((a, b) => (b.ratingAvg ?? 0.0).compareTo(a.ratingAvg ?? 0.0));
-          } else if (value == 'Lowest Rating') {
-            filteredApps.sort((a, b) => (a.ratingAvg ?? 0.0).compareTo(b.ratingAvg ?? 0.0));
+            currentlyFiltered = currentlyFiltered.where((app) => app.isOwner(SharedPreferencesUtil().uid));
           }
           break;
         case 'Category':
-          filteredApps = filteredApps.where((app) => app.category == (value as Category).id).toList();
+          if (value is Category) {
+            currentlyFiltered = currentlyFiltered.where((app) => app.category == value.id);
+          }
           break;
         case 'Rating':
-          value = value as String;
-          value = value.replaceAll('+ Stars', '');
-          filteredApps = filteredApps.where((app) => (app.ratingAvg ?? 0.0) >= double.parse(value)).toList();
+          if (value is String) {
+            String ratingStr = value.replaceAll('+ Stars', '');
+            double minRating = double.tryParse(ratingStr) ?? 0.0;
+            currentlyFiltered = currentlyFiltered.where((app) => (app.ratingAvg ?? 0.0) >= minRating);
+          }
           break;
         case 'Capabilities':
-          filteredApps = filteredApps.where((app) => app.capabilities.contains((value as AppCapability).id)).toList();
+          if (value is AppCapability) {
+            currentlyFiltered = currentlyFiltered.where((app) => app.capabilities.contains(value.id));
+          }
           break;
         default:
           break;
       }
     });
-    notifyListeners();
+
+    if (searchQuery.isNotEmpty) {
+      currentlyFiltered = currentlyFiltered.where((app) => app.name.toLowerCase().contains(searchQuery));
+    }
+
+    List<App> finalFilteredList = currentlyFiltered.toList();
+
+    final Comparator<App>? comparator = _getSortComparator();
+    if (comparator != null) {
+      finalFilteredList.sort(comparator);
+    }
+
+    filteredApps = finalFilteredList;
   }
 
   void setIsLoading(bool value) {
@@ -194,12 +211,18 @@ class AppProvider extends BaseProvider {
   }
 
   void setAppLoading(int index, bool value) {
-    appLoading[index] = value;
-    notifyListeners();
+    if (index >= 0 && index < appLoading.length) {
+      // Boundary check
+      appLoading[index] = value;
+      notifyListeners();
+    } else {
+      print("Error: Attempted to set loading state for invalid index $index");
+    }
   }
 
   void clearSearchQuery() {
     searchQuery = '';
+    filterApps(); // Re-apply filters without search
     notifyListeners();
   }
 
@@ -208,8 +231,8 @@ class AppProvider extends BaseProvider {
     setIsLoading(true);
     apps = await retrieveApps();
     appLoading = List.filled(apps.length, false, growable: true);
+    filterApps();
     setIsLoading(false);
-    notifyListeners();
   }
 
   void updateLocalApp(App app) {
@@ -217,9 +240,13 @@ class AppProvider extends BaseProvider {
     if (idx != -1) {
       apps[idx] = app;
       updatePrefApps();
-      setApps();
+      // filterApps();
+      var filteredIdx = filteredApps.indexWhere((element) => element.id == app.id);
+      if (filteredIdx != -1) {
+        filteredApps[filteredIdx] = app;
+      }
+      notifyListeners(); // Notify after potential changes
     }
-    notifyListeners();
   }
 
   void updateLocalAppReviewResponse(String appId, String response, String reviewId) {
@@ -227,9 +254,12 @@ class AppProvider extends BaseProvider {
     if (idx != -1) {
       apps[idx].updateReviewResponse(response, reviewId, DateTime.now());
       updatePrefApps();
-      setApps();
+      var filteredIdx = filteredApps.indexWhere((element) => element.id == appId);
+      if (filteredIdx != -1) {
+        filteredApps[filteredIdx] = apps[idx];
+      }
+      notifyListeners();
     }
-    notifyListeners();
   }
 
   void checkIsAppOwner(String? appUid) {
@@ -254,127 +284,222 @@ class AppProvider extends BaseProvider {
     var res = await deleteAppServer(appId);
     if (res) {
       var appIndex = apps.indexWhere((app) => app.id == appId);
-      apps.removeAt(appIndex);
-      filteredApps.removeWhere((app) => app.id == appId);
-      appLoading.removeAt(appIndex);
-      updatePrefApps();
-      setApps();
-      AppSnackbar.showSnackbarSuccess('App deleted successfully 🗑️');
+      if (appIndex != -1) {
+        apps.removeAt(appIndex);
+        if (appIndex < appLoading.length) {
+          appLoading.removeAt(appIndex);
+        }
+        filteredApps.removeWhere((app) => app.id == appId);
+        updatePrefApps();
+        AppSnackbar.showSnackbarSuccess('App deleted successfully 🗑️');
+        notifyListeners();
+      } else {
+        print("Warning: Tried to delete app $appId but it wasn't found in the 'apps' list.");
+      }
     } else {
       AppSnackbar.showSnackbarError('Failed to delete app. Please try again later.');
     }
-    notifyListeners();
   }
 
   void toggleAppPublic(String appId, bool value) {
     appPublicToggled = value;
     changeAppVisibilityServer(appId, value);
-    getApps();
     var appIndex = apps.indexWhere((app) => app.id == appId);
-    apps[appIndex].private = !value;
-    updatePrefApps();
-    setApps();
-    AppSnackbar.showSnackbarSuccess('App visibility changed successfully. It may take a few minutes to reflect.');
-    notifyListeners();
+    if (appIndex != -1) {
+      apps[appIndex].private = !value;
+      updatePrefApps();
+      var filteredIdx = filteredApps.indexWhere((app) => app.id == appId);
+      if (filteredIdx != -1) {
+        filteredApps[filteredIdx] = apps[appIndex];
+      }
+      AppSnackbar.showSnackbarSuccess('App visibility changed successfully. It may take a few minutes to reflect.');
+      notifyListeners();
+    }
+    // TODO: Consider calling getApps() after a delay or pull-to-refresh
+    // to get server-confirmed state later, but avoid immediate perf hit.
+    // getApps(); // This would re-fetch everything
   }
 
   void setAppsFromCache() {
     if (SharedPreferencesUtil().appsList.isNotEmpty) {
       apps = SharedPreferencesUtil().appsList;
+      filterApps();
+      notifyListeners();
     }
-    notifyListeners();
   }
 
   void updatePrefApps() {
     SharedPreferencesUtil().appsList = apps;
-    notifyListeners();
   }
 
   void setApps() {
-    apps = SharedPreferencesUtil().appsList;
-    notifyListeners();
-  }
-
-  void initialize(bool filterChatOnly) {
-    if (filterChatOnly) {
-      filterChat = true;
-      filterMemories = false;
-      filterExternal = false;
-    }
-    appLoading = List.filled(apps.length, false);
-
-    getApps();
-    notifyListeners();
-  }
-
-  Future<void> toggleApp(String appId, bool isEnabled, int? idx) async {
-    if (idx != null) {
-      if (appLoading[idx]) return;
-      appLoading[idx] = true;
-      notifyListeners();
-    }
-
-    var prefs = SharedPreferencesUtil();
-    if (isEnabled) {
-      var enabled = await enableAppServer(appId);
-      if (!enabled) {
-        AppDialog.show(
-          title: 'Error activating the app',
-          content: 'If this is an integration app, make sure the setup is completed.',
-          singleButton: true,
-        );
-        if (idx != null) {
-          appLoading[idx] = false;
-          notifyListeners();
-        }
-
-        return;
-      }
-      prefs.enableApp(appId);
-      MixpanelManager().appEnabled(appId);
-    } else {
-      await disableAppServer(appId);
-      prefs.disableApp(appId);
-      MixpanelManager().appDisabled(appId);
-    }
-    if (idx != null) {
-      appLoading[idx] = false;
-    }
     apps = SharedPreferencesUtil().appsList;
     filterApps();
     notifyListeners();
   }
 
-  // List<Plugin> get filteredPlugins {
-  //   var pluginList = plugins
-  //       .where((p) =>
-  //           (p.worksWithChat() && filterChat) ||
-  //           (p.worksWithMemories() && filterMemories) ||
-  //           (p.worksExternally() && filterExternal))
-  //       .toList();
-  //
-  //   return searchQuery.isEmpty
-  //       ? pluginList
-  //       : pluginList.where((plugin) => plugin.name.toLowerCase().contains(searchQuery.toLowerCase())).toList();
-  // }
+  // Helper: Checks if app matches current filters (used by _updateFilteredAppStatus)
+  bool _doesAppMatchFilters(App app) {
+    bool matchesBaseFilters = true;
+    if (filters.isNotEmpty) {
+      matchesBaseFilters = filters.entries.every((entry) {
+        final key = entry.key;
+        final value = entry.value;
+        bool match = true; // Assume match until proven otherwise
 
-  void updateSearchQuery(String query) {
-    searchQuery = query;
-    notifyListeners();
+        switch (key) {
+          case 'Apps':
+            if (value == 'Installed Apps') {
+              match = app.enabled;
+            } else if (value == 'My Apps') {
+              match = app.isOwner(SharedPreferencesUtil().uid);
+            }
+            break;
+          case 'Category':
+            if (value is Category) {
+              match = app.category == value.id;
+            } else {
+              match = false;
+            }
+            break;
+          case 'Rating':
+            if (value is String) {
+              String ratingStr = value.replaceAll('+ Stars', '');
+              double minRating = double.tryParse(ratingStr) ?? 0.0;
+              match = (app.ratingAvg ?? 0.0) >= minRating;
+            } else {
+              match = false;
+            }
+            break;
+          case 'Capabilities':
+            if (value is AppCapability) {
+              match = app.capabilities.contains(value.id);
+            } else {
+              match = false;
+            }
+            break;
+          default:
+            break;
+        }
+        return match;
+      });
+    }
+
+    bool matchesSearch = searchQuery.isEmpty || app.name.toLowerCase().contains(searchQuery);
+
+    return matchesBaseFilters && matchesSearch;
   }
 
-  void toggleFilterChat() {
-    filterChat = !filterChat;
-    notifyListeners();
+  // Helper: Gets the comparator for sorting
+  Comparator<App>? _getSortComparator() {
+    if (filters.containsKey('Sort')) {
+      final sortValue = filters['Sort'];
+      switch (sortValue) {
+        case 'A-Z':
+          return (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        case 'Z-A':
+          return (a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase());
+        case 'Highest Rating':
+          return (a, b) => (b.ratingAvg ?? -1.0).compareTo(a.ratingAvg ?? -1.0);
+        case 'Lowest Rating':
+          return (a, b) => (a.ratingAvg ?? -1.0).compareTo(b.ratingAvg ?? -1.0);
+        default:
+          return null;
+      }
+    }
+    return null;
   }
 
-  void toggleFilterMemories() {
-    filterMemories = !filterMemories;
-    notifyListeners();
+  void _updateFilteredAppStatus(App toggledApp) {
+    final bool matchesFiltersNow = _doesAppMatchFilters(toggledApp);
+    final int existingIndex = filteredApps.indexWhere((a) => a.id == toggledApp.id);
+    final bool isInFilteredList = existingIndex != -1;
+    final Comparator<App>? comparator = _getSortComparator();
+
+    if (matchesFiltersNow) {
+      if (!isInFilteredList) {
+        if (comparator != null && filteredApps.isNotEmpty) {
+          int insertIndex = lowerBound(filteredApps, toggledApp, compare: comparator);
+          filteredApps.insert(insertIndex, toggledApp);
+        } else {
+          filteredApps.add(toggledApp);
+          if (comparator != null && filteredApps.length > 1) {
+            filteredApps.sort(comparator);
+          }
+        }
+      } else {
+        filteredApps[existingIndex] = toggledApp;
+      }
+    } else {
+      if (isInFilteredList) {
+        filteredApps.removeAt(existingIndex);
+      }
+    }
   }
 
-  void toggleFilterExternal() {
-    filterExternal = !filterExternal;
+  Future<void> toggleApp(String appId, bool isEnabled, int? idx) async {
+    int loadingIndex = -1;
+    if (idx != null && idx >= 0 && idx < appLoading.length) {
+      loadingIndex = idx;
+      if (appLoading[loadingIndex]) return;
+      appLoading[loadingIndex] = true;
+      notifyListeners();
+    } else if (idx != null) {
+      debugPrint("Warning: Invalid index $idx provided to toggleApp.");
+    }
+
+    var prefs = SharedPreferencesUtil();
+    bool success = false;
+    String? errorMessage;
+
+    try {
+      if (isEnabled) {
+        success = await enableAppServer(appId);
+        if (!success) {
+          errorMessage = 'Error activating the app. If this is an integration app, make sure the setup is completed.';
+        } else {
+          MixpanelManager().appEnabled(appId);
+        }
+      } else {
+        await disableAppServer(appId);
+        success = true;
+        MixpanelManager().appDisabled(appId);
+      }
+    } catch (e) {
+      print('Error toggling app $appId: $e');
+      success = false;
+      errorMessage = 'An error occurred while updating the app status.';
+    }
+
+    if (!success && errorMessage != null) {
+      AppDialog.show(
+        title: 'Error',
+        content: errorMessage,
+        singleButton: true,
+      );
+    }
+
+    if (success) {
+      if (isEnabled) {
+        prefs.enableApp(appId);
+      } else {
+        prefs.disableApp(appId);
+      }
+
+      var appIndex = apps.indexWhere((a) => a.id == appId);
+      if (appIndex != -1) {
+        apps[appIndex].enabled = isEnabled;
+        App toggledApp = apps[appIndex];
+
+        _updateFilteredAppStatus(toggledApp);
+      } else {
+        debugPrint("Error: Toggled app $appId not found in local 'apps' list after successful toggle.");
+      }
+    }
+
+    if (loadingIndex != -1) {
+      appLoading[loadingIndex] = false;
+    }
     notifyListeners();
   }
 }
