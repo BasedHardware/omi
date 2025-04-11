@@ -138,6 +138,21 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
 def get_app_result(transcript: str, app: App) -> str:
     prompt = f'''
     Your are an AI with the following characteristics:
+    Name: {app.name},
+    Description: {app.description},
+    Task: ${app.memory_prompt}
+
+    Conversation: ```{transcript.strip()}```,
+    '''
+
+    response = llm_medium.invoke(prompt)
+    content = response.content.replace('```json', '').replace('```', '')
+    return content
+
+
+def get_app_result_v1(transcript: str, app: App) -> str:
+    prompt = f'''
+    Your are an AI with the following characteristics:
     Name: ${app.name},
     Description: ${app.description},
     Task: ${app.memory_prompt}
@@ -150,7 +165,7 @@ def get_app_result(transcript: str, app: App) -> str:
     Make sure to be concise and clear.
     '''
 
-    response = llm_medium.invoke(prompt)
+    response = llm_mini.invoke(prompt)
     content = response.content.replace('```json', '').replace('```', '')
     if len(content) < 5:
         return ''
@@ -1569,18 +1584,18 @@ def select_best_app_for_conversation(conversation: Conversation, apps: List[App]
     """Select the best app for the given conversation based on its content and structure."""
     if not apps:
         return None
-    
+
     # If only one app is available, return it
     if len(apps) == 1:
         return apps[0]
-    
+
     # Use LLM to select the best app
     conversation_summary = f"""
     Title: {conversation.structured.title}
     Category: {conversation.structured.category.value}
     Overview: {conversation.structured.overview}
     """
-    
+
     # Format apps as XML to handle complex content better
     apps_xml = "<apps>\n"
     for app in apps:
@@ -1591,7 +1606,7 @@ def select_best_app_for_conversation(conversation: Conversation, apps: List[App]
     <conversation_prompt>{app.memory_prompt if app.memory_prompt else ''}</conversation_prompt>
   </app>\n"""
     apps_xml += "</apps>"
-    
+
     prompt = f"""
     You are assigned the task of identifying the most suitable app to analyze a given conversation on technological advancements.
     
@@ -1609,19 +1624,19 @@ def select_best_app_for_conversation(conversation: Conversation, apps: List[App]
     """
 
     print(prompt)
-    
+
     try:
         with_parser = llm_mini.with_structured_output(BestAppSelection)
         response: BestAppSelection = with_parser.invoke(prompt)
         selected_app_id = response.app_id
-        
+
         # Find the app with the matching ID
         for app in apps:
             if app.id == selected_app_id:
                 return app
     except Exception as e:
         print(f"Error selecting best app: {e}")
-    
+
     # Default to the first app if selection fails
     return apps[0]
 
