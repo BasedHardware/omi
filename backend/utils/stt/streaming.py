@@ -88,28 +88,57 @@ async def send_initial_file(data: List[List[int]], transcript_socket):
 
 
 # Initialize Deepgram client based on environment configuration
+deepgram_api_key = os.getenv('DEEPGRAM_API_KEY')
 is_dg_self_hosted = os.getenv('DEEPGRAM_SELF_HOSTED_ENABLED', '').lower() == 'true'
-deepgram_options = DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"})
 
+# Initialize client options
+deepgram_options = DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"})
 deepgram_beta_options = DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"})
 deepgram_beta_options.url = "https://api.beta.deepgram.com"
 
+# Configure self-hosted URL if enabled
 if is_dg_self_hosted:
     dg_self_hosted_url = os.getenv('DEEPGRAM_SELF_HOSTED_URL')
     if not dg_self_hosted_url:
-        raise ValueError("DEEPGRAM_SELF_HOSTED_URL must be set when DEEPGRAM_SELF_HOSTED_ENABLED is true")
-    # Override only the URL while keeping all other options
-    deepgram_options.url = dg_self_hosted_url
-    deepgram_beta_options.url = dg_self_hosted_url
-    print(f"Using Deepgram self-hosted at: {dg_self_hosted_url}")
+        print("WARNING: DEEPGRAM_SELF_HOSTED_URL must be set when DEEPGRAM_SELF_HOSTED_ENABLED is true. Using default Deepgram URL.")
+    else:
+        # Override only the URL while keeping all other options
+        deepgram_options.url = dg_self_hosted_url
+        deepgram_beta_options.url = dg_self_hosted_url
+        print(f"Using Deepgram self-hosted at: {dg_self_hosted_url}")
 
-deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), deepgram_options)
-deepgram_beta = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), deepgram_beta_options)
+# Initialize Deepgram clients if API key is available
+if deepgram_api_key:
+    try:
+        deepgram = DeepgramClient(deepgram_api_key, deepgram_options)
+        deepgram_beta = DeepgramClient(deepgram_api_key, deepgram_beta_options)
+        print("Deepgram clients initialized successfully")
+    except Exception as e:
+        print(f"WARNING: Failed to initialize Deepgram clients: {e}")
+        deepgram = None
+        deepgram_beta = None
+else:
+    print("WARNING: DEEPGRAM_API_KEY is not set. Deepgram transcription will not be available.")
+    deepgram = None
+    deepgram_beta = None
 
 async def process_audio_dg(
     stream_transcript, language: str, sample_rate: int, channels: int, preseconds: int = 0, model: str = 'nova-2-general',
 ):
     print('process_audio_dg', language, sample_rate, channels, preseconds)
+
+    # Check if Deepgram is available
+    if not deepgram and not deepgram_beta:
+        print("ERROR: Deepgram is not configured. Cannot transcribe audio.")
+        stream_transcript([{
+            'speaker': "SPEAKER_0",
+            'start': 0,
+            'end': 1,
+            'text': "[Transcription unavailable - Deepgram not configured]",
+            'is_user': True,
+            'person_id': None,
+        }])
+        return None
 
     def on_message(self, result, **kwargs):
         # print(f"Received message from Deepgram")  # Log when message is received
@@ -153,6 +182,15 @@ async def process_audio_dg(
 
     def on_error(self, error, **kwargs):
         print(f"Error: {error}")
+        # Send a notification to the client that an error occurred
+        stream_transcript([{
+            'speaker': "SPEAKER_0",
+            'start': 0,
+            'end': 1,
+            'text': f"[Transcription error: {error}]",
+            'is_user': True,
+            'person_id': None,
+        }])
 
     print("Connecting to Deepgram")  # Log before connection attempt
     return connect_to_deepgram_with_backoff(on_message, on_error, language, sample_rate, channels, model)
@@ -185,8 +223,12 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
     try:
         # get connection by model
         if model == "nova-3":
+            if not deepgram_beta:
+                raise Exception("Deepgram beta client is not available")
             dg_connection = deepgram_beta.listen.websocket.v("1")
         else:
+            if not deepgram:
+                raise Exception("Deepgram client is not available")
             dg_connection = deepgram.listen.websocket.v("1")
 
         dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
@@ -244,7 +286,16 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
     # Soniox supports diarization primarily for English
     api_key = os.getenv('SONIOX_API_KEY')
     if not api_key:
-        raise ValueError("API key is not set. Please set the SONIOX_API_KEY environment variable.")
+        print("ERROR: SONIOX_API_KEY is not set. Cannot transcribe audio with Soniox.")
+        stream_transcript([{
+            'speaker': "SPEAKER_0",
+            'start': 0,
+            'end': 1,
+            'text': "[Transcription unavailable - Soniox not configured]",
+            'is_user': True,
+            'person_id': None,
+        }])
+        return None
 
     uri = 'wss://stt-rt.soniox.com/transcribe-websocket'
 
@@ -408,7 +459,20 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
 
 
 async def process_audio_speechmatics(stream_transcript, sample_rate: int, language: str, preseconds: int = 0):
+    # Check if Speechmatics API key is available
     api_key = os.getenv('SPEECHMATICS_API_KEY')
+    if not api_key:
+        print("ERROR: SPEECHMATICS_API_KEY is not set. Cannot transcribe audio with Speechmatics.")
+        stream_transcript([{
+            'speaker': "SPEAKER_0",
+            'start': 0,
+            'end': 1,
+            'text': "[Transcription unavailable - Speechmatics not configured]",
+            'is_user': True,
+            'person_id': None,
+        }])
+        return None
+
     uri = 'wss://eu2.rt.speechmatics.com/v2'
 
     request = {

@@ -44,10 +44,23 @@ async def get_omi_github_releases(cache_key: str) -> Optional[list]:
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
-            "Authorization": f"Bearer {os.getenv('GITHUB_TOKEN')}",
         }
+
+        # Add GitHub token if available
+        github_token = os.getenv('GITHUB_TOKEN')
+        if github_token:
+            headers["Authorization"] = f"Bearer {github_token}"
+        else:
+            print("WARNING: GITHUB_TOKEN not set. Using unauthenticated GitHub API requests with lower rate limits.")
+
         response = await client.get(url, headers=headers)
         if response.status_code != 200:
+            if response.status_code == 403 and not github_token:
+                # Rate limit exceeded without token
+                raise HTTPException(
+                    status_code=403,
+                    detail="GitHub API rate limit exceeded. Set GITHUB_TOKEN in .env file to increase rate limits."
+                )
             raise HTTPException(status_code=response.status_code, detail="Failed to fetch latest release")
         releases = response.json()
         # Cache successful response for 30 minutes
