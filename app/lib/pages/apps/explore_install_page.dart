@@ -242,27 +242,21 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                         ),
                       );
                     }
-                    return SliverToBoxAdapter(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ListView.separated(
-                            physics: const NeverScrollableScrollPhysics(),
-                            shrinkWrap: true,
-                            itemBuilder: (ctx, idx) {
-                              return AppListItem(
-                                app: provider.filteredApps[idx],
-                                index:
-                                    provider.apps.indexWhere((element) => element.id == provider.filteredApps[idx].id),
-                              );
-                            },
-                            separatorBuilder: (ctx, idx) {
-                              return const SizedBox(height: 8);
-                            },
-                            itemCount: provider.filteredApps.length,
-                          ),
-                          const SizedBox(height: 64),
-                        ],
+                    return SliverPadding(
+                      padding: const EdgeInsets.only(bottom: 64),
+                      sliver: SliverList.separated(
+                        itemCount: provider.filteredApps.length,
+                        itemBuilder: (context, index) {
+                          final originalIndex =
+                              provider.apps.indexWhere((app) => app.id == provider.filteredApps[index].id);
+                          return AppListItem(
+                            app: provider.filteredApps[index],
+                            index: originalIndex,
+                          );
+                        },
+                        separatorBuilder: (context, index) {
+                          return const SizedBox(height: 8);
+                        },
                       ),
                     );
                   },
