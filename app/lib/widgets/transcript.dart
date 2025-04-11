@@ -40,23 +40,23 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   final Map<String?, Person?> _personCache = {};
   // Cache for decoded text to avoid repeated decoding
   final Map<String, String> _decodedTextCache = {};
-  
+
   // ScrollController to enable proper scrolling
   final ScrollController _scrollController = ScrollController();
-  
+
   @override
   void dispose() {
     _scrollController.dispose();
     super.dispose();
   }
-  
+
   String _getDecodedText(String text) {
     if (!_decodedTextCache.containsKey(text)) {
       _decodedTextCache[text] = tryDecodingText(text);
     }
     return _decodedTextCache[text]!;
   }
-  
+
   Person? _getPersonById(String? personId) {
     if (personId == null) return null;
     if (!_personCache.containsKey(personId)) {
@@ -72,17 +72,15 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       controller: _scrollController,
       padding: EdgeInsets.zero,
       // Don't use shrinkWrap: true for large lists as it's expensive
-      shrinkWrap: widget.segments.length < 100, 
+      shrinkWrap: widget.segments.length < 100,
       itemCount: widget.segments.length + 2,
       // Allow scrolling when there are many segments
-      physics: widget.segments.length > 100 
-          ? const ClampingScrollPhysics() 
-          : const NeverScrollableScrollPhysics(),
+      physics: widget.segments.length > 100 ? const ClampingScrollPhysics() : const NeverScrollableScrollPhysics(),
       itemBuilder: (context, idx) {
         // Handle header and footer items
         if (idx == 0) return SizedBox(height: widget.topMargin ? 32 : 0);
         if (idx == widget.segments.length + 1) return SizedBox(height: widget.bottomMargin);
-        
+
         // Add separator before the item (except for the first one)
         if (widget.separator && idx > 1) {
           return Column(
@@ -93,19 +91,19 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
             ],
           );
         }
-        
+
         return _buildSegmentItem(idx - 1);
       },
     );
   }
-  
+
   Widget _buildSegmentItem(int segmentIdx) {
     final data = widget.segments[segmentIdx];
     final Person? person = data.personId != null ? _getPersonById(data.personId) : null;
-    
+
     return Padding(
-      padding: EdgeInsetsDirectional.fromSTEB(
-          widget.horizontalMargin ? 16 : 0, 0.0, widget.horizontalMargin ? 16 : 0, 0.0),
+      padding:
+          EdgeInsetsDirectional.fromSTEB(widget.horizontalMargin ? 16 : 0, 0.0, widget.horizontalMargin ? 16 : 0, 0.0),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -136,9 +134,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                       : data.personId != null
                           ? person?.name ?? 'Deleted Person'
                           : 'Speaker ${data.speakerId}',
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18),
+                  style: const TextStyle(color: Colors.white, fontSize: 18),
                 ),
                 if (widget.canDisplaySeconds) ...[
                   const SizedBox(width: 12),
@@ -183,7 +179,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       ),
     );
   }
-  
+
   Widget _buildTranslationNotice() {
     return GestureDetector(
       onTap: () {
@@ -243,10 +239,10 @@ class LiteTranscriptWidget extends StatelessWidget {
     super.key,
     required this.segments,
   }) : _cachedText = _processText(segments);
-  
+
   static String? _processText(List<TranscriptSegment> segments) {
     if (segments.isEmpty) return null;
-    
+
     var text = getLastTranscript(segments, maxCount: 70, includeTimestamps: false);
     return text.replaceAll(RegExp(r"\s+|\n+"), " ");
   }
@@ -267,25 +263,13 @@ class LiteTranscriptWidget extends StatelessWidget {
   }
 }
 
-// Cache for getLastTranscript results
-final Map<String, String> _transcriptCache = {};
-
 String getLastTranscript(List<TranscriptSegment> transcriptSegments,
     {int? maxCount, bool generate = false, bool includeTimestamps = true}) {
-  // Create a cache key based on the parameters
-  final cacheKey = '${transcriptSegments.length}_${maxCount ?? 0}_$includeTimestamps';
-  
-  if (!_transcriptCache.containsKey(cacheKey)) {
-    var transcript = TranscriptSegment.segmentsAsString(transcriptSegments, includeTimestamps: includeTimestamps);
-    if (maxCount != null) transcript = transcript.substring(max(transcript.length - maxCount, 0));
-    try {
-      _transcriptCache[cacheKey] = utf8.decode(transcript.codeUnits);
-    } catch (e) {
-      _transcriptCache[cacheKey] = transcript;
-    }
-  }
-  
-  return _transcriptCache[cacheKey]!;
+  var transcript = TranscriptSegment.segmentsAsString(
+      transcriptSegments.sublist(transcriptSegments.length >= 50 ? transcriptSegments.length - 50 : 0),
+      includeTimestamps: includeTimestamps);
+  if (maxCount != null) transcript = transcript.substring(max(transcript.length - maxCount, 0));
+  return tryDecodingText(transcript);
 }
 
 // Cache for decoded text

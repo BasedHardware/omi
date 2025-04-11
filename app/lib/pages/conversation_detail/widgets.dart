@@ -1,18 +1,17 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/webhooks.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
-import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
-import 'package:omi/pages/apps/page.dart';
 import 'package:omi/pages/chat/widgets/markdown_message_widget.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/test_prompts.dart';
@@ -20,13 +19,10 @@ import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
-import 'package:omi/widgets/expandable_text.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:tuple/tuple.dart';
@@ -333,7 +329,7 @@ class AppResultDetailWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String content = appResponse.content is String ? (appResponse.content as String).trim() : "";
+    final String content = appResponse.content.trim().decodeString;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -508,8 +504,7 @@ class GetAppsWidgets extends StatelessWidget {
                         IconButton(
                           icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
                           onPressed: () {
-                            final String content =
-                                summarizedApp.content is String ? (summarizedApp.content as String).trim() : "";
+                            final String content = summarizedApp.content.decodeString;
                             Clipboard.setData(ClipboardData(text: content));
                             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                               content: Text('Summary copied to clipboard'),
