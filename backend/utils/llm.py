@@ -1585,10 +1585,6 @@ def select_best_app_for_conversation(conversation: Conversation, apps: List[App]
     if not apps:
         return None
 
-    # If only one app is available, return it
-    if len(apps) == 1:
-        return apps[0]
-
     # Use LLM to select the best app
     conversation_summary = f"""
     Title: {conversation.structured.title}
@@ -1603,32 +1599,39 @@ def select_best_app_for_conversation(conversation: Conversation, apps: List[App]
     <id>{app.id}</id>
     <name>{app.name}</name>
     <description>{app.description}</description>
-    <conversation_prompt>{app.memory_prompt if app.memory_prompt else ''}</conversation_prompt>
   </app>\n"""
     apps_xml += "</apps>"
 
     prompt = f"""
-    You are assigned the task of identifying the most suitable app to analyze a given conversation on technological advancements.
-    
+    You are an expert app selector tasked with carefully analyzing a conversation and determining if any available app is truly suitable for processing it.
+
     <conversation>
     {conversation_summary}
     </conversation>
-    
+
     {apps_xml}
-    
+
     Task:
+    1. Carefully analyze the conversation's content, themes, and context
+    2. Thoroughly examine each app's purpose, functionality, and domain expertise
+    3. Determine if there is a strong, meaningful match between the conversation and any app
 
-    Evaluate the conversation's content and the described functionalities and purposes of each app. \
-    Determine the app ID that best aligns with processing this conversation, focusing on the conversation’s themes and the app's strengths.\
-    Provide only the app ID that represents the best match.
+    Important instructions:
+    - It is CRITICAL that you only select an app if there is a genuine, strong alignment between the conversation content and the app's purpose
+    - If the conversation topics don't meaningfully relate to any app's domain (e.g., a business conversation when all apps are for medical analysis), you MUST return an empty app_id
+    - Do not force a match when none exists - it's better to return empty than select an inappropriate app
+    - If you do find a suitable match, provide only the app_id of the best matching app
+
+    Provide only the app_id that represents the best match, or an empty string if no app is suitable.
     """
-
-    print(prompt)
 
     try:
         with_parser = llm_mini.with_structured_output(BestAppSelection)
         response: BestAppSelection = with_parser.invoke(prompt)
         selected_app_id = response.app_id
+
+        if not selected_app_id or selected_app_id.strip() == "":
+            return None
 
         # Find the app with the matching ID
         for app in apps:
@@ -1637,8 +1640,8 @@ def select_best_app_for_conversation(conversation: Conversation, apps: List[App]
     except Exception as e:
         print(f"Error selecting best app: {e}")
 
-    # Default to the first app if selection fails
-    return apps[0]
+    # Return None if no suitable app was found
+    return None
 
 def extract_question_from_conversation(messages: List[Message]) -> str:
     # user last messages
