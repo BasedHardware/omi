@@ -35,21 +35,26 @@ class STTService(str, Enum):
 soniox_supported_languages = ['multi','en', 'af', 'sq', 'ar', 'az', 'eu', 'be', 'bn', 'bs', 'bg', 'ca', 'zh', 'hr', 'cs', 'da', 'nl', 'et', 'fi', 'fr', 'gl', 'de', 'el', 'gu', 'he', 'hi', 'hu', 'id', 'it', 'ja', 'kn', 'kk', 'ko', 'lv', 'lt', 'mk', 'ms', 'ml', 'mr', 'no', 'fa', 'pl', 'pt', 'pa', 'ro', 'ru', 'sr', 'sk', 'sl', 'es', 'sw', 'sv', 'tl', 'ta', 'te', 'th', 'tr', 'uk', 'ur', 'vi', 'cy']
 soniox_multi_languages = soniox_supported_languages
 
-# Languages supported by Deepgram, nova-2-general model
+# Languages supported by Deepgram, nova-2/nova-3 model
 deepgram_supported_languages = {'multi','bg','ca', 'zh', 'zh-CN', 'zh-Hans', 'zh-TW', 'zh-Hant', 'zh-HK', 'cs', 'da', 'da-DK', 'nl', 'en', 'en-US', 'en-AU', 'en-GB', 'en-NZ', 'en-IN', 'et', 'fi', 'nl-BE', 'fr', 'fr-CA', 'de', 'de-CH', 'el' 'hi', 'hu', 'id', 'it', 'ja', 'ko', 'ko-KR', 'lv', 'lt', 'ms', 'no', 'pl', 'pt', 'pt-BR', 'pt-PT', 'ro', 'ru', 'sk', 'es', 'es-419', 'sv', 'sv-SE', 'th', 'th-TH', 'tr', 'uk', 'vi'}
-deepgram_multi_languages = ['en', 'es']
+deepgram_nova2_multi_languages = ['en', 'es']
+deepgram_multi_languages = ["multi", "en", "en-US", "en-AU", "en-GB", "en-NZ", "en-IN", "es", "es-419", "fr", "fr-CA", "de", "hi", "ru", "pt", "pt-BR", "pt-PT", "ja", "it", "nl", "nl-BE"]
 
 def get_stt_service_for_language(language: str):
-    # Deepgram's 'multi'
-    if language in deepgram_multi_languages:
-        return STTService.deepgram, 'multi'
+    # Soniox's 'multi'
+    if language in soniox_multi_languages:
+        return STTService.soniox, 'multi', 'stt-rt-preview'
+
+    ## Deepgram's 'multi'
+    #if language in deepgram_multi_languages:
+    #    return STTService.deepgram, 'multi', 'nova-3'
 
     # Deepgram
     if language in deepgram_supported_languages:
-        return STTService.deepgram, language
+        return STTService.deepgram, language, 'nova-2-general'
 
-    # Default to Soniox
-    return None, None
+    # Fallback to Deepgram en
+    return STTService.deepgram, 'en', 'nova-2-general'
 
 
 async def send_initial_file_path(file_path: str, transcript_socket_async_send):
@@ -86,19 +91,23 @@ async def send_initial_file(data: List[List[int]], transcript_socket):
 is_dg_self_hosted = os.getenv('DEEPGRAM_SELF_HOSTED_ENABLED', '').lower() == 'true'
 deepgram_options = DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"})
 
+deepgram_beta_options = DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"})
+deepgram_beta_options.url = "https://api.beta.deepgram.com"
+
 if is_dg_self_hosted:
     dg_self_hosted_url = os.getenv('DEEPGRAM_SELF_HOSTED_URL')
     if not dg_self_hosted_url:
         raise ValueError("DEEPGRAM_SELF_HOSTED_URL must be set when DEEPGRAM_SELF_HOSTED_ENABLED is true")
     # Override only the URL while keeping all other options
     deepgram_options.url = dg_self_hosted_url
+    deepgram_beta_options.url = dg_self_hosted_url
     print(f"Using Deepgram self-hosted at: {dg_self_hosted_url}")
 
 deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), deepgram_options)
-
+deepgram_beta = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), deepgram_beta_options)
 
 async def process_audio_dg(
-        stream_transcript, language: str, sample_rate: int, channels: int, preseconds: int = 0,
+    stream_transcript, language: str, sample_rate: int, channels: int, preseconds: int = 0, model: str = 'nova-2-general',
 ):
     print('process_audio_dg', language, sample_rate, channels, preseconds)
 
@@ -146,7 +155,7 @@ async def process_audio_dg(
         print(f"Error: {error}")
 
     print("Connecting to Deepgram")  # Log before connection attempt
-    return connect_to_deepgram_with_backoff(on_message, on_error, language, sample_rate, channels)
+    return connect_to_deepgram_with_backoff(on_message, on_error, language, sample_rate, channels, model)
 
 
 # Calculate backoff with jitter
@@ -156,11 +165,11 @@ def calculate_backoff_with_jitter(attempt, base_delay=1000, max_delay=32000):
     return backoff
 
 
-def connect_to_deepgram_with_backoff(on_message, on_error, language: str, sample_rate: int, channels: int, retries=3):
+def connect_to_deepgram_with_backoff(on_message, on_error, language: str, sample_rate: int, channels: int, model: str, retries=3):
     print("connect_to_deepgram_with_backoff")
     for attempt in range(retries):
         try:
-            return connect_to_deepgram(on_message, on_error, language, sample_rate, channels)
+            return connect_to_deepgram(on_message, on_error, language, sample_rate, channels, model)
         except Exception as error:
             print(f'An error occurred: {error}')
             if attempt == retries - 1:  # Last attempt
@@ -172,10 +181,14 @@ def connect_to_deepgram_with_backoff(on_message, on_error, language: str, sample
     raise Exception(f'Could not open socket: All retry attempts failed.')
 
 
-def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, channels: int):
-    # 'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=8000&language=$recordingsLanguage&model=nova-2-general&no_delay=true&endpointing=100&interim_results=false&smart_format=true&diarize=true'
+def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, channels: int, model: str):
     try:
-        dg_connection = deepgram.listen.websocket.v("1")
+        # get connection by model
+        if model == "nova-3":
+            dg_connection = deepgram_beta.listen.websocket.v("1")
+        else:
+            dg_connection = deepgram.listen.websocket.v("1")
+
         dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
         dg_connection.on(LiveTranscriptionEvents.Error, on_error)
 
@@ -215,7 +228,7 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
             filler_words=False,
             channels=channels,
             multichannel=channels > 1,
-            model='nova-2-general',
+            model=model,
             sample_rate=sample_rate,
             encoding='linear16'
         )

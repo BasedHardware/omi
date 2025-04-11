@@ -341,9 +341,10 @@ class SpeechProfileProvider extends ChangeNotifier
     }
     streamStartedAtSecond ??= newSegments[0].start;
 
+    var remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
     TranscriptSegment.combineSegments(
       segments,
-      newSegments,
+      remainSegments,
       toRemoveSeconds: streamStartedAtSecond ?? 0,
     );
     updateProgressMessage();

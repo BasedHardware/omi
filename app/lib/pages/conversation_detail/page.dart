@@ -13,6 +13,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/widgets/expandable_text.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/photos_grid.dart';
@@ -37,6 +38,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final focusTitleField = FocusNode();
   final focusOverviewField = FocusNode();
+  TabController? _controller;
+  ConversationTab selectedTab = ConversationTab.summary;
 
   // TODO: use later for onboarding transcript segment edits
   // late AnimationController _animationController;
@@ -44,6 +47,15 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
   @override
   void initState() {
+    super.initState();
+
+    _controller = TabController(length: 2, vsync: this, initialIndex: 1); // Start with summary tab
+    _controller!.addListener(() {
+      setState(() {
+        selectedTab = _controller!.index == 0 ? ConversationTab.transcript : ConversationTab.summary;
+      });
+    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
       await provider.initConversation();
@@ -65,6 +77,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
   @override
   void dispose() {
+    _controller?.dispose();
     focusTitleField.dispose();
     focusOverviewField.dispose();
     super.dispose();
@@ -74,265 +87,246 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   Widget build(BuildContext context) {
     return PopScope(
       canPop: true,
-      child: DefaultTabController(
-        length: 2,
-        initialIndex: 1,
-        child: MessageListener<ConversationDetailProvider>(
-          showError: (error) {
-            if (error == 'REPROCESS_FAILED') {
-              ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Error while processing conversation. Please try again later.')));
-            }
-          },
-          showInfo: (info) {
-            if (info == 'REPROCESS_SUCCESS') {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Conversation processed! 🚀', style: TextStyle(color: Colors.white))),
-              );
-            }
-          },
-          child: Scaffold(
-            key: scaffoldKey,
-            extendBody: true,
+      child: MessageListener<ConversationDetailProvider>(
+        showError: (error) {
+          if (error == 'REPROCESS_FAILED') {
+            ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Error while processing conversation. Please try again later.')));
+          }
+        },
+        showInfo: (info) {},
+        child: Scaffold(
+          key: scaffoldKey,
+          extendBody: true,
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          appBar: AppBar(
+            automaticallyImplyLeading: false,
             backgroundColor: Theme.of(context).colorScheme.primary,
-            appBar: AppBar(
-              automaticallyImplyLeading: false,
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              title: Consumer<ConversationDetailProvider>(builder: (context, provider, child) {
-                return Row(
-                  mainAxisSize: MainAxisSize.max,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    IconButton(
-                      onPressed: () {
-                        if (widget.isFromOnboarding) {
-                          SchedulerBinding.instance.addPostFrameCallback((_) {
-                            Navigator.pushAndRemoveUntil(context,
-                                MaterialPageRoute(builder: (context) => const HomePageWrapper()), (route) => false);
-                          });
-                        } else {
-                          Navigator.pop(context);
+            title: Consumer<ConversationDetailProvider>(builder: (context, provider, child) {
+              return Row(
+                mainAxisSize: MainAxisSize.max,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  IconButton(
+                    onPressed: () {
+                      if (widget.isFromOnboarding) {
+                        SchedulerBinding.instance.addPostFrameCallback((_) {
+                          Navigator.pushAndRemoveUntil(context,
+                              MaterialPageRoute(builder: (context) => const HomePageWrapper()), (route) => false);
+                        });
+                      } else {
+                        Navigator.pop(context);
+                      }
+                    },
+                    icon: const Icon(Icons.arrow_back_rounded, size: 24.0),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        if (provider.titleController != null && provider.titleFocusNode != null) {
+                          provider.titleFocusNode!.requestFocus();
+                          // Select all text in the title field
+                          provider.titleController!.selection = TextSelection(
+                            baseOffset: 0,
+                            extentOffset: provider.titleController!.text.length,
+                          );
                         }
                       },
-                      icon: const Icon(Icons.arrow_back_rounded, size: 24.0),
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(child: Text("${provider.structured.getEmoji()}")),
-                    IconButton(
-                      onPressed: () async {
-                        await showModalBottomSheet(
-                          context: context,
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.only(
-                              topLeft: Radius.circular(16),
-                              topRight: Radius.circular(16),
-                            ),
-                          ),
-                          builder: (context) {
-                            return const ShowOptionsBottomSheet();
-                          },
-                        ).whenComplete(() {
-                          provider.toggleShareOptionsInSheet(false);
-                          provider.toggleDevToolsInSheet(false);
-                        });
-                      },
-                      icon: const Icon(Icons.more_horiz),
-                    ),
-                  ],
-                );
-              }),
-            ),
-            // floatingActionButton: Selector<ConversationDetailProvider, int>(
-            //     selector: (context, provider) => provider.selectedTab,
-            //     builder: (context, selectedTab, child) {
-            //       return selectedTab == 0
-            //           ? FloatingActionButton(
-            //               backgroundColor: Colors.black,
-            //               elevation: 8,
-            //               shape: const RoundedRectangleBorder(
-            //                   borderRadius: BorderRadius.all(Radius.circular(32)),
-            //                   side: BorderSide(color: Colors.grey, width: 1)),
-            //               onPressed: () {
-            //                 var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
-            //                 Clipboard.setData(ClipboardData(text: provider.conversation.getTranscript(generate: true)));
-            //                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            //                   content: Text('Transcript copied to clipboard'),
-            //                   duration: Duration(seconds: 1),
-            //                 ));
-            //                 MixpanelManager().copiedConversationDetails(provider.conversation, source: 'Transcript');
-            //               },
-            //               child: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
-            //             )
-            //           : const SizedBox.shrink();
-            //     }),
-            body: Stack(
-              children: [
-                Column(
-                  children: [
-                    TabBar(
-                      indicatorSize: TabBarIndicatorSize.label,
-                      isScrollable: false,
-                      onTap: (value) {
-                        context.read<ConversationDetailProvider>().updateSelectedTab(value);
-                      },
-                      padding: EdgeInsets.zero,
-                      indicatorPadding: EdgeInsets.zero,
-                      labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
-                      tabs: [
-                        Selector<ConversationDetailProvider, ConversationSource?>(
-                            selector: (context, provider) => provider.conversation.source,
-                            builder: (context, conversationSource, child) {
-                              return Tab(
-                                text: conversationSource == ConversationSource.openglass
-                                    ? 'Photos'
-                                    : conversationSource == ConversationSource.screenpipe
-                                        ? 'Raw Data'
-                                        : 'Transcript',
-                              );
-                            }),
-                        const Tab(text: 'Summary')
-                      ],
-                      indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
-                    ),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Builder(builder: (context) {
-                          return TabBarView(
-                            physics: const NeverScrollableScrollPhysics(),
-                            children: [
-                              Selector<ConversationDetailProvider, ConversationSource?>(
-                                selector: (context, provider) => provider.conversation.source,
-                                builder: (context, source, child) {
-                                  return ListView(
-                                    shrinkWrap: true,
-                                    children: source == ConversationSource.openglass
-                                        ? [const PhotosGridComponent(), const SizedBox(height: 32)]
-                                        : [const TranscriptWidgets()],
-                                  );
-                                },
-                              ),
-                              const SummaryTab(),
-                            ],
-                          );
-                        }),
+                      child: Text(
+                        provider.structured.title,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 18),
                       ),
                     ),
-                  ],
-                ),
-              ],
-            ),
-
-            bottomNavigationBar: Container(
-              padding: const EdgeInsets.only(left: 30.0, right: 30, bottom: 50, top: 10),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12.0),
-                color: Colors.grey.shade900,
-                gradient: LinearGradient(
-                  colors: [Colors.black54, Colors.black.withOpacity(0)],
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                ),
-              ),
-              child:
-                  Selector<ConversationDetailProvider, ({bool shouldShow, int count})>(selector: (context, provider) {
-                return (
-                  count: provider.conversation.unassignedSegmentsLength(),
-                  shouldShow: provider.showUnassignedFloatingButton && (provider.selectedTab == 0),
-                );
-              }, builder: (context, value, child) {
-                if (value.count == 0 || !value.shouldShow) return const SizedBox.shrink();
-                return Material(
-                  elevation: 8,
-                  borderRadius: BorderRadius.circular(16),
-                  color: Colors.grey.shade900,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 4,
-                      horizontal: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      color: Colors.grey.shade900,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
-                          spreadRadius: 1,
-                          blurRadius: 2,
-                          offset: const Offset(0, 1),
+                  ),
+                  IconButton(
+                    onPressed: () async {
+                      await showModalBottomSheet(
+                        context: context,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(16),
+                            topRight: Radius.circular(16),
+                          ),
                         ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
+                        builder: (context) {
+                          return const ShowOptionsBottomSheet();
+                        },
+                      ).whenComplete(() {
+                        provider.toggleShareOptionsInSheet(false);
+                        provider.toggleDevToolsInSheet(false);
+                      });
+                    },
+                    icon: const Icon(Icons.more_horiz),
+                  ),
+                ],
+              );
+            }),
+          ),
+          // Removed floating action button as we now have the more button in the bottom bar
+          body: Stack(
+            children: [
+              Column(
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Builder(builder: (context) {
+                        return TabBarView(
+                          controller: _controller,
+                          physics: const NeverScrollableScrollPhysics(),
                           children: [
-                            InkWell(
-                              onTap: () {
-                                var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
-                                provider.setShowUnassignedFloatingButton(false);
-                              },
-                              child: const Icon(
-                                Icons.close,
-                                color: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              "${value.count} unassigned segment${value.count == 1 ? '' : 's'}",
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Row(
-                          children: [
-                            const SizedBox(width: 8),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.white24,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                              ),
-                              onPressed: () {
-                                var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
-                                var speakerId = provider.conversation.speakerWithMostUnassignedSegments();
-                                var segmentIdx = provider.conversation.firstSegmentIndexForSpeaker(speakerId);
-                                showModalBottomSheet(
-                                  context: context,
-                                  isScrollControlled: true,
-                                  backgroundColor: Colors.black,
-                                  shape: const RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                                  ),
-                                  builder: (context) {
-                                    return NameSpeakerBottomSheet(
-                                      segmentIdx: segmentIdx,
-                                      speakerId: speakerId,
-                                    );
-                                  },
+                            Selector<ConversationDetailProvider, ConversationSource?>(
+                              selector: (context, provider) => provider.conversation?.source,
+                              builder: (context, source, child) {
+                                return ListView(
+                                  shrinkWrap: true,
+                                  children: source == ConversationSource.openglass
+                                      ? [const PhotosGridComponent(), const SizedBox(height: 32)]
+                                      : [const TranscriptWidgets()],
                                 );
                               },
-                              child: const Text(
-                                "Tag",
-                                style: TextStyle(
-                                  color: Colors.white,
-                                ),
-                              ),
                             ),
+                            const SummaryTab(),
                           ],
-                        ),
-                      ],
+                        );
+                      }),
                     ),
                   ),
-                );
-              }),
-            ),
+                ],
+              ),
+
+              // Floating bottom bar
+              Positioned(
+                bottom: 16,
+                left: 0,
+                right: 0,
+                child: Consumer<ConversationDetailProvider>(
+                  builder: (context, provider, child) {
+                    final conversation = provider.conversation;
+                    return ConversationBottomBar(
+                      mode: ConversationBottomBarMode.detail,
+                      selectedTab: selectedTab,
+                      hasSegments: conversation != null && conversation.transcriptSegments.isNotEmpty,
+                      onTabSelected: (tab) {
+                        int index = tab == ConversationTab.transcript ? 0 : 1;
+                        _controller!.animateTo(index);
+                      },
+                      onStopPressed: () {
+                        // Empty since we don't show the stop button in detail mode
+                      },
+                    );
+                  },
+                ),
+              ),
+
+              // thinh's comment: temporary disabled
+              //// Unassigned segments notification - positioned above the bottom bar
+              //Positioned(
+              //  bottom: 88, // Position above the bottom bar
+              //  left: 16,
+              //  right: 16,
+              //  child: Selector<ConversationDetailProvider, ({bool shouldShow, int count})>(
+              //    selector: (context, provider) {
+              //      final conversation = provider.conversation;
+              //      if (conversation == null) {
+              //        return (
+              //          count: 0,
+              //          shouldShow: false,
+              //        );
+              //      }
+              //      return (
+              //        count: conversation.unassignedSegmentsLength(),
+              //        shouldShow: provider.showUnassignedFloatingButton && (selectedTab == ConversationTab.transcript),
+              //      );
+              //    },
+              //    builder: (context, value, child) {
+              //      if (value.count == 0 || !value.shouldShow) return const SizedBox.shrink();
+              //      return Container(
+              //        padding: const EdgeInsets.symmetric(
+              //          vertical: 8,
+              //          horizontal: 16,
+              //        ),
+              //        decoration: BoxDecoration(
+              //          borderRadius: BorderRadius.circular(16),
+              //          color: Colors.grey.shade900,
+              //          boxShadow: [
+              //            BoxShadow(
+              //              color: Colors.black.withOpacity(0.3),
+              //              spreadRadius: 1,
+              //              blurRadius: 2,
+              //              offset: const Offset(0, 1),
+              //            ),
+              //          ],
+              //        ),
+              //        child: Row(
+              //          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              //          children: [
+              //            Row(
+              //              children: [
+              //                InkWell(
+              //                  onTap: () {
+              //                    var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+              //                    provider.setShowUnassignedFloatingButton(false);
+              //                  },
+              //                  child: const Icon(
+              //                    Icons.close,
+              //                    color: Colors.white,
+              //                  ),
+              //                ),
+              //                const SizedBox(width: 8),
+              //                Text(
+              //                  "${value.count} unassigned segment${value.count == 1 ? '' : 's'}",
+              //                  style: const TextStyle(
+              //                    color: Colors.white,
+              //                    fontSize: 16,
+              //                  ),
+              //                ),
+              //              ],
+              //            ),
+              //            ElevatedButton(
+              //              style: ElevatedButton.styleFrom(
+              //                backgroundColor: Colors.deepPurple.withOpacity(0.5),
+              //                shape: RoundedRectangleBorder(
+              //                  borderRadius: BorderRadius.circular(16),
+              //                ),
+              //              ),
+              //              onPressed: () {
+              //                var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+              //                var speakerId = provider.conversation.speakerWithMostUnassignedSegments();
+              //                var segmentIdx = provider.conversation.firstSegmentIndexForSpeaker(speakerId);
+              //                showModalBottomSheet(
+              //                  context: context,
+              //                  isScrollControlled: true,
+              //                  backgroundColor: Colors.black,
+              //                  shape: const RoundedRectangleBorder(
+              //                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              //                  ),
+              //                  builder: (context) {
+              //                    return NameSpeakerBottomSheet(
+              //                      segmentIdx: segmentIdx,
+              //                      speakerId: speakerId,
+              //                    );
+              //                  },
+              //                );
+              //              },
+              //              child: const Text(
+              //                "Tag",
+              //                style: TextStyle(
+              //                  color: Colors.white,
+              //                  fontWeight: FontWeight.bold,
+              //                ),
+              //              ),
+              //            ),
+              //          ],
+              //        ),
+              //      );
+              //    },
+              //  ),
+              //),
+            ],
           ),
         ),
       ),
@@ -358,58 +352,10 @@ class SummaryTab extends StatelessWidget {
                 children: [
                   const GetSummaryWidgets(),
                   data.item1 ? const ReprocessDiscardedWidget() : const GetAppsWidgets(),
-                  const GetGeolocationWidgets(),
-                  const SizedBox(height: 120)
+                  //const GetGeolocationWidgets(),
+                  const SizedBox(height: 150)
                 ],
               ),
-              data.item2
-                  ? Align(
-                      alignment: Alignment.bottomLeft,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.black,
-                          shape: BoxShape.rectangle,
-                          border: Border.all(color: Colors.grey.shade500),
-                          borderRadius: BorderRadius.circular(32),
-                        ),
-                        padding: const EdgeInsets.all(16),
-                        margin: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-                        width: 260,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            const Text(
-                              'Was the summary good?',
-                              style: TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.w500),
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                IconButton(
-                                  onPressed: () {
-                                    data.item3(0);
-                                    AppSnackbar.showSnackbar('Thank you for your feedback!');
-                                  },
-                                  icon: const Icon(Icons.thumb_down_alt_outlined, size: 30, color: Colors.red),
-                                ),
-                                const SizedBox(width: 32),
-                                IconButton(
-                                  onPressed: () {
-                                    data.item3(1);
-                                    AppSnackbar.showSnackbar('Thank you for your feedback!');
-                                  },
-                                  icon: const Icon(Icons.thumb_up_alt_outlined, size: 30, color: Colors.green),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  : const SizedBox.shrink()
             ],
           );
         },
@@ -425,64 +371,56 @@ class TranscriptWidgets extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<ConversationDetailProvider>(
       builder: (context, provider, child) {
-        return ListView(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          children: [
-            SizedBox(height: provider.conversation.transcriptSegments.isEmpty ? 16 : 0),
-            // provider.memory.isPostprocessing()
-            //     ? Container(
-            //         padding: const EdgeInsets.all(16),
-            //         decoration: BoxDecoration(
-            //           color: Colors.grey.shade800,
-            //           borderRadius: BorderRadius.circular(8),
-            //         ),
-            //         child: Text('🚨 Memory still processing. Please wait before reassigning segments.',
-            //             style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3)),
-            //       )
-            //     : const SizedBox(height: 0),
-            SizedBox(height: provider.conversation.transcriptSegments.isEmpty ? 16 : 0),
-            provider.conversation.transcriptSegments.isEmpty
-                ? ExpandableTextWidget(
-                    text: (provider.conversation.externalIntegration?.text ?? '').decodeString,
-                    maxLines: 1000,
-                    linkColor: Colors.grey.shade300,
-                    style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-                    toggleExpand: () {
-                      provider.toggleIsTranscriptExpanded();
-                    },
-                    isExpanded: provider.isTranscriptExpanded,
-                  )
-                : TranscriptWidget(
-                    segments: provider.conversation.transcriptSegments,
-                    horizontalMargin: false,
-                    topMargin: false,
-                    canDisplaySeconds: provider.canDisplaySeconds,
-                    isConversationDetail: true,
-                    // editSegment: (_) {},
-                    editSegment: (i, j) {
-                      final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-                      if (!connectivityProvider.isConnected) {
-                        ConnectivityProvider.showNoInternetDialog(context);
-                        return;
-                      }
-                      showModalBottomSheet(
-                        context: context,
-                        isScrollControlled: true,
-                        backgroundColor: Colors.black,
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                        ),
-                        builder: (context) {
-                          return NameSpeakerBottomSheet(
-                            speakerId: j,
-                            segmentIdx: i,
-                          );
-                        },
-                      );
-                    }),
-            const SizedBox(height: 32)
-          ],
+        final segments = provider.conversation.transcriptSegments;
+
+        if (segments.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.only(top: 32),
+            child: ExpandableTextWidget(
+              text: (provider.conversation.externalIntegration?.text ?? '').decodeString,
+              maxLines: 1000,
+              linkColor: Colors.grey.shade300,
+              style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+              toggleExpand: () {
+                provider.toggleIsTranscriptExpanded();
+              },
+              isExpanded: provider.isTranscriptExpanded,
+            ),
+          );
+        }
+
+        // Use a Container with fixed height for large lists to enable proper scrolling
+        return Container(
+          height: segments.length > 100 ? MediaQuery.of(context).size.height - 64 : null,
+          child: TranscriptWidget(
+            segments: segments,
+            horizontalMargin: false,
+            topMargin: false,
+            canDisplaySeconds: provider.canDisplaySeconds,
+            isConversationDetail: true,
+            bottomMargin: 200,
+            editSegment: (i, j) {
+              final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+              if (!connectivityProvider.isConnected) {
+                ConnectivityProvider.showNoInternetDialog(context);
+                return;
+              }
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.black,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                builder: (context) {
+                  return NameSpeakerBottomSheet(
+                    speakerId: j,
+                    segmentIdx: i,
+                  );
+                },
+              );
+            },
+          ),
         );
       },
     );

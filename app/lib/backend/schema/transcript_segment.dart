@@ -1,7 +1,35 @@
 import 'package:omi/backend/preferences.dart';
 
+class Translation {
+  String lang;
+  String text;
+
+  Translation({
+    required this.lang,
+    required this.text,
+  });
+
+  factory Translation.fromJson(Map<String, dynamic> json) {
+    return Translation(
+      lang: json['lang'] as String,
+      text: json['text'] as String,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'lang': lang,
+      'text': text,
+    };
+  }
+
+  static List<Translation> fromJsonList(List<dynamic> jsonList) {
+    return jsonList.map((e) => Translation.fromJson(e)).toList();
+  }
+}
+
 class TranscriptSegment {
-  int id = 0;
+  String id;
 
   String text;
   String? speaker;
@@ -10,14 +38,17 @@ class TranscriptSegment {
   String? personId;
   double start;
   double end;
+  List<Translation> translations = [];
 
   TranscriptSegment({
+    required this.id,
     required this.text,
     required this.speaker,
     required this.isUser,
     required this.personId,
     required this.start,
     required this.end,
+    required this.translations,
   }) {
     speakerId = speaker != null ? int.parse(speaker!.split('_')[1]) : 0;
   }
@@ -36,12 +67,14 @@ class TranscriptSegment {
   // Factory constructor to create a new Message instance from a map
   factory TranscriptSegment.fromJson(Map<String, dynamic> json) {
     return TranscriptSegment(
+      id: json['id'] as String,
       text: json['text'] as String,
       speaker: (json['speaker'] ?? 'SPEAKER_00') as String,
       isUser: (json['is_user'] ?? false) as bool,
       personId: json['person_id'],
       start: double.tryParse(json['start'].toString()) ?? 0.0,
       end: double.tryParse(json['end'].toString()) ?? 0.0,
+      translations: json['translations'] != null ? Translation.fromJsonList(json['translations'] as List<dynamic>) : [],
     );
   }
 
@@ -54,11 +87,35 @@ class TranscriptSegment {
       'is_user': isUser,
       'start': start,
       'end': end,
+      'translations': translations?.map((t) => t.toJson()).toList(),
     };
   }
 
   static List<TranscriptSegment> fromJsonList(List<dynamic> jsonList) {
     return jsonList.map((e) => TranscriptSegment.fromJson(e)).toList();
+  }
+
+  static List<TranscriptSegment> updateSegments(
+      List<TranscriptSegment> segments, List<TranscriptSegment> updateSegments) {
+    if (updateSegments.isEmpty) return [];
+
+    if (segments.isEmpty) return updateSegments;
+
+    // Replace existing segments with the same ID
+    Map<String, TranscriptSegment> updateSegmentMap = {};
+    for (var segment in updateSegments) {
+      updateSegmentMap[segment.id] = segment;
+    }
+    for (int i = 0; i < segments.length; i++) {
+      String segmentId = segments[i].id;
+      if (updateSegmentMap.containsKey(segmentId)) {
+        segments[i] = updateSegmentMap[segmentId]!;
+        updateSegmentMap.remove(segmentId);
+      }
+    }
+
+    // remaining
+    return updateSegments.where((segment) => updateSegmentMap.containsKey(segment.id)).toList();
   }
 
   static combineSegments(
