@@ -33,8 +33,8 @@ class AuthStep(BaseModel):
 
 
 class ActionType(str, Enum):
-    CREATE_MEMORY = "create_conversation"
-    CREATE_FACTS = "create_facts"
+    CREATE_CONVERSATION = "create_conversation"
+    CREATE_MEMORIES = "create_facts"
     READ_MEMORIES = "read_memories"
     READ_CONVERSATIONS = "read_conversations"
 
