@@ -133,7 +133,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       }, onDone: () async {
         // Display percentage of completion
         debugPrint('downloadPercentage: ${downloaded / r.contentLength! * 100}');
-
+        // Need Help: 
         // Save the file
         File file = File('$dir/firmware.zip');
         final Uint8List bytes = Uint8List(r.contentLength!);

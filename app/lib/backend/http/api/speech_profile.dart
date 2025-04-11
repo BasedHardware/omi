@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
 import 'package:http/http.dart' as http;
@@ -35,7 +35,7 @@ Future<String?> getUserSpeechProfile() async {
   return null;
 }
 
-Future<bool> uploadProfile(File file) async {
+Future<bool> uploadProfile(XFile file) async {
   var request = http.MultipartRequest(
     'POST',
     Uri.parse('${Env.apiBaseUrl}v3/upload-audio'),

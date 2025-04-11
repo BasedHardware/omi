@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -197,9 +199,21 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                         child: ClipRRect(
                                           borderRadius: BorderRadius.circular(50),
                                           child: provider.selectedImage != null
-                                              ? Image.file(
-                                                  provider.selectedImage!,
-                                                  fit: BoxFit.cover,
+                                              ? FutureBuilder<Uint8List>(
+                                                  future: provider.selectedImage!.readAsBytes(),
+                                                  builder: (context, snapshot) {
+                                                    if (snapshot.hasData) {
+                                                      return Image.memory(
+                                                        snapshot.data!,
+                                                        fit: BoxFit.cover,
+                                                      );
+                                                    }
+                                                    return const Center(
+                                                      child: CircularProgressIndicator(
+                                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                                      ),
+                                                    );
+                                                  },
                                                 )
                                               : persona.image.isEmpty
                                                   ? Image.asset(Assets.images.logoTransparentV2.path)

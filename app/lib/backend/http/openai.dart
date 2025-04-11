@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -60,7 +61,7 @@ Future<dynamic> gptApiCall({
   String contentToEmbed = '',
   bool jsonResponseFormat = false,
   List tools = const [],
-  File? audioFile,
+  XFile? audioFile,
   double temperature = 0.3,
   int? maxTokens,
 }) async {

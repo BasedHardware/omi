@@ -1,9 +1,9 @@
-import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/svg.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
@@ -11,7 +11,7 @@ import 'package:provider/provider.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 
 class AppMetadataWidget extends StatelessWidget {
-  final File? imageFile;
+  final XFile? imageFile;
   final String? imageUrl;
   final VoidCallback pickImage;
   final TextEditingController appNameController;
@@ -64,9 +64,20 @@ class AppMetadataWidget extends StatelessWidget {
                     ),
                     child: imageFile != null || imageUrl != null
                         ? (imageUrl == null
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(30.0),
-                                child: Image.file(imageFile!, fit: BoxFit.cover))
+                            ? FutureBuilder<Uint8List>(
+                                future: imageFile!.readAsBytes(),
+                                builder: (context, snapshot) {
+                                  if (snapshot.hasData) {
+                                    return ClipRRect(
+                                      borderRadius: BorderRadius.circular(30.0),
+                                      child: Image.memory(snapshot.data!, fit: BoxFit.cover),
+                                    );
+                                  }
+                                  return const Center(
+                                    child: CircularProgressIndicator(),
+                                  );
+                                },
+                              )
                             : ClipRRect(
                                 borderRadius: BorderRadius.circular(30.0),
                                 child: CachedNetworkImage(imageUrl: imageUrl!),

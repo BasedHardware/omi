@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:developer';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -75,7 +75,7 @@ Future<bool> reviewApp(String appId, AppReview review) async {
   }
 }
 
-Future<Map<String, String>> uploadAppThumbnail(File file) async {
+Future<Map<String, String>> uploadAppThumbnail(XFile file) async {
   var request = http.MultipartRequest(
     'POST',
     Uri.parse('${Env.apiBaseUrl}v1/app/thumbnails'),
@@ -185,7 +185,7 @@ Future<bool> isAppSetupCompleted(String? url) async {
   }
 }
 
-Future<(bool, String, String?)> submitAppServer(File file, Map<String, dynamic> appData) async {
+Future<(bool, String, String?)> submitAppServer(XFile file, Map<String, dynamic> appData) async {
   var request = http.MultipartRequest(
     'POST',
     Uri.parse('${Env.apiBaseUrl}v1/apps'),
@@ -221,7 +221,7 @@ Future<(bool, String, String?)> submitAppServer(File file, Map<String, dynamic> 
   }
 }
 
-Future<bool> updateAppServer(File? file, Map<String, dynamic> appData) async {
+Future<bool> updateAppServer(XFile? file, Map<String, dynamic> appData) async {
   var request = http.MultipartRequest(
     'PATCH',
     Uri.parse('${Env.apiBaseUrl}v1/apps/${appData['id']}'),
@@ -474,7 +474,7 @@ Future<bool> deleteApiKeyServer(String appId, String keyId) async {
   }
 }
 
-Future<Map> createPersonaApp(File file, Map<String, dynamic> personaData) async {
+Future<Map> createPersonaApp(XFile file, Map<String, dynamic> personaData) async {
   var request = http.MultipartRequest(
     'POST',
     Uri.parse('${Env.apiBaseUrl}v1/personas'),
@@ -500,7 +500,7 @@ Future<Map> createPersonaApp(File file, Map<String, dynamic> personaData) async 
   }
 }
 
-Future<bool> updatePersonaApp(File? file, Map<String, dynamic> personaData) async {
+Future<bool> updatePersonaApp(XFile? file, Map<String, dynamic> personaData) async {
   var request = http.MultipartRequest(
     'PATCH',
     Uri.parse('${Env.apiBaseUrl}v1/personas/${personaData['id']}'),

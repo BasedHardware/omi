@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -50,7 +49,7 @@ class AddAppProvider extends ChangeNotifier {
 
   List<Category> categories = [];
 
-  File? imageFile;
+  XFile? imageFile;
   String? imageUrl;
   String? updateAppId;
 
@@ -608,10 +607,9 @@ class AddAppProvider extends ChangeNotifier {
       );
       if (file != null) {
         setIsUploadingThumbnail(true);
-        var thumbnailFile = File(file.path);
 
         // Upload thumbnail
-        var result = await uploadAppThumbnail(thumbnailFile);
+        var result = await uploadAppThumbnail(file);
         if (result.isNotEmpty) {
           thumbnailUrls.add(result['thumbnail_url']!);
           thumbnailIds.add(result['thumbnail_id']!);
@@ -645,7 +643,7 @@ class AddAppProvider extends ChangeNotifier {
     try {
       var file = await imagePicker.pickImage(source: ImageSource.gallery);
       if (file != null) {
-        imageFile = File(file.path);
+        imageFile = file;
       }
       notifyListeners();
     } on PlatformException catch (e) {
@@ -662,7 +660,7 @@ class AddAppProvider extends ChangeNotifier {
     try {
       var file = await imagePicker.pickImage(source: ImageSource.gallery);
       if (file != null) {
-        imageFile = File(file.path);
+        imageFile = file;
         imageUrl = null;
       }
       notifyListeners();

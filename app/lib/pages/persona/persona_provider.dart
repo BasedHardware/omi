@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/apps.dart';
@@ -41,7 +40,7 @@ class PersonaProvider extends ChangeNotifier {
   bool hasTwitterConnection = false;
   ShowSuccessDialogCallback? onShowSuccessDialog;
 
-  File? selectedImage;
+  XFile? selectedImage;
   String? selectedImageUrl;
 
   Future updatePersonaName() async {
@@ -176,7 +175,7 @@ class PersonaProvider extends ChangeNotifier {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
-      selectedImage = File(image.path);
+      selectedImage = image;
       validateForm();
     }
     notifyListeners();
@@ -186,7 +185,7 @@ class PersonaProvider extends ChangeNotifier {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
-      selectedImage = File(image.path);
+      selectedImage = image;
       validateForm();
 
       // Update
