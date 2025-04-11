@@ -137,11 +137,11 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
     if app_id:
         filtered_apps = [app for app in conversation_apps if app.id == app_id]
     else:
-        # If user has no enabled conversation apps, use default apps
-        if not conversation_apps:
-            filtered_apps = get_default_conversation_summarized_apps()
-        else:
-            filtered_apps = conversation_apps
+        filtered_apps = conversation_apps
+
+        # Extend with default apps
+        default_apps = get_default_conversation_summarized_apps()
+        filtered_apps.extend(default_apps)
 
         # Select the best app for this conversation
         if filtered_apps and len(filtered_apps) > 0:

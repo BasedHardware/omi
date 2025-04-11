@@ -38,7 +38,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   ServerConversation? _cachedConversation;
   ServerConversation get conversation {
-    if (conversationProvider == null || 
+    if (conversationProvider == null ||
         !conversationProvider!.groupedConversations.containsKey(selectedDate) ||
         conversationProvider!.groupedConversations[selectedDate] == null ||
         conversationProvider!.groupedConversations[selectedDate]!.length <= conversationIdx) {
@@ -51,6 +51,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     _cachedConversation = conversationProvider!.groupedConversations[selectedDate]![conversationIdx];
     return _cachedConversation!;
   }
+
   List<bool> appResponseExpanded = [];
 
   TextEditingController? titleController;
@@ -258,13 +259,24 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         notifyError('REPROCESS_FAILED');
         notifyListeners();
         return false;
-      } else {
-        conversationProvider!.updateConversation(updatedConversation);
-        SharedPreferencesUtil().modifiedConversationDetails = updatedConversation;
-        notifyInfo('REPROCESS_SUCCESS');
-        notifyListeners();
-        return true;
       }
+
+      // else
+      conversationProvider!.updateConversation(updatedConversation);
+      SharedPreferencesUtil().modifiedConversationDetails = updatedConversation;
+
+      // Check if the summarized app is in the apps list
+      AppResponse? summaryApp = getSummarizedApp();
+      if (summaryApp != null && summaryApp.appId != null && appProvider != null) {
+        String appId = summaryApp.appId!;
+        bool appExists = appProvider!.apps.any((app) => app.id == appId);
+        if (!appExists) {
+          await appProvider!.getApps();
+        }
+      }
+      notifyInfo('REPROCESS_SUCCESS');
+      notifyListeners();
+      return true;
     } catch (err, stacktrace) {
       print(err);
       var conversationReporting = MixpanelManager().getConversationEventProperties(conversation);
