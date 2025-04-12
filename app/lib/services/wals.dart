@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:collection';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
@@ -9,6 +8,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/utils/omi_file/omi_file.dart';
 import 'package:path_provider/path_provider.dart';
 
 const chunkSizeInSeconds = 60;
@@ -248,7 +248,7 @@ class SDCardWalSync implements IWalSync {
     return connection.getBleStorageBytesListener(onStorageBytesReceived: onStorageBytesReceived);
   }
 
-  Future<File> _flushToDisk(List<List<int>> chunk, int timerStart) async {
+  Future<OmiFile> _flushToDisk(List<List<int>> chunk, int timerStart) async {
     final directory = await getApplicationDocumentsDirectory();
     String filePath = '${directory.path}/audio_${timerStart}.bin';
     List<int> data = [];
@@ -263,13 +263,13 @@ class SDCardWalSync implements IWalSync {
       data.addAll(Uint32List.fromList([frame.length]).buffer.asUint8List());
       data.addAll(byteFrame.buffer.asUint8List());
     }
-    final file = File(filePath);
+    final file = OmiFile(filePath);
     await file.writeAsBytes(data);
 
     return file;
   }
 
-  Future _readStorageBytesToFile(Wal wal, Function(File f, int offset) callback) async {
+  Future _readStorageBytesToFile(Wal wal, Function(OmiFile f, int offset) callback) async {
     var deviceId = wal.device;
 
     // Move the offset
@@ -370,13 +370,13 @@ class SDCardWalSync implements IWalSync {
     debugPrint("sync wal: ${wal.id} byte offset: ${wal.storageOffset} ts ${wal.timerStart}");
 
     var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
-    List<File> files = [];
+    List<OmiFile> files = [];
 
     var limit = 2;
 
     // Read with file chunking
     int lastOffset = 0;
-    await _readStorageBytesToFile(wal, (File file, int offset) async {
+    await _readStorageBytesToFile(wal, (OmiFile file, int offset) async {
       files.add(file);
       lastOffset = offset;
 
@@ -633,7 +633,7 @@ class LocalWalSync implements IWalSync {
           data.addAll(Uint32List.fromList([frame.length]).buffer.asUint8List());
           data.addAll(byteFrame.buffer.asUint8List());
         }
-        final file = File(filePath);
+        final file = OmiFile(filePath);
         await file.writeAsBytes(data);
         wal.filePath = filePath;
         wal.storage = WalStorage.disk;
@@ -657,8 +657,9 @@ class LocalWalSync implements IWalSync {
   Future<bool> _deleteWal(Wal wal) async {
     if (wal.filePath != null && wal.filePath!.isNotEmpty) {
       try {
-        final file = File(wal.filePath!);
-        if (file.existsSync()) {
+        final file = OmiFile(wal.filePath!);
+          bool exists =await file.exists();
+        if (exists) {
           await file.delete();
         }
       } catch (e) {
@@ -713,7 +714,7 @@ class LocalWalSync implements IWalSync {
         left = 0;
       }
 
-      List<File> files = [];
+      List<OmiFile> files = [];
       for (var j = left; j <= right; j++) {
         var wal = wals[j];
         debugPrint("sync id ${wal.id} ${wal.timerStart}");
@@ -726,8 +727,9 @@ class LocalWalSync implements IWalSync {
         debugPrint("sync wal: ${wal.id} file: ${wal.filePath}");
 
         try {
-          File file = File(wal.filePath!);
-          if (!file.existsSync()) {
+          OmiFile file = OmiFile(wal.filePath!);
+          bool exists = await file.exists();
+          if (!exists) {
             debugPrint("file ${wal.filePath} is not exists");
             wal.status = WalStatus.corrupted;
             continue;
@@ -790,14 +792,15 @@ class LocalWalSync implements IWalSync {
     // Empty resp
     var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
 
-    late File walFile;
+    late OmiFile walFile;
     if (wal.filePath == null) {
       debugPrint("file path is not found. wal id ${wal.id}");
       wal.status = WalStatus.corrupted;
     }
     try {
-      File file = File(wal.filePath!);
-      if (!file.existsSync()) {
+      OmiFile file = OmiFile(wal.filePath!);
+      bool exists = await file.exists(); 
+      if (!exists) {
         debugPrint("file ${wal.filePath} is not exists");
         wal.status = WalStatus.corrupted;
       } else {

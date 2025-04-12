@@ -9,6 +9,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/env/env.dart';
 import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:omi/utils/omi_file/omi_file.dart';
 import 'package:path/path.dart';
 
 Future<CreateConversationResponse?> processInProgressConversation() async {
@@ -330,7 +331,7 @@ Future<List<ServerConversation>> sendStorageToBackend(XFile file, String sdCardD
   }
 }
 
-Future<SyncLocalFilesResponse> syncLocalFiles(List<XFile> files) async {
+Future<SyncLocalFilesResponse> syncLocalFiles(List<OmiFile> files) async {
   var request = http.MultipartRequest(
     'POST',
     Uri.parse('${Env.apiBaseUrl}v1/sync-local-files'),

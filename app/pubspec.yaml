@@ -101,6 +101,7 @@ dependencies:
   file_picker: ^10.0.0
   photo_view: ^0.15.0
   web: ^1.1.1
+  idb_shim: ^2.6.5+1
 
 
 dependency_overrides:

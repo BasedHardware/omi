@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:omi/backend/http/api/speech_profile.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
@@ -166,7 +168,10 @@ class SpeechProfileProvider extends ChangeNotifier
       updateLoadingText('Memorizing your voice...');
       var data = await audioStorage.createWavFile(filename: 'speaker_profile.wav');
       try {
-        await uploadProfile(data.item1);
+        var bytes = await data.item1.readAsBytes();
+        XFile uploadFile = XFile.fromData(Uint8List.fromList(bytes));
+
+        await uploadProfile(uploadFile);
       } catch (e) {}
 
       updateLoadingText('Personalizing your experience...');

@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -8,6 +8,8 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:omi/utils/omi_file/omi_file.dart';
+import 'package:omi/utils/platform.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:tuple/tuple.dart';
@@ -168,36 +170,36 @@ class WavBytesUtil {
   //   }
   // }
 
-  static Future<void> listFiles(Directory? directory) async {
-    if (directory == null) return;
-    final totalBytes = await _getDirectorySize(directory);
+  // static Future<void> listFiles(Directory? directory) async {
+  //   if (directory == null) return;
+  //   final totalBytes = await _getDirectorySize(directory);
 
-    final totalSize = formatBytes(totalBytes);
-    debugPrint('Total size of $directory: $totalSize');
-  }
+  //   final totalSize = formatBytes(totalBytes);
+  //   debugPrint('Total size of $directory: $totalSize');
+  // }
 
-  static Future<int> _getDirectorySize(Directory dir) async {
-    int totalBytes = 0;
+  // static Future<int> _getDirectorySize(Directory dir) async {
+  //   int totalBytes = 0;
 
-    try {
-      if (dir.existsSync()) {
-        final List<FileSystemEntity> entities = dir.listSync(recursive: true, followLinks: false);
-        for (var entity in entities) {
-          if (entity is File) {
-            // debugPrint('File: ${entity.path}');
-            totalBytes += await entity.length();
-          } else if (entity is Directory) {
-            // debugPrint('Directory: ${entity.path}');
-            totalBytes += await _getDirectorySize(entity);
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint("Error calculating directory size: $e");
-    }
+  //   try {
+  //     if (dir.existsSync()) {
+  //       final List<FileSystemEntity> entities = dir.listSync(recursive: true, followLinks: false);
+  //       for (var entity in entities) {
+  //         if (entity is File) {
+  //           // debugPrint('File: ${entity.path}');
+  //           totalBytes += await entity.length();
+  //         } else if (entity is Directory) {
+  //           // debugPrint('Directory: ${entity.path}');
+  //           totalBytes += await _getDirectorySize(entity);
+  //         }
+  //       }
+  //     }
+  //   } catch (e) {
+  //     debugPrint("Error calculating directory size: $e");
+  //   }
 
-    return totalBytes;
-  }
+  //   return totalBytes;
+  // }
 
   static String formatBytes(int bytes, {int decimals = 2}) {
     if (bytes <= 0) return "0 B";
@@ -207,25 +209,31 @@ class WavBytesUtil {
     return "$size ${suffixes[i]}";
   }
 
-  static Future<Directory> getDir() => getTemporaryDirectory();
+  static Future<String> getDir() async =>
+      PlatformUtil.isWeb ? "/virtual/web/temp" : (await getTemporaryDirectory()).path;
 
   /*
   * FINISHED TESTING LOGIC
   * */
 
   static clearTempWavFiles() async {
-    var dirs = [await getTemporaryDirectory(), await getApplicationDocumentsDirectory()];
-    for (var directory in dirs) {
-      var file0 = File('${(await getDir()).path}/temp.wav');
-      if (file0.existsSync()) file0.deleteSync();
+    if (PlatformUtil.isWeb) {
+      var file0 = OmiFile('${await getDir()}/temp.wav');
+      if (await file0.exists()) file0.deleteSync();
+    } else {
+      var dirs = [await getTemporaryDirectory(), await getApplicationDocumentsDirectory()];
+      for (var directory in dirs) {
+        var file0 = OmiFile('${await getDir()}/temp.wav');
+        if (await file0.exists()) file0.deleteSync();
 
-      if (directory.existsSync()) {
-        final List<FileSystemEntity> entities = directory.listSync(recursive: false, followLinks: false);
-        for (var entity in entities) {
-          if (entity is File && entity.path.endsWith('.wav')) {
-            debugPrint('Removing file: ${entity.path}');
-            if (entity.existsSync()) {
-              await entity.delete();
+        if (directory.existsSync()) {
+          final List<FileSystemEntity> entities = directory.listSync(recursive: false, followLinks: false);
+          for (var entity in entities) {
+            if (entity is File && entity.path.endsWith('.wav')) {
+              debugPrint('Removing file: ${entity.path}');
+              if (entity.existsSync()) {
+                await entity.delete();
+              }
             }
           }
         }
@@ -240,17 +248,17 @@ class WavBytesUtil {
 
   static tempWavExists() async {
     final directory = await getDir();
-    var file0 = File('${directory.path}/temp.wav');
-    return file0.existsSync();
+    var file0 = OmiFile('$directory/temp.wav');
+    return file0.exists();
   }
 
   static deleteTempWav() async {
     final directory = await getDir();
-    var file0 = File('${directory.path}/temp.wav');
-    if (file0.existsSync()) file0.deleteSync();
+    var file0 = OmiFile('$directory/temp.wav');
+    if (await file0.exists()) file0.deleteSync();
   }
 
-  Future<Tuple2<File, List<List<int>>>> createWavFile({String? filename, int removeLastNSeconds = 0}) async {
+  Future<Tuple2<OmiFile, List<List<int>>>> createWavFile({String? filename, int removeLastNSeconds = 0}) async {
     debugPrint('createWavFile $filename');
     List<List<int>> framesCopy;
     if (removeLastNSeconds > 0) {
@@ -263,13 +271,13 @@ class WavBytesUtil {
       clearAudioBytes();
     }
     debugPrint('about to write to other codec');
-    File file = await createWavByCodec(framesCopy, filename: filename);
+    OmiFile file = await createWavByCodec(framesCopy, filename: filename);
     return Tuple2(file, framesCopy);
   }
 
   /// OPUS
 
-  Future<File> createWavByCodec(List<List<int>> frames, {String? filename}) async {
+  Future<OmiFile> createWavByCodec(List<List<int>> frames, {String? filename}) async {
     Uint8List wavBytes;
     if (codec == BleAudioCodec.pcm8 || codec == BleAudioCodec.pcm16) {
       Int16List samples = getPcmSamples(frames);
@@ -298,13 +306,13 @@ class WavBytesUtil {
     return createWav(wavBytes, filename: filename);
   }
 
-  Future<File> createWav(Uint8List wavBytes, {String? filename}) async {
+  Future<OmiFile> createWav(Uint8List wavBytes, {String? filename}) async {
     final directory = await getDir();
     if (filename == null) {
       final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
       filename = 'recording-$timestamp.wav';
     }
-    final file = File('${directory.path}/$filename');
+    final file = OmiFile('$directory/$filename');
     await file.writeAsBytes(wavBytes);
     debugPrint('WAV file created: ${file.path}');
     return file;
@@ -526,17 +534,17 @@ class StorageBytesUtil extends WavBytesUtil {
   }
 
   @override
-  Future<File> createWav(Uint8List wavBytes, {String? filename}) async {
+  Future<OmiFile> createWav(Uint8List wavBytes, {String? filename}) async {
     final directory = await getDir();
     String filename2 = 'recording-$fileNum.wav';
-    final file = File('${directory.path}/$filename2');
+    final file = OmiFile('$directory/$filename2');
     await file.writeAsBytes(wavBytes);
     debugPrint('WAV file created: ${file.path}');
     return file;
   }
 
   @override
-  Future<File> createWavByCodec(List<List<int>> frames, {String? filename}) async {
+  Future<OmiFile> createWavByCodec(List<List<int>> frames, {String? filename}) async {
     Uint8List wavBytes;
 
     List<int> decodedSamples = [];
@@ -547,5 +555,6 @@ class StorageBytesUtil extends WavBytesUtil {
     return createWav(wavBytes);
   }
 
-  static Future<Directory> getDir() => getTemporaryDirectory();
+  static Future<String> getDir() async =>
+      PlatformUtil.isWeb ? "/virtual/web/temp" : (await getTemporaryDirectory()).path;
 }
