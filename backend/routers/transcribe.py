@@ -29,6 +29,7 @@ from utils.stt.streaming import process_audio_soniox, process_audio_dg, process_
 from utils.webhooks import get_audio_bytes_webhook_seconds
 from utils.pusher import connect_to_trigger_pusher
 from utils.translation import translate_text, detect_language
+from utils.translation_cache import get_cached_language_result, update_cache
 
 
 from utils.other import endpoints as auth
@@ -492,17 +493,24 @@ async def _listen(
         try:
             translated_segments = []
             for segment in segments:
-                language = 'en'  # TODO: REMOVE
+                # Check cache for language detection result
+                is_previously_target_language, diff_text = get_cached_language_result(segment.id, segment.text, language)
+                if is_previously_target_language is None or is_previously_target_language is True \
+                        and diff_text:
+                    try:
+                        detected_lang = detect_language(diff_text)
+                        is_target_language = detected_lang is not None and detected_lang == language
 
-                # Check if the text is already in the target language
-                # Skip translation if the text language matches the target language
-                try:
-                    detected_lang = detect_language(segment.text)
-                    if detected_lang is not None and detected_lang == language:
+                        # Update cache with the detection result
+                        update_cache(segment.id, segment.text, is_target_language)
+
+                        # Skip translation if it's the target language
+                        if is_target_language:
+                            continue
+                    except Exception as e:
+                        print(f"Language detection error: {e}")
+                        # Skip transaltion if couldn't detect the language
                         continue
-                except Exception as e:
-                    print(f"Language detection error: {e}")
-                    pass
 
                 # Translate the text to the target language
                 translated_text = translate_text(language, segment.text)
