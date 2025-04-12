@@ -65,7 +65,7 @@ def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
     return True, remaining, reset_time, 0
 
 
-@router.post('/v2/integrations/{app_id}/user/conversations', response_model=integration_models.ConversationCreateResponse,
+@router.post('/v2/integrations/{app_id}/user/conversations', response_model=integration_models.EmptyResponse,
              tags=['integration', 'conversations'])
 async def create_conversation_via_integration(
     request: Request,
@@ -127,10 +127,9 @@ async def create_conversation_via_integration(
     # Always trigger integration
     trigger_external_integrations(uid, conversation)
 
-    return integration_models.ConversationCreateResponse(
-        status='Ok',
-        conversation_id=conversation.id
-    )
+    # TODO: Empty for now, replace with ConversationCreateResponse once we don't have to wait for process_conversation
+    # to finish for the conversation id
+    return {}
 
 
 @router.post('/v2/integrations/{app_id}/user/memories', response_model=integration_models.EmptyResponse,
