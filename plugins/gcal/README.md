@@ -8,6 +8,20 @@ This plugin allows you to import your Google Calendar events into OMI as facts, 
 - Select which calendar to import from
 - Choose how far back to import events
 - Import events as facts into OMI
+- **NEW:** Continuous synchronization using Composio (events are automatically imported as they are created or updated)
+
+## Continuous Synchronization
+
+The plugin now supports continuous synchronization of calendar events using Composio. This means:
+
+- New events are automatically imported to OMI as they are created
+- Updated events are automatically updated in OMI
+- No need for manual imports
+
+To enable continuous synchronization:
+
+1. Check the "Enable continuous synchronization" option when selecting your calendar
+2. Your calendar events will be automatically synchronized with OMI
 
 ## Setup
 
@@ -28,11 +42,21 @@ pip install -r requirements.txt
 2. Configure your environment variables in the `.env` file:
 
 ```
+# Google OAuth Configuration
 GOOGLE_CALENDAR_CLIENT_ID=your_client_id
 GOOGLE_CALENDAR_CLIENT_SECRET=your_client_secret
-GOOGLE_CALENDAR_REDIRECT_URI=your_redirect_uri
-GOOGLE_CALENDAR_AUTH_URL=https://accounts.google.com/o/oauth2/auth
+FLASK_SECRET_KEY=your_secret_key
+
+# Composio Configuration (required for continuous synchronization)
+COMPOSIO_API_KEY=your_composio_api_key
+COMPOSIO_INTEGRATION_ID=your_composio_integration_id
+WEBHOOK_BASE_URL=https://your-webhook-url.com
 ```
+
+To get your Composio API key and integration ID:
+1. Sign up at [Composio.dev](https://composio.dev)
+2. Create a Google Calendar integration
+3. Copy the API key and integration ID to your `.env` file
 
 3. Update the `app.py` file with your OMI App ID and API Key:
 

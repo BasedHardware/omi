@@ -101,6 +101,24 @@
             border-radius: 8px;
             font-size: 16px;
         }
+        .sync-option {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+        }
+        .sync-option label {
+            font-weight: bold;
+            margin-left: 8px;
+        }
+        .sync-description {
+            margin-top: 8px;
+            margin-bottom: 0;
+            margin-left: 24px;
+            font-size: 14px;
+            color: #6c757d;
+        }
         .loading-spinner {
             display: inline-block;
             width: 20px;
@@ -135,6 +153,12 @@
             <div class="days-back">
                 <label for="days-back">Import events from how many days back?</label>
                 <input type="number" id="days-back" name="days-back" value="30" min="1" max="365">
+            </div>
+            
+            <div class="sync-option">
+                <input type="checkbox" id="sync-mode" name="sync-mode" checked>
+                <label for="sync-mode">Enable continuous synchronization (recommended)</label>
+                <p class="sync-description">When enabled, your calendar events will be automatically imported to OMI as they are created or updated.</p>
             </div>
             
             <button type="submit" id="import-btn" disabled>Import Events</button>

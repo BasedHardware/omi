@@ -1,6 +1,7 @@
-Flask==3.0.2
-python-dotenv==1.0.0
-google-auth==2.29.0
-google-auth-oauthlib==1.2.0
-google-api-python-client==2.120.0
+composio-google==0.7.15
+flask==3.0.2
+python-dotenv==1.0.1
 requests==2.31.0
+google-api-python-client==2.115.0
+google-auth-oauthlib==1.2.0
+google-auth==2.25.2

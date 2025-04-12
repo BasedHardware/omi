@@ -58,8 +58,23 @@ function getUserId() {
     return urlParams.get('uid');
 }
 
-// Make loadCalendars available globally
-window.loadCalendars = function() {
+// Check authentication status
+async function checkAuth() {
+    try {
+        const response = await fetch('/check_auth');
+        if (!response.ok) {
+            throw new Error('Authentication check failed');
+        }
+        const data = await response.json();
+        return data.authenticated;
+    } catch (error) {
+        console.error('Auth check error:', error);
+        return false;
+    }
+}
+
+// Make loadCalendars available globally immediately
+window.loadCalendars = async function() {
     const loadingElement = getElement('loading');
     const calendarList = getElement('calendar-list');
     const importBtn = getElement('import-btn');
@@ -82,8 +97,15 @@ window.loadCalendars = function() {
         return;
     }
 
+    // Check authentication first
+    const isAuthenticated = await checkAuth();
+    if (!isAuthenticated) {
+        addStatus('Authentication required. Please authenticate with Google Calendar.', 'error');
+        return;
+    }
+
     // Fetch calendars
-    fetch('/get_calendars')
+    fetch('/get_calendars?uid=' + encodeURIComponent(userId))
         .then(response => {
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -135,7 +157,9 @@ window.loadCalendars = function() {
             
             // Handle different types of errors
             if (error.code === 403 || (error.message && error.message.includes('403'))) {
-                addStatus('Permission error: Please ensure you are properly authenticated with Google Calendar', 'error');
+                addStatus('Permission error: Please authenticate with Google Calendar', 'error');
+                // Redirect to auth page
+                window.location.href = `/auth?uid=${encodeURIComponent(userId)}&redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`;
             } else if (error.name === 'TypeError' && error.message.includes('null')) {
                 addStatus('Error: Unable to access page elements. Please refresh the page.', 'error');
             } else {
@@ -143,7 +167,7 @@ window.loadCalendars = function() {
             }
             console.error('Calendar loading error:', error);
         });
-}
+};
 
 // Initialize event handlers when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
@@ -160,6 +184,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const selectedCalendar = document.querySelector('input[name="calendar"]:checked');
         const daysBackInput = getElement('days-back');
         const importBtn = getElement('import-btn');
+        const syncModeCheckbox = getElement('sync-mode');
         
         if (!selectedCalendar) {
             addStatus('Please select a calendar', 'error');
@@ -185,20 +210,60 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Disable import button and show loading state
         importBtn.disabled = true;
-        importBtn.innerHTML = '<span class="loading-spinner"></span>Importing...';
+        importBtn.innerHTML = '<span class="loading-spinner"></span>Processing...';
         
-        // Send import request
-        fetch('/import_events', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                calendar_id: selectedCalendar.value,
-                user_id: userId,
-                days_back: parseInt(daysBack)
+        // Check if continuous sync is enabled
+        const isContinuousSync = syncModeCheckbox && syncModeCheckbox.checked;
+        
+        if (isContinuousSync) {
+            // Set up continuous synchronization with Composio
+            fetch('/sync_calendar', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    calendar_id: selectedCalendar.value,
+                    user_id: userId
+                })
             })
-        })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => {
+                        throw new Error(data.error || 'Failed to set up synchronization');
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Reset button state
+                importBtn.disabled = false;
+                importBtn.innerHTML = 'Import Events';
+                
+                // Show success message
+                addStatus(`Calendar synchronization set up successfully! Your calendar events will now be automatically imported to OMI.`, 'success');
+            })
+            .catch(error => {
+                // Reset button state
+                importBtn.disabled = false;
+                importBtn.innerHTML = 'Import Events';
+                
+                // Show error message
+                addStatus(`Error: ${error.message}`, 'error');
+            });
+        } else {
+            // Perform one-time import
+            fetch('/import_events', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    calendar_id: selectedCalendar.value,
+                    user_id: userId,
+                    days_back: parseInt(daysBack)
+                })
+            })
         .then(response => {
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -228,5 +293,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 importBtn.textContent = 'Import Events';
             }
         });
+        }
     });
-});
+    });
+
+// Calendar initialization is handled by the HTML file's DOMContentLoaded event
