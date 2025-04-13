@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:omi/env/env.dart';
 import 'package:map_launcher/map_launcher.dart';

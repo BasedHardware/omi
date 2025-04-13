@@ -1,12 +1,13 @@
-import 'dart:io';
+
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
+import 'package:omi/utils/omi_file/omi_file.dart';
 import 'package:path_provider/path_provider.dart';
 
 class FileUtils {
-  static Future<File> saveAudioBytesToTempFile(List<List<int>> chunk, int timerStart) async {
+  static Future<OmiFile> saveAudioBytesToTempFile(List<List<int>> chunk, int timerStart) async {
     final directory = await getTemporaryDirectory();
     String filePath = '${directory.path}/audio_${timerStart}.bin';
     List<int> data = [];
@@ -21,13 +22,13 @@ class FileUtils {
       data.addAll(Uint32List.fromList([frame.length]).buffer.asUint8List());
       data.addAll(byteFrame.buffer.asUint8List());
     }
-    final file = File(filePath);
+    final file = OmiFile(filePath);
     await file.writeAsBytes(data);
 
     return file;
   }
   
-  static Future<File> convertPcmToWavFile(Uint8List pcmBytes, int sampleRate, int channels) async {
+  static Future<OmiFile> convertPcmToWavFile(Uint8List pcmBytes, int sampleRate, int channels) async {
     try {
       // Convert PCM to WAV bytes
       final wavBytes = WavBytes.fromPcm(
@@ -39,7 +40,7 @@ class FileUtils {
       // Create a temporary file
       final tempDir = await getTemporaryDirectory();
       final tempPath = '${tempDir.path}/recording_${DateTime.now().millisecondsSinceEpoch}.wav';
-      final file = File(tempPath);
+      final file = OmiFile(tempPath);
       
       // Write WAV bytes to file
       await file.writeAsBytes(wavBytes);

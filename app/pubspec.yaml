@@ -104,6 +104,9 @@ dependencies:
   idb_shim: ^2.6.5+1
 
 
+  vector_graphics: any
+  http_parser: ^4.1.2
+  mime: ^2.0.0
 dependency_overrides:
   http: ^1.2.1
   uuid: ^4.4.0

@@ -1,11 +1,11 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/omi_file/omi_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -168,7 +168,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 await getConversations(limit: 10000, offset: 0); // 10k for now
                             String json = const JsonEncoder.withIndent("     ").convert(memories);
                             final directory = await getApplicationDocumentsDirectory();
-                            final file = File('${directory.path}/conversations.json');
+                            final file = OmiFile('${directory.path}/conversations.json');
                             await file.writeAsString(json);
 
                             final result =

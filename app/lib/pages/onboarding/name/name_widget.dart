@@ -4,9 +4,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:omi/utils/analytics/intercom_manager.dart';
 
-import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/intercom_manager.dart';
-import 'package:provider/provider.dart';
 
 class NameWidget extends StatefulWidget {
   final Function goNext;

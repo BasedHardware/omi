@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -17,7 +16,6 @@ import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/home/widgets/chat_apps_dropdown_widget.dart';
 import 'package:omi/pages/persona/persona_profile.dart';
-import 'package:omi/pages/home/widgets/speech_language_sheet.dart';
 import 'package:omi/pages/settings/page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';

@@ -10,7 +10,6 @@ import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/settings/people.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';

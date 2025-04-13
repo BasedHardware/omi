@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_silero_vad/flutter_silero_vad.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
+import 'package:omi/utils/omi_file/omi_file.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -87,7 +87,7 @@ class AudioProcessorService {
     Timer(const Duration(seconds: 30), () async {
       print('Timer started');
       Uint8List wavBytes = wavBytesUtil.getUInt8ListBytes(validFrames, sampleRate);
-      final file = File('${(await getApplicationDocumentsDirectory()).path}/output.wav');
+      final file = OmiFile('${(await getApplicationDocumentsDirectory()).path}/output.wav');
       await file.writeAsBytes(wavBytes);
     });
   }
@@ -209,7 +209,7 @@ class AudioProcessorService {
       ..setUint8(0x27, 0x61) // 'a'
       ..setUint32(40, pcmBytes.length, Endian.little); // Subchunk2Size
 
-    File(filePath).writeAsBytesSync(wavHeader.buffer.asUint8List() + pcmBytes);
+    OmiFile(filePath).writeAsBytesSync(wavHeader.buffer.asUint8List() + pcmBytes);
   }
 
   /// Transforms a list of bytes into an [Int16List] for processing.
@@ -226,6 +226,6 @@ class AudioProcessorService {
   Future<void> onnxModelToLocal() async {
     final data = await rootBundle.load('assets/silero_vad.v5.onnx');
     final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-    File(await modelPath).writeAsBytesSync(bytes);
+    OmiFile(await modelPath).writeAsBytesSync(bytes);
   }
 }

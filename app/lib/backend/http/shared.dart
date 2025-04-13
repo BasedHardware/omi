@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
-import 'package:omi/flavors.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';

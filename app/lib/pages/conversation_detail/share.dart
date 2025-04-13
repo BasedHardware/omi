@@ -1,9 +1,9 @@
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/utils/omi_file/omi_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
@@ -76,7 +76,7 @@ void _exportPDF(ServerConversation conversation, bool isTranscript) async {
   }
 
   final directory = await getApplicationDocumentsDirectory();
-  final file = File('${directory.path}/conversation_export.pdf');
+  final file = OmiFile('${directory.path}/conversation_export.pdf');
   await file.writeAsBytes(await pdf.save());
 
   await Share.shareXFiles([XFile(file.path)], text: header);
@@ -84,7 +84,7 @@ void _exportPDF(ServerConversation conversation, bool isTranscript) async {
 
 void _exportTranscriptTxt(ServerConversation conversation) async {
   final directory = await getApplicationDocumentsDirectory();
-  final transcriptFile = File('${directory.path}/conversation_transcript.txt');
+  final transcriptFile = OmiFile('${directory.path}/conversation_transcript.txt');
   final transcript = "$header${conversation.getTranscript(generate: true)}";
   await transcriptFile.writeAsString(transcript);
 
@@ -93,14 +93,14 @@ void _exportTranscriptTxt(ServerConversation conversation) async {
 
 void _exportSummaryTxt(ServerConversation conversation) async {
   final directory = await getApplicationDocumentsDirectory();
-  final summaryFile = File('${directory.path}/summary.txt');
+  final summaryFile = OmiFile('${directory.path}/summary.txt');
   await summaryFile.writeAsString("$header${conversation.structured.toString()}");
   await Share.shareXFiles([XFile(summaryFile.path)], text: header);
 }
 
 void _exportSummaryMarkdown(ServerConversation conversation) async {
   final directory = await getApplicationDocumentsDirectory();
-  final markdownFile = File('${directory.path}/conversation_export.md');
+  final markdownFile = OmiFile('${directory.path}/conversation_export.md');
   final structured = conversation.structured;
   final markdown = """
     # Summary Export
