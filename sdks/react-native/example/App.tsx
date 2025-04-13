@@ -20,8 +20,42 @@ export default function App() {
   // Backend WebSocket state
   const [backendWsConnected, setBackendWsConnected] = useState<boolean>(false);
   const backendWsRef = useRef<WebSocket | null>(null);
-  const [backendWsUrl, setBackendWsUrl] = useState<string>('wss://<insert-ngrok-url>.ngrok-free.app/ws');
-
+  const [backendWsUrl, setBackendWsUrl] = useState<string>('wss://4be9-106-51-128-138.ngrok-free.app/ws');
+  const [backendSessionId, setBackendSessionId] = useState<string>('');
+  const [packetStats, setPacketStats] = useState<{
+    sent: number;
+    confirmed: number;
+    decoded: number;
+    failed: number;
+    lastSequence: number;
+  }>({
+    sent: 0,
+    confirmed: 0,
+    decoded: 0,
+    failed: 0,
+    lastSequence: 0
+  });
+  const [showDebugInfo, setShowDebugInfo] = useState<boolean>(false);
+  // Use a simpler tracking approach with fewer entries
+  const packetTracking = useRef<{
+    sentCount: number;
+    confirmedCount: number;
+    decodedCount: number;
+    failedCount: number;
+    lastSequence: number;
+    // Only track the last 20 packets for memory efficiency
+    lastPackets: Array<{id: number, sent: number, size: number, confirmed?: boolean}>;
+  }>({
+    sentCount: 0,
+    confirmedCount: 0,
+    decodedCount: 0,
+    failedCount: 0,
+    lastSequence: 0,
+    lastPackets: []
+  });
+  const packetStartTime = useRef<number>(0);
+  // Track when to update the UI to avoid constant re-renders
+  const statsUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Transcription processing state
   const websocketRef = useRef<WebSocket | null>(null);
@@ -242,10 +276,69 @@ export default function App() {
       ws.onopen = () => {
         console.log('Backend WebSocket connection established');
         setBackendWsConnected(true);
+        
+        // Reset packet tracking on new connection
+        setPacketStats({
+          sent: 0,
+          confirmed: 0, 
+          decoded: 0,
+          failed: 0,
+          lastSequence: 0
+        });
+        packetTracking.current = {
+          sentCount: 0,
+          confirmedCount: 0,
+          decodedCount: 0,
+          failedCount: 0,
+          lastSequence: 0,
+          lastPackets: []
+        };
+        packetStartTime.current = Date.now();
       };
 
       ws.onmessage = (event) => {
-        console.log('Received message from backend:', event.data);
+        try {
+          const message = JSON.parse(event.data);
+          
+          if (message.event === 'session_start') {
+            setBackendSessionId(message.session_id);
+            packetStartTime.current = Date.now();
+          }
+          else if (message.event === 'packet_received') {
+            // Update our internal tracking structure
+            const tracking = packetTracking.current;
+            tracking.confirmedCount++;
+            tracking.lastSequence = message.packet_number;
+            
+            if (message.decoded) {
+              tracking.decodedCount++;
+            } else {
+              tracking.failedCount++;
+            }
+            
+            // Mark packet as confirmed in our tracking
+            const packetIndex = tracking.lastPackets.findIndex(p => p.id === message.packet_number);
+            if (packetIndex >= 0) {
+              tracking.lastPackets[packetIndex].confirmed = true;
+            }
+            
+            // Only update UI state periodically to avoid excessive re-renders
+            if (!statsUpdateTimeoutRef.current) {
+              statsUpdateTimeoutRef.current = setTimeout(() => {
+                setPacketStats({
+                  sent: tracking.sentCount,
+                  confirmed: tracking.confirmedCount,
+                  decoded: tracking.decodedCount,
+                  failed: tracking.failedCount,
+                  lastSequence: tracking.lastSequence
+                });
+                statsUpdateTimeoutRef.current = null;
+              }, 500); // Update UI every 500ms
+            }
+          }
+        } catch (error) {
+          console.error('Error processing backend message:', error);
+        }
       };
 
       ws.onerror = (error) => {
@@ -256,6 +349,12 @@ export default function App() {
       ws.onclose = () => {
         console.log('Backend WebSocket connection closed');
         setBackendWsConnected(false);
+        
+        // Clear any pending updates
+        if (statsUpdateTimeoutRef.current) {
+          clearTimeout(statsUpdateTimeoutRef.current);
+          statsUpdateTimeoutRef.current = null;
+        }
       };
 
       backendWsRef.current = ws;
@@ -273,6 +372,12 @@ export default function App() {
       backendWsRef.current.close();
       backendWsRef.current = null;
       setBackendWsConnected(false);
+      
+      // Clear any pending updates
+      if (statsUpdateTimeoutRef.current) {
+        clearTimeout(statsUpdateTimeoutRef.current);
+        statsUpdateTimeoutRef.current = null;
+      }
     }
   };
 
@@ -286,6 +391,7 @@ export default function App() {
 
       // Reset counter
       setAudioPacketsReceived(0);
+      packetStartTime.current = Date.now();
 
       console.log('Starting audio bytes listener...');
 
@@ -310,6 +416,41 @@ export default function App() {
         // Send to our backend WebSocket if connected
         if (bytes.length > 0 && backendWsConnected && backendWsRef.current && 
             backendWsRef.current.readyState === WebSocket.OPEN) {
+            
+          const tracking = packetTracking.current;
+          // Increment the packet count
+          tracking.sentCount++;
+          
+          // Add to our tracking buffer (limited size)
+          const packetNumber = tracking.sentCount;
+          
+          // Keep only the last 20 packets to avoid memory issues
+          if (tracking.lastPackets.length >= 20) {
+            tracking.lastPackets.shift(); // Remove oldest packet
+          }
+          
+          // Add new packet to tracking
+          tracking.lastPackets.push({
+            id: packetNumber,
+            sent: Date.now(),
+            size: bytes.length
+          });
+          
+          // Only update UI state periodically
+          if (!statsUpdateTimeoutRef.current) {
+            statsUpdateTimeoutRef.current = setTimeout(() => {
+              setPacketStats({
+                sent: tracking.sentCount,
+                confirmed: tracking.confirmedCount,
+                decoded: tracking.decodedCount,
+                failed: tracking.failedCount,
+                lastSequence: tracking.lastSequence
+              });
+              statsUpdateTimeoutRef.current = null;
+            }, 500);
+          }
+          
+          // Send the packet
           backendWsRef.current.send(new Uint8Array(bytes));
         }
       });
@@ -573,6 +714,27 @@ export default function App() {
     }
   };
 
+  // Calculate packet loss rate
+  const getPacketLossRate = () => {
+    if (packetStats.sent === 0) return '0%';
+    const lossRate = ((packetStats.sent - packetStats.confirmed) / packetStats.sent) * 100;
+    return `${lossRate.toFixed(2)}%`;
+  };
+
+  // Calculate decode success rate
+  const getDecodeSuccessRate = () => {
+    if (packetStats.confirmed === 0) return '0%';
+    const successRate = (packetStats.decoded / packetStats.confirmed) * 100;
+    return `${successRate.toFixed(2)}%`;
+  };
+
+  // Calculate packets per second
+  const getPacketsPerSecond = () => {
+    const elapsedTimeSeconds = (Date.now() - packetStartTime.current) / 1000;
+    if (elapsedTimeSeconds <= 0) return '0';
+    return (packetStats.sent / elapsedTimeSeconds).toFixed(1);
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -627,6 +789,58 @@ export default function App() {
           <Text style={styles.status}>
             Status: {backendWsConnected ? 'Connected' : 'Disconnected'}
           </Text>
+          
+          {backendWsConnected && backendSessionId && (
+            <View style={styles.sessionInfo}>
+              <Text style={styles.sessionText}>Session ID: {backendSessionId}</Text>
+              <TouchableOpacity
+                style={styles.debugButton}
+                onPress={() => setShowDebugInfo(!showDebugInfo)}
+              >
+                <Text style={styles.debugButtonText}>
+                  {showDebugInfo ? 'Hide Debug Info' : 'Show Debug Info'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          
+          {backendWsConnected && showDebugInfo && (
+            <View style={styles.debugInfo}>
+              <Text style={styles.debugTitle}>Packet Tracking</Text>
+              <View style={styles.debugRow}>
+                <Text style={styles.debugLabel}>Packets Sent:</Text>
+                <Text style={styles.debugValue}>{packetStats.sent}</Text>
+              </View>
+              <View style={styles.debugRow}>
+                <Text style={styles.debugLabel}>Packets Confirmed:</Text>
+                <Text style={styles.debugValue}>{packetStats.confirmed}</Text>
+              </View>
+              <View style={styles.debugRow}>
+                <Text style={styles.debugLabel}>Successfully Decoded:</Text>
+                <Text style={styles.debugValue}>{packetStats.decoded}</Text>
+              </View>
+              <View style={styles.debugRow}>
+                <Text style={styles.debugLabel}>Decode Failed:</Text>
+                <Text style={styles.debugValue}>{packetStats.failed}</Text>
+              </View>
+              <View style={styles.debugRow}>
+                <Text style={styles.debugLabel}>Packet Loss Rate:</Text>
+                <Text style={styles.debugValue}>{getPacketLossRate()}</Text>
+              </View>
+              <View style={styles.debugRow}>
+                <Text style={styles.debugLabel}>Decode Success Rate:</Text>
+                <Text style={styles.debugValue}>{getDecodeSuccessRate()}</Text>
+              </View>
+              <View style={styles.debugRow}>
+                <Text style={styles.debugLabel}>Packets Per Second:</Text>
+                <Text style={styles.debugValue}>{getPacketsPerSecond()}</Text>
+              </View>
+              <View style={styles.debugRow}>
+                <Text style={styles.debugLabel}>Last Sequence Number:</Text>
+                <Text style={styles.debugValue}>{packetStats.lastSequence}</Text>
+              </View>
+            </View>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -1159,5 +1373,55 @@ const styles = StyleSheet.create({
   },
   buttonPrimary: {
     backgroundColor: '#007AFF',
+  },
+  debugButton: {
+    backgroundColor: '#8E8E93',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    marginTop: 8,
+  },
+  debugButtonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 12,
+  },
+  sessionInfo: {
+    marginTop: 10,
+    padding: 8,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 6,
+  },
+  sessionText: {
+    fontSize: 12,
+    color: '#555',
+  },
+  debugInfo: {
+    marginTop: 10,
+    padding: 12,
+    backgroundColor: '#f8f8f8',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  debugTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+    color: '#333',
+  },
+  debugRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  debugLabel: {
+    fontSize: 12,
+    color: '#555',
+  },
+  debugValue: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#007AFF',
   },
 });
