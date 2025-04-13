@@ -1,9 +1,10 @@
+import os
 import datetime
 import random
 import threading
 import uuid
 from datetime import timezone
-from typing import Union, Tuple, List
+from typing import Union, Tuple, List, Optional
 
 from fastapi import HTTPException
 
@@ -13,7 +14,7 @@ import database.conversations as conversations_db
 import database.notifications as notification_db
 import database.tasks as tasks_db
 import database.trends as trends_db
-from database.apps import record_app_usage, get_omi_personas_by_uid_db
+from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
 from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
 from models.memories import MemoryDB, Memory
@@ -28,7 +29,7 @@ from utils.llm import obtain_emotional_message, retrieve_metadata_fields_from_tr
     get_app_result, should_discard_conversation, summarize_experience_text, new_memories_extractor, \
     trends_extractor, get_email_structure, get_post_structure, get_message_structure, \
     retrieve_metadata_from_email, retrieve_metadata_from_post, retrieve_metadata_from_message, \
-    retrieve_metadata_from_text, \
+    retrieve_metadata_from_text, select_best_app_for_conversation, \
     extract_memories_from_text
 from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
@@ -114,17 +115,61 @@ def _get_conversation_obj(uid: str, structured: Structured,
     return conversation
 
 
-def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = False):
+# Get default conversation summary app IDs from environment variable
+CONVERSATION_SUMMARIZED_APP_IDS = os.getenv('CONVERSATION_SUMMARIZED_APP_IDS', 'summary_assistant,action_item_extractor,insight_analyzer').split(',')
+
+# Function to get default memory apps
+def get_default_conversation_summarized_apps():
+    default_apps = []
+    for app_id in CONVERSATION_SUMMARIZED_APP_IDS:
+        app_data = get_app_by_id_db(app_id.strip())
+        if app_data:
+            default_apps.append(App(**app_data))
+
+    return default_apps
+
+def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = False, app_id: Optional[str] = None):
     apps: List[App] = get_available_apps(uid)
-    filtered_apps = [app for app in apps if app.works_with_memories() and app.enabled]
+    conversation_apps = [app for app in apps if app.works_with_memories() and app.enabled]
+    filtered_apps = []
+
+    # If app_id is provided, only use that specific app
+    if app_id:
+        filtered_apps = [app for app in conversation_apps if app.id == app_id]
+    else:
+        filtered_apps = conversation_apps
+
+        # Extend with default apps
+        default_apps = get_default_conversation_summarized_apps()
+        filtered_apps.extend(default_apps)
+
+        # Select the best app for this conversation
+        if filtered_apps and len(filtered_apps) > 0:
+            best_app = select_best_app_for_conversation(conversation, filtered_apps)
+            if best_app:
+                print(f"Selected best app for conversation: {best_app.name}")
+
+                # enabled
+                user_enabled = set(redis_db.get_enabled_plugins(uid))
+                if best_app.id not in user_enabled:
+                    redis_db.enable_app(uid, best_app.id)
+
+                filtered_apps = [best_app]
+
+    if len(filtered_apps) == 0:
+        print("All apps had got filtered out", uid)
+
+    # Clear existing app results
     conversation.apps_results = []
+
     threads = []
 
     def execute_app(app):
-        if result := get_app_result(conversation.get_transcript(False), app).strip():
-            conversation.apps_results.append(AppResult(app_id=app.id, content=result))
-            if not is_reprocess:
-                record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, conversation_id=conversation.id)
+        # allow empty
+        result = get_app_result(conversation.get_transcript(False), app).strip()
+        conversation.apps_results.append(AppResult(app_id=app.id, content=result))
+        if not is_reprocess:
+            record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, conversation_id=conversation.id)
 
     for app in filtered_apps:
         threads.append(threading.Thread(target=execute_app, args=(app,)))
@@ -133,38 +178,38 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
     [t.join() for t in threads]
 
 
-def _extract_facts(uid: str, conversation: Conversation):
+def _extract_memories(uid: str, conversation: Conversation):
     # TODO: maybe instead (once they can edit them) we should not tie it this hard
     memories_db.delete_memories_for_conversation(uid, conversation.id)
 
-    new_facts: List[Memory] = []
+    new_memories: List[Memory] = []
 
-    # Extract facts based on conversation source
+    # Extract memories based on conversation source
     if conversation.source == ConversationSource.external_integration:
         text_content = conversation.external_data.get('text')
         if text_content and len(text_content) > 0:
             text_source = conversation.external_data.get('text_source', 'other')
-            new_facts = extract_memories_from_text(uid, text_content, text_source)
+            new_memories = extract_memories_from_text(uid, text_content, text_source)
     else:
         # For regular conversations with transcript segments
-        new_facts = new_memories_extractor(uid, conversation.transcript_segments)
+        new_memories = new_memories_extractor(uid, conversation.transcript_segments)
 
-    parsed_facts = []
-    for fact in new_facts:
-        parsed_facts.append(MemoryDB.from_memory(fact, uid, conversation.id, conversation.structured.category, False))
-        print('_extract_facts:', fact.category.value.upper(), '|', fact.content)
+    parsed_memories = []
+    for fact in new_memories:
+        parsed_memories.append(MemoryDB.from_memory(fact, uid, conversation.id, conversation.structured.category, False))
+        print('_extract_memories:', fact.category.value.upper(), '|', fact.content)
 
-    if len(parsed_facts) == 0:
-        print(f"No facts extracted for conversation {conversation.id}")
+    if len(parsed_memories) == 0:
+        print(f"No memories extracted for conversation {conversation.id}")
         return
 
-    print(f"Saving {len(parsed_facts)} facts for conversation {conversation.id}")
-    memories_db.save_memories(uid, [fact.dict() for fact in parsed_facts])
+    print(f"Saving {len(parsed_memories)} memories for conversation {conversation.id}")
+    memories_db.save_memories(uid, [fact.dict() for fact in parsed_memories])
 
 
-def send_new_facts_notification(token: str, facts: [MemoryDB]):
-    facts_str = ", ".join([fact.content for fact in facts])
-    message = f"New facts {facts_str}"
+def send_new_memories_notification(token: str, memories: [MemoryDB]):
+    memories_str = ", ".join([memory.content for memory in memories])
+    message = f"New memories {memories_str}"
     ai_message = NotificationMessage(
         text=message,
         from_integration='false',
@@ -228,15 +273,15 @@ def _update_personas_async(uid: str):
 
 def process_conversation(
         uid: str, language_code: str, conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
-        force_process: bool = False, is_reprocess: bool = False
+        force_process: bool = False, is_reprocess: bool = False, app_id: Optional[str] = None
 ) -> Conversation:
     structured, discarded = _get_structured(uid, language_code, conversation, force_process)
     conversation = _get_conversation_obj(uid, structured, conversation)
 
     if not discarded:
-        _trigger_apps(uid, conversation, is_reprocess=is_reprocess)
+        _trigger_apps(uid, conversation, is_reprocess=is_reprocess, app_id=app_id)
         threading.Thread(target=save_structured_vector, args=(uid, conversation,)).start() if not is_reprocess else None
-        threading.Thread(target=_extract_facts, args=(uid, conversation)).start()
+        threading.Thread(target=_extract_memories, args=(uid, conversation)).start()
 
     conversation.status = ConversationStatus.completed
     conversations_db.upsert_conversation(uid, conversation.dict())
