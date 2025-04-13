@@ -334,10 +334,17 @@ async def _listen(
 
             # SONIOX
             elif stt_service == STTService.soniox:
+                # For multi-language detection, provide language hints if available
+                hints = None
+                if stt_language == 'multi' and language != 'multi':
+                    # Include the original language as a hint for multi-language detection
+                    hints = [language]
+
                 soniox_socket = await process_audio_soniox(
                     stream_transcript, sample_rate, stt_language,
                     uid if include_speech_profile else None,
-                    preseconds=speech_profile_duration
+                    preseconds=speech_profile_duration,
+                    language_hints=hints
                 )
 
                 # Create a second socket for initial speech profile if needed
@@ -346,7 +353,8 @@ async def _listen(
                 if speech_profile_duration and file_path:
                     soniox_socket2 = await process_audio_soniox(
                         stream_transcript, sample_rate, stt_language,
-                        uid if include_speech_profile else None
+                        uid if include_speech_profile else None,
+                        language_hints=hints
                     )
 
                     asyncio.create_task(send_initial_file_path(file_path, soniox_socket.send))
