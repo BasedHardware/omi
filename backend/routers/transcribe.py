@@ -29,6 +29,7 @@ from utils.stt.streaming import process_audio_soniox, process_audio_dg, process_
 from utils.webhooks import get_audio_bytes_webhook_seconds
 from utils.pusher import connect_to_trigger_pusher
 from utils.translation import translate_text, detect_language
+from utils.translation_cache import TranscriptSegmentLanguageCache
 
 
 from utils.other import endpoints as auth
@@ -333,10 +334,17 @@ async def _listen(
 
             # SONIOX
             elif stt_service == STTService.soniox:
+                # For multi-language detection, provide language hints if available
+                hints = None
+                if stt_language == 'multi' and language != 'multi':
+                    # Include the original language as a hint for multi-language detection
+                    hints = [language]
+
                 soniox_socket = await process_audio_soniox(
                     stream_transcript, sample_rate, stt_language,
                     uid if include_speech_profile else None,
-                    preseconds=speech_profile_duration
+                    preseconds=speech_profile_duration,
+                    language_hints=hints
                 )
 
                 # Create a second socket for initial speech profile if needed
@@ -345,7 +353,8 @@ async def _listen(
                 if speech_profile_duration and file_path:
                     soniox_socket2 = await process_audio_soniox(
                         stream_transcript, sample_rate, stt_language,
-                        uid if include_speech_profile else None
+                        uid if include_speech_profile else None,
+                        language_hints=hints
                     )
 
                     asyncio.create_task(send_initial_file_path(file_path, soniox_socket.send))
@@ -487,25 +496,41 @@ async def _listen(
     #
     current_conversation_id = None
     translation_enabled = including_combined_segments and stt_language == 'multi'
+    language_cache = TranscriptSegmentLanguageCache()
 
     async def translate(segments: List[TranscriptSegment], conversation_id: str):
         try:
             translated_segments = []
             for segment in segments:
-                language = 'en'  # TODO: REMOVE
+                segment_text = segment.text.strip()
+                if not segment_text or len(segment_text) <= 0:
+                    continue
+                # Check cache for language detection result
+                is_previously_target_language, diff_text = language_cache.get_language_result(segment.id, segment_text, language)
+                if (is_previously_target_language is None or is_previously_target_language is True) \
+                        and diff_text:
+                    try:
+                        detected_lang = detect_language(diff_text)
+                        is_target_language = detected_lang is not None and detected_lang == language
 
-                # Check if the text is already in the target language
-                # Skip translation if the text language matches the target language
-                try:
-                    detected_lang = detect_language(segment.text)
-                    if detected_lang is not None and detected_lang == language:
+                        # Update cache with the detection result
+                        language_cache.update_cache(segment.id, segment_text, is_target_language)
+
+                        # Skip translation if it's the target language
+                        if is_target_language:
+                            continue
+                    except Exception as e:
+                        print(f"Language detection error: {e}")
+                        # Skip translation if couldn't detect the language
                         continue
-                except Exception as e:
-                    print(f"Language detection error: {e}")
-                    pass
 
                 # Translate the text to the target language
                 translated_text = translate_text(language, segment.text)
+
+                # Skip, del cache to detect language again
+                if translated_text == segment.text:
+                    language_cache.delete_cache(segment.id)
+                    continue
 
                 # Create a Translation object
                 translation = Translation(
