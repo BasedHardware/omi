@@ -1,7 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:mime/mime.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/env/env.dart';
@@ -134,7 +136,7 @@ Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId, 
 
     var messageId = "1000"; // Default new message
     var buffers = <String>[];
-    
+
     // Process the streamed response
     await for (var data in response.stream.transform(utf8.decoder)) {
       var lines = data.split('\n\n'); // Make sure this is the correct delimiter for your server responses
@@ -174,6 +176,7 @@ Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId, 
     yield ServerMessageChunk.failedMessage();
   }
 }
+
 Future<ServerMessage> getInitialAppMessage(String? appId) {
   return makeApiCall(
     url: '${Env.apiBaseUrl}v1/initial-message?plugin_id=$appId',
@@ -196,7 +199,13 @@ Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<XFile> files) async
     Uri.parse('${Env.apiBaseUrl}v2/voice-messages'),
   );
   for (var file in files) {
-    request.files.add(await http.MultipartFile.fromPath('files', file.path, filename: basename(file.path)));
+    String filename = basename(file.path);
+    request.files.add(http.MultipartFile.fromBytes(
+      'files',
+      await file.readAsBytes(),
+      filename: filename,
+      contentType: MediaType.parse(lookupMimeType(filename) ?? 'application/octet-stream'),
+    ));
   }
   request.headers.addAll({'Authorization': await getAuthHeader()});
 
@@ -253,7 +262,15 @@ Future<List<ServerMessage>> sendVoiceMessageServer(List<XFile> files) async {
     Uri.parse('${Env.apiBaseUrl}v1/voice-messages'),
   );
   for (var file in files) {
-    request.files.add(await http.MultipartFile.fromPath('files', file.path, filename: basename(file.path)));
+    String filename = basename(file.path);
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'files',
+        await file.readAsBytes(),
+        filename: filename,
+        contentType: MediaType.parse(lookupMimeType(filename) ?? 'application/octet-stream'),
+      ),
+    );
   }
   request.headers.addAll({'Authorization': await getAuthHeader()});
 
@@ -332,7 +349,13 @@ Future<String> transcribeVoiceMessage(XFile audioFile) async {
     );
 
     request.headers.addAll({'Authorization': await getAuthHeader()});
-    request.files.add(await http.MultipartFile.fromPath('files', audioFile.path));
+    String filename = basename(audioFile.path);
+    request.files.add(http.MultipartFile.fromBytes(
+      'files',
+      await audioFile.readAsBytes(),
+      filename: filename,
+      contentType: MediaType.parse(lookupMimeType(filename) ?? 'application/octet-stream'),
+    ));
 
     var streamedResponse = await request.send();
     var response = await http.Response.fromStream(streamedResponse);

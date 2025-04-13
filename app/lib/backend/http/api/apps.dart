@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:developer';
-
+import 'package:http_parser/http_parser.dart';
+import 'package:mime/mime.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:omi/backend/http/shared.dart';
@@ -80,7 +81,15 @@ Future<Map<String, String>> uploadAppThumbnail(XFile file) async {
     'POST',
     Uri.parse('${Env.apiBaseUrl}v1/app/thumbnails'),
   );
-  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+  String filename = basename(file.path);
+  request.files.add(
+    http.MultipartFile.fromBytes(
+      'file',
+      await file.readAsBytes(),
+      contentType: MediaType.parse(lookupMimeType(filename) ?? 'application/octet-stream'),
+      filename: filename,
+    ),
+  );
   request.headers.addAll({'Authorization': await getAuthHeader()});
 
   try {
@@ -190,7 +199,15 @@ Future<(bool, String, String?)> submitAppServer(XFile file, Map<String, dynamic>
     'POST',
     Uri.parse('${Env.apiBaseUrl}v1/apps'),
   );
-  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+  String filename = basename(file.path);
+  request.files.add(
+    http.MultipartFile.fromBytes(
+      'file',
+      await file.readAsBytes(),
+      contentType: MediaType.parse(lookupMimeType(filename) ?? 'application/octet-stream'),
+      filename: filename,
+    ),
+  );
   request.headers.addAll({'Authorization': await getAuthHeader()});
   request.fields.addAll({'app_data': jsonEncode(appData)});
   debugPrint(jsonEncode(appData));
@@ -227,7 +244,8 @@ Future<bool> updateAppServer(XFile? file, Map<String, dynamic> appData) async {
     Uri.parse('${Env.apiBaseUrl}v1/apps/${appData['id']}'),
   );
   if (file != null) {
-    request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+    var bytes = await file.readAsBytes();
+    request.files.add(http.MultipartFile.fromBytes('file', bytes, filename: basename(file.path)));
   }
   request.headers.addAll({'Authorization': await getAuthHeader()});
   request.fields.addAll({'app_data': jsonEncode(appData)});
@@ -479,7 +497,15 @@ Future<Map> createPersonaApp(XFile file, Map<String, dynamic> personaData) async
     'POST',
     Uri.parse('${Env.apiBaseUrl}v1/personas'),
   );
-  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+  String filename = basename(file.path);
+  request.files.add(
+     http.MultipartFile.fromBytes(
+      'file',
+      await file.readAsBytes(),
+      filename: filename,
+      contentType: MediaType.parse(lookupMimeType(filename) ?? 'application/octet-stream'),
+    ),
+  );
   request.headers.addAll({'Authorization': await getAuthHeader()});
   request.fields.addAll({'persona_data': jsonEncode(personaData)});
   print(jsonEncode(personaData));
@@ -506,7 +532,15 @@ Future<bool> updatePersonaApp(XFile? file, Map<String, dynamic> personaData) asy
     Uri.parse('${Env.apiBaseUrl}v1/personas/${personaData['id']}'),
   );
   if (file != null) {
-    request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+    String filename = basename(file.path);
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'file',
+        await file.readAsBytes(),
+        contentType: MediaType.parse(lookupMimeType(filename) ?? 'application/octet-stream'),
+        filename: filename,
+      ),
+    );
   }
   request.headers.addAll({'Authorization': await getAuthHeader()});
   request.fields.addAll({'persona_data': jsonEncode(personaData)});

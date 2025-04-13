@@ -1,7 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:mime/mime.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
 import 'package:http/http.dart' as http;
@@ -40,7 +42,13 @@ Future<bool> uploadProfile(XFile file) async {
     'POST',
     Uri.parse('${Env.apiBaseUrl}v3/upload-audio'),
   );
-  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+  String filename = basename(file.path);
+  request.files.add(http.MultipartFile.fromBytes(
+    'file',
+    await file.readAsBytes(),
+    contentType: MediaType.parse(lookupMimeType(filename) ?? 'application/octet-stream'),
+    filename: filename,
+  ));
   request.headers.addAll({'Authorization': await getAuthHeader()});
 
   try {

@@ -1,7 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:mime/mime.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -307,7 +309,13 @@ Future<List<ServerConversation>> sendStorageToBackend(XFile file, String sdCardD
     Uri.parse('${Env.apiBaseUrl}sdcard_memory?date_time=$sdCardDateTimeString'),
   );
   request.headers.addAll({'Authorization': await getAuthHeader()});
-  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+  String filename = basename(file.path);
+  request.files.add(http.MultipartFile.fromBytes(
+    'file',
+    await file.readAsBytes(),
+    contentType: MediaType.parse(lookupMimeType(filename) ?? 'application/octet-stream'),
+    filename: filename,
+  ));
   try {
     var streamedResponse = await request.send();
     var response = await http.Response.fromStream(streamedResponse);
@@ -337,7 +345,15 @@ Future<SyncLocalFilesResponse> syncLocalFiles(List<OmiFile> files) async {
     Uri.parse('${Env.apiBaseUrl}v1/sync-local-files'),
   );
   for (var file in files) {
-    request.files.add(await http.MultipartFile.fromPath('files', file.path, filename: basename(file.path)));
+    String filename = basename(file.path);
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'files',
+        await file.readAsBytes(),
+        contentType: MediaType.parse(lookupMimeType(filename) ?? 'application/octet-stream'),
+        filename: filename,
+      ),
+    );
   }
   request.headers.addAll({'Authorization': await getAuthHeader()});
 
