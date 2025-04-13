@@ -5,3 +5,5 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
+    volumes:
+      - ./audio_files:/app/audio_files

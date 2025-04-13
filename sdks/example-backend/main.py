@@ -1,7 +1,7 @@
 import os
 import wave
 from datetime import datetime
-
+from typing import Optional
 import numpy as np
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -20,24 +20,23 @@ FRAME_SIZE = 960  # 60ms of audio at 16kHz (using exact same value as SDK)
 
 def debug_packet(data):
     """Debug an incoming packet"""
-    hex_str = data[:16].hex()
-    print(f"Packet header hex: {hex_str}")
     print(f"Packet size: {len(data)} bytes")
     if len(data) > 4:
         first_bytes = [b for b in data[:4]]
         print(f"First 4 bytes: {first_bytes}")
 
-def decode_omi_packet(data, decoder):
+def decode_omi_packet(data: bytes, decoder: OpusDecoder) -> Optional[np.ndarray]:
     """Decode an Omi Opus packet using the same logic as the SDK"""
     if len(data) <= 3:
         return None
     
     # Remove 3-byte header (exactly like SDK)
-    clean_data = data[3:]
+    # clean_data = data[3:]
+    clean_data = data
     
     try:
         # Use exact same parameters as SDK
-        pcm = decoder.decode(clean_data, 960, decode_fec=False)
+        pcm = decoder.decode(clean_data, FRAME_SIZE, decode_fec=False)
         return pcm
     except Exception as e:
         print(f"Opus decode error: {e}")
@@ -93,8 +92,6 @@ async def websocket_endpoint(websocket: WebSocket):
             data = await websocket.receive_bytes()
             packets_received += 1
             
-            # Debug packet for analysis
-            debug_packet(data)
             
             # Save the raw packet for analysis
             opus_buffer.extend(data)
@@ -109,8 +106,12 @@ async def websocket_endpoint(websocket: WebSocket):
                 print(f"Success! Decoded {len(data)} bytes into {len(pcm_frame)} PCM samples")
                 await manager.send_text(f"Received and decoded {len(data)} bytes", websocket)
             else:
+
+                # Debug packet for analysis
+                debug_packet(data)
+
                 # Failed to decode
-                print(f"Failed to decode packet #{packets_received}")
+                print(f"Failed to decode packet #{packets_received}. Data: {len(data)} bytes")
                 await manager.send_text(f"Received {len(data)} bytes (decoding failed)", websocket)
             
             # Print stats periodically
