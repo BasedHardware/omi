@@ -4,6 +4,8 @@ This is a simple backend for the Omi SDK. It is a FastAPI application that liste
 
 ## Running the backend
 
+### Using Local Python
+
 1. Install [uv](https://docs.astral.sh/uv/) 
 ```
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -15,23 +17,40 @@ cd ./sdks/example-backend
 uv run python main.py # 
 ```
 
-3. Expose the backend to the internet using ngrok:
+### Using Docker
+
+1. Build the Docker image:
+```
+cd ./sdks/example-backend
+docker build -t omi-backend .
+```
+
+2. Run the Docker container:
+```
+docker run -p 8000:8000 omi-backend
+```
+
+## Exposing the Backend
+
+Expose the backend to the internet using ngrok:
 ```
 ngrok http 8005
 ```
 Copy the ngrok URL and use it in the app.
 (You just need an https endpoint, you can use whatever you want)
 
-4. Run the app:
+## Running the App
+
+1. Run the app:
 ```
 cd ./sdks/react-native/example
 npm run android
 ```
 
-5. Click on the "Connect to Backend" button, you should see logs on both the app and backend side.
+2. Click on the "Connect to Backend" button, you should see logs on both the app and backend side.
 
-6. Connect Omi device using bluetooth, check that you get codec and battery level data.
+3. Connect Omi device using bluetooth, check that you get codec and battery level data.
 
-7. Click Start audio listener to send audio data to the backend.
+4. Click Start audio listener to send audio data to the backend.
 
 On the backend, audio is saved in both opus and .wav format under example-backend/audio_files
