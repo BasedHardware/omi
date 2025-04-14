@@ -73,23 +73,25 @@ typedef struct
     uint8_t percentage;
 } BatteryState;
 
-#define BATTERY_STATES_COUNT 12
-// Assuming LiPo battery.
-// Source: https://forum.evolvapor.com/topic/65565-discharge-profiles-csv-for-2-3-18650-batteries-sony-vtc6-sammy-30q/
-// SHOULD USE YOUR BATTERY'S DATASHEET
+#define BATTERY_STATES_COUNT 16
+// 1S 250mAh LiPo battery discharge profile
 BatteryState battery_states[BATTERY_STATES_COUNT] = {
-    {4200, 100},
-    {4160, 99},
-    {4090, 91},
-    {4030, 78},
-    {3890, 63},
-    {3830, 53},
-    {3680, 36},
-    {3660, 35},
-    {3480, 14},
-    {3420, 11},
-    {3150, 1}, // 3240
-    {0000, 0}  // Below safe level
+    {4074, 100},
+    {4029, 95},
+    {3983, 90},
+    {3938, 85},
+    {3893, 80},
+    {3847, 70},
+    {3802, 60},
+    {3756, 50},
+    {3665, 40},
+    {3619, 30},
+    {3528, 20},
+    {3437, 10},
+    {3346, 5},
+    {3255, 2},
+    {3164, 1},
+    {3000, 0}  // Below safe level
 };
 
 static uint8_t is_initialized = false;
