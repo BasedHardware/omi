@@ -25,6 +25,16 @@ This script will:
 4. Create an OTA package at `firmware/firmware/build/docker_build/zephyr.zip`
 5. Show the location of all build artifacts
 
+### Clean Build
+
+If you want to start fresh or are experiencing issues with an existing build, use the clean option:
+
+```bash
+./omi/firmware/firmware/build-docker.sh --clean
+```
+
+This will remove any existing SDK and build directories before starting the build process.
+
 ### Build Outputs
 
 After a successful build, you will find these files in the `firmware/firmware/build/docker_build` directory:

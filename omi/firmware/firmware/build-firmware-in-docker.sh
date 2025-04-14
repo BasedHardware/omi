@@ -4,17 +4,22 @@ set -e
 # Set up working directory
 cd /omi/firmware/firmware/
 
-# Initialize west with nRF Connect SDK
-echo "Initializing west with nRF Connect SDK v2.7.0..."
-west init -m https://github.com/nrfconnect/sdk-nrf --mr v2.7.0 v2.7.0
+# Initialize west with nRF Connect SDK if not already initialized
+echo "Checking west initialization status..."
+if [ ! -d "v2.7.0/.west" ]; then
+    echo "Initializing west with nRF Connect SDK v2.7.0..."
+    west init -m https://github.com/nrfconnect/sdk-nrf --mr v2.7.0 v2.7.0
+else
+    echo "West is already initialized in v2.7.0, using existing installation."
+fi
 
 # Navigate to SDK directory
 cd v2.7.0
 
-# Update west modules
+# Update west modules (only if not already up to date)
 echo "Updating west modules..."
-west update -o=--depth=1 -n
-west blobs fetch hal_nordic
+west update -o=--depth=1 -n || echo "West update failed, continuing with existing modules."
+west blobs fetch hal_nordic || echo "Blob fetch failed, continuing with existing blobs."
 
 # Configure environment
 echo "Configuring build environment..."

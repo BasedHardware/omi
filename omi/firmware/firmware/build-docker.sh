@@ -15,6 +15,20 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
+# Parse command line arguments
+CLEAN_BUILD=0
+for arg in "$@"; do
+    case $arg in
+        --clean)
+            CLEAN_BUILD=1
+            shift
+            ;;
+        *)
+            # Unknown option
+            ;;
+    esac
+done
+
 # Make script executable
 chmod +x $(dirname "$0")/build-firmware-in-docker.sh
 
@@ -28,6 +42,13 @@ fi
 
 # Get the absolute path to the repository root
 REPO_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
+
+# Clean build if requested
+if [ $CLEAN_BUILD -eq 1 ]; then
+    echo -e "${YELLOW}Cleaning previous build...${NC}"
+    rm -rf "$REPO_ROOT/firmware/firmware/v2.7.0"
+    rm -rf "$REPO_ROOT/firmware/firmware/build/docker_build"
+fi
 
 echo -e "${YELLOW}Starting Docker container for firmware build...${NC}"
 echo -e "${YELLOW}This might take a while the first time.${NC}"
