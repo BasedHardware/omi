@@ -34,6 +34,16 @@ After a successful build, you will find these files in the `firmware/firmware/bu
 - `zephyr.uf2` - UF2 firmware file for direct flashing to the device
 - `zephyr.zip` - OTA update package
 
+## Available Board Configurations
+
+The firmware has several configuration files for different board variants:
+
+1. `prj_xiao_ble_sense_devkitv2-adafruit.conf` - For the DevKit V2 with Adafruit bootloader (default)
+2. `prj_xiao_ble_sense_devkitv1.conf` - For the DevKit V1
+3. `prj_xiao_ble_sense_devkitv1-spisd.conf` - For the DevKit V1 with SPI SD card
+
+To build with a different configuration, modify the `build-firmware-in-docker.sh` script and change the `-DCONF_FILE=` parameter.
+
 ## Script Details
 
 The repository contains two scripts for Docker-based firmware building:
@@ -55,7 +65,7 @@ cd v2.7.0
 west update -o=--depth=1 -n
 west blobs fetch hal_nordic
 west zephyr-export
-west build -b xiao_ble/nrf52840/sense --pristine always ../app
+west build -b xiao_ble/nrf52840/sense --pristine always ../app -- -DCONF_FILE=prj_xiao_ble_sense_devkitv2-adafruit.conf
 ```
 
 ## Compatibility Notes

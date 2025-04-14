@@ -22,7 +22,7 @@ west zephyr-export
 
 # Build firmware
 echo "Building firmware for xiao_ble/nrf52840/sense board..."
-west build -b xiao_ble/nrf52840/sense --pristine always ../app
+west build -b xiao_ble/nrf52840/sense --pristine always ../app -- -DCONF_FILE=prj_xiao_ble_sense_devkitv2-adafruit.conf
 
 # Copy build artifacts to output directory
 echo "Copying build artifacts to output directory..."
