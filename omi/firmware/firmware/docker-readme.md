@@ -25,6 +25,8 @@ This script will:
 4. Create an OTA package at `firmware/firmware/build/docker_build/zephyr.zip`
 5. Show the location of all build artifacts
 
+The build configuration exactly matches what would be produced by nRF Connect for VS Code, ensuring compatibility with the official build process.
+
 ### Clean Build
 
 If you want to start fresh or are experiencing issues with an existing build, use the clean option:
@@ -34,6 +36,10 @@ If you want to start fresh or are experiencing issues with an existing build, us
 ```
 
 This will remove any existing SDK and build directories before starting the build process.
+
+### Incremental Builds
+
+By default, the build script will reuse an existing west installation and dependencies. This saves time by not re-downloading ~5GB of data on each build.
 
 ### Build Outputs
 
@@ -52,7 +58,17 @@ The firmware has several configuration files for different board variants:
 2. `prj_xiao_ble_sense_devkitv1.conf` - For the DevKit V1
 3. `prj_xiao_ble_sense_devkitv1-spisd.conf` - For the DevKit V1 with SPI SD card
 
-To build with a different configuration, modify the `build-firmware-in-docker.sh` script and change the `-DCONF_FILE=` parameter.
+The build also uses the corresponding overlay file from `app/overlay/`.
+
+## Build Parameters
+
+The Docker build uses the exact same build parameters as nRF Connect for VS Code:
+- Configuration file: `prj_xiao_ble_sense_devkitv2-adafruit.conf`
+- Device Tree Overlay: `overlay/xiao_ble_sense_devkitv2-adafruit.overlay`
+- Build Type: Debug
+- Platform: nrf52840
+
+This ensures the Docker-built firmware is identical to one built with the IDE.
 
 ## Script Details
 
@@ -75,7 +91,14 @@ cd v2.7.0
 west update -o=--depth=1 -n
 west blobs fetch hal_nordic
 west zephyr-export
-west build -b xiao_ble/nrf52840/sense --pristine always ../app -- -DCONF_FILE=prj_xiao_ble_sense_devkitv2-adafruit.conf
+west build -b xiao_ble/nrf52840/sense --pristine always ../app -- \
+    -DNCS_TOOLCHAIN_VERSION="NONE" \
+    -DCONF_FILE="prj_xiao_ble_sense_devkitv2-adafruit.conf" \
+    -DDTC_OVERLAY_FILE="/omi/firmware/firmware/app/overlay/xiao_ble_sense_devkitv2-adafruit.overlay" \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS="YES" \
+    -DCMAKE_BUILD_TYPE="Debug" \
+    -DPLATFORM=nrf52840 \
+    -DCACHED_CONF_FILE="/omi/firmware/firmware/app/prj_xiao_ble_sense_devkitv2-adafruit.conf"
 ```
 
 ## Compatibility Notes
