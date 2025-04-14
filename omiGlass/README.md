@@ -72,7 +72,7 @@ Follow these steps to set up omiglass:
 
    Note: This is an Expo project. For now, open the localhost link (this will appear after completing step 5) to access the web version.
 
-How you can contribute in hardware: 
+How you can contribute in software: 
 - [ ] Connect glasses with omi app. Currently the glasses only work with web interface
 
 ### Hardware
