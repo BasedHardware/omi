@@ -1,6 +1,4 @@
-# omiGlass - Open Source Smart Glasses
-
-Turn any glasses into hackable smart glasses with less than $25 of off-the-shelf components. Record your life, remember people you meet, identify objects, translate text, and more.
+# omiGlass - Open Source Meta Raybans with 6x of their battery
 
 <p align="center">
 <img src="https://github.com/user-attachments/assets/848f664b-183e-4df5-8928-f16f00ff144b" width="45%">
