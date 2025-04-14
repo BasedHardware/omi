@@ -5,9 +5,11 @@ import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/home/page.dart';
+import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/pages/settings/people.dart';
 import 'package:omi/pages/speech_profile/user_speech_samples.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
@@ -35,6 +37,11 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
       context.read<SpeechProfileProvider>().close();
       await context.read<SpeechProfileProvider>().updateDevice();
+      
+      // Check if user has set primary language
+      if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
+        await LanguageSelectionDialog.show(context);
+      }
     });
 
     super.initState();
@@ -314,6 +321,11 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                     )
                                   : MaterialButton(
                                       onPressed: () async {
+                                        // Check if user has set primary language, if not, show dialog
+                                        if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
+                                          await LanguageSelectionDialog.show(context);
+                                        }
+                                        
                                         BleAudioCodec codec;
                                         try {
                                           codec = await _getAudioCodec(provider.device!.id);

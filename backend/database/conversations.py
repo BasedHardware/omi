@@ -13,33 +13,7 @@ from models.conversation import ConversationPhoto, PostProcessingStatus, PostPro
 from models.transcript_segment import TranscriptSegment
 from ._client import db
 
-
-def _convert_memory_data_to_conversation_data(data: dict) -> dict:
-    """Convert memory data format to conversation data format."""
-    if 'processing_memory_id' in data:
-        data['processing_conversation_id'] = data.pop('processing_memory_id')
-    if 'plugins_results' in data:
-        plugins_results = data.pop('plugins_results')
-        data['apps_results'] = [
-            {'content': result['content'], 'app_id': result['plugin_id']}
-            for result in plugins_results
-        ]
-    return data
-
-
-def _get_conversation_ref_and_data(user_ref: firestore.DocumentReference, conversation_id: str) -> Tuple[
-    firestore.DocumentReference, dict]:
-    """Get conversation reference and handle memory_id conversion if needed."""
-    memory_ref = user_ref.collection('memories').document(conversation_id)
-    conversation_ref = user_ref.collection('conversations').document(conversation_id)
-
-    memory_data = memory_ref.get().to_dict()
-
-    if memory_data and (('processing_memory_id' in memory_data) or ('plugins_results' in memory_data)):
-        data = _convert_memory_data_to_conversation_data(memory_data)
-        return conversation_ref, data
-
-    return conversation_ref, None
+conversations_collection = 'conversations'
 
 
 # *****************************
@@ -53,17 +27,13 @@ def upsert_conversation(uid: str, conversation_data: dict):
         del conversation_data['photos']
 
     user_ref = db.collection('users').document(uid)
-    # TODO: memories collection is deprecated, remove this after migration
-    conversation_ref = user_ref.collection('memories').document(conversation_data['id'])
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
     conversation_ref.set(conversation_data)
-    ########################################################
-    new_conversation_ref = user_ref.collection('conversations').document(conversation_data['id'])
-    new_conversation_ref.set(_convert_memory_data_to_conversation_data(conversation_data))
 
 
 def get_conversation(uid, conversation_id):
     user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection('memories').document(conversation_id)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     return conversation_ref.get().to_dict()
 
 
@@ -71,7 +41,7 @@ def get_conversations(uid: str, limit: int = 100, offset: int = 0, include_disca
                       statuses: List[str] = [], start_date: Optional[datetime] = None,
                       end_date: Optional[datetime] = None):
     conversations_ref = (
-        db.collection('users').document(uid).collection('memories')
+        db.collection('users').document(uid).collection(conversations_collection)
         .where(filter=FieldFilter('deleted', '==', False))
     )
     if not include_discarded:
@@ -95,44 +65,26 @@ def get_conversations(uid: str, limit: int = 100, offset: int = 0, include_disca
 
 def update_conversation(uid: str, conversation_id: str, memory_data: dict):
     user_ref = db.collection('users').document(uid)
-    # TODO: memories collection is deprecated, remove this after migration
-    conversation_ref = user_ref.collection('memories').document(conversation_id)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update(memory_data)
-    ########################################################
-    new_conversation_ref, converted_data = _get_conversation_ref_and_data(user_ref, conversation_id)
-    if converted_data:
-        new_conversation_ref.update(converted_data)
-    new_conversation_ref.update(_convert_memory_data_to_conversation_data(memory_data))
 
 
 def update_conversation_title(uid: str, conversation_id: str, title: str):
     user_ref = db.collection('users').document(uid)
-    # TODO: memories collection is deprecated, remove this after migration
-    conversation_ref = user_ref.collection('memories').document(conversation_id)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'structured.title': title})
-    ########################################################
-    new_conversation_ref, converted_data = _get_conversation_ref_and_data(user_ref, conversation_id)
-    if converted_data:
-        new_conversation_ref.update(converted_data)
-    new_conversation_ref.update({'structured.title': title})
 
 
 def delete_conversation(uid, conversation_id):
     user_ref = db.collection('users').document(uid)
-    # TODO: memories collection is deprecated, remove this after migration
-    conversation_ref = user_ref.collection('memories').document(conversation_id)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'deleted': True})
-    ########################################################
-    new_conversation_ref, converted_data = _get_conversation_ref_and_data(user_ref, conversation_id)
-    if converted_data:
-        new_conversation_ref.update(converted_data)
-    new_conversation_ref.update({'deleted': True})
 
 
 def filter_conversations_by_date(uid, start_date, end_date):
     user_ref = db.collection('users').document(uid)
     query = (
-        user_ref.collection('memories')
+        user_ref.collection(conversations_collection)
         .where(filter=FieldFilter('created_at', '>=', start_date))
         .where(filter=FieldFilter('created_at', '<=', end_date))
         .where(filter=FieldFilter('deleted', '==', False))
@@ -144,7 +96,7 @@ def filter_conversations_by_date(uid, start_date, end_date):
 
 def get_conversations_by_id(uid, conversation_ids):
     user_ref = db.collection('users').document(uid)
-    conversations_ref = user_ref.collection('memories')
+    conversations_ref = user_ref.collection(conversations_collection)
 
     doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversation_ids]
     docs = db.get_all(doc_refs)
@@ -166,7 +118,7 @@ def get_conversations_by_id(uid, conversation_ids):
 def get_in_progress_conversation(uid: str):
     user_ref = db.collection('users').document(uid)
     conversations_ref = (
-        user_ref.collection('memories')
+        user_ref.collection(conversations_collection)
         .where(filter=FieldFilter('status', '==', 'in_progress'))
     )
     docs = [doc.to_dict() for doc in conversations_ref.stream()]
@@ -176,7 +128,7 @@ def get_in_progress_conversation(uid: str):
 def get_processing_conversations(uid: str):
     user_ref = db.collection('users').document(uid)
     conversations_ref = (
-        user_ref.collection('memories')
+        user_ref.collection(conversations_collection)
         .where(filter=FieldFilter('status', '==', 'processing'))
     )
     return [doc.to_dict() for doc in conversations_ref.stream()]
@@ -184,26 +136,14 @@ def get_processing_conversations(uid: str):
 
 def update_conversation_status(uid: str, conversation_id: str, status: str):
     user_ref = db.collection('users').document(uid)
-    # TODO: memories collection is deprecated, remove this after migration
-    conversation_ref = user_ref.collection('memories').document(conversation_id)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'status': status})
-    ########################################################
-    new_conversation_ref, converted_data = _get_conversation_ref_and_data(user_ref, conversation_id)
-    if converted_data:
-        new_conversation_ref.update(converted_data)
-    new_conversation_ref.update({'status': status})
 
 
 def set_conversation_as_discarded(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
-    # TODO: memories collection is deprecated, remove this after migration
-    conversation_ref = user_ref.collection('memories').document(conversation_id)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'discarded': True})
-    ########################################################
-    new_conversation_ref, converted_data = _get_conversation_ref_and_data(user_ref, conversation_id)
-    if converted_data:
-        new_conversation_ref.update(converted_data)
-    new_conversation_ref.update({'discarded': True})
 
 
 # *********************************
@@ -212,14 +152,8 @@ def set_conversation_as_discarded(uid: str, conversation_id: str):
 
 def update_conversation_events(uid: str, conversation_id: str, events: List[dict]):
     user_ref = db.collection('users').document(uid)
-    # TODO: memories collection is deprecated, remove this after migration
-    conversation_ref = user_ref.collection('memories').document(conversation_id)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'structured.events': events})
-    ########################################################
-    new_conversation_ref, converted_data = _get_conversation_ref_and_data(user_ref, conversation_id)
-    if converted_data:
-        new_conversation_ref.update(converted_data)
-    new_conversation_ref.update({'structured.events': events})
 
 
 # *********************************
@@ -228,14 +162,8 @@ def update_conversation_events(uid: str, conversation_id: str, events: List[dict
 
 def update_conversation_action_items(uid: str, conversation_id: str, action_items: List[dict]):
     user_ref = db.collection('users').document(uid)
-    # TODO: memories collection is deprecated, remove this after migration
-    conversation_ref = user_ref.collection('memories').document(conversation_id)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'structured.action_items': action_items})
-    ########################################################
-    new_conversation_ref, converted_data = _get_conversation_ref_and_data(user_ref, conversation_id)
-    if converted_data:
-        new_conversation_ref.update(converted_data)
-    new_conversation_ref.update({'structured.action_items': action_items})
 
 
 # ******************************
@@ -244,26 +172,14 @@ def update_conversation_action_items(uid: str, conversation_id: str, action_item
 
 def update_conversation_finished_at(uid: str, conversation_id: str, finished_at: datetime):
     user_ref = db.collection('users').document(uid)
-    # TODO: memories collection is deprecated, remove this after migration
-    conversation_ref = user_ref.collection('memories').document(conversation_id)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'finished_at': finished_at})
-    ########################################################
-    new_conversation_ref, converted_data = _get_conversation_ref_and_data(user_ref, conversation_id)
-    if converted_data:
-        new_conversation_ref.update(converted_data)
-    new_conversation_ref.update({'finished_at': finished_at})
 
 
 def update_conversation_segments(uid: str, conversation_id: str, segments: List[dict]):
     user_ref = db.collection('users').document(uid)
-    # TODO: memories collection is deprecated, remove this after migration
-    conversation_ref = user_ref.collection('memories').document(conversation_id)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'transcript_segments': segments})
-    ########################################################
-    new_conversation_ref, converted_data = _get_conversation_ref_and_data(user_ref, conversation_id)
-    if converted_data:
-        new_conversation_ref.update(converted_data)
-    new_conversation_ref.update({'transcript_segments': segments})
 
 
 # ***********************************
@@ -272,18 +188,12 @@ def update_conversation_segments(uid: str, conversation_id: str, segments: List[
 
 def set_conversation_visibility(uid: str, conversation_id: str, visibility: str):
     user_ref = db.collection('users').document(uid)
-    # TODO: memories collection is deprecated, remove this after migration
-    conversation_ref = user_ref.collection('memories').document(conversation_id)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'visibility': visibility})
-    ########################################################
-    new_conversation_ref, converted_data = _get_conversation_ref_and_data(user_ref, conversation_id)
-    if converted_data:
-        new_conversation_ref.update(converted_data)
-    new_conversation_ref.update({'visibility': visibility})
 
 
 async def _get_public_conversation(db: AsyncClient, uid: str, conversation_id: str):
-    conversation_ref = db.collection('users').document(uid).collection('memories').document(conversation_id)
+    conversation_ref = db.collection('users').document(uid).collection('conversations').document(conversation_id)
     conversation_doc = await conversation_ref.get()
     if conversation_doc.exists:
         conversation_data = conversation_doc.to_dict()
@@ -312,7 +222,7 @@ def set_postprocessing_status(
         model: PostProcessingModel = PostProcessingModel.fal_whisperx
 ):
     user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection('memories').document(conversation_id)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({
         'postprocessing.status': status,
         'postprocessing.model': model,
@@ -322,7 +232,7 @@ def set_postprocessing_status(
 
 def store_model_segments_result(uid: str, conversation_id: str, model_name: str, segments: List[TranscriptSegment]):
     user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection('memories').document(conversation_id)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     segments_ref = conversation_ref.collection(model_name)
     batch = db.batch()
     for i, segment in enumerate(segments):
@@ -341,7 +251,7 @@ def store_model_emotion_predictions_result(
 ):
     now = datetime.now()
     user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection('memories').document(conversation_id)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     predictions_ref = conversation_ref.collection(model_name)
     batch = db.batch()
     count = 0
@@ -364,7 +274,7 @@ def store_model_emotion_predictions_result(
 
 def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection('memories').document(conversation_id)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     deepgram_ref = conversation_ref.collection('deepgram_streaming')
     soniox_ref = conversation_ref.collection('soniox_streaming')
     speechmatics_ref = conversation_ref.collection('speechmatics_streaming')
@@ -384,7 +294,7 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
 
 def store_conversation_photos(uid: str, conversation_id: str, photos: List[ConversationPhoto]):
     user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection('memories').document(conversation_id)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     photos_ref = conversation_ref.collection('photos')
     batch = db.batch()
     for photo in photos:
@@ -398,7 +308,7 @@ def store_conversation_photos(uid: str, conversation_id: str, photos: List[Conve
 
 def get_conversation_photos(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection('memories').document(conversation_id)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     photos_ref = conversation_ref.collection('photos')
     return [doc.to_dict() for doc in photos_ref.stream()]
 
@@ -416,7 +326,7 @@ def get_closest_conversation_to_timestamps(
     print('get_closest_conversation_to_timestamps', start_threshold, end_threshold)
 
     query = (
-        db.collection('users').document(uid).collection('memories')
+        db.collection('users').document(uid).collection(conversations_collection)
         .where(filter=FieldFilter('finished_at', '>=', start_threshold))
         .where(filter=FieldFilter('started_at', '<=', end_threshold))
         .where(filter=FieldFilter('deleted', '==', False))
@@ -450,7 +360,7 @@ def get_closest_conversation_to_timestamps(
 
 def get_last_completed_conversation(uid: str) -> Optional[dict]:
     query = (
-        db.collection('users').document(uid).collection('memories')
+        db.collection('users').document(uid).collection(conversations_collection)
         .where(filter=FieldFilter('deleted', '==', False))
         .where(filter=FieldFilter('status', '==', ConversationStatus.completed))
         .order_by('created_at', direction=firestore.Query.DESCENDING)

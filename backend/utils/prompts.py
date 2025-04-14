@@ -60,7 +60,7 @@ extract_memories_prompt = ChatPromptTemplate.from_messages([
 
     **Existing facts you already know about {user_name} (DO NOT REPEAT ANY)**:
     ```
-    {facts_str}
+    {memories_str}
     ```
 
     **Conversation transcript**:
@@ -140,7 +140,7 @@ extract_memories_text_content_prompt = ChatPromptTemplate.from_messages([
     **Existing facts about {user_name} and learnings {user_name} already has**:**:
 
     ```
-    {facts_str}
+    {memories_str}
     ```
 
     ---
@@ -216,7 +216,7 @@ extract_memories_text_content_prompt_v1 = ChatPromptTemplate.from_messages([
 
     **Existing facts you already know about {user_name} (DO NOT REPEAT ANY)**:
     ```
-    {facts_str}
+    {memories_str}
     ```
 
     **Text Content**:

@@ -6,7 +6,7 @@
 import time
 from datetime import datetime, timezone
 
-import database.processing_memories as processing_memories_db
+import database.processing_conversations as processing_conversations_db
 from database.redis_db import get_cached_user_geolocation
 from models.conversation import CreateConversation, Geolocation
 from models.processing_conversation import ProcessingConversation, ProcessingConversationStatus, DetailProcessingConversation
@@ -17,11 +17,11 @@ from utils.plugins import trigger_external_integrations
 
 async def create_conversation_by_processing_conversation(uid: str, processing_conversation_id: str):
     # Fetch new
-    processing_memories = processing_memories_db.get_processing_memories_by_id(uid, [processing_conversation_id])
-    if len(processing_memories) == 0:
+    processing_conversations = processing_conversations_db.get_processing_conversations_by_id(uid, [processing_conversation_id])
+    if len(processing_conversations) == 0:
         print("processing conversation is not found")
         return
-    processing_conversation = ProcessingConversation(**processing_memories[0])
+    processing_conversation = ProcessingConversation(**processing_conversations[0])
 
     # Create conversation
     transcript_segments = processing_conversation.transcript_segments
@@ -50,13 +50,13 @@ async def create_conversation_by_processing_conversation(uid: str, processing_co
     # update
     processing_conversation.memory_id = conversation.id
     processing_conversation.message_ids = list(map(lambda m: m.id, messages))
-    processing_memories_db.update_processing_memory(uid, processing_conversation.id, processing_conversation.dict())
+    processing_conversations_db.update_processing_conversation(uid, processing_conversation.id, processing_conversation.dict())
 
     return conversation, messages, processing_conversation
 
 
 def get_processing_conversation(uid: str, id: str, ) -> DetailProcessingConversation:
-    processing_conversation = processing_memories_db.get_processing_memory_by_id(uid, id)
+    processing_conversation = processing_conversations_db.get_processing_conversation_by_id(uid, id)
     if not processing_conversation:
         print("processing conversation is not found")
         return
@@ -70,9 +70,9 @@ def get_processing_memories(uid: str, filter_ids: [str] = [], limit: int = 3) ->
     tracking_status = False
     if len(filter_ids) > 0:
         filter_ids = list(set(filter_ids))  # prevent duplicated wastes
-        processing_conversations = processing_memories_db.get_processing_memories(uid, filter_ids=filter_ids, limit=limit)
+        processing_conversations = processing_conversations_db.get_processing_conversations(uid, filter_ids=filter_ids, limit=limit)
     else:
-        processing_conversations = processing_memories_db.get_processing_memories(uid, statuses=[
+        processing_conversations = processing_conversations_db.get_processing_conversations(uid, statuses=[
             ProcessingConversationStatus.Processing], limit=limit)
         tracking_status = True
 
@@ -89,7 +89,7 @@ def get_processing_memories(uid: str, filter_ids: [str] = [], limit: int = 3) ->
             # Keep processing after 5m from the capturing to, there are something went wrong.
             if pm.status == ProcessingConversationStatus.Processing and pm.capturing_to and pm.capturing_to.timestamp() < time.time() - 300:
                 pm.status = ProcessingConversationStatus.Failed
-                processing_memories_db.update_processing_memory_status(uid, pm.id, pm.status)
+                processing_conversations_db.update_processing_conversation_status(uid, pm.id, pm.status)
                 continue
             new_resp.append(pm)
         resp = new_resp

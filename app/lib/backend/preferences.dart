@@ -157,10 +157,6 @@ class SharedPreferencesUtil {
 
   set showFirmwareUpdateDialog(bool value) => saveBool('v2/showFirmwareUpdateDialog', value);
 
-  String get recordingsLanguage => getString('recordingsLanguage2') ?? 'auto';
-
-  set recordingsLanguage(String value) => saveString('recordingsLanguage2', value);
-
   String get transcriptionModel => getString('transcriptionModel3') ?? 'soniox';
 
   set transcriptionModel(String value) => saveString('transcriptionModel3', value);
@@ -196,6 +192,15 @@ class SharedPreferencesUtil {
   bool get showDiscardedMemories => getBool('showDiscardedMemories') ?? true;
 
   set showDiscardedMemories(bool value) => saveBool('showDiscardedMemories', value);
+
+  // User primary language preferences
+  String get userPrimaryLanguage => getString('userPrimaryLanguage') ?? '';
+
+  set userPrimaryLanguage(String value) => saveString('userPrimaryLanguage', value);
+
+  bool get hasSetPrimaryLanguage => getBool('hasSetPrimaryLanguage') ?? false;
+
+  set hasSetPrimaryLanguage(bool value) => saveBool('hasSetPrimaryLanguage', value);
 
   int get currentStorageBytes => getInt('currentStorageBytes') ?? 0;
 
@@ -455,6 +460,12 @@ class SharedPreferencesUtil {
     await remove('calendarEnabled');
     await remove('calendarId');
     await remove('calendarType2');
+
+    // User Primary language
+    await remove('userPrimaryLanguage');
+    await remove('hasSetPrimaryLanguage');
+
+    await remove('onboardingCompleted');
 
     // Keep settings like language, analytics opt-in, etc.
     // as these are user preferences that should persist across logins

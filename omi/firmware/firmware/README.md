@@ -8,12 +8,13 @@ The Omi firmware is built on the Zephyr RTOS and provides functionality for audi
 
 ## Directory Structure
 
-- `src/`: Contains the source code files
-- `include/`: Header files
-- `boards/`: Board-specific configurations (not used)
-- `overlays/`: Device-specific overlay files
-- `CMakeLists.txt`: CMake build configuration
-- `prj.conf`: Project configuration file
+- `app/`: The application project files
+    - `src/`: Source files for the application code.
+    - `CMakeLists.txt`: CMake build configuration
+    - `overlays/`: Device-specific overlay files
+    - `prj.conf`: Project configuration file
+- `test/`: The test project files
+- `boards/`: Board-specific configurations
 
 ## Prerequisites
 
@@ -23,14 +24,14 @@ The Omi firmware is built on the Zephyr RTOS and provides functionality for audi
 
 ## Building the Firmware
 
-Follow the instructions at https://docs.omi.me/docs/developer/Compile_firmware
+Follow the instructions at https://docs.omi.me/docs/developer/firmware/Compile_firmware
 
 ## Flashing the Firmware
 
 Follow the instructions at https://docs.omi.me/docs/get_started/Flash_device
 At the step https://docs.omi.me/docs/get_started/Flash_device#downloading-the-firmware, do not download a released .uf2 file rom GitHub.
 
-Instead, locate the `zephyr.uf2` file in your build output directory, possibly `firmware/build/zephyr`
+Instead, locate the `zephyr.uf2` file in your build output directory, possibly `app/build/zephyr`
 
 ## Device-Specific Builds
 

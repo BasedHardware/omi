@@ -10,6 +10,7 @@ import 'package:omi/pages/onboarding/auth.dart';
 import 'package:omi/pages/onboarding/find_device/page.dart';
 import 'package:omi/pages/onboarding/name/name_widget.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
+import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/onboarding/welcome/page.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -29,13 +30,25 @@ class OnboardingWrapper extends StatefulWidget {
 }
 
 class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProviderStateMixin {
+  // Onboarding page indices
+  static const int kAuthPage = 0;
+  static const int kNamePage = 1;
+  static const int kPrimaryLanguagePage = 2;
+  static const int kPermissionsPage = 3;
+  static const int kWelcomePage = 4;
+  static const int kFindDevicesPage = 5;
+  static const int kSpeechProfilePage = 6;
+
+  // Special index values used in comparisons
+  static const List<int> kHiddenHeaderPages = [-1, 5, 6];
+
   TabController? _controller;
-  bool hasSpeechProfile = SharedPreferencesUtil().hasSpeakerProfile;
+  bool get hasSpeechProfile => SharedPreferencesUtil().hasSpeakerProfile;
 
   @override
   void initState() {
     //TODO: Change from tab controller to default controller and use provider (part of instabug cleanup) @mdmohsin7
-    _controller = TabController(length: hasSpeechProfile ? 5 : 6, vsync: this);
+    _controller = TabController(length: hasSpeechProfile ? 6 : 7, vsync: this);
     _controller!.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (isSignedIn()) {
@@ -61,7 +74,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     } else {
       routeToPage(context, const HomePageWrapper(), replace: true);
     }
-    // _controller!.animateTo(_controller!.index + 1);
   }
 
   // TODO: use connection directly
@@ -101,6 +113,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           FirebaseAuth.instance.currentUser!.uid,
         );
         MixpanelManager().onboardingStepCompleted('Name');
+      }),
+      PrimaryLanguageWidget(goNext: () {
+        _goNext();
+        MixpanelManager().onboardingStepCompleted('Primary Language');
       }),
       PermissionsWidget(
         goNext: () {
@@ -147,22 +163,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         SpeechProfileWidget(
           goNext: () {
             routeToPage(context, const HomePageWrapper(), replace: true);
-            // if (context.read<SpeechProfileProvider>().memory == null) {
-            // } else {
-            //   _goNext();
-            // }
             MixpanelManager().onboardingStepCompleted('Speech Profile');
           },
           onSkip: () {
             routeToPage(context, const HomePageWrapper(), replace: true);
           },
         ),
-        // MemoryCreatedWidget(
-        //   goNext: () {
-        //     // _goNext();
-        //     MixpanelManager().onboardingStepCompleted('Memory Created');
-        //   },
-        // ),
       ]);
     }
 
@@ -180,19 +186,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                   physics: const NeverScrollableScrollPhysics(),
                   children: [
                     DeviceAnimationWidget(animatedBackground: _controller!.index != -1),
-                    // _controller!.index == 6 || _controller!.index == 7
-                    //     ? const SizedBox()
-                    //     : Center(
-                    //         child: Text(
-                    //           'Omi',
-                    //           style: TextStyle(
-                    //               color: Colors.grey.shade200,
-                    //               fontSize: _controller!.index == _controller!.length - 1 ? 28 : 40,
-                    //               fontWeight: FontWeight.w500),
-                    //         ),
-                    //       ),
                     const SizedBox(height: 24),
-                    [-1, 5, 6, 7].contains(_controller?.index)
+                    kHiddenHeaderPages.contains(_controller?.index)
                         ? const SizedBox(
                             height: 0,
                           )
@@ -207,7 +202,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                             ),
                           ),
                     SizedBox(
-                      height: (_controller!.index == 5 || _controller!.index == 6 || _controller!.index == 7)
+                      height: (_controller!.index == kFindDevicesPage || _controller!.index == kSpeechProfilePage)
                           ? max(MediaQuery.of(context).size.height - 500 - 10,
                               maxHeightWithTextScale(context, _controller!.index))
                           : max(MediaQuery.of(context).size.height - 500 - 30,
@@ -224,14 +219,14 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                   ],
                 ),
               ),
-              if (_controller!.index == 3)
+              if (_controller!.index == kWelcomePage)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(0, 40, 16, 0),
                   child: Align(
                     alignment: Alignment.topRight,
                     child: TextButton(
                       onPressed: () {
-                        if (_controller!.index == 2) {
+                        if (_controller!.index == kPermissionsPage) {
                           _controller!.animateTo(_controller!.index + 1);
                         } else {
                           routeToPage(context, const HomePageWrapper(), replace: true);
@@ -244,7 +239,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                     ),
                   ),
                 ),
-              if (_controller!.index > 1)
+              if (_controller!.index > kNamePage)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 40, 0, 0),
                   child: Align(
@@ -260,7 +255,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                     ),
                   ),
                 ),
-              if (_controller!.index != 0)
+              if (_controller!.index != kAuthPage)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 56, 16, 0),
                   child: Row(
@@ -296,7 +291,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 double maxHeightWithTextScale(BuildContext context, int index) {
   double textScaleFactor = MediaQuery.of(context).textScaleFactor;
   if (textScaleFactor > 1.0) {
-    if (index == 0) {
+    if (index == _OnboardingWrapperState.kAuthPage) {
       return 200;
     } else {
       return 405;
