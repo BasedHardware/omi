@@ -7,9 +7,15 @@
 
 
 
-## Video Demo
 
-[![OpenGlass Demo](https://img.youtube.com/vi/DsM_-c2e1ew/0.jpg)](https://youtube.com/shorts/QvFjXgLZX7U)
+<p align="center">
+  <a href="https://youtube.com/shorts/QvFjXgLZX7U">
+    <img src="https://img.youtube.com/vi/QvFjXgLZX7U/maxresdefault.jpg" alt="Watch the video" width="400"/>
+  </a>
+  <br>
+  <a href="https://youtube.com/shorts/QvFjXgLZX7U">▶️ Watch Video</a>
+</p>
+
 
 ## Want a Pre-built Version?
 
@@ -21,7 +27,7 @@ Join the [Based Hardware Discord](https://discord.gg/omi) for setup questions, c
 
 ## Getting Started
 
-Follow these steps to set up OpenGlass:
+Follow these steps to set up omiglass:
 
 ### Buying guide
    - [Seeed Studio XIAO ESP32 S3 Sense](https://www.amazon.com/dp/B0C69FFVHH/ref=dp_iou_view_item?ie=UTF8&psc=1)
@@ -33,11 +39,11 @@ Follow these steps to set up OpenGlass:
 
 ### Software
 
-1. Clone the OpenGlass repository and install the dependencies:
+1. Clone the omiglass repository and install the dependencies:
 
    ```
-   git clone https://github.com/BasedHardware/openglass.git
-   cd openglass
+   git clone https://github.com/BasedHardware/omi.git
+   cd omiglass
    npm install
    ```
 
@@ -47,7 +53,7 @@ Follow these steps to set up OpenGlass:
    yarn install
    ```
 
-2. Add API keys for Groq and OpenAI in the `keys.ts` file located at [https://github.com/BasedHardware/OpenGlass/blob/main/sources/keys.ts](https://github.com/BasedHardware/OpenGlass/blob/main/sources/keys.ts).
+2. Add API keys for Groq and OpenAI in the `keys.ts` file located at [https://github.com/BasedHardware/omiglass/blob/main/sources/keys.ts](https://github.com/BasedHardware/omiglass/blob/main/sources/keys.ts).
 
 3. For Ollama, self-host the REST API from the repository at [https://github.com/ollama/ollama](https://github.com/ollama/ollama) and add the URL to the `keys.ts` file. The URL should be http://localhost:11434/api/chat
 4. go to terminal and type "ollama pull moondream:1.8b-v2-fp16"
@@ -66,24 +72,31 @@ Follow these steps to set up OpenGlass:
 
    Note: This is an Expo project. For now, open the localhost link (this will appear after completing step 5) to access the web version.
 
+How you can contribute in hardware: 
+- [ ] Connect glasses with omi app. Currently the glasses only work with web interface
+
 ### Hardware
 
 
-2. 3D print the glasses mount case using the provided STL file. Put components like this
+1. 3D print the glasses mount case using the provided STL file located in hardware folder.
+2.  Put components like this
    
 <p align="center">
   <img src="https://github.com/user-attachments/assets/45ef303b-0f92-43eb-bfad-1b20a86e948c" width="45%" />
   <img src="https://github.com/user-attachments/assets/3fa00359-74a0-4f85-a233-f4bf12b1db7b" width="45%" />
 </p>
 
+How you can contribute in hardware: 
+- [ ] Redesign the legs/sides so that it would fit on bigger heads
+- [ ] add a switch into design (current design is without switch)
 
-
-3. Open the [firmware folder](https://github.com/BasedHardware/openglass/tree/main/firmware) and open the `.ino` file in the Arduino IDE.
+### Firmware
+1. Open the [firmware folder](https://github.com/BasedHardware/omiglass/tree/main/firmware) and open the `.ino` file in the Arduino IDE.
 
    - If you don't have the Arduino IDE installed, download and install it from the [official website](https://www.arduino.cc/en/software).
    - Alternatively, follow the steps in the [firmware readme](firmware/readme.md) to build using `arduino-cli`
 
-4. Follow the software preparation steps to set up the Arduino IDE for the XIAO ESP32S3 board:
+2. Follow the software preparation steps to set up the Arduino IDE for the XIAO ESP32S3 board:
 
    - Add ESP32 board package to your Arduino IDE:
      - Navigate to File > Preferences, and fill "Additional Boards Manager URLs" with the URL: `https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json`
@@ -92,11 +105,11 @@ Follow these steps to set up OpenGlass:
      - On top of the Arduino IDE, select the port (likely to be COM3 or higher).
      - Search for `xiao` in the development board on the left and select `XIAO_ESP32S3`.
 
-5. Before you flash go to the "Tools" drop down in the Arduino IDE and make sure you set "PSRAM:" to be "PSRAM: "OPI PSRAM"
+3. Before you flash go to the "Tools" drop down in the Arduino IDE and make sure you set "PSRAM:" to be "PSRAM: "OPI PSRAM"
 
 ![Like this](image.png)
 
-6. Upload the firmware to the XIAO ESP32S3 board.
+4. Upload the firmware to the XIAO ESP32S3 board.
 
 
 ## License
