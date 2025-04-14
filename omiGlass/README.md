@@ -2,15 +2,17 @@
 
 Turn any glasses into hackable smart glasses with less than $25 of off-the-shelf components. Record your life, remember people you meet, identify objects, translate text, and more.
 
-![OpenGlass](https://github.com/BasedHardware/OpenGlass/assets/43514161/2fdc9d9d-2206-455c-ba60-10dbd6fb3dfb)
+<p align="center">
+<img src="https://github.com/user-attachments/assets/848f664b-183e-4df5-8928-f16f00ff144b" width="650">
+</p>
 
 ## Video Demo
 
-[![OpenGlass Demo](https://img.youtube.com/vi/DsM_-c2e1ew/0.jpg)](https://youtu.be/DsM_-c2e1ew)
+[![OpenGlass Demo](https://img.youtube.com/vi/DsM_-c2e1ew/0.jpg)](https://youtube.com/shorts/QvFjXgLZX7U)
 
 ## Want a Pre-built Version?
 
-We will ship a limited number of pre-built kits. Fill out the [interest form](https://basedhardware.com/openglass) to get notified.
+We will ship a limited number of pre-built kits. Get a Dev k[it here](https://omi.me/glass)
 
 ## Community
 
