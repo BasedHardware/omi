@@ -25,6 +25,12 @@ Join the [Based Hardware Discord](https://discord.gg/omi) for setup questions, c
 
 Follow these steps to set up OpenGlass:
 
+### Buying guide
+   - [Seeed Studio XIAO ESP32 S3 Sense](https://www.amazon.com/dp/B0C69FFVHH/ref=dp_iou_view_item?ie=UTF8&psc=1)
+   - x6 150mah batteries like [this](https://a.co/d/i17DjOr) or at least like [this](https://a.co/d/bbFdkic) (but you'll need to increase the size of the casing)
+   - 1x 250mah battery like [this](https://a.co/d/2xheiFC)
+
+
 
 ### Software
 
@@ -62,10 +68,6 @@ Follow these steps to set up OpenGlass:
    Note: This is an Expo project. For now, open the localhost link (this will appear after completing step 5) to access the web version.
 
 ### Hardware
-
-1. Gather the required components:
-
-   - [Seeed Studio XIAO ESP32 S3 Sense](https://www.amazon.com/dp/B0C69FFVHH/ref=dp_iou_view_item?ie=UTF8&psc=1)
 
 
 2. 3D print the glasses mount case using the provided STL file. Put components like this
