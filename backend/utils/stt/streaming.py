@@ -4,6 +4,8 @@ import random
 import time
 from typing import List
 from enum import Enum
+from collections import deque
+from thefuzz import fuzz
 
 import websockets
 from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
@@ -271,6 +273,18 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
         request['enable_speaker_identification'] = True
         request['cand_speaker_names'] = [uid]
 
+    # --- Repetition Detection State ---
+    HISTORY_SIZE = 5
+    SIMILARITY_THRESHOLD = 85 # Percentage for fuzz.ratio()
+    REPEAT_COUNT_THRESHOLD = 2
+    MIN_WORDS_FOR_FUZZY_CHECK = 3
+    MAX_SEGMENT_DURATION_S = 15.0
+
+    streamed_history = deque(maxlen=HISTORY_SIZE)
+    immediate_repeat_count = 0
+    alternating_repeat_count = 0
+    # --------------------------------
+
     try:
         # Connect to Soniox WebSocket
         print("Connecting to Soniox WebSocket...")
@@ -286,15 +300,93 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
         current_segment_time = None
         current_speaker_id = None
 
+        # --- Repetition Check Helper ---
+        def check_and_stream_segment(segment_to_check):
+            nonlocal immediate_repeat_count, alternating_repeat_count, streamed_history
+
+            if not segment_to_check: return False
+            current_text = segment_to_check['text'].strip()
+            if not current_text:
+                print("[Check] Segment text is empty, skipping.")
+                return False
+
+            word_count = len(current_text.split())
+            suppress = False
+            similarity_immediate = 0
+            similarity_alternate = 0
+            reset_counters = False
+
+            history_list = list(streamed_history)
+            print(f"[Check] Counts Before: Imm={immediate_repeat_count}, Alt={alternating_repeat_count}")
+
+            # Check immediate repetition (against last streamed segment)
+            if history_list:
+                last_text = history_list[-1]
+                is_similar_immediate = False
+                # Use fuzzy check only if both strings meet min word count
+                if word_count >= MIN_WORDS_FOR_FUZZY_CHECK and len(last_text.split()) >= MIN_WORDS_FOR_FUZZY_CHECK:
+                    similarity_immediate = fuzz.token_set_ratio(current_text, last_text)
+                    is_similar_immediate = similarity_immediate >= SIMILARITY_THRESHOLD
+                    print(f"[Check] Fuzzy Token Set Immediate Check: '{current_text}' vs '{last_text}' -> Score={similarity_immediate}, Similar={is_similar_immediate}")
+                elif current_text == last_text:
+                    is_similar_immediate = True
+                    similarity_immediate = 100
+                    print(f"[Check] Exact Immediate Check: '{current_text}' vs '{last_text}' -> Similar={is_similar_immediate}")
+
+                if is_similar_immediate:
+                    immediate_repeat_count += 1
+                else:
+                    immediate_repeat_count = 0
+                    reset_counters = True
+
+                if immediate_repeat_count >= REPEAT_COUNT_THRESHOLD:
+                    print(f"SUPPRESS Immediate Repeat ({similarity_immediate}%): '{current_text}' vs '{last_text}' (Count: {immediate_repeat_count})")
+                    suppress = True
+
+            # Only check if not already suppressed by immediate check
+            if not suppress and len(history_list) >= 2:
+                alternate_text = history_list[-2]
+                is_similar_alternate = False
+                if word_count >= MIN_WORDS_FOR_FUZZY_CHECK and len(alternate_text.split()) >= MIN_WORDS_FOR_FUZZY_CHECK:
+                    similarity_alternate = fuzz.token_set_ratio(current_text, alternate_text)
+                    is_similar_alternate = similarity_alternate >= SIMILARITY_THRESHOLD
+                    print(f"[Check] Fuzzy Token Set Alternate Check: '{current_text}' vs '{alternate_text}' -> Score={similarity_alternate}, Similar={is_similar_alternate}")
+                elif current_text == alternate_text:
+                    is_similar_alternate = True
+                    similarity_alternate = 100
+                    print(f"[Check] Exact Alternate Check: '{current_text}' vs '{alternate_text}' -> Similar={is_similar_alternate}")
+
+                if is_similar_alternate:
+                    alternating_repeat_count += 1
+                elif reset_counters:
+                    alternating_repeat_count = 0
+
+                if alternating_repeat_count >= REPEAT_COUNT_THRESHOLD:
+                    print(f"SUPPRESS Alternate Repeat ({similarity_alternate}%): '{current_text}' vs '{alternate_text}' (Count: {alternating_repeat_count})")
+                    suppress = True
+
+            if suppress:
+                print(f"Suppressed: '{current_text}'")
+                return False
+            else:
+                stream_transcript([segment_to_check])
+                streamed_history.append(current_text)
+
+                if reset_counters:
+                    print(f"[Check] Resetting counters because '{current_text}' differs from last.")
+                    immediate_repeat_count = 0
+                    alternating_repeat_count = 0
+                return True
+        # --- End Helper ---
+
+
         # Start listening for messages from Soniox
         async def on_message():
             nonlocal current_segment, current_segment_time, current_speaker_id
+
             try:
                 async for message in soniox_socket:
                     response = json.loads(message)
-                    # print(response)
-
-                    # Update last message time
                     current_time = time.time()
 
                     # Check for error responses
@@ -302,77 +394,79 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
                         error_message = response.get('error_message', 'Unknown error')
                         error_code = response.get('error_code', 0)
                         print(f"Soniox error: {error_code} - {error_message}")
+                        if current_segment:
+                            check_and_stream_segment(current_segment)
                         raise Exception(f"Soniox error: {error_code} - {error_message}")
 
                     # Process response based on tokens field
                     if 'tokens' in response:
                         tokens = response.get('tokens', [])
 
+                        if current_segment and current_time - current_segment['creation_time'] > MAX_SEGMENT_DURATION_S:
+                            check_and_stream_segment(current_segment)
+                            current_segment = None
+                            current_segment_time = None
+
                         if not tokens:
                             if current_segment:
-                                stream_transcript([current_segment])
+                                check_and_stream_segment(current_segment)
                                 current_segment = None
                                 current_segment_time = None
                             continue
 
-                        # Extract speaker information and text from tokens
-                        new_speaker_id = None
-                        speaker_change_detected = False
+                        # Extract speaker information and text from this batch's tokens
+                        extracted_speaker_id = None
                         token_texts = []
+                        start_time_ms = tokens[0]['start_ms']
+                        end_time_ms = tokens[-1]['end_ms']
 
-                        # First check if any token contains a speaker tag
                         for token in tokens:
                             token_text = token['text']
                             if token_text.startswith('spk:'):
-                                new_speaker_id = token_text.split(':')[1] if ':' in token_text else "1"
-                                speaker_change_detected = (current_speaker_id is not None and
-                                                           current_speaker_id != new_speaker_id)
-                                current_speaker_id = new_speaker_id
+                                extracted_speaker_id = token_text.split(':')[1] if ':' in token_text else "1"
                             else:
                                 token_texts.append(token_text)
 
-                        # If no speaker tag found in this response, use the current speaker
-                        if new_speaker_id is None and current_speaker_id is not None:
-                            new_speaker_id = current_speaker_id
-                        elif new_speaker_id is None:
-                            new_speaker_id = "1"  # Default speaker
+                        speaker_change_detected = (current_segment and extracted_speaker_id is not None and
+                                                   current_segment['speaker'] != f"SPEAKER_0{extracted_speaker_id}")
 
-                        # If we have either a speaker change or threshold exceeded, send the current segment and start a new one
-                        punctuation_marks = ['.', '?', '!', ',', ';', ':', ' ']
                         time_threshold_exceed = current_segment_time and current_time - current_segment_time > 0.3 and \
-                            (current_segment and current_segment['text'][-1] in punctuation_marks)
+                            (current_segment and current_segment['text'] and current_segment['text'][-1] in ['.', '?', '!', ',', ';', ':', ' '])
+
                         if (speaker_change_detected or time_threshold_exceed) and current_segment:
-                            stream_transcript([current_segment])
+                            segment_streamed = check_and_stream_segment(current_segment)
                             current_segment = None
                             current_segment_time = None
 
-                        # Combine all non-speaker tokens into text
+
                         content = ''.join(token_texts)
-
-                        # Get timing information
-                        start_time = tokens[0]['start_ms'] / 1000.0
-                        end_time = tokens[-1]['end_ms'] / 1000.0
-
-                        if preseconds > 0 and start_time < preseconds:
-                            # print('Skipping word', start_time)
+                        if not content.strip():
                             continue
 
-                        # Adjust timing if we have preseconds (for speech profile)
+                        start_time = start_time_ms / 1000.0
+                        end_time = end_time_ms / 1000.0
+
+                        if preseconds > 0 and start_time < preseconds:
+                            print(f"[on_message] Skipping segment starting before preseconds: {start_time}")
+                            continue
                         if preseconds > 0:
                             start_time -= preseconds
                             end_time -= preseconds
 
-                        # Determine if this is the user based on speaker identification
+                        effective_speaker_id = extracted_speaker_id if extracted_speaker_id else current_speaker_id if current_speaker_id else "1"
+
+                        if extracted_speaker_id:
+                            current_speaker_id = extracted_speaker_id
+
                         is_user = False
-                        if has_speech_profile and new_speaker_id == uid:
-                            is_user = True
-                        elif preseconds > 0 and new_speaker_id == "1":
-                            is_user = True
+                        if has_speech_profile and effective_speaker_id == uid: is_user = True
+                        elif preseconds > 0 and effective_speaker_id == "1": is_user = True
+
 
                         # Create a new segment or append to existing one
                         if current_segment is None:
                             current_segment = {
-                                'speaker': f"SPEAKER_0{new_speaker_id}",
+                                'speaker': f"SPEAKER_0{effective_speaker_id}",
                                 'start': start_time,
                                 'end': end_time,
                                 'text': content,
@@ -383,13 +477,21 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
                         else:
                             current_segment['text'] += content
                             current_segment['end'] = end_time
+                            current_segment_time = current_time
 
                     else:
                         print(f"Unexpected Soniox response format: {response}")
+
             except websockets.exceptions.ConnectionClosedOK:
                 print("Soniox connection closed normally.")
+                if current_segment:
+                    check_and_stream_segment(current_segment)
             except Exception as e:
                 print(f"Error receiving from Soniox: {e}")
+                if current_segment:
+                    check_and_stream_segment(current_segment)
+                # Reraise after attempting to finalize
+                raise
             finally:
                 if not soniox_socket.closed:
                     await soniox_socket.close()
@@ -399,11 +501,10 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
         asyncio.create_task(on_message())
         asyncio.create_task(soniox_socket.keepalive_ping())
 
-        # Return the Soniox WebSocket object
         return soniox_socket
 
     except Exception as e:
-        print(f"Exception in process_audio_soniox: {e}")
+        print(f"Exception in process_audio_soniox setup or connection: {e}")
         raise  # Re-raise the exception to be handled by the caller
 
 
