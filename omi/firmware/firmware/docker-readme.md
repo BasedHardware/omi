@@ -1,0 +1,98 @@
+# Building Firmware with Docker
+
+This document explains how to build the firmware using Docker, which provides a consistent environment across different platforms (Linux, macOS, Windows).
+
+## Prerequisites
+
+1. [Docker](https://www.docker.com/products/docker-desktop/) installed on your system
+2. Git repository cloned to your local machine
+
+## Building the Firmware
+
+### Quick Start
+
+From the root of the repository, run:
+
+```bash
+chmod +x omi/firmware/firmware/build-docker.sh
+./omi/firmware/firmware/build-docker.sh
+```
+
+This script will:
+1. Start a Docker container with the Zephyr RTOS build environment
+2. Install necessary tools and dependencies
+3. Build the firmware for the xiao_ble/nrf52840/sense board
+4. Create an OTA package at `firmware/firmware/build/docker_build/zephyr.zip`
+5. Show the location of all build artifacts
+
+### Build Outputs
+
+After a successful build, you will find these files in the `firmware/firmware/build/docker_build` directory:
+
+- `zephyr.hex` - Raw firmware hex file
+- `zephyr.bin` - Binary firmware file
+- `zephyr.uf2` - UF2 firmware file for direct flashing to the device
+- `zephyr.zip` - OTA update package
+
+## Script Details
+
+The repository contains two scripts for Docker-based firmware building:
+
+1. `build-docker.sh` - The main script you run on your host machine. It sets up and runs the Docker container.
+2. `build-firmware-in-docker.sh` - The script that runs inside the Docker container to build the firmware.
+
+## Manual Build Process
+
+If you prefer to run the Docker commands manually, you can use:
+
+```bash
+# Run from the root of the repository
+docker run --rm -it -v "$(pwd):/omi" -e CMAKE_PREFIX_PATH=/opt/toolchains -e PATH="/root/.local/bin:$PATH" ghcr.io/zephyrproject-rtos/ci bash
+pip install --user adafruit-nrfutil
+cd /omi/firmware/firmware/
+west init -m https://github.com/nrfconnect/sdk-nrf --mr v2.7.0 v2.7.0
+cd v2.7.0
+west update -o=--depth=1 -n
+west blobs fetch hal_nordic
+west zephyr-export
+west build -b xiao_ble/nrf52840/sense --pristine always ../app
+```
+
+## Compatibility Notes
+
+### Apple Silicon (M1/M2/M3 Macs)
+
+The script automatically detects Apple Silicon (arm64) architecture and uses the compatible Docker image. No additional configuration is needed.
+
+### Windows
+
+On Windows, you may need to adjust the path mapping in the Docker command:
+
+```bash
+docker run --rm -it -v %cd%:/omi -e CMAKE_PREFIX_PATH=/opt/toolchains ghcr.io/zephyrproject-rtos/ci bash
+```
+
+## Flashing the Firmware
+
+After building, copy the `zephyr.uf2` file to the device:
+
+1. Put the XIAO board in bootloader mode by double-pressing the reset button
+2. The board should appear as a USB drive (named XIAO-SENSE)
+3. Copy the `zephyr.uf2` file to the root of this drive
+4. The board will automatically reset after the firmware is flashed
+
+For macOS:
+```bash
+cp firmware/firmware/build/docker_build/zephyr.uf2 /Volumes/XIAO-SENSE/
+```
+
+For Linux:
+```bash
+cp firmware/firmware/build/docker_build/zephyr.uf2 /path/to/XIAO-SENSE/
+```
+
+For Windows:
+```bash
+copy firmware\firmware\build\docker_build\zephyr.uf2 D:\
+```
+(where D: is the drive letter of the XIAO-SENSE board)

@@ -1,0 +1,46 @@
+#!/bin/bash
+set -e
+
+# Set up working directory
+cd /omi/firmware/firmware/
+
+# Initialize west with nRF Connect SDK
+echo "Initializing west with nRF Connect SDK v2.7.0..."
+west init -m https://github.com/nrfconnect/sdk-nrf --mr v2.7.0 v2.7.0
+
+# Navigate to SDK directory
+cd v2.7.0
+
+# Update west modules
+echo "Updating west modules..."
+west update -o=--depth=1 -n
+west blobs fetch hal_nordic
+
+# Configure environment
+echo "Configuring build environment..."
+west zephyr-export
+
+# Build firmware
+echo "Building firmware for xiao_ble/nrf52840/sense board..."
+west build -b xiao_ble/nrf52840/sense --pristine always ../app
+
+# Copy build artifacts to output directory
+echo "Copying build artifacts to output directory..."
+mkdir -p /omi/firmware/firmware/build/docker_build
+cp -r build/zephyr/zephyr.{hex,bin,uf2} /omi/firmware/firmware/build/docker_build/ || echo "Warning: Some build artifacts not found"
+
+# Create OTA package
+echo "Creating OTA package..."
+cd /omi/firmware/firmware/build/docker_build/
+adafruit-nrfutil dfu genpkg --dev-type 0x0052 --dev-revision 0xCE68 --application zephyr.hex zephyr.zip
+
+echo ""
+echo "==================================================="
+echo "Build completed successfully!"
+echo "Build artifacts are located at:"
+echo "  /omi/firmware/firmware/build/docker_build/"
+echo "  • zephyr.hex - Raw firmware hex file"
+echo "  • zephyr.bin - Binary firmware file"
+echo "  • zephyr.uf2 - UF2 firmware file for direct flashing"
+echo "  • zephyr.zip - OTA update package"
+echo "==================================================="
