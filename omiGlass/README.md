@@ -29,6 +29,7 @@ Follow these steps to set up OpenGlass:
    - [Seeed Studio XIAO ESP32 S3 Sense](https://www.amazon.com/dp/B0C69FFVHH/ref=dp_iou_view_item?ie=UTF8&psc=1)
    - x6 150mah batteries like [this](https://a.co/d/i17DjOr) or at least like [this](https://a.co/d/bbFdkic) (but you'll need to increase the size of the casing)
    - 1x 250mah battery like [this](https://a.co/d/2xheiFC)
+   - switch like [this](https://a.co/d/gJbWdKn) + [wires](https://a.co/d/ah98wY0) + hinges
 
 
 
