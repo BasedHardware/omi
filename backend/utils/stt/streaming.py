@@ -41,13 +41,13 @@ deepgram_nova2_multi_languages = ['en', 'es']
 deepgram_multi_languages = ["multi", "en", "en-US", "en-AU", "en-GB", "en-NZ", "en-IN", "es", "es-419", "fr", "fr-CA", "de", "hi", "ru", "pt", "pt-BR", "pt-PT", "ja", "it", "nl", "nl-BE"]
 
 def get_stt_service_for_language(language: str):
-    # # Soniox's 'multi'
-    # if language in soniox_multi_languages:
-    #     return STTService.soniox, 'multi', 'stt-rt-preview'
+    # Soniox's 'multi'
+    if language in soniox_multi_languages:
+        return STTService.soniox, 'multi', 'stt-rt-preview'
 
     # Deepgram's 'multi'
-    if language in deepgram_multi_languages:
-       return STTService.deepgram, 'multi', 'nova-3'
+    # if language in deepgram_multi_languages:
+    #    return STTService.deepgram, 'multi', 'nova-3'
 
     # Deepgram
     if language in deepgram_supported_languages:
