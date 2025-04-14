@@ -202,13 +202,14 @@ int battery_get_percentage(uint8_t *battery_percentage, uint16_t battery_millivo
     for (uint16_t i = 0; i < BATTERY_STATES_COUNT - 1; i++)
     {
         // Find the two points battery_millivolt is between
-        if (battery_states[i].voltage >= battery_millivolt && battery_millivolt >= battery_states[i + 1].voltage)
+        if (battery_millivolt <= battery_states[i].voltage && battery_millivolt > battery_states[i + 1].voltage)
         {
             // Linear interpolation
-            *battery_percentage = battery_states[i].percentage +
-                                  ((float)(battery_millivolt - battery_states[i].voltage) *
-                                   ((float)(battery_states[i + 1].percentage - battery_states[i].percentage) /
-                                    (float)(battery_states[i + 1].voltage - battery_states[i].voltage)));
+            float voltage_range = (float)(battery_states[i].voltage - battery_states[i + 1].voltage);
+            float percentage_range = (float)(battery_states[i].percentage - battery_states[i + 1].percentage);
+            float position = (float)(battery_states[i].voltage - battery_millivolt) / voltage_range;
+
+            *battery_percentage = battery_states[i].percentage - (uint8_t)(position * percentage_range);
 
             LOG_DBG("%d %%", *battery_percentage);
             return 0;
