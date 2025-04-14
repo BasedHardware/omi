@@ -759,6 +759,23 @@ def app_has_action(app: dict, action_name: str) -> bool:
 
 
 def validate_app_integration(params: ValidationParams) -> dict:
+    """
+    Validation for all app integration endpoints:
+        - verify app api key.
+        - check app availability.
+        - check if the provided user enabled the app.
+        - check if app has the specified capability action.
+
+    Args:
+        params (ValidationParams): A dictionary with app integration data. Expected keys:
+            - app_id (str): The app ID.
+            - api_key (str): The app API_KEY.
+            - uid (str): User ID for integration.
+            - action_type (Optinal[ActionType]): App capability action type.
+            - action_desc (Optional[str]): Optional description for action type.
+    Returns:
+        dict: app data as a dictionary
+    """
     app_id, api_key, uid = params["app_id"], params["api_key"], params["uid"]
     action_type, action_desc = params.get("action_type"), params.get("action_desc")
 
