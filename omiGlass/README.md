@@ -9,11 +9,11 @@
 
 
 <p align="center">
-  <a href="https://youtube.com/shorts/QvFjXgLZX7U">
+  <a href="https://x.com/kodjima33/status/1911852469329727811">
     <img src="https://img.youtube.com/vi/QvFjXgLZX7U/maxresdefault.jpg" alt="Watch the video" width="400"/>
   </a>
   <br>
-  <a href="https://youtube.com/shorts/QvFjXgLZX7U">▶️ Watch Video</a>
+  <a href="https://x.com/kodjima33/status/1911852469329727811">▶️ Watch Video</a>
 </p>
 
 
