@@ -44,6 +44,11 @@ class EmptyResponse(BaseModel):
     pass
 
 
+class ConversationCreateResponse(BaseModel):
+    status: str
+    conversation_id: str
+
+
 class MemoryItem(MemoryDB):
     """
     Memory item model that extends MemoryDB for API responses
@@ -123,8 +128,10 @@ class ConversationItem(BaseModel):
 
     class Config:
         json_encoders = {
-            datetime: lambda v: v.isoformat() + 'Z' if v.tzinfo is None else v.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
+            datetime: lambda v: v.isoformat() + 'Z' if v.tzinfo is None else v.astimezone(
+                timezone.utc).isoformat().replace('+00:00', 'Z')
         }
+
 
 class ConversationsResponse(BaseModel):
     conversations: List[ConversationItem] = Field(description="List of user conversations")

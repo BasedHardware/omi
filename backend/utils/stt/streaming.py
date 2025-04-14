@@ -45,8 +45,8 @@ def get_stt_service_for_language(language: str):
     if language in soniox_multi_languages:
         return STTService.soniox, 'multi', 'stt-rt-preview'
 
-    ## Deepgram's 'multi'
-    #if language in deepgram_multi_languages:
+    # Deepgram's 'multi'
+    # if language in deepgram_multi_languages:
     #    return STTService.deepgram, 'multi', 'nova-3'
 
     # Deepgram
@@ -240,7 +240,7 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
     except Exception as e:
         raise Exception(f'Could not open socket: {e}')
 
-async def process_audio_soniox(stream_transcript, sample_rate: int, language: str, uid: str, preseconds: int = 0):
+async def process_audio_soniox(stream_transcript, sample_rate: int, language: str, uid: str, preseconds: int = 0, language_hints: List[str] = []):
     # Soniox supports diarization primarily for English
     api_key = os.getenv('SONIOX_API_KEY')
     if not api_key:
@@ -263,7 +263,7 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
         'sample_rate': sample_rate,
         'num_channels': 1,
         'enable_speaker_tags': True,
-        'language_hints': [language] if language != 'multi' else [],
+        'language_hints': language_hints,
     }
 
     # Add speaker identification if available
