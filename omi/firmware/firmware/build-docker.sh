@@ -36,8 +36,6 @@ chmod +x $(dirname "$0")/build-firmware-in-docker.sh
 PLATFORM_FLAG=""
 if [[ $(uname -m) == "arm64" ]]; then
     echo -e "${YELLOW}Detected ARM64 platform (M1/M2/M3 Mac)${NC}"
-    # Note: The zephyrproject Docker image supports ARM64 natively,
-    # so we don't need platform flag for emulation
 fi
 
 # Get the absolute path to the repository root
@@ -48,12 +46,15 @@ if [ $CLEAN_BUILD -eq 1 ]; then
     echo -e "${YELLOW}Cleaning previous build...${NC}"
     rm -rf "$REPO_ROOT/firmware/firmware/v2.7.0"
     rm -rf "$REPO_ROOT/firmware/firmware/build/docker_build"
+    # Also clean the build directory inside app if it exists from previous runs
+    rm -rf "$REPO_ROOT/firmware/firmware/app/build"
 fi
 
 echo -e "${YELLOW}Starting Docker container for firmware build...${NC}"
 echo -e "${YELLOW}This might take a while the first time.${NC}"
 
 # Run the Docker container with the repository mounted correctly
+# Rely on the environment variables set within the ghcr.io/zephyrproject-rtos/ci image
 docker run --rm -it $PLATFORM_FLAG \
     -v "$REPO_ROOT:/omi" \
     -e CMAKE_PREFIX_PATH=/opt/toolchains \

@@ -38,6 +38,7 @@ west build -b xiao_ble/nrf52840/sense --pristine always ../app -- \
 
 # Copy build artifacts to output directory
 echo "Copying build artifacts to output directory..."
+# The build output is in the 'build' directory within the SDK (v2.7.0/build)
 mkdir -p /omi/firmware/firmware/build/docker_build
 cp -r build/zephyr/zephyr.{hex,bin,uf2} /omi/firmware/firmware/build/docker_build/ || echo "Warning: Some build artifacts not found"
 
