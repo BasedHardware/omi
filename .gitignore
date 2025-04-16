@@ -86,7 +86,6 @@ dist/
 
 # Version control
 .git/
-.gitignore
 
 # Miscellaneous
 *.lock
