@@ -1,6 +1,8 @@
 # Building Firmware with Docker
 
-This document explains how to build the firmware using Docker, which provides a consistent environment across different platforms (Linux, macOS, Windows).
+This document explains how to build the firmware using Docker, which provides a consistent environment across different platforms (Linux, macOS, Windows). This is the **recommended** method for building the Omi firmware as it eliminates environment setup complexities.
+
+> **Note:** For the traditional nRF Connect build method, see our [official documentation](https://docs.omi.me/docs/developer/Compile_firmware).
 
 ## Prerequisites
 
@@ -139,3 +141,5 @@ For Windows:
 copy firmware\firmware\build\docker_build\zephyr.uf2 D:\
 ```
 (where D: is the drive letter of the XIAO-SENSE board)
+
+For more detailed flashing instructions, see our [official documentation](https://docs.omi.me/docs/get_started/Flash_device).

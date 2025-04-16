@@ -16,22 +16,35 @@ The Omi firmware is built on the Zephyr RTOS and provides functionality for audi
 - `test/`: The test project files
 - `boards/`: Board-specific configurations
 
-## Prerequisites
-
-- (Visual Studio Code)[https://code.visualstudio.com/]
-- (nRF Connect for VS Code extension)[https://marketplace.visualstudio.com/items?itemName=NordicSemiconductor.nrf-connect-for-visual-studio-code]
-- (nRF Command Line Tools)[https://www.nordicsemi.com/Software-and-tools/Development-Tools/nRF-Command-Line-Tools/Download]
-
 ## Building the Firmware
 
-Follow the instructions at https://docs.omi.me/docs/developer/firmware/Compile_firmware
+There are two ways to build the firmware:
+
+### Option 1: Using Docker (Recommended)
+
+This is the easiest method and works across all platforms:
+
+```bash
+./build-docker.sh
+```
+
+For detailed instructions, see [docker-readme.md](./docker-readme.md).
+
+### Option 2: Using nRF Connect for VS Code
+
+Prerequisites:
+- [Visual Studio Code](https://code.visualstudio.com/)
+- [nRF Connect for VS Code extension](https://marketplace.visualstudio.com/items?itemName=NordicSemiconductor.nrf-connect-for-visual-studio-code)
+- [nRF Command Line Tools](https://www.nordicsemi.com/Software-and-tools/Development-Tools/nRF-Command-Line-Tools/Download)
+
+Follow the instructions in our [official documentation](https://docs.omi.me/docs/developer/Compile_firmware).
 
 ## Flashing the Firmware
 
 Follow the instructions at https://docs.omi.me/docs/get_started/Flash_device
-At the step https://docs.omi.me/docs/get_started/Flash_device#downloading-the-firmware, do not download a released .uf2 file rom GitHub.
 
-Instead, locate the `zephyr.uf2` file in your build output directory, possibly `app/build/zephyr`
+For Docker builds, the output files will be in `build/docker_build/`.
+For nRF Connect builds, locate the `zephyr.uf2` file in your build output directory.
 
 ## Device-Specific Builds
 
