@@ -8,6 +8,7 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/omi_file/omi_file.dart';
 import 'package:omi/utils/other/string_utils.dart';
 import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -341,7 +342,7 @@ Future reportMessageServer(String messageId) async {
   }
 }
 
-Future<String> transcribeVoiceMessage(XFile audioFile) async {
+Future<String> transcribeVoiceMessage(OmiFile audioFile) async {
   try {
     var request = http.MultipartRequest(
       'POST',

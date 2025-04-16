@@ -3,7 +3,9 @@ import 'dart:math' as Math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/file.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shimmer/shimmer.dart';
@@ -179,28 +181,28 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
       1, // Mono channel
     );
 
-    // try {
-    //   final transcript = await transcribeVoiceMessage(audioFile);
-    //   if (mounted) {
-    //     setState(() {
-    //       _transcript = transcript;
-    //       _state = RecordingState.transcribeSuccess;
-    //       _isProcessing = false;
-    //     });
-    //     if (transcript.isNotEmpty) {
-    //       widget.onTranscriptReady(transcript);
-    //     }
-    //   }
-    // } catch (e) {
-    //   debugPrint('Error processing recording: $e');
-    //   if (mounted) {
-    //     setState(() {
-    //       _state = RecordingState.transcribeFailed;
-    //       _isProcessing = false;
-    //     });
-    //   }
-    //   AppSnackbar.showSnackbarError('Failed to transcribe audio');
-    // }
+    try {
+      final transcript = await transcribeVoiceMessage(audioFile);
+      if (mounted) {
+        setState(() {
+          _transcript = transcript;
+          _state = RecordingState.transcribeSuccess;
+          _isProcessing = false;
+        });
+        if (transcript.isNotEmpty) {
+          widget.onTranscriptReady(transcript);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error processing recording: $e');
+      if (mounted) {
+        setState(() {
+          _state = RecordingState.transcribeFailed;
+          _isProcessing = false;
+        });
+      }
+      AppSnackbar.showSnackbarError('Failed to transcribe audio');
+    }
   }
 
   void _retry() {
