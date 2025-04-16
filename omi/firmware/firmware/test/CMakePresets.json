@@ -17,7 +17,7 @@
 			"cacheVariables": {
 				"CMAKE_EXPORT_COMPILE_COMMANDS": "YES",
 				"CMAKE_BUILD_TYPE": "Debug",
-				"BOARD": "omi_nrf5340/nrf5340/cpuapp",
+				"BOARD": "omi2/nrf5340/cpuapp",
 				"CACHED_CONF_FILE": "${sourceDir}/omi2.conf",
 				"CONF_FILE": "${sourceDir}/omi2.conf"
             }
