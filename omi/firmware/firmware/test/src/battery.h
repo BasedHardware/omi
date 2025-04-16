@@ -6,4 +6,6 @@
 
 extern bool is_charging;
 
+int bat_init(void);
+
 #endif // BATTERY_H

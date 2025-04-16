@@ -28,7 +28,7 @@ static struct gpio_callback bat_chg_cb;
 bool is_charging = false;
 static void battrey_input_cb(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
 {
-    if(gpio_pin_get(bat_chg_pin.port, bat_chg_pin.pin) == 1) {
+    if(gpio_pin_get(bat_chg_pin.port, bat_chg_pin.pin) == 0) {
         shell_execute_cmd(NULL, "led on 1");
         is_charging = true;
     } else{
@@ -119,13 +119,13 @@ static int cmd_bat_get(const struct shell *sh, size_t argc, char **argv)
 int bat_init(void)
 { 
     int err;
-    err = gpio_pin_configure_dt(&power_pin, GPIO_OUTPUT );
-    if (err < 0)
-    {
-        LOG_ERR("Failed to configure enable pin (%d)", err);
-        return err;
-    }
-    gpio_pin_set_dt(&power_pin, 0);
+    // err = gpio_pin_configure_dt(&power_pin, GPIO_OUTPUT );
+    // if (err < 0)
+    // {
+    //     LOG_ERR("Failed to configure enable pin (%d)", err);
+    //     return err;
+    // }
+    // gpio_pin_set_dt(&power_pin, 0);
     
     err = gpio_pin_configure_dt(&bat_read_pin, GPIO_INPUT);
     if (err < 0)
@@ -138,6 +138,12 @@ int bat_init(void)
     if (err < 0)
     {
         LOG_ERR("Failed to configure enable pin (%d)", err);
+        return err;
+    }
+    battrey_input_cb(NULL, NULL, 0);
+    err = gpio_pin_interrupt_configure_dt(&bat_chg_pin, GPIO_INT_EDGE_BOTH);
+    if (err < 0) {
+        LOG_ERR("Failed to configure interrupt for bat_chg_pin (%d)", err);
         return err;
     }
     gpio_init_callback(&bat_chg_cb, battrey_input_cb, BIT(bat_chg_pin.pin));
