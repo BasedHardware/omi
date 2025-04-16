@@ -84,9 +84,6 @@ dist/
 **/web/**/build/
 **/web/.dart_tool/
 
-# Version control
-.git/
-
 # Miscellaneous
 *.lock
 *.log
