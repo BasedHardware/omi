@@ -29,6 +29,12 @@ static int init_module(void)
 	{
 		printk("Failed to initialize sd module (%d)\n", ret);
 	}
+
+	ret = bat_init();
+	if (ret < 0)
+	{
+		printk("Failed to initialize battery module (%d)\n", ret);
+	}
 	return 0;
 }
 
