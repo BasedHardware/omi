@@ -13,8 +13,8 @@ from models.conversation import ConversationPhoto, PostProcessingStatus, PostPro
 from models.transcript_segment import TranscriptSegment
 from ._client import db
 
-
 conversations_collection = 'conversations'
+
 
 # *****************************
 # ********** CRUD *************
@@ -29,6 +29,7 @@ def upsert_conversation(uid: str, conversation_data: dict):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
     conversation_ref.set(conversation_data)
+
 
 def get_conversation(uid, conversation_id):
     user_ref = db.collection('users').document(uid)

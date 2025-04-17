@@ -61,9 +61,9 @@ Future<List<ServerConversation>> getConversations(
   return [];
 }
 
-Future<ServerConversation?> reProcessConversationServer(String conversationId) async {
+Future<ServerConversation?> reProcessConversationServer(String conversationId, {String? appId}) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/reprocess',
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/reprocess${appId != null ? '?app_id=$appId' : ''}',
     headers: {},
     method: 'POST',
     body: '',

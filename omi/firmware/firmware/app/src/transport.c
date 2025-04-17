@@ -30,7 +30,7 @@ extern uint8_t file_count;
 extern uint32_t file_num_array[2];
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
-uint16_t current_package_index = 0; 
+uint16_t current_package_index = 0;
 //
 // Internal
 //
@@ -70,7 +70,7 @@ static struct bt_gatt_attr audio_service_attr[] = {
     BT_GATT_CHARACTERISTIC(&audio_characteristic_speaker_uuid.uuid, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_WRITE, NULL, audio_data_write_handler, NULL),
     BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), //
 #endif
-    
+
 };
 
 static struct bt_gatt_service audio_service = BT_GATT_SERVICE(audio_service_attr);
@@ -134,7 +134,7 @@ void broadcast_accel(struct k_work *work_item) {
 
    //only time mega sensor is changed is through here (hopefully),  so no chance of race condition
     int err = bt_gatt_notify(current_connection, &accel_service.attrs[1], &mega_sensor, sizeof(mega_sensor));
-    if (err) 
+    if (err)
     {
        LOG_ERR("Error updating Accelerometer data");
     }
@@ -144,7 +144,7 @@ void broadcast_accel(struct k_work *work_item) {
 struct gpio_dt_spec accel_gpio_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio1)), .pin=8, .dt_flags = GPIO_INT_DISABLE};
 
 //use d4,d5
-static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) 
+static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value)
 {
     if (value == BT_GATT_CCC_NOTIFY)
     {
@@ -159,17 +159,17 @@ static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, ui
         LOG_ERR("Invalid CCC value: %u", value);
     }
 }
-int accel_start() 
+int accel_start()
 {
     struct sensor_value odr_attr;
     lsm6dsl_dev = DEVICE_DT_GET_ONE(st_lsm6dsl);
     k_msleep(50);
-    if (lsm6dsl_dev == NULL) 
+    if (lsm6dsl_dev == NULL)
     {
         LOG_ERR("Could not get LSM6DSL device");
         return 0;
     }
-    if (!device_is_ready(lsm6dsl_dev)) 
+    if (!device_is_ready(lsm6dsl_dev))
     {
         LOG_ERR("LSM6DSL: not ready");
         return 0;
@@ -179,23 +179,23 @@ int accel_start()
 
 
 
-    if (gpio_is_ready_dt(&accel_gpio_pin)) 
+    if (gpio_is_ready_dt(&accel_gpio_pin))
     {
         LOG_PRINTK("Speaker Pin ready\n");
     }
-    else 
+    else
     {
         LOG_PRINTK("Error setting up speaker Pin\n");
         return -1;
     }
-    if (gpio_pin_configure_dt(&accel_gpio_pin, GPIO_OUTPUT_INACTIVE) < 0) 
+    if (gpio_pin_configure_dt(&accel_gpio_pin, GPIO_OUTPUT_INACTIVE) < 0)
     {
         LOG_PRINTK("Error setting up Haptic Pin\n");
         return -1;
     }
     gpio_pin_set_dt(&accel_gpio_pin, 1);
     if (sensor_attr_set(lsm6dsl_dev, SENSOR_CHAN_ACCEL_XYZ,
-        SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) 
+        SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0)
     {
         LOG_ERR("Cannot set sampling frequency for Accelerometer.");
         return 0;
@@ -205,14 +205,14 @@ int accel_start()
         LOG_ERR("Cannot set sampling frequency for gyro.");
         return 0;
     }
-    if (sensor_sample_fetch(lsm6dsl_dev) < 0) 
+    if (sensor_sample_fetch(lsm6dsl_dev) < 0)
     {
         LOG_ERR("Sensor sample update error");
         return 0;
     }
 
     LOG_INF("Accelerometer is ready for use \n");
-    
+
     return 1;
 }
 // Advertisement data
@@ -357,11 +357,15 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     if (err)
     {
         LOG_ERR("Failed to get connection info (err %d)", err);
+        bt_conn_unref(conn);
         return;
     }
 
     LOG_INF("bluetooth activated");
 
+    if (current_connection != NULL) {
+        bt_conn_unref(current_connection);
+    }
     current_connection = bt_conn_ref(conn);
     current_mtu = info.le.data_len->tx_max_len;
     LOG_INF("Transport connected");
@@ -372,13 +376,6 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     k_work_schedule(&battery_work, K_MSEC(100)); // run immediately
 
     is_connected = true;
-
-    // // Put NFC to sleep when Bluetooth is connected
-    // nfc_sleep();
-// #ifdef CONFIG_ACCELEROMETER
-//      k_work_schedule(&accel_work, K_MSEC(ACCEL_REFRESH_INTERVAL));
-// #endif
-
 }
 
 static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
@@ -387,12 +384,12 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
     storage_is_on = false;
 
     LOG_INF("Transport disconnected");
-    bt_conn_unref(conn);
-    current_connection = NULL;
-    current_mtu = 0;
 
-    // // restart NFC
-    // nfc_wake();
+    if (current_connection != NULL) {
+        bt_conn_unref(current_connection);
+        current_connection = NULL;
+    }
+    current_mtu = 0;
 }
 
 static bool _le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
@@ -461,7 +458,7 @@ static bool write_to_tx_queue(uint8_t *data, size_t size)
     tx_buffer_2[1] = (size >> 8) & 0xFF;
     memcpy(tx_buffer_2 + RING_BUFFER_HEADER_SIZE, data, size);
 
-    // Write to ring buffer 
+    // Write to ring buffer
     int written = ring_buf_put(&ring_buf, tx_buffer_2, (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)); // It always fits completely or not at all
     if (written != CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)
     {
@@ -507,7 +504,6 @@ static bool push_to_gatt(struct bt_conn *conn)
     // Read data from ring buffer
     if (!read_from_tx_queue())
     {
-
         return false;
     }
 
@@ -515,6 +511,9 @@ static bool push_to_gatt(struct bt_conn *conn)
     uint8_t *buffer = tx_buffer + RING_BUFFER_HEADER_SIZE;
     uint32_t offset = 0;
     uint8_t index = 0;
+    int retry_count = 0;
+    const int max_retries = 3;
+
     while (offset < tx_buffer_size)
     {
         // Recombine packet
@@ -524,12 +523,12 @@ static bool push_to_gatt(struct bt_conn *conn)
         pusher_temp_data[1] = (id >> 8) & 0xFF;
         pusher_temp_data[2] = index;
         memcpy(pusher_temp_data + NET_BUFFER_HEADER_SIZE, buffer + offset, packet_size);
-        // LOG_PRINTK("sent %d bytes \n",tx_buffer_size);
 
         offset += packet_size;
         index++;
 
-        while (true)
+        retry_count = 0;
+        while (retry_count < max_retries)
         {
             // Try send notification
             int err = bt_gatt_notify(conn, &audio_service.attrs[1], pusher_temp_data, packet_size + NET_BUFFER_HEADER_SIZE);
@@ -540,16 +539,24 @@ static bool push_to_gatt(struct bt_conn *conn)
                 LOG_DBG("bt_gatt_notify failed (err %d)", err);
                 LOG_DBG("MTU: %d, packet_size: %d", current_mtu, packet_size + NET_BUFFER_HEADER_SIZE);
                 k_sleep(K_MSEC(1));
+                retry_count++;
+                continue;
             }
 
             // Try to send more data if possible
             if (err == -EAGAIN || err == -ENOMEM)
             {
+                retry_count++;
                 continue;
             }
 
             // Break if success
             break;
+        }
+
+        if (retry_count >= max_retries) {
+            LOG_ERR("Failed to send packet after %d retries", max_retries);
+            return false;
         }
     }
 
@@ -561,7 +568,7 @@ static bool push_to_gatt(struct bt_conn *conn)
 static uint8_t storage_temp_data[MAX_WRITE_SIZE];
 static uint32_t offset = 0;
 static uint16_t buffer_offset = 0;
-// bool write_to_storage(void) 
+// bool write_to_storage(void)
 // {
 //     if (!read_from_tx_queue())
 //     {
@@ -570,12 +577,12 @@ static uint16_t buffer_offset = 0;
 
 //     uint8_t *buffer = tx_buffer+2;
 //     const uint32_t packet_size = tx_buffer_size;
-//     //load into write at 400 bytes at a time. is faster 
+//     //load into write at 400 bytes at a time. is faster
 //     memcpy(storage_temp_data + OPUS_PREFIX_LENGTH + buffer_offset, buffer, packet_size);
 //     storage_temp_data[buffer_offset] = (uint8_t)tx_buffer_size;
-    
+
 //     buffer_offset = buffer_offset+OPUS_PADDED_LENGTH;
-//     if(buffer_offset >= OPUS_PADDED_LENGTH*5) { 
+//     if(buffer_offset >= OPUS_PADDED_LENGTH*5) {
 //     uint8_t *write_ptr = (uint8_t*)storage_temp_data;
 //     write_to_file(write_ptr,OPUS_PADDED_LENGTH*5);
 
@@ -596,8 +603,8 @@ bool write_to_storage(void) {//max possible packing
 
     // buffer_offset = buffer_offset+amount_to_fill;
     //check if adding the new packet will cause a overflow
-    if(buffer_offset + packet_size > MAX_WRITE_SIZE-1) 
-    { 
+    if(buffer_offset + packet_size > MAX_WRITE_SIZE-1)
+    {
 
     storage_temp_data[buffer_offset] = tx_buffer_size;
     uint8_t *write_ptr = storage_temp_data;
@@ -608,16 +615,16 @@ bool write_to_storage(void) {//max possible packing
     memcpy(storage_temp_data + 1, buffer, tx_buffer_size);
 
     }
-    else if (buffer_offset + packet_size == MAX_WRITE_SIZE-1) 
-    { //exact frame needed 
+    else if (buffer_offset + packet_size == MAX_WRITE_SIZE-1)
+    { //exact frame needed
     storage_temp_data[buffer_offset] = tx_buffer_size;
     memcpy(storage_temp_data + buffer_offset + 1, buffer, tx_buffer_size);
     buffer_offset = 0;
     uint8_t *write_ptr = (uint8_t*)storage_temp_data;
     write_to_file(write_ptr,MAX_WRITE_SIZE);
-    
+
     }
-    else 
+    else
     {
     storage_temp_data[buffer_offset] = tx_buffer_size;
     memcpy(storage_temp_data+ buffer_offset+1, buffer, tx_buffer_size);
@@ -632,7 +639,7 @@ static bool use_storage = true;
 #define MAX_AUDIO_FILE_SIZE 300000
 static int recent_file_size_updated = 0;
 static uint8_t heartbeat_count = 0;
-void update_file_size() 
+void update_file_size()
 {
     file_num_array[0] = get_file_size(1);
     file_num_array[1] = get_offset();
@@ -652,21 +659,21 @@ void pusher(void)
         //updating the most recent file size is expensive!
         static bool file_size_updated = true;
         static bool connection_was_true = false;
-        if (conn && !connection_was_true) 
+        if (conn && !connection_was_true)
         {
             k_msleep(100);
             file_size_updated = false;
             connection_was_true = true;
-        } 
-        else if (!conn) 
+        }
+        else if (!conn)
         {
             connection_was_true = false;
         }
-        if (!file_size_updated) 
+        if (!file_size_updated)
         {
             LOG_PRINTK("updating file size\n");
             update_file_size();
-            
+
             file_size_updated = true;
         }
         if (conn)
@@ -686,14 +693,14 @@ void pusher(void)
         {
             valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
         }
-        
-        if (!valid  && !storage_is_on) 
+
+        if (!valid  && !storage_is_on)
         {
             bool result = false;
             if (file_num_array[1] < MAX_STORAGE_BYTES)
             {
                 k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
-                if(is_sd_on()) 
+                if(is_sd_on())
                 {
                     result = write_to_storage();
                 }
@@ -709,11 +716,11 @@ void pusher(void)
                 LOG_PRINTK("drawing\n");
              }
             }
-            else 
+            else
             {
-    
+
             }
-        }    
+        }
         if (valid)
         {
             bool sent = push_to_gatt(conn);
@@ -736,20 +743,39 @@ extern struct bt_gatt_service storage_service;
 //
 int bt_off()
 {
-   bt_disable();
-   int err = bt_le_adv_stop();
-   if (err)
-   {
-       LOG_PRINTK("Failed to stop Bluetooth %d\n",err);
-   }
-   k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
-   sd_off();
-   k_mutex_unlock(&write_sdcard_mutex);
-   mic_off();
-   //everything else off
+    // First disconnect any active connections
+    if (current_connection != NULL) {
+        bt_conn_disconnect(current_connection, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+        bt_conn_unref(current_connection);
+        current_connection = NULL;
+    }
 
+    // Stop advertising
+    int err = bt_le_adv_stop();
+    if (err)
+    {
+        LOG_ERR("Failed to stop Bluetooth advertising %d", err);
+    }
 
-   return 0;
+    // Disable Bluetooth
+    err = bt_disable();
+    if (err)
+    {
+        LOG_ERR("Failed to disable Bluetooth %d", err);
+    }
+
+    // Turn off other peripherals
+    k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
+    sd_off();
+    k_mutex_unlock(&write_sdcard_mutex);
+    mic_off();
+
+    // Ensure all Bluetooth resources are cleaned up
+    is_connected = false;
+    storage_is_on = false;
+    current_mtu = 0;
+
+    return 0;
 }
 int bt_on()
 {
@@ -780,11 +806,11 @@ int transport_start()
     //  Enable accelerometer
 #ifdef CONFIG_ACCELEROMETER
     err = accel_start();
-    if (!err) 
+    if (!err)
     {
         LOG_INF("Accelerometer failed to activate\n");
     }
-    else 
+    else
     {
         LOG_INF("Accelerometer initialized");
         bt_gatt_service_register(&accel_service);
@@ -799,7 +825,7 @@ int transport_start()
 
 #ifdef CONFIG_ENABLE_SPEAKER
     err = speaker_init();
-    if (err) 
+    if (err)
     {
         LOG_ERR("Speaker failed to start");
         return 0;
@@ -854,10 +880,20 @@ struct bt_conn *get_current_connection()
 
 int broadcast_audio_packets(uint8_t *buffer, size_t size)
 {
-    while (!write_to_tx_queue(buffer, size))
+    int retry_count = 0;
+    const int max_retries = 3;
+
+    while (retry_count < max_retries && !write_to_tx_queue(buffer, size))
     {
         k_sleep(K_MSEC(1));
+        retry_count++;
     }
+
+    if (retry_count >= max_retries) {
+        LOG_ERR("Failed to write to tx queue after %d retries", max_retries);
+        return -1;
+    }
+
     return 0;
 }
 
