@@ -1,2 +1,2 @@
 source "Kconfig.zephyr"
-source "Kconfig.omi"
+source "omi/firmware/firmware/omi2/Kconfig.omi"
