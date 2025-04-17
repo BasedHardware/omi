@@ -10,6 +10,13 @@ LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
 static void codec_handler(uint8_t *data, size_t len)
 {
+    LOG_INF("Codec handler received %d bytes of data: [%02x %02x %02x %02x %02x]", 
+            len, 
+            len > 0 ? data[0] : 0, 
+            len > 1 ? data[1] : 0, 
+            len > 2 ? data[2] : 0, 
+            len > 3 ? data[3] : 0, 
+            len > 4 ? data[4] : 0);
 }
 
 static void mic_handler(int16_t *buffer)
@@ -21,23 +28,9 @@ static void mic_handler(int16_t *buffer)
     }
 }
 
-static int init_module(void)
-{
-	int ret;
-	ret = mic_init();
-	if (ret < 0)
-	{
-		printk("Failed to initialize mic module (%d)\n", ret);
-	}
-}
-
 int main(void)
 {
 	int ret;
-	if (init_module() < 0)
-	{
-		return -1;
-	}
 
 	printk("Starting omi2 ...\n");
 	
