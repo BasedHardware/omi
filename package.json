@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "expo-file-system": "^18.0.12"
+  }
+}
