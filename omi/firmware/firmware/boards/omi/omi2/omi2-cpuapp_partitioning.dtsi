@@ -31,7 +31,7 @@
 
 		slot0_ns_partition: partition@50000 {
 			label = "image-0-nonsecure";
-			reg = <0x00050000 DT_SIZE_K(384)>;
+			reg = <0x00050000 DT_SIZE_K(192)>;
 		};
 
 		slot1_partition: partition@80000 {
@@ -41,7 +41,7 @@
 
 		slot1_ns_partition: partition@c0000 {
 			label = "image-1-nonsecure";
-			reg = <0x000c0000 DT_SIZE_K(64)>;
+			reg = <0x000c0000 DT_SIZE_K(192)>;
 		};
 
 		/* 0xf0000 to 0xf7fff reserved for TF-M partitions */

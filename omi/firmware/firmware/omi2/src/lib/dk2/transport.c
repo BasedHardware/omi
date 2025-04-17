@@ -10,6 +10,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/ring_buffer.h>
+#include <hal/nrf_power.h>
 #include "transport.h"
 #include "config.h"
 #include "speaker.h"
@@ -21,10 +22,15 @@
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define MAX_STORAGE_BYTES 0xFFFF0000
-extern bool is_connected;
-extern bool storage_is_on;
-extern uint8_t file_count;
+
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+extern struct bt_gatt_service storage_service;
 extern uint32_t file_num_array[2];
+extern bool storage_is_on;
+#endif
+
+extern bool is_connected;
+
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0;
@@ -63,7 +69,7 @@ static struct bt_gatt_attr audio_service_attr[] = {
     BT_GATT_CHARACTERISTIC(&audio_characteristic_data_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, audio_data_read_characteristic, NULL, NULL),
     BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
     BT_GATT_CHARACTERISTIC(&audio_characteristic_format_uuid.uuid, BT_GATT_CHRC_READ, BT_GATT_PERM_READ, audio_codec_read_characteristic, NULL, NULL),
-#ifdef CONFIG_ENABLE_SPEAKER
+#ifdef CONFIG_OMI_ENABLE_SPEAKER
     BT_GATT_CHARACTERISTIC(&audio_characteristic_speaker_uuid.uuid, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_WRITE, NULL, audio_data_write_handler, NULL),
     BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), //
 #endif
@@ -190,6 +196,7 @@ static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struc
 
 #define BATTERY_REFRESH_INTERVAL 15000 // 15 seconds
 
+#ifdef CONFIG_OMI_ENABLE_BATTERY
 void broadcast_battery_level(struct k_work *work_item);
 
 K_WORK_DELAYABLE_DEFINE(battery_work, broadcast_battery_level);
@@ -215,6 +222,7 @@ void broadcast_battery_level(struct k_work *work_item) {
 
     k_work_reschedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
 }
+#endif
 
 //
 // Connection Callbacks
@@ -223,7 +231,9 @@ void broadcast_battery_level(struct k_work *work_item) {
 static void _transport_connected(struct bt_conn *conn, uint8_t err)
 {
     struct bt_conn_info info = {0};
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     storage_is_on = true;
+#endif
 
     err = bt_conn_get_info(conn, &info);
     if (err)
@@ -234,18 +244,17 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     }
 
     LOG_INF("bluetooth activated");
-
-    if (current_connection != NULL) {
-        bt_conn_unref(current_connection);
-    }
     current_connection = bt_conn_ref(conn);
-    current_mtu = info.le.data_len->tx_max_len;
+    current_mtu = 512;// TODO: info.le.data_len->tx_max_len;
     LOG_INF("Transport connected");
+    LOG_INF("current mtu %d", current_mtu);
     LOG_DBG("Interval: %d, latency: %d, timeout: %d", info.le.interval, info.le.latency, info.le.timeout);
     LOG_DBG("TX PHY %s, RX PHY %s", phy2str(info.le.phy->tx_phy), phy2str(info.le.phy->rx_phy));
     LOG_DBG("LE data len updated: TX (len: %d time: %d) RX (len: %d time: %d)", info.le.data_len->tx_max_len, info.le.data_len->tx_max_time, info.le.data_len->rx_max_len, info.le.data_len->rx_max_time);
 
+#ifdef CONFIG_OMI_ENABLE_BATTERY
     k_work_schedule(&battery_work, K_MSEC(100)); // run immediately
+#endif
 
     is_connected = true;
 }
@@ -253,7 +262,9 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
 static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 {
     is_connected = false;
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     storage_is_on = false;
+#endif
 
     LOG_INF("Transport disconnected");
 
@@ -290,11 +301,12 @@ static void _le_phy_updated(struct bt_conn *conn,
 static void _le_data_length_updated(struct bt_conn *conn,
                                     struct bt_conn_le_data_len_info *info)
 {
-    LOG_DBG("LE data len updated: TX (len: %d time: %d)"
+    LOG_INF("LE data len updated: TX (len: %d time: %d)"
            " RX (len: %d time: %d)",
            info->tx_max_len,
            info->tx_max_time, info->rx_max_len, info->rx_max_time);
     current_mtu = info->tx_max_len;
+    LOG_INF("current mtu: %d", current_mtu);
 }
 
 static struct bt_conn_cb _callback_references = {
@@ -356,7 +368,7 @@ static bool read_from_tx_queue()
 
     // Adjust size
     tx_buffer_size = tx_buffer[0] + (tx_buffer[1] << 8);
-    // LOG_PRINTK("tx_buffer_size %d\n",tx_buffer_size);
+    LOG_INF("tx_buffer_size %d\n",tx_buffer_size);
 
     return true;
 }
@@ -373,6 +385,7 @@ static uint8_t pusher_temp_data[CODEC_OUTPUT_MAX_BYTES + NET_BUFFER_HEADER_SIZE]
 
 static bool push_to_gatt(struct bt_conn *conn)
 {
+    LOG_INF("bt_gatt_notify prepare");
     // Read data from ring buffer
     if (!read_from_tx_queue())
     {
@@ -403,16 +416,19 @@ static bool push_to_gatt(struct bt_conn *conn)
         while (retry_count < max_retries)
         {
             // Try send notification
+            LOG_INF("bt_gatt_notify start");
             int err = bt_gatt_notify(conn, &audio_service.attrs[1], pusher_temp_data, packet_size + NET_BUFFER_HEADER_SIZE);
 
             // Log failure
             if (err)
             {
-                LOG_DBG("bt_gatt_notify failed (err %d)", err);
-                LOG_DBG("MTU: %d, packet_size: %d", current_mtu, packet_size + NET_BUFFER_HEADER_SIZE);
+                LOG_INF("bt_gatt_notify failed (err %d)", err);
+                LOG_INF("MTU: %d, packet_size: %d", current_mtu, packet_size + NET_BUFFER_HEADER_SIZE);
                 k_sleep(K_MSEC(1));
                 retry_count++;
                 continue;
+            } else {
+                LOG_INF("bt_gatt_notify ok");
             }
 
             // Try to send more data if possible
@@ -437,7 +453,6 @@ static bool push_to_gatt(struct bt_conn *conn)
 #define OPUS_PREFIX_LENGTH 1
 #define OPUS_PADDED_LENGTH 80
 #define MAX_WRITE_SIZE 440
-static uint8_t storage_temp_data[MAX_WRITE_SIZE];
 static uint32_t offset = 0;
 static uint16_t buffer_offset = 0;
 // bool write_to_storage(void)
@@ -464,6 +479,8 @@ static uint16_t buffer_offset = 0;
 //     return true;
 // }
 //for improving ble bandwidth
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+static uint8_t storage_temp_data[MAX_WRITE_SIZE];
 bool write_to_storage(void) {//max possible packing
     if (!read_from_tx_queue())
     {
@@ -478,45 +495,85 @@ bool write_to_storage(void) {//max possible packing
     if(buffer_offset + packet_size > MAX_WRITE_SIZE-1)
     {
 
-    storage_temp_data[buffer_offset] = tx_buffer_size;
-    uint8_t *write_ptr = storage_temp_data;
-    write_to_file(write_ptr,MAX_WRITE_SIZE);
+        storage_temp_data[buffer_offset] = tx_buffer_size;
+        uint8_t *write_ptr = storage_temp_data;
+        write_to_file(write_ptr,MAX_WRITE_SIZE);
 
-    buffer_offset = packet_size;
-    storage_temp_data[0] = tx_buffer_size;
-    memcpy(storage_temp_data + 1, buffer, tx_buffer_size);
+        buffer_offset = packet_size;
+        storage_temp_data[0] = tx_buffer_size;
+        memcpy(storage_temp_data + 1, buffer, tx_buffer_size);
 
     }
     else if (buffer_offset + packet_size == MAX_WRITE_SIZE-1)
-    { //exact frame needed
-    storage_temp_data[buffer_offset] = tx_buffer_size;
-    memcpy(storage_temp_data + buffer_offset + 1, buffer, tx_buffer_size);
-    buffer_offset = 0;
-    uint8_t *write_ptr = (uint8_t*)storage_temp_data;
-    write_to_file(write_ptr,MAX_WRITE_SIZE);
-
+    {
+        //exact frame needed
+        storage_temp_data[buffer_offset] = tx_buffer_size;
+        memcpy(storage_temp_data + buffer_offset + 1, buffer, tx_buffer_size);
+        buffer_offset = 0;
+        uint8_t *write_ptr = (uint8_t*)storage_temp_data;
+        write_to_file(write_ptr,MAX_WRITE_SIZE);
     }
     else
     {
-    storage_temp_data[buffer_offset] = tx_buffer_size;
-    memcpy(storage_temp_data+ buffer_offset+1, buffer, tx_buffer_size);
-    buffer_offset = buffer_offset + packet_size;
+        storage_temp_data[buffer_offset] = tx_buffer_size;
+        memcpy(storage_temp_data+ buffer_offset+1, buffer, tx_buffer_size);
+        buffer_offset = buffer_offset + packet_size;
     }
 
     return true;
 }
+#endif
 
 static bool use_storage = true;
 #define MAX_FILES 10
 #define MAX_AUDIO_FILE_SIZE 300000
 static int recent_file_size_updated = 0;
 static uint8_t heartbeat_count = 0;
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 void update_file_size()
 {
     file_num_array[0] = get_file_size(1);
     file_num_array[1] = get_offset();
-    // LOG_PRINTK("file size for file count %d %d\n",file_count,file_num_array[0]);
-    // LOG_PRINTK("offset for file count %d %d\n",file_count,file_num_array[1]);
+}
+#endif
+
+void test_pusher(void)
+{
+    while (1)
+    {
+        k_sleep(K_MSEC(1));
+        struct bt_conn *conn = current_connection;
+        if (conn)
+        {
+            conn = bt_conn_ref(conn);
+        }
+        bool valid = true;
+        if (!conn)
+        {
+            valid = false;
+        }
+        else if (current_mtu < MINIMAL_PACKET_SIZE)
+        {
+            valid = false;
+        }
+        else
+        {
+            valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
+        }
+        if (valid)
+        {
+            bool sent = push_to_gatt(conn);
+            if (!sent)
+            {
+                // k_sleep(K_MSEC(50));
+            }
+        }
+        if (conn)
+        {
+            bt_conn_unref(conn);
+        }
+        k_yield();
+    }
 }
 
 void pusher(void)
@@ -541,6 +598,7 @@ void pusher(void)
         {
             connection_was_true = false;
         }
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
         if (!file_size_updated)
         {
             LOG_PRINTK("updating file size\n");
@@ -548,6 +606,7 @@ void pusher(void)
 
             file_size_updated = true;
         }
+#endif
         if (conn)
         {
             conn = bt_conn_ref(conn);
@@ -566,6 +625,7 @@ void pusher(void)
             valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
         }
 
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
         if (!valid  && !storage_is_on)
         {
             bool result = false;
@@ -580,19 +640,20 @@ void pusher(void)
             }
             if (result)
             {
-             heartbeat_count++;
-             if (heartbeat_count == 255)
-             {
-                update_file_size();
-                heartbeat_count = 0;
-                LOG_PRINTK("drawing\n");
-             }
+                heartbeat_count++;
+                if (heartbeat_count == 255)
+                {
+                    update_file_size();
+                    heartbeat_count = 0;
+                    LOG_PRINTK("drawing\n");
+                 }
             }
             else
             {
 
             }
         }
+#endif
         if (valid)
         {
             bool sent = push_to_gatt(conn);
@@ -609,7 +670,7 @@ void pusher(void)
         k_yield();
     }
 }
-extern struct bt_gatt_service storage_service;
+
 //
 // Public functions
 //
@@ -644,16 +705,21 @@ int bt_off()
 
     // Ensure all Bluetooth resources are cleaned up
     is_connected = false;
-    storage_is_on = false;
     current_mtu = 0;
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    storage_is_on = false;
+#endif
 
     return 0;
 }
+
 int bt_on()
 {
    int err = bt_enable(NULL);
    bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
    bt_gatt_service_register(&storage_service);
+#endif
    sd_on();
    mic_on();
 
@@ -664,6 +730,7 @@ int bt_on()
 int transport_start()
 {
     k_mutex_init(&write_sdcard_mutex);
+
     // Configure callbacks
     bt_conn_cb_register(&_callback_references);
 
@@ -689,13 +756,13 @@ int transport_start()
     }
 #endif
     //  Enable button
-#ifdef CONFIG_ENABLE_BUTTON
+#ifdef CONFIG_OMI_ENABLE_BUTTON
     button_init();
     register_button_service();
     activate_button_work();
 #endif
 
-#ifdef CONFIG_ENABLE_SPEAKER
+#ifdef CONFIG_OMI_ENABLE_SPEAKER
     err = speaker_init();
     if (err)
     {
@@ -705,12 +772,14 @@ int transport_start()
     LOG_INF("Speaker initialized");
     register_speaker_service();
 
-
 #endif
-    // Start advertising
 
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);
     bt_gatt_service_register(&storage_service);
+#endif
+
+    // Start advertising
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&dfu_service);
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
@@ -724,6 +793,7 @@ int transport_start()
         LOG_INF("Advertising successfully started");
     }
 
+#ifdef CONFIG_OMI_ENABLE_BATTERY
     int battErr = 0;
     battErr |= battery_init();
     battErr |= battery_charge_start();
@@ -735,12 +805,26 @@ int transport_start()
     {
         LOG_INF("Battery initialized");
     }
-
-    // friend_init();
+#endif
 
     // Start pusher
     ring_buf_init(&ring_buf, sizeof(tx_queue), tx_queue);
-    k_thread_create(&pusher_thread, pusher_stack, K_THREAD_STACK_SIZEOF(pusher_stack), (k_thread_entry_t)pusher, NULL, NULL, NULL, K_PRIO_PREEMPT(7), 0, K_NO_WAIT);
+    if (ring_buf_is_empty(&ring_buf)) {
+        LOG_INF("Ring buffer successfully initialized");
+    } else {
+        LOG_ERR("Ring buffer initialization failed");
+        return -1;
+    }
+    
+    struct k_thread *thread = k_thread_create(&pusher_thread, pusher_stack, K_THREAD_STACK_SIZEOF(pusher_stack), 
+                                             (k_thread_entry_t)test_pusher, NULL, NULL, NULL, 
+                                             K_PRIO_PREEMPT(7), 0, K_NO_WAIT);
+    if (thread == NULL) {
+        LOG_ERR("Failed to create pusher thread");
+        return -1;
+    }
+    
+    LOG_INF("Pusher successfully started");
 
     return 0;
 }
@@ -762,7 +846,7 @@ int broadcast_audio_packets(uint8_t *buffer, size_t size)
     }
 
     if (retry_count >= max_retries) {
-        LOG_ERR("Failed to write to tx queue after %d retries", max_retries);
+        //LOG_ERR("Failed to write to tx queue after %d retries", max_retries);
         return -1;
     }
 

@@ -239,7 +239,7 @@ int main(void)
 #endif
 
     // Enable usb
-#ifdef CONFIG_ENABLE_USB
+#ifdef CONFIG_OMI_ENABLE_USB
     LOG_PRINTK("\n");
     LOG_INF("Initializing power supply check...\n");
 

@@ -2,21 +2,21 @@
 #include <zephyr/shell/shell.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/pm/device_runtime.h>
-#include "lib/evt/mic.h"
 #include "lib/dk2/mic.h"
 #include "lib/dk2/codec.h"
 #include "lib/dk2/config.h"
+#include "lib/dk2/transport.h"
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
+
+bool is_connected = false;
 
 static void codec_handler(uint8_t *data, size_t len)
 {
-    LOG_INF("Codec handler received %d bytes of data: [%02x %02x %02x %02x %02x]", 
-            len, 
-            len > 0 ? data[0] : 0, 
-            len > 1 ? data[1] : 0, 
-            len > 2 ? data[2] : 0, 
-            len > 3 ? data[3] : 0, 
-            len > 4 ? data[4] : 0);
+    int err = broadcast_audio_packets(data, len);
+    if (err)
+    {
+        //LOG_ERR("Failed to broadcast audio packets: %d", err);
+    }
 }
 
 static void mic_handler(int16_t *buffer)
@@ -33,6 +33,19 @@ int main(void)
 	int ret;
 
 	printk("Starting omi2 ...\n");
+	
+	// Indicate transport initialization
+	LOG_PRINTK("\n");
+	LOG_INF("Initializing transport...\n");
+
+	// Start transport
+	int transportErr;
+	transportErr = transport_start();
+	if (transportErr)
+	{
+		LOG_ERR("Failed to start transport (err %d)", transportErr);
+		return transportErr;
+	}
 	
 	// Initialize codec
 	LOG_INF("Initializing codec...\n");
@@ -60,6 +73,14 @@ int main(void)
 
 	while (1) {
         LOG_INF("Running omi2...\n");
+        
+        // Update connection status in logs
+        if (is_connected) {
+            LOG_INF("Transport connected");
+        } else {
+            LOG_INF("Transport disconnected");
+        }
+        
         k_msleep(500);
 	}
 
