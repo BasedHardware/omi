@@ -7,18 +7,13 @@
 #include "lib/evt/sd.h"
 #include "lib/evt/button.h"
 #include "lib/evt/battery.h"
-#include "lib/dk2/transport.h"
+#include "lib/dk2/mic.h"
 #include "lib/dk2/codec.h"
-#include "lib/dk2/utils.h"
+#include "lib/dk2/config.h"
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
 static void codec_handler(uint8_t *data, size_t len)
 {
-    int err = broadcast_audio_packets(data, len);
-    if (err)
-    {
-        LOG_ERR("Failed to broadcast audio packets: %d", err);
-    }
 }
 
 static void mic_handler(int16_t *buffer)
@@ -78,15 +73,6 @@ int main(void)
 	if (ret)
 	{
 		LOG_ERR("Failed to start codec: %d", ret);
-		return ret;
-	}
-	
-	// Initialize transport
-	LOG_INF("Initializing transport...\n");
-	ret = transport_start();
-	if (ret)
-	{
-		LOG_ERR("Failed to start transport (err %d)", ret);
 		return ret;
 	}
 	
