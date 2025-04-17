@@ -6,7 +6,7 @@ project(omi2)
 
 file(GLOB app_sources src/*.c)
 file(GLOB evt_sources src/lib/evt/mic.c) # todo: remove evt_sources
-file(GLOB dk2_sources src/lib/dk2/mic.c src/lib/dk2/codec.c src/lib/dk2/config.h)
+file(GLOB dk2_sources src/lib/dk2/mic.c src/lib/dk2/codec.c src/lib/dk2/config.h src/lib/dk2/transport.c)
 target_sources(app PRIVATE ${evt_sources} ${dk2_sources} ${app_sources})
 
 # OPUS
