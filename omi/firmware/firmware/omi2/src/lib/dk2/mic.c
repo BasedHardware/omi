@@ -11,6 +11,10 @@
 
 LOG_MODULE_REGISTER(mic, CONFIG_LOG_DEFAULT_LEVEL);
 
+static const struct gpio_dt_spec mic_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(pdm_en_pin), gpios, {0});
+static const struct gpio_dt_spec mic_thsel = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(pdm_thsel_pin), gpios, {0});
+static const struct gpio_dt_spec mic_wake = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(pdm_wake_pin), gpios, {0});
+
 //
 // Port of this code: https://github.com/Seeed-Studio/Seeed_Arduino_Mic/blob/master/src/hardware/nrf52840_adc.cpp
 //
@@ -63,8 +67,13 @@ int mic_start()
         nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_HFCLKSTART);
     }
 
+    // Use hardcoded PDM pins from pinctrl.dtsi
+    // PDM CLK is on P1.1 and PDM DIN is on P1.0 as defined in omi2-pinctrl.dtsi
+    uint32_t pdm_clk_pin = NRF_GPIO_PIN_MAP(1, 1);
+    uint32_t pdm_din_pin = NRF_GPIO_PIN_MAP(1, 0);
+    
     // Configure PDM
-    nrfx_pdm_config_t pdm_config = NRFX_PDM_DEFAULT_CONFIG(PDM_CLK_PIN, PDM_DIN_PIN);
+    nrfx_pdm_config_t pdm_config = NRFX_PDM_DEFAULT_CONFIG(pdm_clk_pin, pdm_din_pin);
     pdm_config.gain_l = MIC_GAIN;
     pdm_config.gain_r = MIC_GAIN;
     pdm_config.interrupt_priority = MIC_IRC_PRIORITY;
@@ -79,9 +88,16 @@ int mic_start()
         return -1;
     }
 
-    // Power on Mic
-    nrfy_gpio_cfg_output(PDM_PWR_PIN);
-    nrfy_gpio_pin_set(PDM_PWR_PIN);
+    // Configure and enable microphone pins
+    if (mic_en.port) {
+        gpio_pin_configure_dt(&mic_en, GPIO_OUTPUT);
+        gpio_pin_set_dt(&mic_en, 1);
+    }
+    
+    if (mic_thsel.port) {
+        gpio_pin_configure_dt(&mic_thsel, GPIO_OUTPUT);
+        gpio_pin_set_dt(&mic_thsel, 1);
+    }
 
     // Start PDM
     if (nrfx_pdm_start(&pdm_instance) != NRFX_SUCCESS)
@@ -101,11 +117,31 @@ void set_mic_callback(mix_handler callback)
 
 void mic_off()
 {
-  nrfy_gpio_pin_clear(PDM_PWR_PIN);
+    if (mic_en.port) {
+        gpio_pin_configure_dt(&mic_en, GPIO_OUTPUT);
+        gpio_pin_set_dt(&mic_en, 0);
+    }
+    
+    if (mic_thsel.port) {
+        gpio_pin_configure_dt(&mic_thsel, GPIO_OUTPUT);
+        gpio_pin_set_dt(&mic_thsel, 0);
+    }
 }
 
 
 void mic_on()
 {
-  nrfy_gpio_pin_set(PDM_PWR_PIN);
+    if (mic_en.port) {
+        gpio_pin_configure_dt(&mic_en, GPIO_OUTPUT);
+        gpio_pin_set_dt(&mic_en, 1);
+    }
+
+    if (mic_thsel.port) {
+        gpio_pin_configure_dt(&mic_thsel, GPIO_OUTPUT);
+        gpio_pin_set_dt(&mic_thsel, 1);
+    }
+
+    if (mic_wake.port) {
+        gpio_pin_configure_dt(&mic_wake, GPIO_INPUT);
+    }
 }
