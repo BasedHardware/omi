@@ -14,9 +14,6 @@ Write-Host "- CocoaPods (for iOS dependencies)"
 Write-Host "- Android Studio (for Android)"
 Write-Host "- NDK 26.3.11579264 or above (to build Opus for ARM Devices)"
 Write-Host "- Opus Codec: https://opus-codec.org"
-Write-Host "Usages:"
-Write-Host "- .\setup.ps1 ios"
-Write-Host "- .\setup.ps1 android"
 Write-Host ""
 
 
@@ -36,6 +33,7 @@ function SetupFirebase {
     Copy-Item "setup/prebuilt/google-services.json" -Destination "android/app/src/prod/"
     Copy-Item "setup/prebuilt/GoogleService-Info.plist" -Destination "ios/Config/Prod/"
 }
+
 
 function SetupFirebaseWithServiceAccount {
     dart pub global activate flutterfire_cli
