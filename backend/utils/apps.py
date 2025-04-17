@@ -619,3 +619,23 @@ def app_has_action(app: dict, action_name: str) -> bool:
             return True
 
     return False
+
+
+def app_can_create_memories(app: dict) -> bool:
+    """Check if an app can create memories (facts)."""
+    return app_has_action(app, 'create_memories') or app_has_action(app, 'create_facts')
+
+
+def app_can_read_memories(app: dict) -> bool:
+    """Check if an app can read memories (facts)."""
+    return app_has_action(app, 'read_memories') or app_has_action(app, 'read_facts')
+
+
+def app_can_read_conversations(app: dict) -> bool:
+    """Check if an app can read conversations."""
+    return app_has_action(app, 'read_conversations')
+
+
+def app_can_create_conversation(app: dict) -> bool:
+    """Check if an app can create a conversation."""
+    return app_has_action(app, 'create_conversation')

@@ -65,6 +65,7 @@ Start speaking, you'll see Real-time transcript on [webhook.site ](https://webho
 ## In this repo:
 
 - [omi device](https://github.com/BasedHardware/omi/tree/main/omi)
+- [omi glass](https://github.com/BasedHardware/omi/tree/main/omiGlass)
 - [mobile app](https://github.com/BasedHardware/omi/tree/main/app)
 - [ai personas (web)](https://github.com/BasedHardware/omi/tree/main/personas-open-source)
 - [SDKs](sdks)

@@ -118,7 +118,7 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
     {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | ChatOpenAI(model='gpt-4o') | parser
+    chain = prompt | llm_mini | parser
 
     response = chain.invoke({
         'transcript': transcript.strip(),
@@ -136,6 +136,21 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
 
 
 def get_app_result(transcript: str, app: App) -> str:
+    prompt = f'''
+    Your are an AI with the following characteristics:
+    Name: {app.name},
+    Description: {app.description},
+    Task: ${app.memory_prompt}
+
+    Conversation: ```{transcript.strip()}```,
+    '''
+
+    response = llm_mini.invoke(prompt)
+    content = response.content.replace('```json', '').replace('```', '')
+    return content
+
+
+def get_app_result_v1(transcript: str, app: App) -> str:
     prompt = f'''
     Your are an AI with the following characteristics:
     Name: ${app.name},
@@ -197,7 +212,7 @@ def get_email_structure(text: str, started_at: datetime, language_code: str, tz:
     {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | ChatOpenAI(model='gpt-4o') | parser
+    chain = prompt | llm_medium | parser
 
     response = chain.invoke({
         'language_code': language_code,
@@ -232,7 +247,7 @@ def get_post_structure(text: str, started_at: datetime, language_code: str, tz: 
     {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | ChatOpenAI(model='gpt-4o') | parser
+    chain = prompt | llm_mini | parser
 
     response = chain.invoke({
         'language_code': language_code,
@@ -268,7 +283,7 @@ def get_message_structure(text: str, started_at: datetime, language_code: str, t
     {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | ChatOpenAI(model='gpt-4o') | parser
+    chain = prompt | llm_mini | parser
 
     response = chain.invoke({
         'language_code': language_code,
@@ -1177,7 +1192,7 @@ def qa_rag_v3(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
     Anwser:
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
     # print('qa_rag prompt', prompt)
-    return ChatOpenAI(model='gpt-4o').invoke(prompt).content
+    return llm_medium.invoke(prompt).content
 
 
 def qa_rag_v2(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
@@ -1228,7 +1243,7 @@ def qa_rag_v2(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
     Answer:
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
     # print('qa_rag prompt', prompt)
-    return ChatOpenAI(model='gpt-4o').invoke(prompt).content
+    return llm_medium.invoke(prompt).content
 
 
 def qa_rag_v1(uid: str, question: str, context: str, plugin: Optional[Plugin] = None) -> str:
@@ -1266,7 +1281,7 @@ def qa_rag_v1(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
     Answer:
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
     # print('qa_rag prompt', prompt)
-    return ChatOpenAI(model='gpt-4o').invoke(prompt).content
+    return llm_medium.invoke(prompt).content
 
 
 # **************************************************
@@ -1366,7 +1381,7 @@ def new_memories_extractor(
         response: Memories = chain.invoke({
             'user_name': user_name,
             'conversation': content,
-            'facts_str': memories_str,
+            'memories_str': memories_str,
             'format_instructions': parser.get_format_instructions(),
         })
         # for fact in response:
@@ -1394,7 +1409,7 @@ def extract_memories_from_text(
             'user_name': user_name,
             'text_content': text,
             'text_source': text_source,
-            'facts_str': memories_str,
+            'memories_str': memories_str,
             'format_instructions': parser.get_format_instructions(),
         })
         return response.facts
@@ -1561,6 +1576,72 @@ class FiltersToUse(BaseModel):
 class OutputQuestion(BaseModel):
     question: str = Field(description='The extracted user question from the conversation.')
 
+
+class BestAppSelection(BaseModel):
+    app_id: str = Field(description='The ID of the best app for processing this conversation.')
+
+def select_best_app_for_conversation(conversation: Conversation, apps: List[App]) -> Optional[App]:
+    """Select the best app for the given conversation based on its content and structure."""
+    if not apps:
+        return None
+
+    # Use LLM to select the best app
+    conversation_summary = f"""
+    Title: {conversation.structured.title}
+    Category: {conversation.structured.category.value}
+    Overview: {conversation.structured.overview}
+    """
+
+    # Format apps as XML to handle complex content better
+    apps_xml = "<apps>\n"
+    for app in apps:
+        apps_xml += f"""  <app>
+    <id>{app.id}</id>
+    <name>{app.name}</name>
+    <description>{app.description}</description>
+  </app>\n"""
+    apps_xml += "</apps>"
+
+    prompt = f"""
+    You are an expert app selector tasked with carefully analyzing a conversation and determining if any available app is truly suitable for processing it.
+
+    <conversation>
+    {conversation_summary}
+    </conversation>
+
+    {apps_xml}
+
+    Task:
+    1. Carefully analyze the conversation's content, themes, and context
+    2. Thoroughly examine each app's purpose, functionality, and domain expertise
+    3. Determine if there is a strong, meaningful match between the conversation and any app
+
+    Important instructions:
+    - It is CRITICAL that you only select an app if there is a genuine, strong alignment between the conversation content and the app's purpose
+    - If the conversation topics don't meaningfully relate to any app's domain (e.g., a business conversation when all apps are for medical analysis), you MUST return an empty app_id
+    - Do not force a match when none exists - it's better to return empty than select an inappropriate app
+    - If you do find a suitable match, provide only the app_id of the best matching app
+
+    Provide only the app_id that represents the best match, or an empty string if no app is suitable.
+    """
+
+    try:
+        with_parser = llm_mini.with_structured_output(BestAppSelection)
+        response: BestAppSelection = with_parser.invoke(prompt)
+        selected_app_id = response.app_id
+
+        if not selected_app_id or selected_app_id.strip() == "":
+            return None
+
+        # Find the app with the matching ID
+        for app in apps:
+            if app.id == selected_app_id:
+                return app
+    except Exception as e:
+        print(f"Error selecting best app: {e}")
+
+    # Return None if no suitable app was found
+    return None
 
 def extract_question_from_conversation(messages: List[Message]) -> str:
     # user last messages

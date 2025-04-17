@@ -6,10 +6,13 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
 
+memories_collection = 'memories'
+users_collection = 'users'
+
 
 def get_memories(uid: str, limit: int = 100, offset: int = 0):
     print('get_memories', uid, limit, offset)
-    memories_ref = db.collection('users').document(uid).collection('facts')
+    memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
     memories_ref = (
         memories_ref.order_by('scoring', direction=firestore.Query.DESCENDING)
         .order_by('created_at', direction=firestore.Query.DESCENDING)
@@ -25,7 +28,7 @@ def get_memories(uid: str, limit: int = 100, offset: int = 0):
 def get_user_public_memories(uid: str, limit: int = 100, offset: int = 0):
     print('get_public_memories', limit, offset)
 
-    memories_ref = db.collection('users').document(uid).collection('facts')
+    memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
     memories_ref = (
         memories_ref.order_by('scoring', direction=firestore.Query.DESCENDING)
         .order_by('created_at', direction=firestore.Query.DESCENDING)
@@ -44,7 +47,7 @@ def get_user_public_memories(uid: str, limit: int = 100, offset: int = 0):
 
 def get_non_filtered_memories(uid: str, limit: int = 100, offset: int = 0):
     print('get_non_filtered_memories', uid, limit, offset)
-    memories_ref = db.collection('users').document(uid).collection('facts')
+    memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
     memories_ref = (
         memories_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
         .where(filter=FieldFilter('deleted', '==', False))
@@ -54,16 +57,16 @@ def get_non_filtered_memories(uid: str, limit: int = 100, offset: int = 0):
 
 
 def create_memory(uid: str, data: dict):
-    user_ref = db.collection('users').document(uid)
-    memories_ref = user_ref.collection('facts')
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
     memory_ref = memories_ref.document(data['id'])
     memory_ref.set(data)
 
 
 def save_memories(uid: str, data: List[dict]):
     batch = db.batch()
-    user_ref = db.collection('users').document(uid)
-    memories_ref = user_ref.collection('facts')
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
     for memory in data:
         memory_ref = memories_ref.document(memory['id'])
         batch.set(memory_ref, memory)
@@ -72,51 +75,51 @@ def save_memories(uid: str, data: List[dict]):
 
 def delete_memories(uid: str):
     batch = db.batch()
-    user_ref = db.collection('users').document(uid)
-    memories_ref = user_ref.collection('facts')
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
     for doc in memories_ref.stream():
         batch.delete(doc.reference)
     batch.commit()
 
 
 def get_memory(uid: str, memory_id: str):
-    user_ref = db.collection('users').document(uid)
-    memories_ref = user_ref.collection('facts')
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
     memory_ref = memories_ref.document(memory_id)
     return memory_ref.get().to_dict()
 
 
 def review_memory(uid: str, memory_id: str, value: bool):
-    user_ref = db.collection('users').document(uid)
-    memories_ref = user_ref.collection('facts')
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
     memory_ref = memories_ref.document(memory_id)
     memory_ref.update({'reviewed': True, 'user_review': value})
 
 
 def change_memory_visibility(uid: str, memory_id: str, value: str):
-    user_ref = db.collection('users').document(uid)
-    memories_ref = user_ref.collection('facts')
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
     memory_ref = memories_ref.document(memory_id)
     memory_ref.update({'visibility': value})
 
 
 def edit_memory(uid: str, memory_id: str, value: str):
-    user_ref = db.collection('users').document(uid)
-    memories_ref = user_ref.collection('facts')
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
     memory_ref = memories_ref.document(memory_id)
     memory_ref.update({'content': value, 'edited': True, 'updated_at': datetime.now(timezone.utc)})
 
 
 def delete_memory(uid: str, memory_id: str):
-    user_ref = db.collection('users').document(uid)
-    memories_ref = user_ref.collection('facts')
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
     memory_ref = memories_ref.document(memory_id)
     memory_ref.update({'deleted': True})
 
 
 def delete_all_memories(uid: str):
-    user_ref = db.collection('users').document(uid)
-    memories_ref = user_ref.collection('facts')
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
     query = memories_ref.where(filter=FieldFilter('deleted', '==', False))
     batch = db.batch()
     for doc in query.stream():
@@ -126,8 +129,8 @@ def delete_all_memories(uid: str):
 
 def delete_memories_for_conversation(uid: str, memory_id: str):
     batch = db.batch()
-    user_ref = db.collection('users').document(uid)
-    memories_ref = user_ref.collection('facts')
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
     query = (
         memories_ref.where(filter=FieldFilter('memory_id', '==', memory_id))
         .where(filter=FieldFilter('deleted', '==', False))
@@ -149,8 +152,8 @@ def migrate_memories(prev_uid: str, new_uid: str, app_id: str = None):
     print(f'Migrating memories from {prev_uid} to {new_uid}')
 
     # Get source memories
-    prev_user_ref = db.collection('users').document(prev_uid)
-    prev_memories_ref = prev_user_ref.collection('facts')
+    prev_user_ref = db.collection(users_collection).document(prev_uid)
+    prev_memories_ref = prev_user_ref.collection(memories_collection)
 
     # Apply app_id filter if provided
     if app_id:
@@ -167,7 +170,7 @@ def migrate_memories(prev_uid: str, new_uid: str, app_id: str = None):
 
     # Create batch for destination user
     batch = db.batch()
-    new_user_ref = db.collection('users').document(new_uid)
+    new_user_ref = db.collection(users_collection).document(new_uid)
     new_memories_ref = new_user_ref.collection('facts')
 
     # Add memories to batch

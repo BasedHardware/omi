@@ -148,9 +148,14 @@ getTranscriptWidget(
   }
 
   return Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       if (photos.isNotEmpty) const PhotosGridComponent(),
-      if (segments.isNotEmpty) TranscriptWidget(segments: segments),
+      if (segments.isNotEmpty)
+        TranscriptWidget(
+          segments: segments,
+          bottomMargin: 100, // Smaller bottom margin for capturing page
+        ),
     ],
   );
 }
