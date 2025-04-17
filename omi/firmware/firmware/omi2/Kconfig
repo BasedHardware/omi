@@ -1,2 +1,2 @@
 source "Kconfig.zephyr"
-source "${CMAKE_CURRENT_LIST_DIR}/Kconfig.omi"
+source "omi/firmware/firmware/omi2/Kconfig.omi"
