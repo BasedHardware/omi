@@ -1,1 +1,2 @@
 source "Kconfig.zephyr"
+source "Kconfig.omi"
