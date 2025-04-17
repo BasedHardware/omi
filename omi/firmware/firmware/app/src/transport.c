@@ -31,6 +31,7 @@ extern uint32_t file_num_array[2];
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0;
+struct k_mutex conn_mutex; // Mutex for current_connection access
 //
 // Internal
 //
@@ -351,6 +352,7 @@ void broadcast_battery_level(struct k_work *work_item) {
 static void _transport_connected(struct bt_conn *conn, uint8_t err)
 {
     struct bt_conn_info info = {0};
+    k_mutex_lock(&conn_mutex, K_FOREVER); // Lock
     storage_is_on = true;
 
     err = bt_conn_get_info(conn, &info);
@@ -358,6 +360,7 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     {
         LOG_ERR("Failed to get connection info (err %d)", err);
         bt_conn_unref(conn);
+        k_mutex_unlock(&conn_mutex);
         return;
     }
 
@@ -367,6 +370,7 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
         bt_conn_unref(current_connection);
     }
     current_connection = bt_conn_ref(conn);
+    k_mutex_unlock(&conn_mutex);
     current_mtu = info.le.data_len->tx_max_len;
     LOG_INF("Transport connected");
     LOG_DBG("Interval: %d, latency: %d, timeout: %d", info.le.interval, info.le.latency, info.le.timeout);
@@ -381,6 +385,7 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
 static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 {
     is_connected = false;
+    k_mutex_lock(&conn_mutex, K_FOREVER); // Lock
     storage_is_on = false;
 
     LOG_INF("Transport disconnected");
@@ -389,6 +394,7 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
         bt_conn_unref(current_connection);
         current_connection = NULL;
     }
+    k_mutex_unlock(&conn_mutex);
     current_mtu = 0;
 }
 
@@ -650,12 +656,19 @@ void update_file_size()
 void pusher(void)
 {
     k_msleep(500);
+    struct bt_conn *conn = NULL; // Local variable for connection
     while (1)
     {
         //
         // Load current connection
         //
-        struct bt_conn *conn = current_connection;
+        k_mutex_lock(&conn_mutex, K_FOREVER);
+        conn = current_connection;
+        if (conn) {
+             conn = bt_conn_ref(conn);
+        }
+        k_mutex_unlock(&conn_mutex);
+
         //updating the most recent file size is expensive!
         static bool file_size_updated = true;
         static bool connection_was_true = false;
@@ -677,8 +690,10 @@ void pusher(void)
             file_size_updated = true;
         }
         if (conn)
-        {
-            conn = bt_conn_ref(conn);
+        { // This ref was taken under lock earlier
+           // conn = bt_conn_ref(conn); <-- moved earlier under lock
+        } else {
+            // If conn is NULL here, skip GATT operations or handle appropriately
         }
         bool valid = true;
         if (current_mtu < MINIMAL_PACKET_SIZE)
@@ -732,6 +747,7 @@ void pusher(void)
         if (conn)
         {
             bt_conn_unref(conn);
+            conn = NULL; // Clear local variable
         }
 
         k_yield();
@@ -743,15 +759,34 @@ extern struct bt_gatt_service storage_service;
 //
 int bt_off()
 {
-    // First disconnect any active connections
-    if (current_connection != NULL) {
-        bt_conn_disconnect(current_connection, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
-        bt_conn_unref(current_connection);
-        current_connection = NULL;
+    int err = 0;
+    struct bt_conn *conn_to_disconnect = NULL;
+
+    // Get connection under lock
+    k_mutex_lock(&conn_mutex, K_FOREVER);
+    conn_to_disconnect = current_connection;
+    if (conn_to_disconnect) {
+        // Take ref if we are going to use it after unlock
+        conn_to_disconnect = bt_conn_ref(conn_to_disconnect);
+    }
+    k_mutex_unlock(&conn_mutex);
+
+    // Perform disconnection outside the lock
+    if (conn_to_disconnect != NULL) {
+        LOG_PRINTK("Disconnecting Bluetooth...");
+        err = bt_conn_disconnect(conn_to_disconnect, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+        if (err) {
+            LOG_ERR("Disconnection failed (err %d)", err);
+        } else {
+            LOG_INF("Disconnected");
+        }
+        bt_conn_unref(conn_to_disconnect);
+
+        // Note: The disconnect callback _transport_disconnected already handles setting current_connection to NULL.
     }
 
     // Stop advertising
-    int err = bt_le_adv_stop();
+    err = bt_le_adv_stop();
     if (err)
     {
         LOG_ERR("Failed to stop Bluetooth advertising %d", err);
@@ -791,6 +826,7 @@ int bt_on()
 //periodic advertising
 int transport_start()
 {
+    k_mutex_init(&conn_mutex);
     k_mutex_init(&write_sdcard_mutex);
     // Configure callbacks
     bt_conn_cb_register(&_callback_references);
@@ -875,7 +911,11 @@ int transport_start()
 
 struct bt_conn *get_current_connection()
 {
-    return current_connection;
+    struct bt_conn *conn;
+    k_mutex_lock(&conn_mutex, K_FOREVER);
+    conn = current_connection;
+    k_mutex_unlock(&conn_mutex);
+    return conn;
 }
 
 int broadcast_audio_packets(uint8_t *buffer, size_t size)
