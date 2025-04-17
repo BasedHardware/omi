@@ -53,10 +53,23 @@ Follow these steps to set up omiglass:
    yarn install
    ```
 
-2. Add API keys for Groq and OpenAI in the `keys.ts` file located at [https://github.com/BasedHardware/omi/blob/main/omiGlass/sources/keys.ts](https://github.com/BasedHardware/omi/blob/main/omiGlass/sources/keys.ts).
+2. Set up your API keys:
 
-3. For Ollama, self-host the REST API from the repository at [https://github.com/ollama/ollama](https://github.com/ollama/ollama) and add the URL to the `keys.ts` file. The URL should be http://localhost:11434/api/chat
-4. go to terminal and type "ollama pull moondream:1.8b-v2-fp16"
+   - Copy the `.env.example` file to create a new `.env` file:
+     ```
+     cp .env.example .env
+     ```
+
+   - Edit the `.env` file and add your API keys:
+     - Get a Groq API key from [Groq](https://console.groq.com/keys)
+     - Get an OpenAI API key from [OpenAI](https://platform.openai.com/api-keys)
+     - For Ollama, the default URL is already set (http://localhost:11434/api/chat)
+
+   The environment variables are automatically loaded and used by the application.
+
+3. For Ollama, self-host the REST API from the repository at [https://github.com/ollama/ollama](https://github.com/ollama/ollama). The default URL is already set in the `.env.example` file.
+
+4. Go to terminal and type "ollama pull moondream:1.8b-v2-fp16"
 
 5. Start the application:
 
