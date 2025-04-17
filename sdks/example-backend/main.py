@@ -77,6 +77,7 @@ class ConnectionManager:
         await websocket.send_text(message)
 
 manager = ConnectionManager()
+
 @app.get("/")
 async def root():
     return {"message": "Omi Audio Processor API. Connect to /ws for WebSocket audio processing."}

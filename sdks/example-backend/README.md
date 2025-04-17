@@ -19,22 +19,17 @@ uv run python main.py #
 
 ### Using Docker
 
-1. Build the Docker image:
+1. Run the backend
 ```
 cd ./sdks/example-backend
-docker build -t omi-backend .
-```
-
-2. Run the Docker container:
-```
-docker run -p 8000:8000 omi-backend
+docker compose up --build
 ```
 
 ## Exposing the Backend
 
 Expose the backend to the internet using ngrok:
 ```
-ngrok http 8005
+ngrok http 8000
 ```
 Copy the ngrok URL and use it in the app.
 (You just need an https endpoint, you can use whatever you want)
