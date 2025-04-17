@@ -53,7 +53,7 @@ Follow these steps to set up omiglass:
    yarn install
    ```
 
-2. Add API keys for Groq and OpenAI in the `keys.ts` file located at [https://github.com/BasedHardware/omiglass/blob/main/sources/keys.ts](https://github.com/BasedHardware/omiglass/blob/main/sources/keys.ts).
+2. Add API keys for Groq and OpenAI in the `keys.ts` file located at [https://github.com/BasedHardware/omi/blob/main/omiGlass/sources/keys.ts](https://github.com/BasedHardware/omi/blob/main/omiGlass/sources/keys.ts).
 
 3. For Ollama, self-host the REST API from the repository at [https://github.com/ollama/ollama](https://github.com/ollama/ollama) and add the URL to the `keys.ts` file. The URL should be http://localhost:11434/api/chat
 4. go to terminal and type "ollama pull moondream:1.8b-v2-fp16"
@@ -72,7 +72,7 @@ Follow these steps to set up omiglass:
 
    Note: This is an Expo project. For now, open the localhost link (this will appear after completing step 5) to access the web version.
 
-How you can contribute in software: 
+How you can contribute in software:
 - [ ] Connect glasses with omi app. Currently the glasses only work with web interface
 
 ### Hardware
@@ -80,13 +80,13 @@ How you can contribute in software:
 
 1. 3D print the glasses mount case using the provided STL file located in hardware folder.
 2.  Put components like this
-   
+
 <p align="center">
   <img src="https://github.com/user-attachments/assets/45ef303b-0f92-43eb-bfad-1b20a86e948c" width="45%" />
   <img src="https://github.com/user-attachments/assets/3fa00359-74a0-4f85-a233-f4bf12b1db7b" width="45%" />
 </p>
 
-How you can contribute in hardware: 
+How you can contribute in hardware:
 - [ ] Redesign the legs/sides so that it would fit on bigger heads
 - [ ] add a switch into design (current design is without switch)
 
