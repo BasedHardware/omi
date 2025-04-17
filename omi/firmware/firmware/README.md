@@ -24,7 +24,7 @@ The Omi firmware is built on the Zephyr RTOS and provides functionality for audi
 
 ## Building the Firmware
 
-Follow the instructions at https://docs.omi.me/docs/developer/Compile_firmware
+Follow the instructions at https://docs.omi.me/docs/developer/firmware/Compile_firmware
 
 ## Flashing the Firmware
 

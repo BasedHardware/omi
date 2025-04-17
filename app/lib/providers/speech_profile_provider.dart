@@ -119,7 +119,7 @@ class SpeechProfileProvider extends ChangeNotifier
   Future<void> _initiateWebsocket({bool force = false}) async {
     _socket = await ServiceManager.instance()
         .socket
-        .speechProfile(codec: BleAudioCodec.opus, sampleRate: 16000, force: force);
+        .speechProfile(codec: BleAudioCodec.opus, sampleRate: 16000, language: "auto", force: force);
     if (_socket == null) {
       throw Exception("Can not create new speech profile socket");
     }
@@ -341,9 +341,10 @@ class SpeechProfileProvider extends ChangeNotifier
     }
     streamStartedAtSecond ??= newSegments[0].start;
 
+    var remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
     TranscriptSegment.combineSegments(
       segments,
-      newSegments,
+      remainSegments,
       toRemoveSeconds: streamStartedAtSecond ?? 0,
     );
     updateProgressMessage();

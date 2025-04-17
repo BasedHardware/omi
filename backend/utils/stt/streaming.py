@@ -3,6 +3,7 @@ import os
 import random
 import time
 from typing import List
+from enum import Enum
 
 import websockets
 from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
@@ -14,6 +15,50 @@ headers = {
     "Authorization": f"Token {os.getenv('DEEPGRAM_API_KEY')}",
     "Content-Type": "audio/*"
 }
+
+class STTService(str, Enum):
+    deepgram = "deepgram"
+    soniox = "soniox"
+    speechmatics = "speechmatics"
+
+    @staticmethod
+    def get_model_name(value):
+        if value == STTService.deepgram:
+            return 'deepgram_streaming'
+        elif value == STTService.soniox:
+            return 'soniox_streaming'
+        elif value == STTService.speechmatics:
+            return 'speechmatics_streaming'
+
+
+# Languages supported by Soniox
+soniox_supported_languages = ['multi','en', 'af', 'sq', 'ar', 'az', 'eu', 'be', 'bn', 'bs', 'bg', 'ca', 'zh', 'hr', 'cs', 'da', 'nl', 'et', 'fi', 'fr', 'gl', 'de', 'el', 'gu', 'he', 'hi', 'hu', 'id', 'it', 'ja', 'kn', 'kk', 'ko', 'lv', 'lt', 'mk', 'ms', 'ml', 'mr', 'no', 'fa', 'pl', 'pt', 'pa', 'ro', 'ru', 'sr', 'sk', 'sl', 'es', 'sw', 'sv', 'tl', 'ta', 'te', 'th', 'tr', 'uk', 'ur', 'vi', 'cy']
+soniox_multi_languages = soniox_supported_languages
+
+# Languages supported by Deepgram, nova-2/nova-3 model
+deepgram_supported_languages = {'multi','bg','ca', 'zh', 'zh-CN', 'zh-Hans', 'zh-TW', 'zh-Hant', 'zh-HK', 'cs', 'da', 'da-DK', 'nl', 'en', 'en-US', 'en-AU', 'en-GB', 'en-NZ', 'en-IN', 'et', 'fi', 'nl-BE', 'fr', 'fr-CA', 'de', 'de-CH', 'el' 'hi', 'hu', 'id', 'it', 'ja', 'ko', 'ko-KR', 'lv', 'lt', 'ms', 'no', 'pl', 'pt', 'pt-BR', 'pt-PT', 'ro', 'ru', 'sk', 'es', 'es-419', 'sv', 'sv-SE', 'th', 'th-TH', 'tr', 'uk', 'vi'}
+deepgram_multi_languages = ['multi', 'en', 'es']
+deepgram_nova3_multi_languages = ["multi", "en", "en-US", "en-AU", "en-GB", "en-NZ", "en-IN", "es", "es-419", "fr", "fr-CA", "de", "hi", "ru", "pt", "pt-BR", "pt-PT", "ja", "it", "nl", "nl-BE"]
+
+def get_stt_service_for_language(language: str):
+    # # Soniox's 'multi'
+    # if language in soniox_multi_languages:
+    #     return STTService.soniox, 'multi', 'stt-rt-preview'
+
+    # Deepgram's 'multi'
+    # if language in deepgram_multi_languages:
+    #    return STTService.deepgram, 'multi', 'nova-3'
+
+    # Deepgram's 'multi', nova-2
+    if language in deepgram_multi_languages:
+        return STTService.deepgram, 'multi', 'nova-2-general'
+
+    # Deepgram
+    if language in deepgram_supported_languages:
+        return STTService.deepgram, language, 'nova-2-general'
+
+    # Fallback to Deepgram en
+    return STTService.deepgram, 'en', 'nova-2-general'
 
 
 async def send_initial_file_path(file_path: str, transcript_socket_async_send):
@@ -35,6 +80,7 @@ async def send_initial_file_path(file_path: str, transcript_socket_async_send):
 async def send_initial_file(data: List[List[int]], transcript_socket):
     print('send_initial_file2')
     start = time.time()
+
     # Reading and sending in chunks
     for i in range(0, len(data)):
         chunk = data[i]
@@ -49,19 +95,23 @@ async def send_initial_file(data: List[List[int]], transcript_socket):
 is_dg_self_hosted = os.getenv('DEEPGRAM_SELF_HOSTED_ENABLED', '').lower() == 'true'
 deepgram_options = DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"})
 
+deepgram_beta_options = DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"})
+deepgram_beta_options.url = "https://api.beta.deepgram.com"
+
 if is_dg_self_hosted:
     dg_self_hosted_url = os.getenv('DEEPGRAM_SELF_HOSTED_URL')
     if not dg_self_hosted_url:
         raise ValueError("DEEPGRAM_SELF_HOSTED_URL must be set when DEEPGRAM_SELF_HOSTED_ENABLED is true")
     # Override only the URL while keeping all other options
     deepgram_options.url = dg_self_hosted_url
+    deepgram_beta_options.url = dg_self_hosted_url
     print(f"Using Deepgram self-hosted at: {dg_self_hosted_url}")
 
 deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), deepgram_options)
-
+deepgram_beta = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), deepgram_beta_options)
 
 async def process_audio_dg(
-        stream_transcript, language: str, sample_rate: int, channels: int, preseconds: int = 0,
+    stream_transcript, language: str, sample_rate: int, channels: int, preseconds: int = 0, model: str = 'nova-2-general',
 ):
     print('process_audio_dg', language, sample_rate, channels, preseconds)
 
@@ -109,7 +159,7 @@ async def process_audio_dg(
         print(f"Error: {error}")
 
     print("Connecting to Deepgram")  # Log before connection attempt
-    return connect_to_deepgram_with_backoff(on_message, on_error, language, sample_rate, channels)
+    return connect_to_deepgram_with_backoff(on_message, on_error, language, sample_rate, channels, model)
 
 
 # Calculate backoff with jitter
@@ -119,11 +169,11 @@ def calculate_backoff_with_jitter(attempt, base_delay=1000, max_delay=32000):
     return backoff
 
 
-def connect_to_deepgram_with_backoff(on_message, on_error, language: str, sample_rate: int, channels: int, retries=3):
+def connect_to_deepgram_with_backoff(on_message, on_error, language: str, sample_rate: int, channels: int, model: str, retries=3):
     print("connect_to_deepgram_with_backoff")
     for attempt in range(retries):
         try:
-            return connect_to_deepgram(on_message, on_error, language, sample_rate, channels)
+            return connect_to_deepgram(on_message, on_error, language, sample_rate, channels, model)
         except Exception as error:
             print(f'An error occurred: {error}')
             if attempt == retries - 1:  # Last attempt
@@ -135,10 +185,14 @@ def connect_to_deepgram_with_backoff(on_message, on_error, language: str, sample
     raise Exception(f'Could not open socket: All retry attempts failed.')
 
 
-def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, channels: int):
-    # 'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=8000&language=$recordingsLanguage&model=nova-2-general&no_delay=true&endpointing=100&interim_results=false&smart_format=true&diarize=true'
+def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, channels: int, model: str):
     try:
-        dg_connection = deepgram.listen.websocket.v("1")
+        # get connection by model
+        if model == "nova-3":
+            dg_connection = deepgram_beta.listen.websocket.v("1")
+        else:
+            dg_connection = deepgram.listen.websocket.v("1")
+
         dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
         dg_connection.on(LiveTranscriptionEvents.Error, on_error)
 
@@ -178,7 +232,7 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
             filler_words=False,
             channels=channels,
             multichannel=channels > 1,
-            model='nova-2-general',
+            model=model,
             sample_rate=sample_rate,
             encoding='linear16'
         )
@@ -190,115 +244,152 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
     except Exception as e:
         raise Exception(f'Could not open socket: {e}')
 
-
-soniox_valid_languages = ['en']
-
-
-async def process_audio_soniox(stream_transcript, sample_rate: int, language: str, uid: str):
-    # Fuck, soniox doesn't even support diarization in languages != english
+async def process_audio_soniox(stream_transcript, sample_rate: int, language: str, uid: str, preseconds: int = 0, language_hints: List[str] = []):
+    # Soniox supports diarization primarily for English
     api_key = os.getenv('SONIOX_API_KEY')
     if not api_key:
         raise ValueError("API key is not set. Please set the SONIOX_API_KEY environment variable.")
 
-    uri = 'wss://api.soniox.com/transcribe-websocket'
+    uri = 'wss://stt-rt.soniox.com/transcribe-websocket'
 
-    # Validate the language and construct the model name
-    if language not in soniox_valid_languages:
-        raise ValueError(f"Unsupported language '{language}'. Supported languages are: {soniox_valid_languages}")
+    # Speaker identification only works with English and 16kHz sample rate
+    # New Soniox streaming is not supported speaker indentification
+    has_speech_profile = False  # create_user_speech_profile(uid) if uid and sample_rate == 16000 and language == 'en' else False
 
-    has_speech_profile = create_user_speech_profile(uid) if uid and sample_rate == 16000 else False  # only english too
+    # Determine audio format based on sample rate
+    audio_format = "s16le" if sample_rate == 16000 else "mulaw"
 
     # Construct the initial request with all required and optional parameters
     request = {
         'api_key': api_key,
-        'sample_rate_hertz': sample_rate,
-        'include_nonfinal': True,
-        'enable_endpoint_detection': True,
-        'enable_streaming_speaker_diarization': True,
-        'enable_speaker_identification': has_speech_profile,
-        'cand_speaker_names': [uid] if has_speech_profile else [],
-        'max_num_speakers': 4,
-        # 'enable_global_speaker_diarization': False,
-        # 'enable_profanity_filter': False,
-        # 'enable_dictation': False,
-        # 'speech_context': {
-        #     'entries': [
-        #         {
-        #             'phrases': ['MVP', 'PMF', 'VC', 'API', 'IPO', 'SEO', 'ROI', 'UI', 'UX'],
-        #             'boost': 15,
-        #         },
-        #         {
-        #             'phrases': ['Soniox', 'Deepgram', 'Speechmatics', 'Whisper', 'OpenAI', 'Otter'],
-        #             'boost': 15,
-        #         },
-        #         {
-        #             'phrases': ["Bro", "Sup"],
-        #             'boost': 10
-        #         },
-        #
-        #     ]
-        # },
-        'model': f'{language}_v2_lowlatency'
+        'model': 'stt-rt-preview',
+        'audio_format': audio_format,
+        'sample_rate': sample_rate,
+        'num_channels': 1,
+        'enable_speaker_tags': True,
+        'language_hints': language_hints,
     }
+
+    # Add speaker identification if available
+    if has_speech_profile:
+        request['enable_speaker_identification'] = True
+        request['cand_speaker_names'] = [uid]
 
     try:
         # Connect to Soniox WebSocket
         print("Connecting to Soniox WebSocket...")
         soniox_socket = await websockets.connect(uri, ping_timeout=10, ping_interval=10)
         print("Connected to Soniox WebSocket.")
+
         # Send the initial request
         await soniox_socket.send(json.dumps(request))
         print(f"Sent initial request: {request}")
 
+        # Variables to track current segment
+        current_segment = None
+        current_segment_time = None
+        current_speaker_id = None
+
         # Start listening for messages from Soniox
         async def on_message():
+            nonlocal current_segment, current_segment_time, current_speaker_id
             try:
                 async for message in soniox_socket:
                     response = json.loads(message)
                     # print(response)
-                    fw = response['fw']
-                    if not fw:
-                        continue
-                    spks = response['spks']
-                    user_speaker_id = None if not spks else spks[0]['spk']
-                    segments = []
-                    for f in fw:
-                        word = f['t']
-                        if word == '' or word == '<end>':
+
+                    # Update last message time
+                    current_time = time.time()
+
+                    # Check for error responses
+                    if 'error_code' in response:
+                        error_message = response.get('error_message', 'Unknown error')
+                        error_code = response.get('error_code', 0)
+                        print(f"Soniox error: {error_code} - {error_message}")
+                        raise Exception(f"Soniox error: {error_code} - {error_message}")
+
+                    # Process response based on tokens field
+                    if 'tokens' in response:
+                        tokens = response.get('tokens', [])
+
+                        if not tokens:
+                            if current_segment:
+                                stream_transcript([current_segment])
+                                current_segment = None
+                                current_segment_time = None
                             continue
-                        word = word.replace('<end>', '')
-                        start = (f['s'] / 1000)
-                        end = (f['s'] + f['d']) / 1000
-                        if not segments:
-                            segments.append({
-                                'speaker': f"SPEAKER_0{f['spk']}",
-                                'start': start,
-                                'end': end,
-                                'text': word,
-                                'is_user': user_speaker_id == f['spk'],
-                                'person_id': None,
-                            })
-                        else:
-                            last_segment = segments[-1]
-                            if last_segment['speaker'] == f"SPEAKER_0{f['spk']}":
-                                last_segment['text'] += word
-                                last_segment['end'] += f['d'] / 1000
+
+                        # Extract speaker information and text from tokens
+                        new_speaker_id = None
+                        speaker_change_detected = False
+                        token_texts = []
+
+                        # First check if any token contains a speaker tag
+                        for token in tokens:
+                            token_text = token['text']
+                            if token_text.startswith('spk:'):
+                                new_speaker_id = token_text.split(':')[1] if ':' in token_text else "1"
+                                speaker_change_detected = (current_speaker_id is not None and
+                                                           current_speaker_id != new_speaker_id)
+                                current_speaker_id = new_speaker_id
                             else:
-                                segments.append({
-                                    'speaker': f"SPEAKER_0{f['spk']}",
-                                    'start': start,
-                                    'end': end,
-                                    'text': word,
-                                    'is_user': user_speaker_id == f['spk'],
-                                    'person_id': None,
-                                })
+                                token_texts.append(token_text)
 
-                    for i, segment in enumerate(segments):
-                        segments[i]['text'] = segments[i]['text'].strip().replace('  ', '')
+                        # If no speaker tag found in this response, use the current speaker
+                        if new_speaker_id is None and current_speaker_id is not None:
+                            new_speaker_id = current_speaker_id
+                        elif new_speaker_id is None:
+                            new_speaker_id = "1"  # Default speaker
 
-                    # print('Soniox:', transcript.replace('<end>', ''))
-                    if segments:
-                        stream_transcript(segments)
+                        # If we have either a speaker change or threshold exceeded, send the current segment and start a new one
+                        punctuation_marks = ['.', '?', '!', ',', ';', ':', ' ']
+                        time_threshold_exceed = current_segment_time and current_time - current_segment_time > 0.3 and \
+                            (current_segment and current_segment['text'][-1] in punctuation_marks)
+                        if (speaker_change_detected or time_threshold_exceed) and current_segment:
+                            stream_transcript([current_segment])
+                            current_segment = None
+                            current_segment_time = None
+
+                        # Combine all non-speaker tokens into text
+                        content = ''.join(token_texts)
+
+                        # Get timing information
+                        start_time = tokens[0]['start_ms'] / 1000.0
+                        end_time = tokens[-1]['end_ms'] / 1000.0
+
+                        if preseconds > 0 and start_time < preseconds:
+                            # print('Skipping word', start_time)
+                            continue
+
+                        # Adjust timing if we have preseconds (for speech profile)
+                        if preseconds > 0:
+                            start_time -= preseconds
+                            end_time -= preseconds
+
+                        # Determine if this is the user based on speaker identification
+                        is_user = False
+                        if has_speech_profile and new_speaker_id == uid:
+                            is_user = True
+                        elif preseconds > 0 and new_speaker_id == "1":
+                            is_user = True
+
+                        # Create a new segment or append to existing one
+                        if current_segment is None:
+                            current_segment = {
+                                'speaker': f"SPEAKER_0{new_speaker_id}",
+                                'start': start_time,
+                                'end': end_time,
+                                'text': content,
+                                'is_user': is_user,
+                                'person_id': None
+                            }
+                            current_segment_time = current_time
+                        else:
+                            current_segment['text'] += content
+                            current_segment['end'] = end_time
+
+                    else:
+                        print(f"Unexpected Soniox response format: {response}")
             except websockets.exceptions.ConnectionClosedOK:
                 print("Soniox connection closed normally.")
             except Exception as e:
@@ -308,7 +399,7 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
                     await soniox_socket.close()
                     print("Soniox WebSocket closed in on_message.")
 
-        # Start the on_message coroutine
+        # Start the coroutines
         asyncio.create_task(on_message())
         asyncio.create_task(soniox_socket.keepalive_ping())
 

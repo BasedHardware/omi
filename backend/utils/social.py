@@ -102,12 +102,12 @@ async def get_twitter_profile(handle: str) -> TwitterProfile:
     return with_retry(f"fetching Twitter profile for {handle}", fetch_profile)
 
 
-def create_facts_from_twitter_tweets(uid: str, persona_id: str, tweets: List[TwitterTweet]) -> None:
+def create_memories_from_twitter_tweets(uid: str, persona_id: str, tweets: List[TwitterTweet]) -> None:
     """Create individual memories from tweets for more detailed persona information"""
-    # Combine tweets into a single text for fact extraction
+    # Combine tweets into a single text for memory extraction
     combined_text = "\n".join([f"{tweet.text} (Posted: {tweet.created_at})" for tweet in tweets])
 
-    # Process tweets and extract facts using the dedicated function
+    # Process tweets and extract memories using the dedicated function
     process_twitter_memories(uid, combined_text, persona_id)
 
 
@@ -165,7 +165,7 @@ async def verify_latest_tweet(username: str, handle: str) -> Dict[str, Any]:
 
 
 async def upsert_persona_from_twitter_profile(username: str, handle: str, uid: str) -> Dict[str, Any]:
-    """Create or update a persona based on Twitter profile and generate facts"""
+    """Create or update a persona based on Twitter profile and generate memories"""
     # Get Twitter profile data
     profile = await get_twitter_profile(handle)
 
@@ -185,8 +185,8 @@ async def upsert_persona_from_twitter_profile(username: str, handle: str, uid: s
     save_username(username, uid)
     delete_generic_cache('get_public_approved_apps_data')
 
-    # Create facts from persona prompt and tweets
-    create_facts_from_twitter_tweets(uid, persona['id'], timeline.timeline)
+    # Create memories from persona prompt and tweets
+    create_memories_from_twitter_tweets(uid, persona['id'], timeline.timeline)
 
     return persona
 
@@ -250,8 +250,8 @@ async def add_twitter_to_persona(handle: str, persona_id) -> Dict[str, Any]:
     # Get tweets from the Twitter timeline
     timeline = await get_twitter_timeline(handle)
 
-    # Create facts from the tweets
+    # Create memories from the tweets
     if timeline and timeline.timeline:
-        create_facts_from_twitter_tweets(persona['uid'], persona_id, timeline.timeline)
+        create_memories_from_twitter_tweets(persona['uid'], persona_id, timeline.timeline)
 
     return persona

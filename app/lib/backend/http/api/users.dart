@@ -280,3 +280,39 @@ Future<bool> getHasConversationSummaryRating(String conversationId) async {
     return false;
   }
 }
+
+// User language preference API calls
+Future<String?> getUserPrimaryLanguage() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/language',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return null;
+  debugPrint('getUserPrimaryLanguage response: ${response.body}');
+
+  try {
+    var jsonResponse = jsonDecode(response.body);
+    // Return null if language is null or empty
+    if (jsonResponse['language'] == null || jsonResponse['language'] == '') {
+      return null;
+    }
+    return jsonResponse['language'] as String?;
+  } catch (e) {
+    debugPrint('Error parsing getUserPrimaryLanguage response: $e');
+    return null;
+  }
+}
+
+Future<bool> setUserPrimaryLanguage(String languageCode) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/language',
+    headers: {},
+    method: 'PATCH',
+    body: jsonEncode({'language': languageCode}),
+  );
+  if (response == null) return false;
+  debugPrint('setUserPrimaryLanguage response: ${response.body}');
+  return response.statusCode == 200;
+}

@@ -64,39 +64,40 @@ class FilterBottomSheet extends StatelessWidget {
                       ),
                     ),
                     FilterSection(
-                        title: 'Sort',
-                        child: Column(
-                          children: [
-                            FilterOption(
-                              label: 'A-Z',
-                              onTap: () {
-                                provider.addOrRemoveFilter('A-Z', 'Sort');
-                              },
-                              isSelected: provider.isFilterSelected('A-Z', 'Sort'),
-                            ),
-                            FilterOption(
-                              label: 'Z-A',
-                              onTap: () {
-                                provider.addOrRemoveFilter('Z-A', 'Sort');
-                              },
-                              isSelected: provider.isFilterSelected('Z-A', 'Sort'),
-                            ),
-                            FilterOption(
-                              label: 'Highest Rating',
-                              onTap: () {
-                                provider.addOrRemoveFilter('Highest Rating', 'Sort');
-                              },
-                              isSelected: provider.isFilterSelected('Highest Rating', 'Sort'),
-                            ),
-                            FilterOption(
-                              label: 'Lowest Rating',
-                              onTap: () {
-                                provider.addOrRemoveFilter('Lowest Rating', 'Sort');
-                              },
-                              isSelected: provider.isFilterSelected('Lowest Rating', 'Sort'),
-                            ),
-                          ],
-                        )),
+                      title: 'Sort',
+                      child: Column(
+                        children: [
+                          FilterOption(
+                            label: 'A-Z',
+                            onTap: () {
+                              provider.addOrRemoveFilter('A-Z', 'Sort');
+                            },
+                            isSelected: provider.isFilterSelected('A-Z', 'Sort'),
+                          ),
+                          FilterOption(
+                            label: 'Z-A',
+                            onTap: () {
+                              provider.addOrRemoveFilter('Z-A', 'Sort');
+                            },
+                            isSelected: provider.isFilterSelected('Z-A', 'Sort'),
+                          ),
+                          FilterOption(
+                            label: 'Highest Rating',
+                            onTap: () {
+                              provider.addOrRemoveFilter('Highest Rating', 'Sort');
+                            },
+                            isSelected: provider.isFilterSelected('Highest Rating', 'Sort'),
+                          ),
+                          FilterOption(
+                            label: 'Lowest Rating',
+                            onTap: () {
+                              provider.addOrRemoveFilter('Lowest Rating', 'Sort');
+                            },
+                            isSelected: provider.isFilterSelected('Lowest Rating', 'Sort'),
+                          ),
+                        ],
+                      ),
+                    ),
                     FilterSection(
                       title: 'Category',
                       child: Column(

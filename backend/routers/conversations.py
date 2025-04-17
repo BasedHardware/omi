@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from typing import Optional, List
 from datetime import datetime
 
@@ -8,8 +8,7 @@ from database.vector_db import delete_vector
 from models.conversation import *
 from models.conversation import SearchRequest
 
-from routers.transcribe_v2 import retrieve_in_progress_conversation
-from utils.conversations.process_conversation import process_conversation
+from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.conversations.search import search_conversations
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
@@ -51,13 +50,16 @@ def process_in_progress_conversation(uid: str = Depends(auth.get_current_user_ui
 
 @router.post('/v1/conversations/{conversation_id}/reprocess', response_model=Conversation, tags=['conversations'])
 def reprocess_conversation(
-        conversation_id: str, language_code: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+        conversation_id: str, language_code: Optional[str] = None, app_id: Optional[str] = None,
+        uid: str = Depends(auth.get_current_user_uid)
 ):
     """
     Whenever a user wants to reprocess a conversation, or wants to force process a discarded one
+    :param conversation_id: The ID of the conversation to reprocess
+    :param language_code: Optional language code to use for processing
+    :param app_id: Optional app ID to use for processing (if provided, only this app will be triggered)
     :return: The updated conversation after reprocessing.
     """
-
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -65,7 +67,7 @@ def reprocess_conversation(
     if not language_code:
         language_code = conversation.language or 'en'
 
-    return process_conversation(uid, language_code, conversation, force_process=True, is_reprocess=True)
+    return process_conversation(uid, language_code, conversation, force_process=True, is_reprocess=True, app_id=app_id)
 
 
 @router.get('/v1/conversations', response_model=List[Conversation], tags=['conversations'])

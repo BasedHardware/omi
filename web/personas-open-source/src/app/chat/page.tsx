@@ -552,20 +552,10 @@ function ChatContent() {
   const inputRef = useRef<HTMLInputElement>(null);
   
   const getStoreUrl = useMemo(() => {
-    if (typeof window !== 'undefined') {
-      // Check if user is on iOS
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-      // Check if user is on Android
-      const isAndroid = /Android/.test(navigator.userAgent);
-      
-      if (isIOS) {
-        return 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163';
-      } else if (isAndroid) {
-        return 'https://play.google.com/store/apps/details?id=com.friend.ios';
-      }
-    }
-    // Default to iOS App Store
-    return 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163';
+    // Get the current URL parameters but always add ref=personas
+    const currentUrl = typeof window !== 'undefined' ? window.location.search : '';
+    // Return the product page URL with ?ref=personas
+    return `https://www.omi.me/pages/product?ref=personas${currentUrl ? `&${currentUrl.substring(1)}` : ''}`;
   }, []);
 
   useEffect(() => {
@@ -740,7 +730,7 @@ function ChatContent() {
             onClick={() => window.open(getStoreUrl, '_blank')}
             className="w-full max-w-[250px] py-5 text-base font-bold text-[16px] rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white hover:opacity-90 shadow-lg"
           >
-            Chat with My Own Clone!
+          Train AI on Your Real Life!
           </Button>
         </div>
         

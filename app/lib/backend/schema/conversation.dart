@@ -132,7 +132,7 @@ class ServerConversation {
           .map((segment) => TranscriptSegment.fromJson(segment))
           .toList(),
       appResults:
-          ((json['plugins_results'] ?? []) as List<dynamic>).map((result) => AppResponse.fromJson(result)).toList(),
+          ((json['apps_results'] ?? []) as List<dynamic>).map((result) => AppResponse.fromJson(result)).toList(),
       geolocation: json['geolocation'] != null ? Geolocation.fromJson(json['geolocation']) : null,
       photos: json['photos'] != null
           ? ((json['photos'] ?? []) as List<dynamic>).map((photo) => ConversationPhoto.fromJson(photo)).toList()
