@@ -3,10 +3,6 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/pm/device_runtime.h>
 #include "lib/evt/mic.h"
-#include "lib/evt/spi_flash.h"
-#include "lib/evt/sd.h"
-#include "lib/evt/button.h"
-#include "lib/evt/battery.h"
 #include "lib/dk2/mic.h"
 #include "lib/dk2/codec.h"
 #include "lib/dk2/config.h"
@@ -33,25 +29,6 @@ static int init_module(void)
 	{
 		printk("Failed to initialize mic module (%d)\n", ret);
 	}
-
-	ret = flash_init();
-	if (ret < 0)
-	{
-		printk("Failed to initialize flash module (%d)\n", ret);
-	}
-
-	ret = app_sd_init();
-	if (ret < 0)
-	{
-		printk("Failed to initialize sd module (%d)\n", ret);
-	}
-
-	ret = bat_init();
-	if (ret < 0)
-	{
-		printk("Failed to initialize battery module (%d)\n", ret);
-	}
-	return 0;
 }
 
 int main(void)
