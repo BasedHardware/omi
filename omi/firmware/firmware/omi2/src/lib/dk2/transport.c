@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <zephyr/kernel.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/uuid.h>
@@ -20,6 +21,10 @@
 #include "mic.h"
 #include "accel.h"
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
+
+// Counters for tracking function calls
+extern uint32_t gatt_notify_count;
+extern uint32_t write_to_tx_queue_count;
 
 #define MAX_STORAGE_BYTES 0xFFFF0000
 
@@ -245,13 +250,44 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
 
     LOG_INF("bluetooth activated");
     current_connection = bt_conn_ref(conn);
-    current_mtu = 512;// TODO: info.le.data_len->tx_max_len;
+    current_mtu = 512; // TODO: info.le.data_len->tx_max_len;
+
     LOG_INF("Transport connected");
     LOG_INF("current mtu %d", current_mtu);
     LOG_DBG("Interval: %d, latency: %d, timeout: %d", info.le.interval, info.le.latency, info.le.timeout);
     LOG_DBG("TX PHY %s, RX PHY %s", phy2str(info.le.phy->tx_phy), phy2str(info.le.phy->rx_phy));
     LOG_DBG("LE data len updated: TX (len: %d time: %d) RX (len: %d time: %d)", info.le.data_len->tx_max_len, info.le.data_len->tx_max_time, info.le.data_len->rx_max_len, info.le.data_len->rx_max_time);
 
+    // TODO: recheck, should be the hardware issue.
+    // These configs enhanced the BLE performance, increasing from 30 rps to 65 rps
+    // Request optimal connection parameters for high-throughput
+    struct bt_le_conn_param param = {
+        .interval_min = 6,    // 7.5ms (6 * 1.25ms)
+        .interval_max = 12,   // 15ms (12 * 1.25ms)
+        .latency = 0,         // No slave latency
+        .timeout = 400,       // 4s (400 * 10ms)
+    };
+    err = bt_conn_le_param_update(conn, &param);
+    if (err) {
+        LOG_WRN("Failed to update connection parameters (err %d)", err);
+    }
+
+    // Request 2M PHY for higher throughput
+    struct bt_conn_le_phy_param phy_param = {
+        .options = 0,
+        .pref_tx_phy = BT_GAP_LE_PHY_2M,
+        .pref_rx_phy = BT_GAP_LE_PHY_2M,
+    };
+    bt_conn_le_phy_update(conn, &phy_param);
+
+    // Request maximum data length
+    struct bt_conn_le_data_len_param data_param = {
+        .tx_max_len = 251,
+        .tx_max_time = 2120,
+    };
+    bt_conn_le_data_len_update(conn, &data_param);
+    // END
+     
 #ifdef CONFIG_OMI_ENABLE_BATTERY
     k_work_schedule(&battery_work, K_MSEC(100)); // run immediately
 #endif
@@ -332,6 +368,9 @@ static struct ring_buf ring_buf;
 
 static bool write_to_tx_queue(uint8_t *data, size_t size)
 {
+    // Increment the counter
+    write_to_tx_queue_count++;
+    
     if (size > CODEC_OUTPUT_MAX_BYTES)
     {
         return false;
@@ -395,38 +434,27 @@ static bool push_to_gatt(struct bt_conn *conn)
     uint32_t offset = 0;
     uint8_t index = 0;
 
-    while (offset < tx_buffer_size)
+    // Recombine packet
+    uint32_t id = packet_next_index++;
+    uint32_t packet_size = MIN(current_mtu - NET_BUFFER_HEADER_SIZE, tx_buffer_size - offset);
+    //LOG_INF("push_to_gatt package size: %d, %d, %d, %d, %d", packet_size, current_mtu, NET_BUFFER_HEADER_SIZE, tx_buffer_size, offset);
+    pusher_temp_data[0] = id & 0xFF;
+    pusher_temp_data[1] = (id >> 8) & 0xFF;
+    pusher_temp_data[2] = index;
+    memcpy(pusher_temp_data + NET_BUFFER_HEADER_SIZE, buffer + offset, packet_size);
+
+    offset += packet_size;
+    index++;
+
+    // Try send notification
+    int err = bt_gatt_notify(conn, &audio_service.attrs[1], pusher_temp_data, packet_size + NET_BUFFER_HEADER_SIZE);
+    // Increment the notify counter regardless of success or failure
+    gatt_notify_count++;
+    if (err)
     {
-        // Recombine packet
-        uint32_t id = packet_next_index++;
-        uint32_t packet_size = MIN(current_mtu - NET_BUFFER_HEADER_SIZE, tx_buffer_size - offset);
-        LOG_INF("push_to_gatt package size: %d, %d, %d, %d, %d", packet_size, current_mtu, NET_BUFFER_HEADER_SIZE, tx_buffer_size, offset);
-        pusher_temp_data[0] = id & 0xFF;
-        pusher_temp_data[1] = (id >> 8) & 0xFF;
-        pusher_temp_data[2] = index;
-        memcpy(pusher_temp_data + NET_BUFFER_HEADER_SIZE, buffer + offset, packet_size);
-
-        offset += packet_size;
-        index++;
-
-        // Try send notification
-        int err = bt_gatt_notify(conn, &audio_service.attrs[1], pusher_temp_data, packet_size + NET_BUFFER_HEADER_SIZE);
-        if (err)
-        {
-            LOG_ERR("bt_gatt_notify failed (err %d)", err);
-            LOG_ERR("MTU: %d, packet_size: %d", current_mtu, packet_size + NET_BUFFER_HEADER_SIZE);
-            k_sleep(K_MSEC(1));
-            continue;
-        }
-
-        // Try to send more data if possible
-        if (err == -EAGAIN || err == -ENOMEM)
-        {
-            continue;
-        }
-
-        // Break if success
-        break;
+        LOG_ERR("bt_gatt_notify failed (err %d)", err);
+        LOG_ERR("MTU: %d, packet_size: %d", current_mtu, packet_size + NET_BUFFER_HEADER_SIZE);
+        return false;
     }
 
     return true;
@@ -778,7 +806,7 @@ int transport_start()
     
     struct k_thread *thread = k_thread_create(&pusher_thread, pusher_stack, K_THREAD_STACK_SIZEOF(pusher_stack), 
                                              (k_thread_entry_t)test_pusher, NULL, NULL, NULL, 
-                                             K_PRIO_PREEMPT(7), 0, K_NO_WAIT);
+                                             K_PRIO_PREEMPT(4), 0, K_NO_WAIT);
     if (thread == NULL) {
         LOG_ERR("Failed to create pusher thread");
         return -1;

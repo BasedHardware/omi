@@ -35,7 +35,6 @@ int codec_receive_pcm(int16_t *data, size_t len) //this gets called after mic da
         LOG_ERR("Failed to write %d bytes to codec ring buffer", len * 2);
         return -1;
     }
-    
 
     return 0;
 }

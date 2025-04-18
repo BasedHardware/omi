@@ -10,8 +10,15 @@ LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
 bool is_connected = false;
 
+// TODO: remove these metrics
+uint32_t gatt_notify_count = 0;
+uint32_t total_mic_buffer_bytes = 0;
+uint32_t broadcast_audio_count = 0;
+uint32_t write_to_tx_queue_count = 0;
+
 static void codec_handler(uint8_t *data, size_t len)
 {
+    broadcast_audio_count++;
     int err = broadcast_audio_packets(data, len);
     if (err)
     {
@@ -21,6 +28,9 @@ static void codec_handler(uint8_t *data, size_t len)
 
 static void mic_handler(int16_t *buffer)
 {
+    // Track total bytes processed (each sample is 2 bytes)
+    total_mic_buffer_bytes += 1;
+    
     int err = codec_receive_pcm(buffer, MIC_BUFFER_SAMPLES);
     if (err)
     {
@@ -74,14 +84,18 @@ int main(void)
 	while (1) {
         LOG_INF("Running omi2...\n");
         
-        // Update connection status in logs
+        // Update connection status and buffer stats in logs
         if (is_connected) {
             LOG_INF("Transport connected");
         } else {
             LOG_INF("Transport disconnected");
         }
         
-        k_msleep(500);
+        // Log total mic buffer bytes processed, GATT notify count, broadcast count, and write_to_tx_queue count
+        LOG_INF("Total mic buffer bytes: %u, GATT notify count: %u, Broadcast count: %u, TX queue writes: %u", 
+                total_mic_buffer_bytes, gatt_notify_count, broadcast_audio_count, write_to_tx_queue_count);
+        
+        k_msleep(1000);
 	}
 
     printk("Exiting omi2...");
