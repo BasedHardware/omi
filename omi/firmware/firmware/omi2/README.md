@@ -1,37 +1,44 @@
-# OMI2
+# OMI2 Firmware
 
-WIP
+The firmware for the omi consumer version. 
 
-## Progress
+## Install
+
+Use https://docs.omi.me/docs/developer/firmware/Compile_firmware as the reference with these specifications.
+
+- NCS: 2.9.0
+- Application: omi2
+- Board: omi2/nrf5340/cpuapp, you could also use the [CMakePresets.json](CMakePresets.json).
+
+## WIP
 
 - Status: DEV
+
 - TODOs:
- - [x] Testing new modules in omi2 device
-  - [x] Mic
-  - [x] BLE
-  - [x] Buttons
-  - [x] Leds
-  - [ ] Wifi, partially
-  - [ ] Motors
- - [x] Add support MCUBoot
-  - [x] Add the basic MCUBoot
-  - [ ] Testing with the omi app (iOS/Android)
- - [ ] Update the omi devkit firmware deps to compatible with new NCS 2.9.0
- - [ ] Init project, basic main loop with tests and the devkit firwmare as libs
- - [ ] Streaming and transcripting
-  - [ ] Mic
-  - [ ] BLE
-  - [ ] Encoding(OPUS) and Transmiting
- - [ ] Leds
- - [ ] Buttons
- - [ ] SD Card
-  - [ ] Storing files
-  - [ ] Transfering via BLE
-  - [ ] Transfering via Wifi
- - [ ] Haptic
- - [ ] Battery
- - [ ] Charger
+  - [x] Testing new modules in omi2 device
+    - [x] Mic
+    - [x] BLE
+    - [x] Buttons
+    - [x] Leds
+    - [ ] Wifi, partialy
+    - [ ] Motors
+  - [x] Add support MCUBoot
+    - [x] Add the basic MCUBoot
+    - [ ] Testing with the omi app (iOS/Android)
+  - [ ] Init project, basic main loop with tests and the devkit firwmare as libs
+  - [x] Streaming and transcripting
+    - [x] Mic
+    - [x] BLE
+    - [x] Encoding(OPUS) and Transmiting
+    - [ ] Fix the audio byte loss issue, about 30%
+  - [ ] Leds
+  - [ ] Buttons
+  - [ ] SD Card
+    - [ ] Storing files
+    - [ ] Transfering via BLE
+    - [ ] Transfering via Wifi
+  - [ ] Haptic
+  - [ ] Battery
+  - [ ] Charger
+  - [ ] Update the omi devkit firmware deps to compatible with new NCS 2.9.0
 
-## Notes
-
-Nothing
