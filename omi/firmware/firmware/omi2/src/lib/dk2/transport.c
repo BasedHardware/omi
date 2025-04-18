@@ -384,7 +384,6 @@ static uint8_t pusher_temp_data[CODEC_OUTPUT_MAX_BYTES + NET_BUFFER_HEADER_SIZE]
 
 static bool push_to_gatt(struct bt_conn *conn)
 {
-    LOG_INF("bt_gatt_notify prepare");
     // Read data from ring buffer
     if (!read_from_tx_queue())
     {
@@ -395,14 +394,13 @@ static bool push_to_gatt(struct bt_conn *conn)
     uint8_t *buffer = tx_buffer + RING_BUFFER_HEADER_SIZE;
     uint32_t offset = 0;
     uint8_t index = 0;
-    int retry_count = 0;
-    const int max_retries = 3;
 
     while (offset < tx_buffer_size)
     {
         // Recombine packet
         uint32_t id = packet_next_index++;
         uint32_t packet_size = MIN(current_mtu - NET_BUFFER_HEADER_SIZE, tx_buffer_size - offset);
+        LOG_INF("push_to_gatt package size: %d, %d, %d, %d, %d", packet_size, current_mtu, NET_BUFFER_HEADER_SIZE, tx_buffer_size, offset);
         pusher_temp_data[0] = id & 0xFF;
         pusher_temp_data[1] = (id >> 8) & 0xFF;
         pusher_temp_data[2] = index;
@@ -411,35 +409,24 @@ static bool push_to_gatt(struct bt_conn *conn)
         offset += packet_size;
         index++;
 
-        retry_count = 0;
-        while (retry_count < max_retries)
+        // Try send notification
+        int err = bt_gatt_notify(conn, &audio_service.attrs[1], pusher_temp_data, packet_size + NET_BUFFER_HEADER_SIZE);
+        if (err)
         {
-            // Try send notification
-            int err = bt_gatt_notify(conn, &audio_service.attrs[1], pusher_temp_data, packet_size + NET_BUFFER_HEADER_SIZE);
-            if (err)
-            {
-                LOG_ERR("bt_gatt_notify failed (err %d)", err);
-                LOG_ERR("MTU: %d, packet_size: %d", current_mtu, packet_size + NET_BUFFER_HEADER_SIZE);
-                k_sleep(K_MSEC(1));
-                retry_count++;
-                continue;
-            }
-
-            // Try to send more data if possible
-            if (err == -EAGAIN || err == -ENOMEM)
-            {
-                retry_count++;
-                continue;
-            }
-
-            // Break if success
-            break;
+            LOG_ERR("bt_gatt_notify failed (err %d)", err);
+            LOG_ERR("MTU: %d, packet_size: %d", current_mtu, packet_size + NET_BUFFER_HEADER_SIZE);
+            k_sleep(K_MSEC(1));
+            continue;
         }
 
-        if (retry_count >= max_retries) {
-            LOG_ERR("Failed to send packet after %d retries", max_retries);
-            return false;
+        // Try to send more data if possible
+        if (err == -EAGAIN || err == -ENOMEM)
+        {
+            continue;
         }
+
+        // Break if success
+        break;
     }
 
     return true;

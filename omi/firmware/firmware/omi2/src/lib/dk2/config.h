@@ -5,7 +5,7 @@
 #define MIC_IRC_PRIORITY 7
 #define MIC_BUFFER_SAMPLES 1600    // 100ms
 #define AUDIO_BUFFER_SAMPLES 16000 // 1s
-#define NETWORK_RING_BUF_SIZE 32   // number of frames * CODEC_OUTPUT_MAX_BYTES
+#define NETWORK_RING_BUF_SIZE 32  // number of frames * CODEC_OUTPUT_MAX_BYTES
 #define MINIMAL_PACKET_SIZE 100    // Less than that doesn't make sence to send anything at all
 
 // PIN definitions
@@ -23,7 +23,7 @@
 
 #if CODEC_OPUS
 #define CODEC_PACKAGE_SAMPLES 160
-#define CODEC_OUTPUT_MAX_BYTES CODEC_PACKAGE_SAMPLES * 2 // Let's assume that 16bit is enough
+#define CODEC_OUTPUT_MAX_BYTES CODEC_PACKAGE_SAMPLES / 2 // Should be 1/2
 #define CODEC_OPUS_APPLICATION OPUS_APPLICATION_RESTRICTED_LOWDELAY
 #define CODEC_OPUS_BITRATE 32000
 #define CODEC_OPUS_VBR 1 // Or 1
