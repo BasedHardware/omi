@@ -15,7 +15,7 @@ static void codec_handler(uint8_t *data, size_t len)
     int err = broadcast_audio_packets(data, len);
     if (err)
     {
-        //LOG_ERR("Failed to broadcast audio packets: %d", err);
+        LOG_ERR("Failed to broadcast audio packets: %d", err);
     }
 }
 

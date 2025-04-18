@@ -368,7 +368,6 @@ static bool read_from_tx_queue()
 
     // Adjust size
     tx_buffer_size = tx_buffer[0] + (tx_buffer[1] << 8);
-    LOG_INF("tx_buffer_size %d\n",tx_buffer_size);
 
     return true;
 }
@@ -416,19 +415,14 @@ static bool push_to_gatt(struct bt_conn *conn)
         while (retry_count < max_retries)
         {
             // Try send notification
-            LOG_INF("bt_gatt_notify start");
             int err = bt_gatt_notify(conn, &audio_service.attrs[1], pusher_temp_data, packet_size + NET_BUFFER_HEADER_SIZE);
-
-            // Log failure
             if (err)
             {
-                LOG_INF("bt_gatt_notify failed (err %d)", err);
-                LOG_INF("MTU: %d, packet_size: %d", current_mtu, packet_size + NET_BUFFER_HEADER_SIZE);
+                LOG_ERR("bt_gatt_notify failed (err %d)", err);
+                LOG_ERR("MTU: %d, packet_size: %d", current_mtu, packet_size + NET_BUFFER_HEADER_SIZE);
                 k_sleep(K_MSEC(1));
                 retry_count++;
                 continue;
-            } else {
-                LOG_INF("bt_gatt_notify ok");
             }
 
             // Try to send more data if possible
@@ -545,32 +539,11 @@ void test_pusher(void)
         struct bt_conn *conn = current_connection;
         if (conn)
         {
-            conn = bt_conn_ref(conn);
-        }
-        bool valid = true;
-        if (!conn)
-        {
-            valid = false;
-        }
-        else if (current_mtu < MINIMAL_PACKET_SIZE)
-        {
-            valid = false;
-        }
-        else
-        {
-            valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
-        }
-        if (valid)
-        {
             bool sent = push_to_gatt(conn);
             if (!sent)
             {
                 // k_sleep(K_MSEC(50));
             }
-        }
-        if (conn)
-        {
-            bt_conn_unref(conn);
         }
         k_yield();
     }
@@ -836,19 +809,9 @@ struct bt_conn *get_current_connection()
 
 int broadcast_audio_packets(uint8_t *buffer, size_t size)
 {
-    int retry_count = 0;
-    const int max_retries = 3;
-
-    while (retry_count < max_retries && !write_to_tx_queue(buffer, size))
+    if (!write_to_tx_queue(buffer, size))
     {
-        k_sleep(K_MSEC(1));
-        retry_count++;
-    }
-
-    if (retry_count >= max_retries) {
-        //LOG_ERR("Failed to write to tx queue after %d retries", max_retries);
         return -1;
     }
-
     return 0;
 }

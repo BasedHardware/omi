@@ -4,7 +4,7 @@ enable_language(C ASM) # OPUS
 
 project(omi2)
 
-file(GLOB app_sources src/*.c)
+file(GLOB app_sources src/main.c)
 file(GLOB dk2_sources src/lib/dk2/mic.c src/lib/dk2/codec.c src/lib/dk2/config.h src/lib/dk2/transport.c)
 target_sources(app PRIVATE ${dk2_sources} ${app_sources})
 

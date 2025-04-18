@@ -77,7 +77,7 @@ int mic_start()
     pdm_config.gain_l = MIC_GAIN;
     pdm_config.gain_r = MIC_GAIN;
     pdm_config.interrupt_priority = MIC_IRC_PRIORITY;
-    pdm_config.clock_freq = NRF_PDM_FREQ_1280K;
+    pdm_config.clock_freq = NRF_PDM_FREQ_1000K; // TODO: try to lower the capturing rate, was NRF_PDM_FREQ_1280K; before
     pdm_config.mode = NRF_PDM_MODE_MONO;
     pdm_config.edge = NRF_PDM_EDGE_LEFTFALLING;
     pdm_config.ratio = NRF_PDM_RATIO_80X;
