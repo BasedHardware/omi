@@ -10,6 +10,9 @@ Use https://docs.omi.me/docs/developer/firmware/Compile_firmware as the referenc
 - Application: omi2
 - Board: omi2/nrf5340/cpuapp, you could also use the [CMakePresets.json](CMakePresets.json).
 
+ <img width="543" alt="Screenshot 2025-04-18 at 18 11 48" src="https://github.com/user-attachments/assets/2c5a642f-af66-46d2-8a56-e3a6e28034c6" />
+
+
 ## WIP
 
 - Status: DEV
@@ -25,7 +28,7 @@ Use https://docs.omi.me/docs/developer/firmware/Compile_firmware as the referenc
   - [x] Add support MCUBoot
     - [x] Add the basic MCUBoot
     - [ ] Testing with the omi app (iOS/Android)
-  - [ ] Init project, basic main loop with tests and the devkit firwmare as libs
+  - [x] Init project, basic main loop with tests and the devkit firwmare as libs
   - [x] Streaming and transcripting
     - [x] Mic
     - [x] BLE
