@@ -13,6 +13,7 @@ The Omi firmware is built on the Zephyr RTOS and provides functionality for audi
     - `CMakeLists.txt`: CMake build configuration
     - `overlays/`: Device-specific overlay files
     - `prj.conf`: Project configuration file
+- `omi2/`: the OMI consumer version application project files.
 - `test/`: The test project files
 - `boards/`: Board-specific configurations
 
