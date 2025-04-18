@@ -13,6 +13,9 @@
 
 LOG_MODULE_REGISTER(ble_shell);
 
+#define BT_UUID_OMI_VAL \
+	BT_UUID_128_ENCODE(0x19b10000, 0xe8f2, 0x537e, 0x4f6c, 0xd104768a1214)
+
 #define DEVICE_NAME             CONFIG_BT_DEVICE_NAME
 #define DEVICE_NAME_LEN	        (sizeof(DEVICE_NAME) - 1)
 
@@ -25,7 +28,7 @@ static const struct bt_data ad[] = {
 };
 
 static const struct bt_data sd[] = {
-	BT_DATA_BYTES(BT_DATA_UUID128_ALL, BT_UUID_NUS_VAL),
+	BT_DATA_BYTES(BT_DATA_UUID128_ALL, BT_UUID_OMI_VAL),
 };
 
 static void connected(struct bt_conn *conn, uint8_t err)
