@@ -1,0 +1,26 @@
+{
+    "version": 2,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 20,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "OMI2",
+            "displayName": "OMI2",
+            "configuration": "Debug",
+            "hidden": false,
+            "description": "Debug build for omi2 device",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/omi2",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "YES",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "BOARD": "omi2/nrf5340/cpuapp",
+                "CACHED_CONF_FILE": "${sourceDir}/omi2.conf",
+                "CONF_FILE": "${sourceDir}/omi2.conf"
+            }
+        }
+    ]
+}
