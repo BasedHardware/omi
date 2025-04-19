@@ -6,6 +6,8 @@ The firmware for the OMI consumer version.
 
 Use https://docs.omi.me/docs/developer/firmware/Compile_firmware as the reference with these specifications.
 
+open "firmware" folder in your code editor. Don't open the root omi folder (otherwise West wouldn't recognize the project and won't find your board)
+
 - NCS: 2.9.0
 - Application: omi2
 - Board: omi2/nrf5340/cpuapp — you can also use the [CMakePresets.json](CMakePresets.json).
