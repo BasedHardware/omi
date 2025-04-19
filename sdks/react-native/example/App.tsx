@@ -22,6 +22,7 @@ export default function App() {
   const backendWsRef = useRef<WebSocket | null>(null);
   const [backendWsUrl, setBackendWsUrl] = useState<string>('wss://4be9-106-51-128-138.ngrok-free.app/ws');
   const [backendSessionId, setBackendSessionId] = useState<string>('');
+  const [backendTranscription, setBackendTranscription] = useState<string>('');
   const [packetStats, setPacketStats] = useState<{
     sent: number;
     confirmed: number;
@@ -334,6 +335,22 @@ export default function App() {
                 });
                 statsUpdateTimeoutRef.current = null;
               }, 500); // Update UI every 500ms
+            }
+          }
+          else if (message.event === 'transcription' && message.text) {
+            // Handle transcription from backend
+            const newTranscript = message.text.trim();
+            if (newTranscript) {
+              setBackendTranscription((prev) => {
+                const lines = prev ? prev.split('\n') : [];
+                if (lines.length > 4) { // Keep last 5 lines
+                  lines.shift();
+                }
+                const now = new Date();
+                const timestamp = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+                lines.push(`[${timestamp}] ${newTranscript}`);
+                return lines.join('\n');
+              });
             }
           }
         } catch (error) {
@@ -842,6 +859,20 @@ export default function App() {
             </View>
           )}
         </View>
+
+        {/* Separate Section for Backend Transcription */}
+        {backendWsConnected && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Backend Transcription</Text>
+            {backendTranscription ? (
+              <View style={styles.transcriptionTextContainer}>
+                <Text style={styles.transcriptionText}>{backendTranscription}</Text>
+              </View>
+            ) : (
+              <Text style={styles.status}>Waiting for transcription...</Text>
+            )}
+          </View>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Bluetooth Connection</Text>
