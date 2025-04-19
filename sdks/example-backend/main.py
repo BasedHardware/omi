@@ -1,20 +1,27 @@
+import asyncio
+import json
+import logging
 import os
-import wave
-import traceback
 import time
+import traceback
+import wave
+from contextlib import suppress
 from datetime import datetime
 from typing import Optional
+
 import numpy as np
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from opuslib import Decoder as OpusDecoder
-import json
-import asyncio
+from websockets.exceptions import (
+    ConnectionClosedError,
+    ConnectionClosedOK,
+    WebSocketException,
+)
+from wyoming.asr import Transcribe
+from wyoming.audio import AudioChunk, AudioStart, AudioStop
 from wyoming.client import AsyncClient
-from wyoming.audio import AudioStart, AudioChunk, AudioStop
-
-import traceback
-import logging
+from wyoming.event import Event
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -125,10 +132,11 @@ async def websocket_endpoint(websocket: WebSocket):
     # Time tracking for periodic saves
     last_save_time = time.time()
     last_stt_time = time.time()  # Track when we last performed STT
+    stt_interval = 5.0  # Process speech recognition every 5 seconds
+    stt_read_timeout = 10.0 # Timeout for reading transcript after AudioStop
     chunk_counter = 0
     session_start_time = time.time()
     last_log_write_time = time.time()
-    stt_interval = 5.0  # Process speech recognition every 5 seconds
     
     # Packet tracking for debugging - limit to last 1000 packets to avoid memory issues
     packet_log = []
@@ -142,63 +150,10 @@ async def websocket_endpoint(websocket: WebSocket):
         "start_time": session_start_time
     }), websocket)
     
-    # Function to handle ASR responses in the background
-    async def handle_asr_responses(client: AsyncClient, websocket):
-        try:
-            while True:
-                logger.info("Waiting for ASR response...")
-                try:
-                    if client._reader is None:
-                        logger.error("Client reader is None")
-                        await asyncio.sleep(0.1)
-                        continue
-                    response = await client.read_event()
-                    logger.info(f"Received ASR response: {type(response)}")
-                    if response and hasattr(response, 'data') and 'text' in response.data:
-                        transcription = response.data["text"]
-                        logger.info(f"Transcription: {transcription}")
-                        
-                        # Send transcription back to client
-                        await manager.send_text(json.dumps({
-                            "event": "transcription",
-                            "text": transcription,
-                            "timestamp": time.time() - session_start_time
-                        }), websocket)
-                    else:
-                        logger.info(f"Received non-transcription response: {response}")
-                except asyncio.TimeoutError:
-                    logger.warning("Timeout waiting for ASR response, continuing...")
-                except Exception as e:
-                    logger.error(f"Error during ASR read_event: {e}")
-                    logger.error(traceback.format_exc())
-                    # Continue the loop instead of breaking to maintain the connection
-                    await asyncio.sleep(0.001)  # Small sleep to prevent CPU hogging
-        except Exception as e:
-            logger.error(f"Fatal error in ASR response handler: {e}")
-            # Print the full traceback for better debugging
-            logger.error(traceback.format_exc())
-    
-    # Initialize asr_task to None
-    asr_task = None
-    asr_client = None
-    
-    
     try:
-        # Main WebSocket receive loop
-        asr_client = AsyncClient.from_uri(f"tcp://{WYOMING_HOST}:{WYOMING_PORT}")
-        await asr_client.connect()
-        logger.info(f"Connected to Wyoming at {WYOMING_HOST}:{WYOMING_PORT}")
-
-        # Start audio streaming initially
-        await asr_client.write_event(AudioStart(rate=SAMPLE_RATE, width=2, channels=CHANNELS).event())
-        logger.info("Audio streaming started")
-        
-        # Start the background task to handle ASR responses
-        asr_task = asyncio.create_task(handle_asr_responses(asr_client, websocket))
-        
         # Create a queue for websocket messages
         message_queue = asyncio.Queue()
-        
+
         # Background task to receive websocket messages without blocking
         async def websocket_receiver():
             try:
@@ -206,17 +161,20 @@ async def websocket_endpoint(websocket: WebSocket):
                     try:
                         data = await websocket.receive_bytes()
                         await message_queue.put(data)
+                    except WebSocketDisconnect:
+                        logger.info("WebSocket disconnected in receiver.")
+                        await message_queue.put(None) # Signal disconnect
+                        break
                     except Exception as e:
                         logger.error(f"Error in websocket receiver: {e}")
-                        # Put None in the queue to signal error
-                        await message_queue.put(None)
+                        await message_queue.put(None) # Signal error
                         break
             except asyncio.CancelledError:
                 logger.info("Websocket receiver task cancelled")
-        
+
         # Start the websocket receiver task
         receiver_task = asyncio.create_task(websocket_receiver())
-        
+
         # Set up a ping task to keep the connection alive
         async def ping_client():
             try:
@@ -227,10 +185,12 @@ async def websocket_endpoint(websocket: WebSocket):
             except asyncio.CancelledError:
                 logger.info("Ping task cancelled")
             except Exception as e:
-                logger.error(f"Error in ping task: {e}")
-        
+                # Catch specific exception if possible, e.g., ConnectionClosed
+                logger.error(f"Error in ping task (client likely disconnected): {e}")
+
         ping_task = asyncio.create_task(ping_client())
-        
+
+        # Main WebSocket receive loop
         while True:
             # Receive binary data from WebSocket via the queue
             try:
@@ -273,10 +233,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 if pcm_frame is not None:
                     logger.info(f"Decoded packet {packets_received}")
 
-                    # Send audio chunk
-                    chunk = AudioChunk(audio=pcm_frame.tobytes(), rate=SAMPLE_RATE, width=2, channels=CHANNELS)
-                    await asr_client.write_event(chunk.event())
-                    
                     # Successfully decoded
                     pcm_buffer.append(pcm_frame)
                     pcm_to_process.append(pcm_frame)
@@ -326,30 +282,92 @@ async def websocket_endpoint(websocket: WebSocket):
                             
                     # Check if it's time to process speech-to-text
                     if current_time - last_stt_time >= stt_interval and pcm_to_process:
-                            # Concatenate all PCM frames for speech recognition
-                            pcm_data = np.concatenate(pcm_to_process)
-                            logger.info(f"Sending audio data to ASR: {len(pcm_data)} samples ({len(pcm_to_process)} frames)")
-                            
-                            # Send audio stop event
-                            logger.info("Sending AudioStop event")
-                            await asr_client.write_event(AudioStop().event())
-                            logger.info("AudioStop event sent successfully")
-                            
-                            # Wait for transcription response after sending AudioStop
-                            await asyncio.sleep(1.0)
-                            # The example script shows we should wait for a response after AudioStop
-                            
-                            # Start a new audio session after getting the response
-                            logger.info("Sending AudioStart event")
-                            await asr_client.write_event(AudioStart(rate=SAMPLE_RATE, width=2, channels=CHANNELS).event())
-                            logger.info("AudioStart event sent successfully")
-                                
+                            logger.info(f"STT interval reached. Processing {len(pcm_to_process)} frames.")
+
+                            # --- Start of Per-Segment STT Logic ---
+                            stt_client = None
+                            try:
+                                # 1. Connect for this segment
+                                logger.info(f"Connecting to Wyoming for STT ({WYOMING_HOST}:{WYOMING_PORT})...")
+                                stt_client = AsyncClient.from_uri(f"tcp://{WYOMING_HOST}:{WYOMING_PORT}")
+                                await stt_client.connect()
+                                logger.info("Connected to Wyoming for STT.")
+
+                                # 2. Send Transcribe Intent
+                                logger.debug("Wyoming: Sending Transcribe intent...")
+                                await stt_client.write_event(Transcribe(name="default", language="en").event()) # Use appropriate model name if needed
+                                logger.debug("Wyoming: Transcribe intent sent.")
+
+                                # 3. Send AudioStart
+                                logger.debug("Wyoming: Sending AudioStart...")
+                                await stt_client.write_event(AudioStart(rate=SAMPLE_RATE, width=2, channels=CHANNELS).event())
+                                logger.debug("Wyoming: AudioStart sent.")
+
+                                # 4. Send Audio Chunks
+                                logger.debug(f"Wyoming: Sending {len(pcm_to_process)} audio frames...")
+                                for frame in pcm_to_process:
+                                    chunk = AudioChunk(audio=frame.tobytes(), rate=SAMPLE_RATE, width=2, channels=CHANNELS)
+                                    await stt_client.write_event(chunk.event())
+                                logger.debug("Wyoming: All audio frames sent.")
+
+                                # 5. Send AudioStop
+                                logger.debug("Wyoming: Sending AudioStop...")
+                                await stt_client.write_event(AudioStop().event())
+                                logger.debug("Wyoming: AudioStop sent.")
+
+                                # 6. Read Transcript
+                                logger.debug(f"Wyoming: Reading transcript (timeout={stt_read_timeout}s)...")
+                                transcript = ""
+                                try:
+                                    while True:
+                                        event = await asyncio.wait_for(stt_client.read_event(), timeout=stt_read_timeout)
+                                        if event is None:
+                                            logger.warning("Wyoming connection closed while waiting for transcript.")
+                                            break
+
+                                        logger.debug(f"Wyoming: Received event type: {type(event)}")
+                                        if isinstance(event, Event) and event.type == 'transcript' and 'text' in event.data:
+                                            transcript = event.data['text']
+                                            if transcript and transcript.strip():
+                                                logger.info(f"Transcription: {transcript.strip()}")
+                                                # Send transcription back to client
+                                                await manager.send_text(json.dumps({
+                                                    "event": "transcription",
+                                                    "text": transcript.strip(),
+                                                    "timestamp": time.time() - session_start_time,
+                                                    "segment_processed": True # Indicate it's from segment processing
+                                                }), websocket)
+                                            # Assume one transcript per segment
+                                            break
+                                        elif isinstance(event, Event) and event.type == 'error':
+                                            logger.error(f"Wyoming server error event: {event.data}")
+                                            break # Stop reading on error
+                                        else:
+                                            logger.debug("Received non-transcript/non-error event.")
+
+                                except asyncio.TimeoutError:
+                                    logger.warning(f"Timeout waiting for transcript after {stt_read_timeout}s.")
+                                except (ConnectionClosedOK, ConnectionClosedError, ConnectionResetError) as close_err:
+                                    logger.info(f"Wyoming connection closed as expected: {close_err}")
+                                except Exception as read_err:
+                                    logger.error(f"Error reading transcript event: {read_err}", exc_info=True)
+
+                            except (ConnectionRefusedError, ConnectionResetError, ConnectionError, WebSocketException) as conn_err:
+                                logger.error(f"Wyoming connection error during STT segment: {conn_err}")
+                            except Exception as stt_err:
+                                logger.error(f"Unexpected error during STT segment processing: {stt_err}", exc_info=True)
+                            finally:
+                                if stt_client:
+                                    logger.info("Disconnecting STT client...")
+                                    with suppress(Exception):
+                                        await stt_client.disconnect()
+                                    logger.info("STT client disconnected.")
+                            # --- End of Per-Segment STT Logic ---
+
                             # Clear the processing buffer after sending for transcription
                             pcm_to_process = []
                             last_stt_time = current_time
-                            
-                            
-
+                
                 else:
                     logger.error(f"Failed to decode packet {packets_received}")
                     # Failed to decode
@@ -394,7 +412,9 @@ async def websocket_endpoint(websocket: WebSocket):
                 except Exception as ping_error:
                     logger.error(f"Error sending ping: {ping_error}")
                     # Use 1008 code (Policy Violation) as a reasonable code for connection timeout
-                    raise WebSocketDisconnect(code=1008)
+                    # Signal disconnect by putting None in queue, let main loop handle it
+                    await message_queue.put(None)
+                    break # Exit the receive loop
     
     except WebSocketDisconnect:
         # Client disconnected
@@ -402,7 +422,7 @@ async def websocket_endpoint(websocket: WebSocket):
         logger.info(f"Client #{client_id} disconnected. {remaining} clients remaining.")
         
         # Cancel all background tasks
-        for task in [asr_task, receiver_task, ping_task]:
+        for task in [receiver_task, ping_task]:
             if task and not task.done():
                 task.cancel()
                 try:
@@ -483,10 +503,17 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         traceback.print_exc()
         logger.error(f"Error: {e}")
-        raise e
+        # Optionally re-raise or handle differently
     finally:
-        if asr_client:
-            await asr_client.disconnect()
+        # Disconnection now happens per-segment in the finally block above
+        # Ensure background tasks are properly awaited if cancelled earlier
+        for task in [receiver_task, ping_task]:
+            if task and not task.done() and task.cancelled():
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+        logger.info(f"Cleaned up tasks for client #{client_id}")
 
 # Helper function for async writing of packet logs to avoid blocking the WebSocket
 async def write_packet_log(filename, packet_log):

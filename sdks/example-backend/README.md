@@ -54,3 +54,7 @@ npm run android
 4. Click Start audio listener to send audio data to the backend.
 
 On the backend, audio is saved in both opus and .wav format under example-backend/audio_files
+
+
+# TODO
+- [ ] Dockerize the local-client-asr.py (needs access to dbus for docker and bluetooth to work together)
