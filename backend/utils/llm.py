@@ -118,7 +118,7 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
     {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | ChatOpenAI(model='gpt-4o') | parser
+    chain = prompt | llm_mini | parser
 
     response = chain.invoke({
         'transcript': transcript.strip(),
@@ -145,7 +145,7 @@ def get_app_result(transcript: str, app: App) -> str:
     Conversation: ```{transcript.strip()}```,
     '''
 
-    response = llm_medium.invoke(prompt)
+    response = llm_mini.invoke(prompt)
     content = response.content.replace('```json', '').replace('```', '')
     return content
 
@@ -212,7 +212,7 @@ def get_email_structure(text: str, started_at: datetime, language_code: str, tz:
     {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | ChatOpenAI(model='gpt-4o') | parser
+    chain = prompt | llm_medium | parser
 
     response = chain.invoke({
         'language_code': language_code,
@@ -247,7 +247,7 @@ def get_post_structure(text: str, started_at: datetime, language_code: str, tz: 
     {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | ChatOpenAI(model='gpt-4o') | parser
+    chain = prompt | llm_mini | parser
 
     response = chain.invoke({
         'language_code': language_code,
@@ -283,7 +283,7 @@ def get_message_structure(text: str, started_at: datetime, language_code: str, t
     {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | ChatOpenAI(model='gpt-4o') | parser
+    chain = prompt | llm_mini | parser
 
     response = chain.invoke({
         'language_code': language_code,
@@ -1192,7 +1192,7 @@ def qa_rag_v3(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
     Anwser:
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
     # print('qa_rag prompt', prompt)
-    return ChatOpenAI(model='gpt-4o').invoke(prompt).content
+    return llm_medium.invoke(prompt).content
 
 
 def qa_rag_v2(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
@@ -1243,7 +1243,7 @@ def qa_rag_v2(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
     Answer:
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
     # print('qa_rag prompt', prompt)
-    return ChatOpenAI(model='gpt-4o').invoke(prompt).content
+    return llm_medium.invoke(prompt).content
 
 
 def qa_rag_v1(uid: str, question: str, context: str, plugin: Optional[Plugin] = None) -> str:
@@ -1281,7 +1281,7 @@ def qa_rag_v1(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
     Answer:
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
     # print('qa_rag prompt', prompt)
-    return ChatOpenAI(model='gpt-4o').invoke(prompt).content
+    return llm_medium.invoke(prompt).content
 
 
 # **************************************************
