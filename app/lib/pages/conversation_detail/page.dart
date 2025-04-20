@@ -200,7 +200,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
               // Floating bottom bar
               Positioned(
-                bottom: 16,
+                bottom: 32,
                 left: 0,
                 right: 0,
                 child: Consumer<ConversationDetailProvider>(
@@ -209,7 +209,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                     return ConversationBottomBar(
                       mode: ConversationBottomBarMode.detail,
                       selectedTab: selectedTab,
-                      hasSegments: conversation != null && conversation.transcriptSegments.isNotEmpty,
+                      hasSegments:
+                          conversation.transcriptSegments.isNotEmpty || conversation.externalIntegration != null,
                       onTabSelected: (tab) {
                         int index = tab == ConversationTab.transcript ? 0 : 1;
                         _controller!.animateTo(index);
