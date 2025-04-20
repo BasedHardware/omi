@@ -28,13 +28,6 @@ There are two ways to build the firmware:
 
 ### Option 1: Using nRF Connect for VS Code
 
-Prerequisites:
-- [Visual Studio Code](https://code.visualstudio.com/)
-- [nRF Connect for VS Code extension](https://marketplace.visualstudio.com/items?itemName=NordicSemiconductor.nrf-connect-for-visual-studio-code)
-  - devkit: NCS 2.7.0
-  - omi: NCS 2.9.0
-- [nRF Command Line Tools](https://www.nordicsemi.com/Software-and-tools/Development-Tools/nRF-Command-Line-Tools/Download)
-
 Follow the instructions in our [official documentation](https://docs.omi.me/docs/developer/firmware/Compile_firmware).
 
 ### Option 2: Using Docker
