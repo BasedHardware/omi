@@ -33,13 +33,13 @@ This method is recommended as it eliminates environment setup complexities and w
 From the root of the repository, run:
 
 ```bash
-chmod +x omi/firmware/firmware/build-docker.sh
-./omi/firmware/firmware/build-docker.sh
+chmod +x omi/firmware/scripts/build-docker.sh
+./omi/firmware/scripts/build-docker.sh
 ```
 
-The output files will be in `omi/firmware/firmware/build/docker_build/` directory.
+The output files will be in `omi/firmware/build/docker_build/` directory.
 
-For more detailed instructions, see the [Docker build readme](https://github.com/BasedHardware/omi/blob/main/omi/firmware/firmware/docker-readme.md).
+For more detailed instructions, see the [Docker build readme](https://github.com/BasedHardware/omi/blob/main/omi/firmware/docker-readme.md).
 
 ---
 
@@ -94,7 +94,7 @@ xiao_ble/nrf52840/sense
 
 ### Step 4: Locate the Compiled Firmware
 
-Once the build succeeds, you will find the `zephyr.uf2` file in the directory corresponding to the CMake preset you chose, for example `firmware/firmware/build/build_xiao_ble_sense_devkitv2-adafruit/zephyr/`.
+Once the build succeeds, you will find the `zephyr.uf2` file in the directory corresponding to the CMake preset you chose, for example `firmware/build/build_xiao_ble_sense_devkitv2-adafruit/zephyr/`.
 
 ---
 

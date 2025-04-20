@@ -2,7 +2,7 @@
 set -e
 
 # Set up working directory
-cd /omi/firmware/firmware/
+cd /omi/firmware/
 
 # Initialize west with nRF Connect SDK if not already initialized
 echo "Checking west initialization status..."
@@ -30,28 +30,28 @@ echo "Building firmware for xiao_ble/nrf52840/sense board..."
 west build -b xiao_ble/nrf52840/sense --pristine always ../app -- \
     -DNCS_TOOLCHAIN_VERSION="NONE" \
     -DCONF_FILE="prj_xiao_ble_sense_devkitv2-adafruit.conf" \
-    -DDTC_OVERLAY_FILE="/omi/firmware/firmware/app/overlay/xiao_ble_sense_devkitv2-adafruit.overlay" \
+    -DDTC_OVERLAY_FILE="/omi/firmware/app/overlay/xiao_ble_sense_devkitv2-adafruit.overlay" \
     -DCMAKE_EXPORT_COMPILE_COMMANDS="YES" \
     -DCMAKE_BUILD_TYPE="Debug" \
     -DPLATFORM=nrf52840 \
-    -DCACHED_CONF_FILE="/omi/firmware/firmware/app/prj_xiao_ble_sense_devkitv2-adafruit.conf"
+    -DCACHED_CONF_FILE="/omi/firmware/app/prj_xiao_ble_sense_devkitv2-adafruit.conf"
 
 # Copy build artifacts to output directory
 echo "Copying build artifacts to output directory..."
 # The build output is in the 'build' directory within the SDK (v2.7.0/build)
-mkdir -p /omi/firmware/firmware/build/docker_build
-cp -r build/zephyr/zephyr.{hex,bin,uf2} /omi/firmware/firmware/build/docker_build/ || echo "Warning: Some build artifacts not found"
+mkdir -p /omi/firmware/build/docker_build
+cp -r build/zephyr/zephyr.{hex,bin,uf2} /omi/firmware/build/docker_build/ || echo "Warning: Some build artifacts not found"
 
 # Create OTA package
 echo "Creating OTA package..."
-cd /omi/firmware/firmware/build/docker_build/
+cd /omi/firmware/build/docker_build/
 adafruit-nrfutil dfu genpkg --dev-type 0x0052 --dev-revision 0xCE68 --application zephyr.hex zephyr.zip
 
 echo ""
 echo "==================================================="
 echo "Build completed successfully!"
 echo "Build artifacts are located at:"
-echo "  /omi/firmware/firmware/build/docker_build/"
+echo "  /omi/firmware/build/docker_build/"
 echo "  • zephyr.hex - Raw firmware hex file"
 echo "  • zephyr.bin - Binary firmware file"
 echo "  • zephyr.uf2 - UF2 firmware file for direct flashing"
