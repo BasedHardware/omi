@@ -13,7 +13,7 @@ To build the firmware, you can use VS Code.
 #### Using VSCode:
 1.Open nRF Connect Extension inside VS Code.
 
-2.Click “Open an existing application” and navigate to the firmware/firmware/test folder in the root of this repository.
+2.Click “Open an existing application” and navigate to the firmware/test folder in the root of this repository.
 
 3.In the application panel of the extension, click the Add Build Configuration icon. Choose a CMake Preset that matches your hardware.
 
