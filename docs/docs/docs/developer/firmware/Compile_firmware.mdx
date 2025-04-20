@@ -16,15 +16,26 @@ Navigate to [Flash Device](https://docs.omi.me/docs/get_started/Flash_device) to
 Follow the tutorial in this video:
 [How to Set Up nRF Connect](https://youtu.be/EAJdOqsL9m8)
 
-You must use **nRF Connect** SDK and toolchain version `2.7.0` to compile the firmware.
-Note that this is not the `latest` version of the NRF Connect toolchain or SDK.
+### Step 2: Choose Your Firmware Version
+
+You have two options for building firmware:
+
+1. **OMI Consumer Version**
+   - Open the `firmware/omi` folder
+   - Use **nRF Connect** SDK and toolchain version `2.9.0`
+
+2. **OMI DevKit Version**
+   - Open the `firmware/devkit` folder
+   - Use **nRF Connect** SDK and toolchain version `2.7.0`
+
+Make sure to use the correct SDK version for the firmware you're building.
 
 ---
 
-### Step 2: Open the Firmware Application
+### Step 3: Open the Firmware Application
 
 1. Open **nRF Connect Extension** inside VS Code.
-2. Click "Open an existing application" and navigate to the `firmware/firmware/app` folder in the root of this repository.
+2. Click "Open an existing application" and navigate to either the `firmware/omi` or `firmware/devkit` folder in the root of this repository, depending on which version you want to build.
 
    <img
      src="/images/docs/developer/images/install_firmware_screenshot_1.png"
