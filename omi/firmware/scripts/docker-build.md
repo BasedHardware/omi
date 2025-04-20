@@ -16,15 +16,15 @@ This document explains how to build the firmware using Docker, which provides a 
 From the root of the repository, run:
 
 ```bash
-chmod +x omi/firmware/firmware/build-docker.sh
-./omi/firmware/firmware/build-docker.sh
+chmod +x omi/firmware/scripts/build-docker.sh
+./omi/firmware/scripts/build-docker.sh
 ```
 
 This script will:
 1. Start a Docker container with the Zephyr RTOS build environment
 2. Install necessary tools and dependencies
 3. Build the firmware for the xiao_ble/nrf52840/sense board
-4. Create an OTA package at `firmware/firmware/build/docker_build/zephyr.zip`
+4. Create an OTA package at `firmware/build/docker_build/zephyr.zip`
 5. Show the location of all build artifacts
 
 The build configuration exactly matches what would be produced by nRF Connect for VS Code, ensuring compatibility with the official build process.
@@ -34,7 +34,7 @@ The build configuration exactly matches what would be produced by nRF Connect fo
 If you want to start fresh or are experiencing issues with an existing build, use the clean option:
 
 ```bash
-./omi/firmware/firmware/build-docker.sh --clean
+./omi/firmware/scripts/build-docker.sh --clean
 ```
 
 This will remove any existing SDK and build directories before starting the build process.
@@ -45,7 +45,7 @@ By default, the build script will reuse an existing west installation and depend
 
 ### Build Outputs
 
-After a successful build, you will find these files in the `firmware/firmware/build/docker_build` directory:
+After a successful build, you will find these files in the `firmware/build/docker_build` directory:
 
 - `zephyr.hex` - Raw firmware hex file
 - `zephyr.bin` - Binary firmware file
@@ -87,7 +87,7 @@ If you prefer to run the Docker commands manually, you can use:
 # Run from the root of the repository
 docker run --rm -it -v "$(pwd):/omi" -e CMAKE_PREFIX_PATH=/opt/toolchains -e PATH="/root/.local/bin:$PATH" ghcr.io/zephyrproject-rtos/ci bash
 pip install --user adafruit-nrfutil
-cd /omi/firmware/firmware/
+cd /omi/firmware/
 west init -m https://github.com/nrfconnect/sdk-nrf --mr v2.7.0 v2.7.0
 cd v2.7.0
 west update -o=--depth=1 -n
@@ -96,11 +96,11 @@ west zephyr-export
 west build -b xiao_ble/nrf52840/sense --pristine always ../app -- \
     -DNCS_TOOLCHAIN_VERSION="NONE" \
     -DCONF_FILE="prj_xiao_ble_sense_devkitv2-adafruit.conf" \
-    -DDTC_OVERLAY_FILE="/omi/firmware/firmware/app/overlay/xiao_ble_sense_devkitv2-adafruit.overlay" \
+    -DDTC_OVERLAY_FILE="/omi/firmware/devkit/overlay/xiao_ble_sense_devkitv2-adafruit.overlay" \
     -DCMAKE_EXPORT_COMPILE_COMMANDS="YES" \
     -DCMAKE_BUILD_TYPE="Debug" \
     -DPLATFORM=nrf52840 \
-    -DCACHED_CONF_FILE="/omi/firmware/firmware/app/prj_xiao_ble_sense_devkitv2-adafruit.conf"
+    -DCACHED_CONF_FILE="/omi/firmware/devkit/prj_xiao_ble_sense_devkitv2-adafruit.conf"
 ```
 
 ## Compatibility Notes
@@ -128,12 +128,12 @@ After building, copy the `zephyr.uf2` file to the device:
 
 For macOS:
 ```bash
-cp firmware/firmware/build/docker_build/zephyr.uf2 /Volumes/XIAO-SENSE/
+cp firmware/build/docker_build/zephyr.uf2 /Volumes/XIAO-SENSE/
 ```
 
 For Linux:
 ```bash
-cp firmware/firmware/build/docker_build/zephyr.uf2 /path/to/XIAO-SENSE/
+cp firmware/build/docker_build/zephyr.uf2 /path/to/XIAO-SENSE/
 ```
 
 For Windows:
