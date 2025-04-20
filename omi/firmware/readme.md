@@ -35,7 +35,7 @@ Prerequisites:
   - omi: NCS 2.9.0
 - [nRF Command Line Tools](https://www.nordicsemi.com/Software-and-tools/Development-Tools/nRF-Command-Line-Tools/Download)
 
-Follow the instructions in our [official documentation](https://docs.omi.me/docs/developer/Compile_firmware).
+Follow the instructions in our [official documentation](https://docs.omi.me/docs/developer/firmware/Compile_firmware).
 
 ### Option 2: Using Docker
 
