@@ -44,10 +44,10 @@ REPO_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 # Clean build if requested
 if [ $CLEAN_BUILD -eq 1 ]; then
     echo -e "${YELLOW}Cleaning previous build...${NC}"
-    rm -rf "$REPO_ROOT/firmware/firmware/v2.7.0"
-    rm -rf "$REPO_ROOT/firmware/firmware/build/docker_build"
+    rm -rf "$REPO_ROOT/firmware/v2.7.0"
+    rm -rf "$REPO_ROOT/firmware/build/docker_build"
     # Also clean the build directory inside app if it exists from previous runs
-    rm -rf "$REPO_ROOT/firmware/firmware/app/build"
+    rm -rf "$REPO_ROOT/firmware/app/build"
 fi
 
 echo -e "${YELLOW}Starting Docker container for firmware build...${NC}"
@@ -61,16 +61,16 @@ docker run --rm -it $PLATFORM_FLAG \
     -e PATH="/root/.local/bin:$PATH" \
     ghcr.io/zephyrproject-rtos/ci \
     bash -c "pip install --user adafruit-nrfutil && \
-             /omi/firmware/firmware/build-firmware-in-docker.sh"
+             /omi/firmware/build-firmware-in-docker.sh"
 
 # Check if the build was successful
-if [ -d "$REPO_ROOT/firmware/firmware/build/docker_build" ] && [ "$(ls -A "$REPO_ROOT/firmware/firmware/build/docker_build")" ]; then
+if [ -d "$REPO_ROOT/firmware/build/docker_build" ] && [ "$(ls -A "$REPO_ROOT/firmware/build/docker_build")" ]; then
     echo -e "${GREEN}Build artifacts are available at:${NC}"
-    echo -e "${GREEN}$(realpath "$REPO_ROOT/firmware/firmware/build/docker_build")${NC}"
+    echo -e "${GREEN}$(realpath "$REPO_ROOT/firmware/build/docker_build")${NC}"
 
     # List the generated files
     echo -e "${YELLOW}Generated files:${NC}"
-    ls -la "$REPO_ROOT/firmware/firmware/build/docker_build"
+    ls -la "$REPO_ROOT/firmware/build/docker_build"
 else
     echo -e "${RED}Build may have failed. Check the logs above for errors.${NC}"
     exit 1
