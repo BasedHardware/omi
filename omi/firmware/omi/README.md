@@ -1,4 +1,4 @@
-# OMI2 Firmware
+# OMI Firmware
 
 The firmware for the OMI consumer version.
 
@@ -6,11 +6,11 @@ The firmware for the OMI consumer version.
 
 Use https://docs.omi.me/docs/developer/firmware/Compile_firmware as the reference with these specifications.
 
-open "firmware" folder in your code editor. Don't open the root omi folder (otherwise West wouldn't recognize the project and won't find your board)
+Note: Open "firmware" folder in your code editor. Don't open the root omi folder (otherwise West wouldn't recognize the project and won't find your board)
 
 - NCS: 2.9.0
-- Application: omi2
-- Board: omi2/nrf5340/cpuapp — you can also use the [CMakePresets.json](CMakePresets.json).
+- Application: omi
+- Board: omi/nrf5340/cpuapp — you can also use the [CMakePresets.json](CMakePresets.json).
 
  <img width="543" alt="Screenshot 2025-04-18 at 18 11 48" src="https://github.com/user-attachments/assets/2c5a642f-af66-46d2-8a56-e3a6e28034c6" />
 
@@ -19,7 +19,7 @@ open "firmware" folder in your code editor. Don't open the root omi folder (othe
 - Status: DEV
 
 - TODOs:
-  - [x] Testing new modules in the omi2 device
+  - [x] Testing new modules in the omi device
     - [x] Mic
     - [x] BLE
     - [x] Buttons

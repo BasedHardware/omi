@@ -1,6 +1,6 @@
 board:
-  name: omi2
-  vendor: omi2
+  name: omi
+  vendor: omi
   socs:
   - name: nrf5340
     variants:

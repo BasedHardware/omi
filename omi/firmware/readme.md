@@ -8,46 +8,45 @@ The Omi firmware is built on the Zephyr RTOS and provides functionality for audi
 
 ## Directory Structure
 
-- `app/`: The main application project files
+- `omi/`: The main application project files
     - `src/`: Source files for the application code
-    - `include/`: Header files for the application
+    - `lib/`: Libraries used by the application
     - `CMakeLists.txt`: CMake build configuration
-    - `prj.conf`: Project configuration file
-    - `boards/`: Board-specific configurations
-    - `dts/`: Device tree overlay files
-- `omi2/`: The OMI consumer version application project files
-    - `src/`: Source files specific to the consumer version
-    - `include/`: Header files for the consumer version
+    - `CMakePresets.json`: CMake presets configuration
+- `devkit/`: The development kit application project files
+    - `src/`: Source files specific to the devkit version
+    - `lib/`: Libraries used by the devkit
     - `CMakeLists.txt`: CMake build configuration
-    - `prj.conf`: Project configuration file
-- `test/`: Test project files for unit and integration testing
+    - `CMakePresets.json`: CMake presets configuration
+- `test/`: The test project files
 - `boards/`: Custom board definitions and configurations
-- `modules/`: Shared modules and libraries
-- `drivers/`: Custom device drivers
 - `scripts/`: Build and utility scripts
 
 ## Building the Firmware
 
 There are two ways to build the firmware:
 
-### Option 1: Using Docker (Recommended)
-
-This is the easiest method and works across all platforms:
-
-```bash
-./build-docker.sh
-```
-
-For detailed instructions, see [docker-readme.md](./docker-readme.md).
-
-### Option 2: Using nRF Connect for VS Code
+### Option 1: Using nRF Connect for VS Code
 
 Prerequisites:
 - [Visual Studio Code](https://code.visualstudio.com/)
 - [nRF Connect for VS Code extension](https://marketplace.visualstudio.com/items?itemName=NordicSemiconductor.nrf-connect-for-visual-studio-code)
+  - devkit: NCS 2.7.0
+  - omi: NCS 2.9.0
 - [nRF Command Line Tools](https://www.nordicsemi.com/Software-and-tools/Development-Tools/nRF-Command-Line-Tools/Download)
 
 Follow the instructions in our [official documentation](https://docs.omi.me/docs/developer/Compile_firmware).
+
+### Option 2: Using Docker
+
+This is the easiest method and works across all platforms:
+
+```bash
+./scripts/build-docker.sh
+```
+
+For detailed instructions, see [docker-build.md](./scripts/docker-build.md).
+
 
 ## Flashing the Firmware
 

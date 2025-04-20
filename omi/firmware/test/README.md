@@ -25,7 +25,7 @@ To build the firmware, you can use VS Code.
 
 The firmware can be updated over the air (OTA) using the nRF Connect app. The firmware file is located in the `build/dfu_application.zip` directory after building the firmware. To perform an OTA update, follow these steps:
 1. Open the nRF Connect app on your mobile device.
-2. Connect to the OMI2_shell device using the app.
+2. Connect to the OMI_shell device using the app.
 3. Navigate to the DFU (Device Firmware Update) section in the app.
 4. Select the `dfu_application.zip` file from your build directory and upload it to the device.
 

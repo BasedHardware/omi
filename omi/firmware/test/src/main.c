@@ -49,7 +49,7 @@ int main(void)
 		return -1;
 	}
 	shell_execute_cmd(NULL, "ble on");
-	printk("Starting omi2 EVT test...\n");
+	printk("Starting omi EVT test...\n");
 
 	ret = pm_device_runtime_get(buttons);
 	if (ret < 0) {

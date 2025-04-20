@@ -68,7 +68,7 @@ int mic_start()
     }
 
     // Use hardcoded PDM pins from pinctrl.dtsi
-    // PDM CLK is on P1.1 and PDM DIN is on P1.0 as defined in omi2-pinctrl.dtsi
+    // PDM CLK is on P1.1 and PDM DIN is on P1.0 as defined in omi-pinctrl.dtsi
     uint32_t pdm_clk_pin = NRF_GPIO_PIN_MAP(1, 1);
     uint32_t pdm_din_pin = NRF_GPIO_PIN_MAP(1, 0);
     

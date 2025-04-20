@@ -7,19 +7,19 @@
 	},
 	"configurePresets": [
 		{
-			"name": "build_OMI2 app",
-			"displayName": "Omi2",
+			"name": "build_OMI app",
+			"displayName": "Omi",
 			"configuration": "Debug",
 			"hidden": false,
 			"description": "Debug build for new Omi device with the nrf5340 chip!",
 			"generator": "Ninja",
-			"binaryDir": "${sourceDir}/build/build_OMI2_test",
+			"binaryDir": "${sourceDir}/build/build_OMI_test",
 			"cacheVariables": {
 				"CMAKE_EXPORT_COMPILE_COMMANDS": "YES",
 				"CMAKE_BUILD_TYPE": "Debug",
-				"BOARD": "omi2/nrf5340/cpuapp",
-				"CACHED_CONF_FILE": "${sourceDir}/omi2.conf",
-				"CONF_FILE": "${sourceDir}/omi2.conf"
+				"BOARD": "omi/nrf5340/cpuapp",
+				"CACHED_CONF_FILE": "${sourceDir}/omi.conf",
+				"CONF_FILE": "${sourceDir}/omi.conf"
             }
 		}
     ]

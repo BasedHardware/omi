@@ -42,7 +42,7 @@ int main(void)
 {
 	int ret;
 
-	printk("Starting omi2 ...\n");
+	printk("Starting omi ...\n");
 	
 	// Indicate transport initialization
 	LOG_PRINTK("\n");
@@ -82,7 +82,7 @@ int main(void)
 	LOG_INF("Device initialized successfully\n");
 
 	while (1) {
-        LOG_INF("Running omi2...\n");
+        LOG_INF("Running omi...\n");
         
         // Update connection status and buffer stats in logs
         if (is_connected) {
@@ -98,6 +98,6 @@ int main(void)
         k_msleep(1000);
 	}
 
-    printk("Exiting omi2...");
+    printk("Exiting omi...");
 	return 0;
 }
