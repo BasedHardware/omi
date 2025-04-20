@@ -12,7 +12,11 @@ Note: Open "firmware" folder in your code editor. Don't open the root omi folder
 - Application: omi
 - Board: omi/nrf5340/cpuapp — you can also use the [CMakePresets.json](CMakePresets.json).
 
- <img width="543" alt="Screenshot 2025-04-18 at 18 11 48" src="https://github.com/user-attachments/assets/2c5a642f-af66-46d2-8a56-e3a6e28034c6" />
+ <img width="463" alt="Screenshot 2025-04-20 at 12 48 04" src="https://github.com/user-attachments/assets/5fc17e99-9cdd-4b2a-a438-fc4c6ffed498" />
+
+ <img width="986" alt="Screenshot 2025-04-20 at 12 48 49" src="https://github.com/user-attachments/assets/ccce238d-fa4b-4cbc-af7c-fc7688569b95" />
+
+
 
 ## WIP
 
