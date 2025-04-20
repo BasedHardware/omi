@@ -1,32 +1,89 @@
-### Install adafruit-nrfutil
+# Omi Firmware
 
-```
-pip3 install --user adafruit-nrfutil
-```
+This repository contains the firmware for the Omi AI wearable device.
 
-### Create firmware OTA .zip using adafruit-nrfutil
+## Overview
+
+The Omi firmware is built on the Zephyr RTOS and provides functionality for audio capture, processing, and battery. It includes Bluetooth connectivity for streaming audio data. Given the complex nature of this firmware its not buildable in Arduino IDE and requires a more advanced toolchain.
+
+## Directory Structure
+
+- `app/`: The main application project files
+    - `src/`: Source files for the application code
+    - `include/`: Header files for the application
+    - `CMakeLists.txt`: CMake build configuration
+    - `prj.conf`: Project configuration file
+    - `boards/`: Board-specific configurations
+    - `dts/`: Device tree overlay files
+- `omi2/`: The OMI consumer version application project files
+    - `src/`: Source files specific to the consumer version
+    - `include/`: Header files for the consumer version
+    - `CMakeLists.txt`: CMake build configuration
+    - `prj.conf`: Project configuration file
+- `test/`: Test project files for unit and integration testing
+- `boards/`: Custom board definitions and configurations
+- `modules/`: Shared modules and libraries
+- `drivers/`: Custom device drivers
+- `scripts/`: Build and utility scripts
+
+## Building the Firmware
+
+There are two ways to build the firmware:
+
+### Option 1: Using Docker (Recommended)
+
+This is the easiest method and works across all platforms:
 
 ```bash
-adafruit-nrfutil dfu genpkg --dev-type 0x0052 --dev-revision 0xCE68 --application zephyr.hex zephyr.zip
+./build-docker.sh
 ```
 
-### Upgrade firmware using UF2 file
+For detailed instructions, see [docker-readme.md](./docker-readme.md).
 
-Download the latest version of the firmware ```xiao_nrf52840_ble_sense-XXXX.uf2```
-from [Omi firmware releases](https://github.com/BasedHardware/Omi/releases)
+### Option 2: Using nRF Connect for VS Code
 
-Put the board in bootloader mode by double pressing the reset button. The board should appear as a USB drive.
+Prerequisites:
+- [Visual Studio Code](https://code.visualstudio.com/)
+- [nRF Connect for VS Code extension](https://marketplace.visualstudio.com/items?itemName=NordicSemiconductor.nrf-connect-for-visual-studio-code)
+- [nRF Command Line Tools](https://www.nordicsemi.com/Software-and-tools/Development-Tools/nRF-Command-Line-Tools/Download)
 
-Copy the new firmware file in the root directory of the board. The board will automatically update the firmware and reset back to application mode.
-You can check the firmware version from the Omi AI App.
+Follow the instructions in our [official documentation](https://docs.omi.me/docs/developer/Compile_firmware).
 
-### Upgrade bootloader using UF2 file
+## Flashing the Firmware
 
-Download a compatible version of the ```update-xiao_nrf52840_ble_sense_bootloader-XXX.uf2``` bootloader
-from [Adafurit bootloader releases](https://github.com/adafruit/Adafruit_nRF52_Bootloader/releases)
-The latest tested version is 0.9.0. Newer versions should work as well.
+Follow the instructions at https://docs.omi.me/docs/get_started/Flash_device
 
-Put the board in bootloader mode by double pressing the reset button. The board should appear as a USB drive.
+For Docker builds, the output files will be in `build/docker_build/`.
+For nRF Connect builds, locate the `zephyr.uf2` file in your build output directory.
 
-Copy the bootloader update file in the root directory of the board. The board will automatically update the bootloader and reset back to application mode.
-To check the bootloader was updated, put the board in bootloader mode again and check the INFO_UF2.TXT file for the new bootloader version.
+## Device-Specific Builds
+
+For different device hardware versions (e.g., V1 and V2), use separate overlay files and project configuration files. See `CMakePresets.json` for the available configurations.
+
+These overlay files provide context on pins and device functions to the firmware when building. Each device will need its own unique build.
+
+To select the appropriate overlay file select the configuration in the nRF Connect extension sidebar which is set in `CMakePresets.json`.
+
+## Debugging
+
+To enable USB serial debugging:
+
+1. Uncomment the debug lines in `main.c`.
+2. Use the nRF Terminal in VS Code to view debug output.
+3. Full live-code debugging is also supported using the nRF Connect extension however this requires a J-Link debugger device and additional setup.
+
+## Key Components
+
+- **Main Application**: Coordinates the overall functionality of the device from initialization to shutdown.
+- **Audio Capture**: Handles microphone input and audio buffering.
+- **Codec**: Processes raw audio data.
+- **Transport**: Manages Bluetooth connectivity and audio streaming.
+- **Storage**: Handles SD card operations and audio file management.
+- **LED Control**: Provides visual feedback about device status.
+
+## On the Storage Reads
+
+The storage will automatically activate whenever there is no Bluetooth connection to the app. Whenever you turn on the device, a new file is created which
+will begin filling with opus encoded data. Whenever you connect to the app, the contents of the storage will begin streaming to the app. When it is finished, it will try to delete the file on the device.
+
+The format of each packet is different to the streaming audio packets.
