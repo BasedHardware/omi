@@ -43,7 +43,7 @@ jobs:
 
               path_depth=$(awk -F'/' '{print NF-1}' <<< "$README_FILE")
               image_base_path=""
-              for ((i=0; i<$relative_depth; i++)); do
+              for ((i=0; i<$path_depth; i++)); do
                 image_base_path+="../"
               done
 
