@@ -13,7 +13,7 @@ The Omi firmware is built on the Zephyr RTOS and provides functionality for audi
     - `lib/`: Libraries used by the application
     - `CMakeLists.txt`: CMake build configuration
     - `CMakePresets.json`: CMake presets configuration
-- `devkit/`: The development kit application project files
+- `devkit/`: The development kit application project files (for Omi DevKit1, Omi DevKit2)
     - `src/`: Source files specific to the devkit version
     - `lib/`: Libraries used by the devkit
     - `CMakeLists.txt`: CMake build configuration
