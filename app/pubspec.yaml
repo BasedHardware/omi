@@ -66,6 +66,7 @@ dependencies:
   mcumgr_flutter: ^0.4.2
   flutter_archive: ^6.0.3
   json_annotation: ^4.9.0
+  json_serializable: 6.8.0
   package_info_plus: ^8.0.1
   path_provider: any
   flutter_foreground_task: 8.13.0
