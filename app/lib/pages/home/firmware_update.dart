@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'firmware_update_dialog.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -48,6 +49,30 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
     super.initState();
   }
 
+  Future<void> _selectLocalFirmwareFile() async {
+    try {
+      // Here you would implement file picking functionality
+      // For example using file_picker package:
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['zip'],
+      );
+      
+      if (result != null) {
+        String filePath = result.files.single.path!;
+        // Start firmware update with local file
+        await startDfu(widget.device!, zipFilePath: filePath);
+      }
+    } catch (e) {
+      debugPrint('Error selecting firmware file: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error selecting firmware file: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -57,6 +82,16 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
         appBar: AppBar(
           title: const Text('Firmware Update'),
           backgroundColor: Theme.of(context).colorScheme.primary,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.file_upload, color: Colors.white),
+              tooltip: 'Select local file',
+              onPressed: () async {
+                // Implement local file selection for firmware upgrade
+                await _selectLocalFirmwareFile();
+              },
+            ),
+          ],
         ),
         body: Center(
           child: isLoading
