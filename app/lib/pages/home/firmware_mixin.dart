@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
+import 'package:nordic_dfu/nordic_dfu.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/http/api/device.dart';
 import 'package:omi/services/services.dart';
@@ -22,9 +23,9 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   bool isInstalling = false;
   bool isInstalled = false;
   int installProgress = 1;
+  bool isLegacySecureDFU = true;
   List<String> otaUpdateSteps = [];
-  final mcumgr.FirmwareUpdateManagerFactory? managerFactory =
-      mcumgr.FirmwareUpdateManagerFactory();
+  final mcumgr.FirmwareUpdateManagerFactory? managerFactory = mcumgr.FirmwareUpdateManagerFactory();
 
   // TODO: thinh, use connection directly
   Future _bleDisconnectDevice(BtDevice btDevice) async {
@@ -86,14 +87,20 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   }
 
   Future<void> startDfu(BtDevice btDevice, {bool fileInAssets = false, String? zipFilePath}) async {
+    if (isLegacySecureDFU) {
+      return startLegacyDfu(btDevice, fileInAssets: fileInAssets);
+    }
+    return startMCUDfu(btDevice, fileInAssets: fileInAssets, zipFilePath: zipFilePath);
+  }
+
+  Future<void> startMCUDfu(BtDevice btDevice, {bool fileInAssets = false, String? zipFilePath}) async {
     setState(() {
       isInstalling = true;
     });
     await _bleDisconnectDevice(btDevice);
     await Future.delayed(const Duration(seconds: 2));
 
-    String firmwareFile = zipFilePath ??
-        '${(await getApplicationDocumentsDirectory()).path}/firmware.zip';
+    String firmwareFile = zipFilePath ?? '${(await getApplicationDocumentsDirectory()).path}/firmware.zip';
     final bytes = await File(firmwareFile).readAsBytes();
     const configuration = mcumgr.FirmwareUpgradeConfiguration(
       estimatedSwapTime: Duration(seconds: 0),
@@ -120,8 +127,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     updateManager.progressStream.listen((progress) {
       debugPrint('progress: $progress');
       setState(() {
-        installProgress =
-            (progress.bytesSent / progress.imageSize * 100).round();
+        installProgress = (progress.bytesSent / progress.imageSize * 100).round();
       });
     });
 
@@ -134,6 +140,53 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     await updateManager.update(
       images,
       configuration: configuration,
+    );
+  }
+
+  Future<void> startLegacyDfu(BtDevice btDevice, {bool fileInAssets = false}) async {
+    setState(() {
+      isInstalling = true;
+    });
+    await _bleDisconnectDevice(btDevice);
+    await Future.delayed(const Duration(seconds: 2));
+    String firmwareFile = '${(await getApplicationDocumentsDirectory()).path}/firmware.zip';
+    NordicDfu dfu = NordicDfu();
+    await dfu.startDfu(
+      btDevice.id,
+      firmwareFile,
+      fileInAsset: fileInAssets,
+      numberOfPackets: 8,
+      enableUnsafeExperimentalButtonlessServiceInSecureDfu: true,
+      iosSpecialParameter: const IosSpecialParameter(
+        packetReceiptNotificationParameter: 8,
+        forceScanningForNewAddressInLegacyDfu: true,
+        connectionTimeout: 60,
+      ),
+      androidSpecialParameter: const AndroidSpecialParameter(
+        packetReceiptNotificationsEnabled: true,
+        rebootTime: 1000,
+      ),
+      onProgressChanged: (deviceAddress, percent, speed, avgSpeed, currentPart, partsTotal) {
+        debugPrint('deviceAddress: $deviceAddress, percent: $percent');
+        setState(() {
+          installProgress = percent.toInt();
+        });
+      },
+      onError: (deviceAddress, error, errorType, message) =>
+          debugPrint('deviceAddress: $deviceAddress, error: $error, errorType: $errorType, message: $message'),
+      onDeviceConnecting: (deviceAddress) => debugPrint('deviceAddress: $deviceAddress, onDeviceConnecting'),
+      onDeviceConnected: (deviceAddress) => debugPrint('deviceAddress: $deviceAddress, onDeviceConnected'),
+      onDfuProcessStarting: (deviceAddress) => debugPrint('deviceAddress: $deviceAddress, onDfuProcessStarting'),
+      onDfuProcessStarted: (deviceAddress) => debugPrint('deviceAddress: $deviceAddress, onDfuProcessStarted'),
+      onEnablingDfuMode: (deviceAddress) => debugPrint('deviceAddress: $deviceAddress, onEnablingDfuMode'),
+      onFirmwareValidating: (deviceAddress) => debugPrint('address: $deviceAddress, onFirmwareValidating'),
+      onDfuCompleted: (deviceAddress) {
+        debugPrint('deviceAddress: $deviceAddress, onDfuCompleted');
+        setState(() {
+          isInstalling = false;
+          isInstalled = true;
+        });
+      },
     );
   }
 
@@ -150,6 +203,9 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     );
     if (latestFirmwareDetails['ota_update_steps'] != null) {
       otaUpdateSteps = List<String>.from(latestFirmwareDetails['ota_update_steps']);
+    }
+    if (latestFirmwareDetails['is_legacy_secure_dfu'] != null) {
+      isLegacySecureDFU = latestFirmwareDetails['is_legacy_secure_dfu'];
     }
   }
 

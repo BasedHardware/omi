@@ -57,7 +57,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
         type: FileType.custom,
         allowedExtensions: ['zip'],
       );
-      
+
       if (result != null) {
         String filePath = result.files.single.path!;
         // Start firmware update with local file
@@ -82,16 +82,16 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
         appBar: AppBar(
           title: const Text('Firmware Update'),
           backgroundColor: Theme.of(context).colorScheme.primary,
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.file_upload, color: Colors.white),
-              tooltip: 'Select local file',
-              onPressed: () async {
-                // Implement local file selection for firmware upgrade
-                await _selectLocalFirmwareFile();
-              },
-            ),
-          ],
+          // actions: [
+          //   IconButton(
+          //     icon: const Icon(Icons.file_upload, color: Colors.white),
+          //     tooltip: 'Select local file',
+          //     onPressed: () async {
+          //       // Implement local file selection for firmware upgrade
+          //       await _selectLocalFirmwareFile();
+          //     },
+          //   ),
+          // ],
         ),
         body: Center(
           child: isLoading
