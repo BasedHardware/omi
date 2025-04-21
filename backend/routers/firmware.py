@@ -5,6 +5,7 @@ from typing import Optional
 import httpx
 from fastapi import APIRouter, HTTPException
 from enum import Enum
+import ast
 
 from database.redis_db import get_generic_cache, set_generic_cache
 
@@ -119,6 +120,7 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
         "zip_url": asset.get("browser_download_url"),
         "draft": False,
         "ota_update_steps": kv.get('ota_update_steps', []),
+        "is_legacy_secure_dfu": ast.literal_eval(kv.get('is_legacy_secure_dfu', 'True')),
     }
 
 
