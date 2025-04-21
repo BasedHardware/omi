@@ -62,7 +62,9 @@ dependencies:
   awesome_notifications_core: ^0.9.3
   awesome_notifications: any
   instabug_flutter: ^13.3.0
-  nordic_dfu: ^6.1.4+hotfix
+  mcumgr_flutter: ^0.4.2
+  flutter_archive: ^6.0.3
+  json_annotation: ^4.9.0
   package_info_plus: ^8.0.1
   path_provider: any
   flutter_foreground_task: 8.13.0
