@@ -12,6 +12,7 @@ class DeviceModel(int, Enum):
     OMI_DEVKIT_1 = 1
     OMI_DEVKIT_2 = 2
     OPEN_GLASS = 3
+    OMI_CV1 = 4
 
 
 router = APIRouter()
@@ -21,6 +22,7 @@ router = APIRouter()
 # - DK2: Omi DevKit 2
 # - DK1: Friend | Friend DevKit 1
 # - OpenGlass: OpenGlass
+# - Omi_CV1: Omi CV 1
 def _get_device_by_model_number(device_model: str):
     if device_model in ['Omi DevKit 2']:
         return DeviceModel.OMI_DEVKIT_2
@@ -28,11 +30,14 @@ def _get_device_by_model_number(device_model: str):
         return DeviceModel.OMI_DEVKIT_1
     if device_model in ['OpenGlass']:
         return DeviceModel.OPEN_GLASS
+    if device_model in ['Omi CV 1']:
+        return DeviceModel.OMI_CV1
 
     return None
 
 async def get_omi_github_releases(cache_key: str) -> Optional[list]:
     """Fetch releases from GitHub API with caching"""
+
     # Check cache first
     cached_releases = get_generic_cache(cache_key)
     if cached_releases:
@@ -69,11 +74,14 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
     # - Omi_DK2_v2.0.5
     # - Friend_v1.0.4
     # - OpenGlass_v1.0.4
+    # - Omi_CV1_v1.0.0
     release_prefix = "Friend"
     if device == DeviceModel.OMI_DEVKIT_2:
         release_prefix = "Omi_DK2"
     if device == DeviceModel.OPEN_GLASS:
         release_prefix = "OpenGlass"
+    if device == DeviceModel.OMI_CV1:
+        release_prefix = "Omi_CV1"
     for release in releases:
         if release.get("draft") or not release.get("published_at") or not release.get("tag_name"):
             continue

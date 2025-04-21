@@ -142,6 +142,8 @@ def get_supported_countries():
         country_codes.remove("GI")
     if "US" not in country_codes:
         country_codes.append("US")
+    if "TR" not in country_codes:
+        country_codes.append("TR")
     country_codes.sort()
     countries = [
         {"id": code, "name": pycountry.countries.get(alpha_2=code).name}
