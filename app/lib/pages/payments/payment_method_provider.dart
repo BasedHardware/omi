@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:omi/backend/http/api/payments.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/widgets/extensions/string.dart';
 
 import 'models/payment_method_config.dart';
 
@@ -70,7 +71,7 @@ class PaymentMethodProvider extends ChangeNotifier {
       _filteredCountries = _supportedCountries;
     } else {
       _filteredCountries = _supportedCountries.where((country) {
-        return country['name'].toString().toLowerCase().contains(_searchQuery);
+        return country['name'].toString().toLowerCase().decodeString.contains(_searchQuery);
       }).toList();
     }
     notifyListeners();
