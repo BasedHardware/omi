@@ -11,6 +11,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 security = HTTPBearer()
 
+
 def get_user(uid: str):
     user = auth.get_user(uid)
     return user
@@ -39,9 +40,7 @@ def get_current_user_uid(authorization: Annotated[HTTPAuthorizationCredentials, 
 cached = {}
 
 
-def rate_limit_custom(
-    endpoint: str, request: Request, requests_per_window: int, window_seconds: int
-):
+def rate_limit_custom(endpoint: str, request: Request, requests_per_window: int, window_seconds: int):
     ip = request.client.host
     key = f"rate_limit:{endpoint}:{ip}"
 
@@ -75,9 +74,7 @@ def rate_limit_custom(
 
 
 # Dependency to enforce custom rate limiting for specific endpoints
-def rate_limit_dependency(
-    endpoint: str = "", requests_per_window: int = 60, window_seconds: int = 60
-):
+def rate_limit_dependency(endpoint: str = "", requests_per_window: int = 60, window_seconds: int = 60):
     def rate_limit(request: Request):
         return rate_limit_custom(endpoint, request, requests_per_window, window_seconds)
 
@@ -92,10 +89,8 @@ def timeit(func):
     def measure_time(*args, **kw):
         start_time = time.time()
         result = func(*args, **kw)
-        print(
-            "Processing time of %s(): %.2f seconds."
-            % (func.__qualname__, time.time() - start_time)
-        )
+        print("Processing time of %s(): %.2f seconds."
+              % (func.__qualname__, time.time() - start_time))
         return result
 
     return measure_time
