@@ -9,7 +9,7 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/animated_loading_button.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-
+import 'package:omi/widgets/extensions/string.dart';
 import 'payment_method_provider.dart';
 
 class StripeConnectSetup extends StatefulWidget {
@@ -165,8 +165,10 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                                       Text(
                                         provider.selectedCountryId?.isEmpty ?? true
                                             ? 'Select your country'
-                                            : (provider.filteredCountries.firstWhereOrNull((country) =>
-                                                    country['id'] == provider.selectedCountryId)?['name'] ??
+                                            : ((provider.filteredCountries.firstWhereOrNull((country) =>
+                                                            country['id'] == provider.selectedCountryId)?['name']
+                                                        as String?)
+                                                    ?.decodeString ??
                                                 'Select your country'),
                                         style: const TextStyle(color: Colors.white),
                                       ),
