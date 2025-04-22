@@ -1,0 +1,16 @@
+name: omi_flutter_demo
+description: A Flutter demo for streaming Omi audio via BLE.
+version: 1.0.0
+environment:
+  sdk: '>=2.18.0 <3.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_blue_plus: ^2.0.0
+  flutter_sound: ^9.2.13
+  permission_handler: ^10.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
