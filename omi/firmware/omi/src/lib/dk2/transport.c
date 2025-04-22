@@ -258,12 +258,14 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     LOG_DBG("TX PHY %s, RX PHY %s", phy2str(info.le.phy->tx_phy), phy2str(info.le.phy->rx_phy));
     LOG_DBG("LE data len updated: TX (len: %d time: %d) RX (len: %d time: %d)", info.le.data_len->tx_max_len, info.le.data_len->tx_max_time, info.le.data_len->rx_max_len, info.le.data_len->rx_max_time);
 
-    // TODO: recheck, should be the hardware issue.
-    // These configs enhanced the BLE performance, increasing from 30 rps to 65 rps
+    // TODO: recheck needed, should be the hardware issue ?
     // Request optimal connection parameters for high-throughput
+    // These configs enhanced the BLE performance
+    // - Updated 0: using interval max 12 helps on increasing the rps to 65
+    // - Updated 1: using interval max 6 helps on increasing the rps > 100
     struct bt_le_conn_param param = {
         .interval_min = 6,    // 7.5ms (6 * 1.25ms)
-        .interval_max = 12,   // 15ms (12 * 1.25ms)
+        .interval_max = 6,   // 15ms (12 * 1.25ms)
         .latency = 0,         // No slave latency
         .timeout = 400,       // 4s (400 * 10ms)
     };
@@ -279,13 +281,6 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
         .pref_rx_phy = BT_GAP_LE_PHY_2M,
     };
     bt_conn_le_phy_update(conn, &phy_param);
-
-    // Request maximum data length
-    struct bt_conn_le_data_len_param data_param = {
-        .tx_max_len = 251,
-        .tx_max_time = 2120,
-    };
-    bt_conn_le_data_len_update(conn, &data_param);
     // END
      
 #ifdef CONFIG_OMI_ENABLE_BATTERY
@@ -401,7 +396,7 @@ static bool read_from_tx_queue()
     tx_buffer_size = ring_buf_get(&ring_buf, tx_buffer, (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)); // It always fits completely or not at all
     if (tx_buffer_size != (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE))
     {
-        LOG_ERR("Failed to read from ring buffer. not enough data %d", tx_buffer_size);
+        // LOG_ERR("Failed to read from ring buffer. not enough data %d", tx_buffer_size);
         return false;
     }
 
@@ -554,6 +549,7 @@ void test_pusher(void)
         struct bt_conn *conn = current_connection;
         if (conn)
         {
+            // Expected 100 packages per seconds
             bool sent = push_to_gatt(conn);
             if (!sent)
             {
