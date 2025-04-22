@@ -6,6 +6,7 @@ import 'package:omi/pages/apps/page.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
 class SummarizedAppsBottomSheet extends StatelessWidget {
@@ -181,7 +182,7 @@ class _AppListItem extends StatelessWidget {
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
       leading: _buildLeadingIcon(),
       title: Text(
-        app != null ? app!.name : 'Auto',
+        app != null ? app!.name.decodeString : 'Auto',
         style: TextStyle(
           color: Colors.white,
           fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
@@ -190,7 +191,7 @@ class _AppListItem extends StatelessWidget {
       ),
       subtitle: app != null
           ? Text(
-              app!.description,
+              app!.description.decodeString,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(color: Colors.grey, fontSize: 12),

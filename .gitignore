@@ -84,10 +84,6 @@ dist/
 **/web/**/build/
 **/web/.dart_tool/
 
-# Version control
-.git/
-.gitignore
-
 # Miscellaneous
 *.lock
 *.log
@@ -167,6 +163,10 @@ app/lib/env/prod_env.g.dart
 /backend/scripts/stt/results
 /backend/scripts/stt/diarization.json
 /docs/.docusaurus
+
+
+/omi/firmware/firmware/v2.7.0/
+
 
 # Additional Expo/React Native specific ignores
 .expo/*

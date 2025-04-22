@@ -1,8 +1,9 @@
+<!-- This file is auto-generated from docs/docs/docs/hardware/omiGlass.mdx. Do not edit manually. -->
 # omiGlass - Open Source Meta Raybans with 6x of their battery
 
 <p align="center">
-<img src="https://github.com/user-attachments/assets/848f664b-183e-4df5-8928-f16f00ff144b" width="45%">
-   <img src="https://github.com/user-attachments/assets/3fa00359-74a0-4f85-a233-f4bf12b1db7b" width="45%">
+  <img src="https://github.com/user-attachments/assets/848f664b-183e-4df5-8928-f16f00ff144b" width="45%" />
+  <img src="https://github.com/user-attachments/assets/3fa00359-74a0-4f85-a233-f4bf12b1db7b" width="45%" />
 </p>
 
 
@@ -12,7 +13,7 @@
   <a href="https://x.com/kodjima33/status/1911852469329727811">
     <img src="https://img.youtube.com/vi/QvFjXgLZX7U/maxresdefault.jpg" alt="Watch the video" width="400"/>
   </a>
-  <br>
+  <br />
   <a href="https://x.com/kodjima33/status/1911852469329727811">▶️ Watch Video</a>
 </p>
 
@@ -127,7 +128,8 @@ You'll need the following components to build your own omiGlass:
    - Go to the "Tools" dropdown in the Arduino IDE
    - Set "PSRAM:" to "OPI PSRAM"
 
-   ![PSRAM Settings](image.png)
+   ![PSRAM Settings](../docs/images/docs/hardware/images/image.png)
+
 
 4. Upload the firmware to the XIAO ESP32S3 board.
 
