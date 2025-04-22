@@ -37,7 +37,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   static const int kPermissionsPage = 3;
   static const int kWelcomePage = 4;
   static const int kFindDevicesPage = 5;
-  static const int kSpeechProfilePage = 6;
+  static const int kSpeechProfilePage = 6; // Now always the last index
 
   // Special index values used in comparisons
   static const List<int> kHiddenHeaderPages = [-1, 5, 6];
@@ -47,17 +47,21 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   @override
   void initState() {
-    //TODO: Change from tab controller to default controller and use provider (part of instabug cleanup) @mdmohsin7
-    _controller = TabController(length: hasSpeechProfile ? 6 : 7, vsync: this);
+    _controller = TabController(length: 7, vsync: this);
     _controller!.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (isSignedIn()) {
         // && !SharedPreferencesUtil().onboardingCompleted
         if (mounted) {
           context.read<HomeProvider>().setupHasSpeakerProfile();
-          _goNext();
+          if (SharedPreferencesUtil().onboardingCompleted) {
+            routeToPage(context, const HomePageWrapper(), replace: true);
+          } else {
+            _controller!.animateTo(kNamePage);
+          }
         }
       }
+      // If not signed in, it stays at the Auth page (index 0)
     });
     super.initState();
   }
@@ -71,8 +75,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   _goNext() {
     if (_controller!.index < _controller!.length - 1) {
       _controller!.animateTo(_controller!.index + 1);
-    } else {
-      routeToPage(context, const HomePageWrapper(), replace: true);
     }
   }
 
@@ -88,7 +90,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   @override
   Widget build(BuildContext context) {
     List<Widget> pages = [
-      // TODO: if connected already, stop animation and display battery
       AuthComponent(
         onSignIn: () {
           SharedPreferencesUtil().hasOmiDevice = true;
@@ -99,7 +100,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           if (SharedPreferencesUtil().onboardingCompleted) {
             routeToPage(context, const HomePageWrapper(), replace: true);
           } else {
-            _goNext();
+            _goNext(); // Go to Name page
           }
         },
       ),
@@ -113,62 +114,55 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         MixpanelManager().onboardingStepCompleted('Name');
       }),
       PrimaryLanguageWidget(goNext: () {
-        _goNext();
+        _goNext(); // Go to Permissions page
         MixpanelManager().onboardingStepCompleted('Primary Language');
       }),
       PermissionsWidget(
         goNext: () {
-          _goNext();
+          _goNext(); // Go to Welcome page
           MixpanelManager().onboardingStepCompleted('Permissions');
         },
       ),
       WelcomePage(
         goNext: () {
-          _goNext();
+          _goNext(); // Go to Find Devices page
           MixpanelManager().onboardingStepCompleted('Welcome');
         },
       ),
       FindDevicesPage(
         isFromOnboarding: true,
         onSkip: () {
+          // Skipping device finding means skipping speech profile too
           routeToPage(context, const HomePageWrapper(), replace: true);
         },
         goNext: () async {
           var provider = context.read<OnboardingProvider>();
-          if (context.read<HomeProvider>().hasSpeakerProfile) {
-            // previous users
+          MixpanelManager().onboardingStepCompleted('Find Devices');
+
+          if (hasSpeechProfile) {
             routeToPage(context, const HomePageWrapper(), replace: true);
           } else {
-            if (provider.deviceId.isEmpty) {
-              _goNext();
+            var codec = await _getAudioCodec(provider.deviceId);
+            if (codec == BleAudioCodec.opus) {
+              _goNext(); // Go to Speech Profile page
             } else {
-              var codec = await _getAudioCodec(provider.deviceId);
-              if (codec == BleAudioCodec.opus) {
-                _goNext();
-              } else {
-                routeToPage(context, const HomePageWrapper(), replace: true);
-              }
+              // Device selected, but not Opus, skip speech profile
+              routeToPage(context, const HomePageWrapper(), replace: true);
             }
           }
-
-          MixpanelManager().onboardingStepCompleted('Find Devices');
+        },
+      ),
+      SpeechProfileWidget(
+        goNext: () {
+          routeToPage(context, const HomePageWrapper(), replace: true);
+          MixpanelManager().onboardingStepCompleted('Speech Profile');
+        },
+        onSkip: () {
+          routeToPage(context, const HomePageWrapper(), replace: true);
+          MixpanelManager().onboardingStepCompleted('Speech Profile Skipped');
         },
       ),
     ];
-
-    if (!hasSpeechProfile) {
-      pages.addAll([
-        SpeechProfileWidget(
-          goNext: () {
-            routeToPage(context, const HomePageWrapper(), replace: true);
-            MixpanelManager().onboardingStepCompleted('Speech Profile');
-          },
-          onSkip: () {
-            routeToPage(context, const HomePageWrapper(), replace: true);
-          },
-        ),
-      ]);
-    }
 
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
@@ -186,15 +180,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                     DeviceAnimationWidget(animatedBackground: _controller!.index != -1),
                     const SizedBox(height: 24),
                     kHiddenHeaderPages.contains(_controller?.index)
-                        ? const SizedBox(
-                            height: 0,
-                          )
+                        ? const SizedBox.shrink()
                         : Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             child: Text(
-                              _controller!.index == _controller!.length - 1
-                                  ? 'Your personal growth journey with AI that listens to your every word.'
-                                  : 'Your personal growth journey with AI that listens to your every word.',
+                              'Your personal growth journey with AI that listens to your every word.',
                               style: TextStyle(color: Colors.grey.shade300, fontSize: 24),
                               textAlign: TextAlign.center,
                             ),
@@ -244,7 +234,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                     alignment: Alignment.topLeft,
                     child: TextButton(
                       onPressed: () {
-                        _controller!.animateTo(_controller!.index - 1);
+                        if (_controller!.index > kNamePage) {
+                          _controller!.animateTo(_controller!.index - 1);
+                        }
                       },
                       child: Text(
                         'Back',
@@ -259,16 +251,15 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: List.generate(
-                      _controller!.length - 1, // Exclude the Auth page from the count
+                      6,
                       (index) {
-                        // Calculate the adjusted index
-                        int adjustedIndex = index + 1;
+                        int pageIndex = index + 1; // Name=1, Lang=2, ..., Speech=6
                         return Container(
                           margin: const EdgeInsets.symmetric(horizontal: 4.0),
-                          width: adjustedIndex == _controller!.index ? 12.0 : 8.0,
-                          height: adjustedIndex == _controller!.index ? 12.0 : 8.0,
+                          width: pageIndex == _controller!.index ? 12.0 : 8.0,
+                          height: pageIndex == _controller!.index ? 12.0 : 8.0,
                           decoration: BoxDecoration(
-                            color: adjustedIndex <= _controller!.index
+                            color: pageIndex <= _controller!.index
                                 ? Theme.of(context).colorScheme.secondary
                                 : Colors.grey.shade400,
                             shape: BoxShape.circle,

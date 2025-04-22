@@ -1,0 +1,8 @@
+board:
+  name: omi
+  vendor: omi
+  socs:
+  - name: nrf5340
+    variants:
+    - name: ns
+      cpucluster: cpuapp

@@ -11,7 +11,39 @@ Navigate to [Flash Device](https://docs.omi.me/docs/get_started/Flash_device) to
 
 ---
 
-## Build Your Own Firmware
+## Build Methods
+
+There are two ways to build the Omi firmware:
+
+1. **Docker-based build (Recommended)** - Easier, works across all platforms
+2. **nRF Connect for VS Code** - Traditional method
+
+---
+
+## Option 1: Docker-Based Build (Recommended)
+
+This method is recommended as it eliminates environment setup complexities and works consistently across all platforms.
+
+### Prerequisites
+1. [Docker](https://www.docker.com/products/docker-desktop/) installed on your system
+2. Git repository cloned to your local machine
+
+### Building with Docker
+
+From the root of the repository, run:
+
+```bash
+chmod +x omi/firmware/scripts/build-docker.sh
+./omi/firmware/scripts/build-docker.sh
+```
+
+The output files will be in `omi/firmware/build/docker_build/` directory.
+
+For more detailed instructions, see the [Docker build readme](https://github.com/BasedHardware/omi/blob/main/omi/firmware/docker-readme.md).
+
+---
+
+## Option 2: Build with nRF Connect for VS Code
 
 ### Step 1: Set Up nRF Connect
 
@@ -20,8 +52,6 @@ Follow the tutorial in this video:
 
 You must use **nRF Connect** SDK and toolchain version `2.7.0` to compile the firmware.
 Note that this is not the `latest` version of the NRF Connect toolchain or SDK.
-
----
 
 ### Step 2: Open the Firmware Application
 
@@ -40,8 +70,6 @@ Note that this is not the `latest` version of the NRF Connect toolchain or SDK.
      width="75%"
    />
 
----
-
 ### Step 3: Add a Build Configuration
 
 1.  In the application panel of the extension, click the **Add Build Configuration** icon. Choose a `CMake Preset` that matches your hardware.
@@ -52,7 +80,7 @@ Note that this is not the `latest` version of the NRF Connect toolchain or SDK.
       width="75%"
     />
 
-Board target shoud be:
+Board target should be:
 xiao_ble/nrf52840/sense
 
 2.  Scroll to the bottom and click "Build Configuration." This will start the nRFConnect SDK building your firmware file.
@@ -64,17 +92,18 @@ xiao_ble/nrf52840/sense
      width="75%"
    />
 
----
-
 ### Step 4: Locate the Compiled Firmware
 
-Once the build succeeds, you will find the `zephyr.uf2` file in the directory corresponding to the CMake preset you chose, for example `firmware/firmware/build/build_xiao_ble_sense_devkitv2-adafruit/zephyr/`.
+Once the build succeeds, you will find the `zephyr.uf2` file in the directory corresponding to the CMake preset you chose, for example `firmware/build/build_xiao_ble_sense_devkitv2-adafruit/zephyr/`.
 
 ---
 
-### Step 5: Flash the Firmware
+## Flashing the Firmware
 
-Follow the steps as described [here](../get_started/Flash_device) using the generated file
+Regardless of which build method you used:
+
+1. Follow the steps as described in [Flash Device](../get_started/Flash_device)
+2. Use the generated `zephyr.uf2` file instead of downloading a pre-built firmware
 
 ---
 

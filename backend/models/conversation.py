@@ -241,7 +241,7 @@ class Conversation(BaseModel):
             {**event, 'start': event['start'].isoformat()} for event in conversation_dict['structured']['events']
         ]
 
-        if conversation_dict['external_data']:
+        if 'external_data' in conversation_dict and conversation_dict['external_data']:
             conversation_dict['external_data']['started_at'] = conversation_dict['started_at'].isoformat()
             conversation_dict['external_data']['finished_at'] = conversation_dict['finished_at'].isoformat()
 
