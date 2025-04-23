@@ -79,6 +79,11 @@ You'll need to obtain the following API keys and credentials:
    NEXT_PUBLIC_MIXPANEL_TOKEN=your_mixpanel_token
    NEXT_PUBLIC_LINKEDIN_API_HOST=your_rapidapi_linkedin_host
    NEXT_PUBLIC_LINKEDIN_API_KEY=your_rapidapi_linkedin_key
+
+REDIS_DB_HOST=your_redis_key
+REDIS_DB_PORT=redis_port
+REDIS_DB_PASSWORD=redis_password
+
    ```
 
 4. Run the development server:
