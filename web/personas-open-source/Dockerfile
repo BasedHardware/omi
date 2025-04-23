@@ -4,8 +4,9 @@ WORKDIR /app
 # Copy all files
 COPY web/personas-open-source .
 
-# Install dependencies and types
-RUN npm ci --legacy-peer-deps && \
+# Install dependencies using npm install for potentially better compatibility in build
+# Still using legacy-peer-deps based on potential project setup
+RUN npm install --legacy-peer-deps && \
     npm install --save-dev @types/mixpanel-browser --legacy-peer-deps
 
 # Environment variables should be passed at build time
