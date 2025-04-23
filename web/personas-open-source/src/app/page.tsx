@@ -1,5 +1,12 @@
 'use client';
 
+// ------------------------------------------------------------------------------------
+// TEMPORARY: Force a fixed UID for end‑to‑end testing in prod/staging environments.
+//            Comment out or delete the following line (and its usages) once testing is
+//            finished and real Firebase anonymous/authenticated UIDs should be used.
+// export const TEST_UID = "kiTPO8XwMlOpFpb4x1diyMg213j2"; // <-- commented after tests
+// ------------------------------------------------------------------------------------
+
 import { SetStateAction, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
@@ -15,6 +22,7 @@ import { ChatbotList } from '@/components/ChatbotList';
 import { Footer } from '@/components/Footer';
 import { Chatbot, TwitterProfile, LinkedinProfile } from '@/types/profiles';
 import { PreorderBanner } from '@/components/shared/PreorderBanner';
+import { signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
 
 const formatTwitterAvatarUrl = (url: string): string => {
   if (!url) return '/omi-avatar.svg';
@@ -133,6 +141,70 @@ export default function HomePage() {
   const [pendingCleanHandle, setPendingCleanHandle] = useState<string | null>(null);
   const [availablePlatforms] = useState({ twitter: true, linkedin: true });
   const [platformSelectionMode] = useState<'create' | 'add'>('create');
+  const [currentUserUid, setCurrentUserUid] = useState<string | null>(null);
+  const [authInitialized, setAuthInitialized] = useState<boolean>(false);
+
+  // ----------------------------------------------------------------------------------
+  // Helper: open ChatGPT workspace with the (temporary test) UID.
+  // Comment or delete after tests together with TEST_UID declarations.
+  const openChatGPTWithUid = (uid: string) => {
+    window.location.href =
+      `https://chatgpt.com/g/g-67e2772d0af081919a5baddf4a12aacf-omigpt?prompt=uid=${encodeURIComponent(uid)}`;
+  };
+  // ----------------------------------------------------------------------------------
+
+  // Effect to observe Firebase Auth state and store the UID
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
+      if (user) {
+        console.log('[Auth State] User found:', user.uid);
+        setCurrentUserUid(user.uid);
+      } else {
+        console.log('[Auth State] No user found.');
+        setCurrentUserUid(null);
+      }
+      setAuthInitialized(true); // Mark auth as initialized
+    });
+
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
+  }, []); // Empty dependency array ensures this runs only once on mount
+
+  // Helper function to reliably get UID, creating anonymous if needed
+  const getUid = async (): Promise<string | null> => {
+    if (!authInitialized) {
+      // Auth hasn't initialized yet, wait briefly or handle differently?
+      // For now, try direct check + anonymous creation as fallback
+      console.warn('[getUid] Auth not initialized, attempting direct check/creation.');
+    }
+
+    // 1. Check state first (set by onAuthStateChanged)
+    if (currentUserUid) {
+      console.log('[getUid] Using UID from state:', currentUserUid);
+      return currentUserUid;
+    }
+
+    // 2. Check current auth object directly (might be null if not initialized)
+    if (auth.currentUser) {
+      console.log('[getUid] Using UID from auth.currentUser:', auth.currentUser.uid);
+      setCurrentUserUid(auth.currentUser.uid); // Update state
+      return auth.currentUser.uid;
+    }
+
+    // 3. If no user found, create an anonymous one
+    console.log('[getUid] No user found, attempting anonymous sign-in...');
+    try {
+      const result = await signInAnonymously(auth);
+      const newUid = result.user.uid;
+      console.log('[getUid] Signed in anonymously, new UID:', newUid);
+      setCurrentUserUid(newUid); // Update state
+      return newUid;
+    } catch (err) {
+      console.error('[getUid] Anonymous sign-in failed:', err);
+      toast.error('Failed to initialize user session.');
+      return null; // Indicate failure
+    }
+  };
 
   // Handle profile parameter on mount
   useEffect(() => {
@@ -264,49 +336,39 @@ export default function HomePage() {
       if (isTwitterInput(handleToUse)) {
         existingId = await checkExistingProfile(cleanHandle, 'twitter');
         if (existingId) {
-          redirectToChat(existingId);
+          // Existing persona found – open ChatGPT directly
+          const uid = await getUid();
+          if (uid) openChatGPTWithUid(uid);
+          else toast.error('Could not get user ID to redirect.');
           return;
         }
         twitterResult = await fetchTwitterProfile(cleanHandle);
         if (twitterResult) {
-          const docId = await getProfileDocId(cleanHandle, 'twitter');
-          if (docId) {
-            redirectToChat(docId);
-          }
           return;
         }
       } else if (isLinkedinInput(handleToUse)) {
         existingId = await checkExistingProfile(cleanHandle, 'linkedin');
         if (existingId) {
-          redirectToChat(existingId);
+          // Existing persona found – open ChatGPT directly
+          const uid = await getUid();
+          if (uid) openChatGPTWithUid(uid);
+          else toast.error('Could not get user ID to redirect.');
           return;
         }
         linkedinResult = await fetchLinkedinProfile(cleanHandle);
         if (linkedinResult) {
-          const docId = await getProfileDocId(cleanHandle, 'linkedin');
-          if (docId) {
-            redirectToChat(docId);
-          }
           return;
         }
       } else {
         // Try Twitter first
         twitterResult = await fetchTwitterProfile(cleanHandle);
         if (twitterResult) {
-          const docId = await getProfileDocId(cleanHandle, 'twitter');
-          if (docId) {
-            redirectToChat(docId);
-          }
           return;
         }
 
         // Then try LinkedIn
         linkedinResult = await fetchLinkedinProfile(cleanHandle);
         if (linkedinResult) {
-          const docId = await getProfileDocId(cleanHandle, 'linkedin');
-          if (docId) {
-            redirectToChat(docId);
-          }
           return;
         }
       }
@@ -328,7 +390,9 @@ export default function HomePage() {
       const existingId = await checkExistingProfile(pendingCleanHandle, platform);
       if (existingId) {
         toast.success('Profile already exists, redirecting...');
-        redirectToChat(existingId);
+        const uid = await getUid();
+        if (uid) openChatGPTWithUid(uid);
+        else toast.error('Could not get user ID to redirect.');
       } else {
         toast.error('No profiles found for the given handle.');
       }
@@ -462,7 +526,7 @@ export default function HomePage() {
     const cleanHandle = twitterHandle.replace('@', '');
     setIsCreating(true);
     try {
-      if (await checkExistingProfile(cleanHandle, 'twitter')) return true;
+      const profileExists = await checkExistingProfile(cleanHandle, 'twitter');
       const profileResponse = await fetch(`https://${process.env.NEXT_PUBLIC_RAPIDAPI_HOST}/screenname.php?screenname=${cleanHandle}`, {
         headers: {
           'x-rapidapi-key': process.env.NEXT_PUBLIC_RAPIDAPI_KEY!,
@@ -493,13 +557,19 @@ ${extraPromptRules}
 Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your personality. Responses should help the conversation go deeper. You have strong opinions, slightly controversial.`;
 
       const persona_id = ulid();
+      const uid = await getUid();
+      if (!uid) {
+        // getUid already shows a toast on failure
+        return false; // Cannot proceed without UID
+      }
+
       const docData = {
         'id': persona_id,
         'name': profileData.name,
         'username': cleanHandle.toLowerCase(),
         'description': profileData.desc || 'This is my personal AI clone',
         'image': formattedAvatarUrl,
-        'uid': auth.currentUser?.uid || null,
+        'uid': uid,
         'author': profileData.name,
         'email': auth.currentUser?.email || '',
         'approved': true,
@@ -519,18 +589,32 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
         }
       };
 
-      const docRef = await setDoc(doc(db, 'plugins_data', persona_id), docData);
-
-      // Store the created persona ID in localStorage only if user is not authenticated
-      if (!auth.currentUser) {
-        const createdPersonas = JSON.parse(localStorage.getItem('createdPersonas') || '[]');
-        createdPersonas.push(persona_id);
-        localStorage.setItem('createdPersonas', JSON.stringify(createdPersonas));
+      if (!profileExists) {
+        await setDoc(doc(db, 'plugins_data', persona_id), docData);
       }
+
+      // Enable default plugins in Redis
+      try {
+        const enableRes = await fetch('/api/enable-plugins', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uid: uid }) // Use real UID
+        });
+        if (!enableRes.ok) {
+          console.error('Failed to enable plugins via API:', await enableRes.text());
+          // Non-fatal, continue with fact storage
+        }
+      } catch (apiErr) {
+        console.error('Error calling /api/enable-plugins:', apiErr);
+         // Non-fatal
+      }
+
+      // Store facts into OMI then redirect
+      const memories = [profileData.desc || '', ...recentTweets];
+      storeFactsAndRedirect(uid, memories.filter(Boolean)); // Use real UID
 
       toast.success('Profile saved successfully!');
 
-      // router.push(`/chat?id=${persona_id}`);
       return true;
 
     } catch (error) {
@@ -546,7 +630,7 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
     const cleanHandle = linkedinHandle.replace('@', '');
     setIsCreating(true);
     try {
-      if (await checkExistingProfile(cleanHandle, 'linkedin')) return true;
+      const profileExists = await checkExistingProfile(cleanHandle, 'linkedin');
       const encodedHandle = encodeURIComponent(cleanHandle);
       const profileResponse = await fetch(`https://${process.env.NEXT_PUBLIC_LINKEDIN_API_HOST}/profile-data-connection-count-posts?username=${encodedHandle}`, {
         headers: {
@@ -600,6 +684,12 @@ ${extraPromptRules}
 
 Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your personality. Responses should help the conversation go deeper. You have strong opinions, slightly controversial.`;
       try {
+        const uid = await getUid();
+        if (!uid) {
+          // getUid already shows a toast on failure
+          return false; // Cannot proceed without UID
+        }
+
         const persona_id = ulid();
         const docData = {
           'id': persona_id,
@@ -607,7 +697,7 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
           'username': cleanHandle.toLowerCase().replace('@', ''),
           'description': enhancedDesc || 'This is my personal AI clone',
           'image': formattedAvatarUrl,
-          'uid': auth.currentUser?.uid || null,
+          'uid': uid,
           'author': fullName,
           'email': auth.currentUser?.email || '',
           'approved': true,
@@ -627,14 +717,29 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
           }
         };
 
-        const docRef = await setDoc(doc(db, 'plugins_data', persona_id), docData);
-
-        // Store the created persona ID in localStorage only if user is not authenticated
-        if (!auth.currentUser) {
-          const createdPersonas = JSON.parse(localStorage.getItem('createdPersonas') || '[]');
-          createdPersonas.push(persona_id);
-          localStorage.setItem('createdPersonas', JSON.stringify(createdPersonas));
+        if (!profileExists) {
+          await setDoc(doc(db, 'plugins_data', persona_id), docData);
         }
+
+        // Enable default plugins in Redis
+        try {
+          const enableRes = await fetch('/api/enable-plugins', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uid: uid }) // Use real UID
+          });
+          if (!enableRes.ok) {
+            console.error('Failed to enable plugins via API:', await enableRes.text());
+            // Non-fatal, continue with fact storage
+          }
+        } catch (apiErr) {
+          console.error('Error calling /api/enable-plugins:', apiErr);
+           // Non-fatal
+        }
+
+        // Store facts then redirect
+        const memories = [summary, recentPosts].filter(Boolean);
+        storeFactsAndRedirect(uid, memories); // Use real UID
 
         toast.success('Profile saved successfully!');
         return true;
@@ -649,6 +754,40 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
     } finally {
       setIsCreating(false);
     }
+  };
+
+  // Helper to store scraped memories in OMI and redirect to ChatGPT
+  const storeFactsAndRedirect = async (uid: string, memories: string[]) => {
+    if (!uid || memories.length === 0) {
+      console.warn('[storeFactsAndRedirect] No UID or no memories provided, redirecting anyway.');
+      openChatGPTWithUid(uid || 'NO_UID_PROVIDED'); // Redirect even if memories are empty, handle missing UID case.
+      return;
+    }
+    
+    // Initiate the background fact storage - DO NOT await this
+    try {
+      fetch('/api/store-facts', { // No await here!
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ uid, memories }),
+      }).then(response => {
+        if (!response.ok) {
+          console.error(`[storeFactsAndRedirect] Background /api/store-facts call failed with status: ${response.status}`);
+          // Optionally log response.text() here if needed, but don't block
+        }
+      }).catch(err => {
+         console.error('[storeFactsAndRedirect] Background fetch to /api/store-facts failed:', err);
+      });
+    } catch (err) {
+      // Catch synchronous errors initiating the fetch, though unlikely
+      console.error('[storeFactsAndRedirect] Error initiating background fact storage:', err);
+    }
+    
+    // Redirect immediately after initiating the background fetch
+    console.log('[storeFactsAndRedirect] Initiated background fact storage. Redirecting NOW...');
+    openChatGPTWithUid(uid);
   };
 
   return (
