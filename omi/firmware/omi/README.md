@@ -23,29 +23,37 @@ Note: Open "firmware" folder in your code editor. Don't open the root omi folder
 - Status: DEV
 
 - TODOs:
-  - [x] Testing new modules in the omi device
+  - [x] Testing new modules in the omi device (4/6)
     - [x] Mic
     - [x] BLE
     - [x] Buttons
     - [x] LEDs
     - [ ] Wi-Fi, partially
     - [ ] Motors
-  - [x] Add support for MCUBoot
+  - [x] Add support for MCUBoot (2/3)
     - [x] Add basic MCUBoot
-    - [ ] Test with the OMI app (iOS/Android)
+    - [x] Test with the OMI app (iOS/Android)
+    - [ ] Test with an on-battery device (without charger)
   - [x] Initialize project, basic main loop with tests and devkit firmware as libs
-  - [x] Streaming and transcribing
+  - [x] Streaming and transcribing (3/4)
     - [x] Mic
     - [x] BLE
     - [x] Encoding (OPUS) and transmitting
-    - [ ] Fix the audio byte loss issue — currently about 30%
-  - [ ] LEDs
+    - [ ] Fix the audio byte loss issue - currently about 30% https://github.com/BasedHardware/omi/pull/2217#issuecomment-2815077148 
+      - [x] android, fixed by increasing the BLE connnection interval (7ms) - but tbh i don't think this is a good solution since our devkit work fine without tunning the connection interval. 100 rps, 50 bytes each is not a big deal! https://github.com/BasedHardware/omi/pull/2248#issuecomment-2820156590 
+      - [ ] iOS, they doesn't allow increasing the connnection interval(CI). the feasible CI on iOS is about 15ms.
+  - [x] LEDs
+    - [x] Charging
+    - [x] BLE connected
+    - [x] BLE disconnected
   - [ ] Buttons
   - [ ] SD Card
     - [ ] Store files
     - [ ] Transfer via BLE
     - [ ] Transfer via Wi-Fi
   - [ ] Haptic
-  - [ ] Battery
-  - [ ] Charger
+  - [x] Battery (1/2)
+    - [x] Percentage feedbacks via BLE
+    - [ ] Fix in-accurated battery level, especially on charging
+  - [x] Charger
   - [ ] Update the OMI devkit firmware dependencies to be compatible with NCS 2.9.0
