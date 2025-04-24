@@ -1,13 +1,14 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/gpio.h>
-#include "led.h"
-#include "utils.h"
+#include "lib/dk2/led.h"
+#include "lib/dk2/utils.h"
 
 LOG_MODULE_REGISTER(led, CONFIG_LOG_DEFAULT_LEVEL);
 
-static const struct gpio_dt_spec led_red = GPIO_DT_SPEC_GET(DT_ALIAS(led0), gpios);
-static const struct gpio_dt_spec led_green = GPIO_DT_SPEC_GET(DT_ALIAS(led1), gpios);
-static const struct gpio_dt_spec led_blue = GPIO_DT_SPEC_GET(DT_ALIAS(led2), gpios);
+// Define LED pins using the same pattern as in evt/led.c
+const struct gpio_dt_spec led_red = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(led_red), gpios, {0});
+const struct gpio_dt_spec led_green = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(led_green), gpios, {0});
+const struct gpio_dt_spec led_blue = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(led_blue), gpios, {0});
 
 int led_start()
 {
