@@ -8,10 +8,12 @@
 #include "lib/dk2/transport.h"
 #include "lib/dk2/lib/battery/battery.h"
 #include "lib/dk2/led.h"
+#include "lib/dk2/button.h"
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
 bool is_connected = false;
 bool is_charging = false;
+bool is_off = false;
 
 // TODO: remove these metrics
 uint32_t gatt_notify_count = 0;
@@ -81,6 +83,14 @@ void set_led_state()
         set_led_green(false);
     }
     
+    // If device is off, turn off all status LEDs except charging indicator
+    if (is_off)
+    {
+        set_led_red(false);
+        set_led_blue(false);
+        return;
+    }
+    
     if (is_connected)
     {
         set_led_blue(true);
@@ -134,6 +144,18 @@ int main(void)
 	}
 	LOG_INF("Battery initialized");
 #endif
+
+	// Initialize button
+#ifdef CONFIG_OMI_ENABLE_BUTTON
+	ret = button_init();
+	if (ret)
+	{
+		LOG_ERR("Failed to initialize Button (err %d)", ret);
+		return ret;
+	}
+	LOG_INF("Button initialized");
+	activate_button_work();
+#endif
 	
 	// Indicate transport initialization
 	LOG_PRINTK("\n");
@@ -173,22 +195,12 @@ int main(void)
 	LOG_INF("Device initialized successfully\n");
 
 	while (1) {
-        LOG_INF("Running omi...\n");
-        
-        // Update connection status and buffer stats in logs
-        if (is_connected) {
-            LOG_INF("Transport connected");
-        } else {
-            LOG_INF("Transport disconnected");
-        }
-        
         // Log total mic buffer bytes processed, GATT notify count, broadcast count, and write_to_tx_queue count
         LOG_INF("Total mic buffer bytes: %u, GATT notify count: %u, Broadcast count: %u, TX queue writes: %u", 
                 total_mic_buffer_bytes, gatt_notify_count, broadcast_audio_count, write_to_tx_queue_count);
         
-        // Update LED state based on connection and charging status
+        // Update LED state based on connection, charging status, and power state
         set_led_state();
-        
         k_msleep(1000);
 	}
 

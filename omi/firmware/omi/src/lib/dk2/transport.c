@@ -549,6 +549,23 @@ void test_pusher(void)
         struct bt_conn *conn = current_connection;
         if (conn)
         {
+            conn = bt_conn_ref(conn);
+        }
+        bool valid = true;
+        if (current_mtu < MINIMAL_PACKET_SIZE)
+        {
+            valid = false;
+        }
+        else if (!conn)
+        {
+            valid = false;
+        }
+        else
+        {
+            valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
+        }
+        if (valid)
+        {
             // Expected 100 packages per seconds
             bool sent = push_to_gatt(conn);
             if (!sent)
@@ -682,14 +699,18 @@ int bt_off()
     }
 
     // Turn off other peripherals
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
     sd_off();
     k_mutex_unlock(&write_sdcard_mutex);
+#endif
+
     mic_off();
 
     // Ensure all Bluetooth resources are cleaned up
     is_connected = false;
     current_mtu = 0;
+
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     storage_is_on = false;
 #endif
