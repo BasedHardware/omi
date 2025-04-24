@@ -163,13 +163,6 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
     //  */
     // NRF_SAADC_S->TASKS_CALIBRATEOFFSET = 1;
 
-    // err = adc_sample(sample_buffer);
-    // if (err)
-    // {
-    //     return err;
-    // }
-
-    // *battery_millivolt = (sample_buffer[1] * 1.8) / 1024 * 3 * 1000;
     LOG_DBG("ADC raw value: %d ", adc_mv);
     LOG_DBG("Measured voltage: %f", battery_millivolt);
     gpio_pin_configure_dt(&bat_read_pin, GPIO_INPUT);
