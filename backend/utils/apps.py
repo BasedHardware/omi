@@ -12,7 +12,7 @@ from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
     add_tester_db, add_app_access_for_tester_db, remove_app_access_for_tester_db, remove_tester_db, \
     is_tester_db, can_tester_access_app_db, get_apps_for_tester_db, get_app_chat_message_sent_usage_count_db, \
     update_app_in_db, get_audio_apps_count, get_persona_by_uid_db, update_persona_in_db, \
-    get_omi_personas_by_uid_db, get_api_key_by_hash_db
+    get_omi_personas_by_uid_db, get_api_key_by_hash_db, get_popular_apps_db
 from database.auth import get_user_name
 from database.conversations import get_conversations
 from database.memories import get_memories, get_user_public_memories
@@ -68,6 +68,34 @@ def weighted_rating(plugin):
     R = plugin.rating_avg or 0
     v = plugin.rating_count or 0
     return (v / (v + m) * R) + (m / (v + m) * C)
+
+
+def get_popular_apps() -> List[App]:
+    popular_apps = []
+    if cached_apps := get_generic_cache('get_popular_apps_data'):
+        print('get_popular_apps from cache')
+        popular_apps = cached_apps
+    else:
+        print('get_popular_apps from db')
+        popular_apps = get_popular_apps_db()
+        set_generic_cache('get_popular_apps_data', popular_apps, 60 * 30)  # 30 minutes cached
+
+    app_ids = [app['id'] for app in popular_apps]
+    plugins_install = get_plugins_installs_count(app_ids)
+    plugins_review = get_plugins_reviews(app_ids)
+
+    apps = []
+    for app in popular_apps:
+        app_dict = app
+        app_dict['installs'] = plugins_install.get(app['id'], 0)
+        reviews = plugins_review.get(app['id'], {})
+        sorted_reviews = reviews.values()
+        rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
+        app_dict['rating_avg'] = rating_avg
+        app_dict['rating_count'] = len(sorted_reviews)
+        apps.append(App(**app_dict))
+    apps = sorted(apps, key=lambda x: x.installs, reverse=True)
+    return apps
 
 
 def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
