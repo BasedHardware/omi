@@ -105,6 +105,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   void _initiateApps() {
     context.read<AppProvider>().getApps();
+    context.read<AppProvider>().getPopularApps();
   }
 
   @override
@@ -157,7 +158,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   @override
   void initState() {
     SharedPreferencesUtil().onboardingCompleted = true;
-    
+
     // Navigate uri
     Uri? navigateToUri;
     var pageAlias = "home";
