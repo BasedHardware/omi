@@ -35,6 +35,29 @@ Future<List<App>> retrieveApps() async {
   return SharedPreferencesUtil().appsList;
 }
 
+Future<List<App>> retrievePopularApps() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/apps/popular',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  if (response != null && response.statusCode == 200 && response.body.isNotEmpty) {
+    try {
+      log('apps: ${response.body}');
+      var apps = App.fromJsonList(jsonDecode(response.body));
+      apps = apps.where((p) => !p.deleted).toList();
+      SharedPreferencesUtil().appsList = apps;
+      return apps;
+    } catch (e, stackTrace) {
+      debugPrint(e.toString());
+      CrashReporting.reportHandledCrash(e, stackTrace);
+      return SharedPreferencesUtil().appsList;
+    }
+  }
+  return SharedPreferencesUtil().appsList;
+}
+
 Future<bool> enableAppServer(String appId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/apps/enable?app_id=$appId',

@@ -265,12 +265,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
               ? SliverToBoxAdapter(
                   child: AppSectionCard(
                     title: 'Popular Apps',
-                    apps: context
-                        .read<AppProvider>()
-                        .apps
-                        .where((p) => (p.installs > 50 && (p.ratingAvg ?? 0.0) > 4.0))
-                        .take(6)
-                        .toList(),
+                    apps: context.read<AppProvider>().popularApps,
                   ),
                 )
               : const SliverToBoxAdapter(child: SizedBox.shrink()),

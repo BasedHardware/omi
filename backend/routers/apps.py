@@ -6,13 +6,13 @@ from typing import List
 from pydantic import ValidationError
 import requests
 from ulid import ULID
-from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header
+from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header, Query
 
 from database.apps import change_app_approval_status, get_unapproved_public_apps_db, \
     add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db, \
     get_personas_by_username_db, get_persona_by_id_db, delete_persona_db, get_persona_by_twitter_handle_db, \
     get_persona_by_username_db, migrate_app_owner_id_db, get_user_persona_by_uid, get_omi_persona_apps_by_uid_db, \
-    create_api_key_db, list_api_keys_db, delete_api_key_db
+    create_api_key_db, list_api_keys_db, delete_api_key_db, set_app_popular_db
 from database.auth import get_user_from_uid
 from database.notifications import get_token_only
 from database.redis_db import delete_generic_cache, get_specific_user_review, increase_app_installs_count, \
@@ -21,7 +21,7 @@ from utils.apps import get_available_apps, get_available_app_by_id, get_approved
     get_available_app_by_id_with_reviews, set_app_review, get_app_reviews, add_tester, is_tester, \
     add_app_access_for_tester, remove_app_access_for_tester, upsert_app_payment_link, get_is_user_paid_app, \
     is_permit_payment_plan_get, generate_persona_prompt, generate_persona_desc, get_persona_by_uid, \
-    increment_username, generate_api_key
+    increment_username, generate_api_key, get_popular_apps
 
 from database.memories import migrate_memories
 
@@ -49,6 +49,11 @@ def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: boo
 @router.get('/v1/approved-apps', tags=['v1'], response_model=List[App])
 def get_approved_apps(include_reviews: bool = False):
     return get_approved_available_apps(include_reviews=include_reviews)
+
+
+@router.get('/v1/apps/popular', tags=['v1'], response_model=List[App])
+def get_popular_apps_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+    return get_popular_apps()
 
 
 @router.post('/v1/apps', tags=['v1'])
@@ -227,6 +232,7 @@ def get_persona_details(uid: str = Depends(auth.get_current_user_uid)):
             raise HTTPException(status_code=403, detail='You are not authorized to view this Persona')
 
     return app
+
 
 @router.post('/v1/user/persona', tags=['v1'])
 async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_uid)):
@@ -512,26 +518,26 @@ def get_plugin_capabilities():
             {'title': 'Transcript Processed', 'id': 'transcript_processed'},
         ], 'actions': [
             {
-                'title': 'Create conversations', 
-                'id': 'create_conversation', 
+                'title': 'Create conversations',
+                'id': 'create_conversation',
                 'doc_url': 'https://docs.omi.me/docs/developer/apps/Import',
                 'description': 'Extend user conversations by making a POST request to the OMI System.'
             },
             {
-                'title': 'Create memories', 
-                'id': 'create_facts', 
+                'title': 'Create memories',
+                'id': 'create_facts',
                 'doc_url': 'https://docs.omi.me/docs/developer/apps/Import',
                 'description': 'Create new memories for the user through the OMI System.'
             },
             {
-                'title': 'Read conversations', 
-                'id': 'read_conversations', 
+                'title': 'Read conversations',
+                'id': 'read_conversations',
                 'doc_url': 'https://docs.omi.me/docs/developer/apps/Import',
                 'description': 'Access and read all user conversations through the OMI System. This gives the app access to all conversation history.'
             },
             {
-                'title': 'Read memories', 
-                'id': 'read_memories', 
+                'title': 'Read memories',
+                'id': 'read_memories',
                 'doc_url': 'https://docs.omi.me/docs/developer/apps/Import',
                 'description': 'Access and read all user memories through the OMI System. This gives the app access to all stored memories.'
             }
@@ -667,6 +673,7 @@ async def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid
 
     return {"status": "ok", "message": "Migration started"}
 
+
 async def update_omi_persona_connected_accounts(uid: str):
     try:
         # Get all personas owned by the user
@@ -789,6 +796,16 @@ def get_unapproved_public_apps(secret_key: str = Header(...)):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     apps = get_unapproved_public_apps_db()
     return apps
+
+
+@router.patch('/v1/apps/{app_id}/popular', tags=['v1'])
+def set_app_popular(app_id: str, value: bool = Query(...), secret_key: str = Header(...)):
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    set_app_popular_db(app_id, value)
+    delete_app_cache_by_id(app_id)
+    delete_generic_cache('get_popular_apps_data')
+    return {'status': 'ok'}
 
 
 @router.post('/v1/apps/{app_id}/approve', tags=['v1'])
