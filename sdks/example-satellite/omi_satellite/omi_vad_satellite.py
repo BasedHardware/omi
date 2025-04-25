@@ -1,40 +1,35 @@
 #!/usr/bin/env python3
 # Library file for WebSocket VAD Satellite
+import argparse
 import asyncio
 import logging
 import math
-import argparse
 from pathlib import Path
-from typing import Optional, Callable, Union
+from typing import Callable, Optional, Union
 
 from pyring_buffer import RingBuffer
-
-from wyoming.audio import AudioChunk, AudioStart, AudioStop
 from wyoming.asr import Transcript
+from wyoming.audio import AudioChunk, AudioStart, AudioStop
 from wyoming.error import Error
 from wyoming.event import Event, async_write_event
-from wyoming.info import Attribution, Info, Satellite
+from wyoming.info import Attribution, Describe, Info, Satellite
 from wyoming.ping import Ping, Pong
-from wyoming.server import AsyncEventHandler
 from wyoming.satellite import (
-    RunSatellite,
     PauseSatellite,
+    RunSatellite,
     SatelliteConnected,
     SatelliteDisconnected,
     StreamingStarted,
     StreamingStopped,
 )
-from wyoming.tts import Synthesize
+from wyoming.server import AsyncEventHandler
 from wyoming.timer import TimerCancelled, TimerFinished, TimerStarted, TimerUpdated
-
+from wyoming.tts import Synthesize
 from wyoming_satellite import SatelliteBase, __version__
-from wyoming_satellite.satellite import State, SoundEvent
-from wyoming_satellite.settings import (
-    SatelliteSettings,
-)
+from wyoming_satellite.satellite import SoundEvent, State
+from wyoming_satellite.settings import SatelliteSettings
+from wyoming_satellite.utils import DebugAudioWriter, multiply_volume, run_event_command
 from wyoming_satellite.vad import SileroVad
-from wyoming_satellite.utils import DebugAudioWriter, run_event_command, multiply_volume
-
 
 _LOGGER = logging.getLogger()
 
@@ -167,44 +162,45 @@ class WebSocketVadSatellite(SatelliteBase):
         _LOGGER.debug("Disconnected from internal services")
 
     async def stop(self) -> None:
-         """Initiates the satellite stop sequence."""
-         if self.state != State.STOPPED:
-             self.state = State.STOPPING
+        """Initiates the satellite stop sequence."""
+        if self.state != State.STOPPED:
+            self.state = State.STOPPING
 
     async def stopped(self) -> None:
-         """Called when satellite has stopped."""
-         _LOGGER.info("Satellite stopped.")
+        """Called when satellite has stopped."""
+        _LOGGER.info("Satellite stopped.")
 
     async def started(self) -> None:
-         """Called when satellite has started."""
-         _LOGGER.info("Satellite started and ready.")
+        """Called when satellite has started."""
+        _LOGGER.info("Satellite started and ready.")
 
     # --- Server Connection Handling (from SatelliteBase) --- 
     async def set_server(self, server_id: str, writer: asyncio.StreamWriter) -> None:
-         self.server_id = server_id
-         self._writer = writer
-         _LOGGER.debug("Server set: %s", server_id)
-         await self.trigger_server_connected()
+        self.server_id = server_id
+        self._writer = writer
+        _LOGGER.debug("Server set: %s", server_id)
+        await self.trigger_server_connected()
 
     async def clear_server(self) -> None:
-         self.server_id = None
-         self._writer = None
-         self._disable_ping()
-         _LOGGER.debug("Server connection cleared")
-         await self.trigger_server_disonnected()
+        self.server_id = None
+        self._writer = None
+        self._disable_ping()
+        _LOGGER.debug("Server connection cleared")
+        await self.trigger_server_disonnected()
 
     async def event_to_server(self, event: Event) -> None:
-         if self._writer is None:
-             return
-         try:
-             await asyncio.sleep(0) # Yield to allow other tasks
-             await async_write_event(event, self._writer)
-         except (ConnectionResetError, BrokenPipeError):
-             _LOGGER.warning("Server disconnected unexpectedly")
-             await self.clear_server()
-         except Exception:
-             _LOGGER.exception("Unexpected error sending event to server")
-             await self.clear_server()
+        _LOGGER.debug(f"Self writer: {self._writer}")
+        if self._writer is None:
+            return
+        try:
+            await asyncio.sleep(0) # Yield to allow other tasks
+            await async_write_event(event, self._writer)
+        except (ConnectionResetError, BrokenPipeError):
+            _LOGGER.warning("Server disconnected unexpectedly")
+            await self.clear_server()
+        except Exception:
+            _LOGGER.exception("Unexpected error sending event to server")
+            await self.clear_server()
 
     # --- Ping/Pong Handling (from SatelliteBase) --- 
     def _enable_ping(self) -> None:
@@ -312,7 +308,7 @@ class WebSocketVadSatellite(SatelliteBase):
                      #     await snd_client.disconnect()
                      #     snd_client = None 
                      if snd_event_wrapper.is_tts:
-                        from wyoming.snd import Played # Import here
+                        from wyoming.snd import Played  # Import here
                         await self.event_to_server(Played().event())
                         await self.trigger_played()
 
@@ -387,8 +383,9 @@ class WebSocketVadSatellite(SatelliteBase):
         if (not wav_path) or not (self.settings.snd and self.settings.snd.enabled):
             return
         
-        from pathlib import Path
         import wave
+        from pathlib import Path
+
         from wyoming_satellite.utils import wav_to_events
 
         # Ensure wav_path is a Path object and exists
@@ -532,7 +529,7 @@ class WebSocketVadSatellite(SatelliteBase):
 
     # --- Pipeline Control (Adapted from SatelliteBase) --- 
     async def _send_run_pipeline(self, pipeline_name: Optional[str] = None) -> None:
-        from wyoming.pipeline import PipelineStage, RunPipeline # Import here
+        from wyoming.pipeline import PipelineStage, RunPipeline  # Import here
 
         # VAD satellite always starts at ASR stage
         start_stage = PipelineStage.ASR
@@ -707,28 +704,37 @@ class WebSocketVadSatellite(SatelliteBase):
 class SatelliteHandler(AsyncEventHandler):
     """Event handler connecting WebSocketVadSatellite to the Wyoming server."""
 
-    # Store cli_args to construct Info object
-    def __init__(self, satellite: WebSocketVadSatellite, cli_args: argparse.Namespace, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(self, satellite: WebSocketVadSatellite, cli_args: argparse.Namespace, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        """Initialize handler and associate with the satellite."""
+        super().__init__(reader, writer) # Pass reader/writer to base
         self.satellite = satellite
         self.cli_args = cli_args
 
-    async def handle_event(self, event, client_id, writer) -> bool:
+        # Get client ID from writer and set server immediately
+        peername = writer.get_extra_info('peername')
+        client_id = str(peername) # Use peername as a unique ID
+        _LOGGER.debug("Server connected: %s", client_id)
+        # Use asyncio.create_task because set_server is async
+        asyncio.create_task(self.satellite.set_server(client_id, writer))
+
+    async def handle_event(self, event) -> bool:
         """Handle events from the server."""
-        if self.satellite.server_id is None:
-            await self.satellite.set_server(client_id, writer)
+        # The writer should be set by __init__ calling set_server
+        _LOGGER.debug(event)
+        if Describe.is_type(event.type):
+            info = await self.get_info()
+            if info is not None:
+                # Send Info event back to the requesting server
+                await self.satellite.event_to_server(info.event())
 
         # Let the satellite instance process the event
         await self.satellite.event_from_server(event)
 
-        # Don't forward server events back to server
-        return False
+        # Return True to keep the connection alive
+        return True
 
     async def get_info(self) -> Optional[Info]:
         """Return Info constructed from CLI args."""
-        # Get base satellite info from settings if available
-        # This part is tricky as SatelliteBase.__init__ wasn't called
-        # Let's manually create the satellite part of Info
         info = Info(
             satellite=Satellite(
                 name=self.cli_args.name,
@@ -738,13 +744,25 @@ class SatelliteHandler(AsyncEventHandler):
                 installed=True,
                 version=__version__,
             )
-            # We might want to add snd/event info here if possible
-            # snd=...?
-            # events=...?
+            # snd=?
+            # events=?
         )
         return info
 
     async def disconnected(self) -> None:
         """Client disconnected."""
-        _LOGGER.debug("Server disconnected")
+        # The base class AsyncEventHandler doesn't have an async disconnected
+        # This might need adjustment based on how disconnect is handled upstream
+        # For now, assume clear_server is needed when the handler's run loop exits
+        _LOGGER.debug("Server disconnected handler called")
         await self.satellite.clear_server()
+
+    async def run(self) -> None:
+        """Receive events until stopped or handle_event returns false."""
+        # Override run to ensure clear_server is called on disconnect/error
+        try:
+            await super().run()
+        finally:
+            # Ensure server state is cleared when connection ends
+            _LOGGER.debug("Handler run loop finished, clearing server.")
+            await self.satellite.clear_server()

@@ -8,22 +8,27 @@ from typing import Optional
 
 # WebSocket and Opus decoding
 import websockets
-from opuslib import Decoder as OpusDecoder
-
-from wyoming.server import AsyncServer
 
 # Local imports for satellite and settings
-from .omi_vad_satellite import WebSocketVadSatellite, SatelliteHandler, OPUS_SAMPLE_RATE, OPUS_CHANNELS, OPUS_FRAME_SIZE
+from omi_satellite.omi_vad_satellite import (
+    OPUS_CHANNELS,
+    OPUS_FRAME_SIZE,
+    OPUS_SAMPLE_RATE,
+    SatelliteHandler,
+    WebSocketVadSatellite,
+)
+from opuslib import Decoder as OpusDecoder
+from wyoming.server import AsyncServer
 from wyoming_satellite.settings import (
-    SatelliteSettings,
-    MicSettings,
-    VadSettings,
-    SndSettings,
     EventSettings,
+    MicSettings,
+    SatelliteSettings,
+    SndSettings,
     TimerSettings,
+    VadSettings,
     WakeSettings,
 )
-from wyoming_satellite.utils import split_command, run_event_command
+from wyoming_satellite.utils import run_event_command, split_command
 
 _LOGGER = logging.getLogger(__name__) # Use module name
 
@@ -193,14 +198,14 @@ async def main() -> None:
 
     # Opus dependency check
     try:
-        import opuslib # noqa: F401
+        import opuslib  # noqa: F401
     except ImportError:
         _LOGGER.exception("python-opus is not installed (pip install python-opus)")
         sys.exit(1)
 
     # WebSocket dependency check
     try:
-        import websockets # noqa: F401
+        import websockets  # noqa: F401
     except ImportError:
         _LOGGER.exception("websockets is not installed (pip install websockets)")
         sys.exit(1)
@@ -305,7 +310,7 @@ async def main() -> None:
     )
 
     _LOGGER.info(f"WebSocket audio server listening on ws://{args.websocket_host}:{args.websocket_port}")
-    _LOGGER.info(f"Connecting to Wyoming server at {args.server_uri}")
+    _LOGGER.info(f"Waiting for Wyoming server to connect to {args.server_uri}")
 
     # --- Wait for Tasks --- 
     try:

@@ -1,5 +1,5 @@
 [project]
-name = "example-satellite"
+name = "omi-satellite"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -10,6 +10,10 @@ dependencies = [
     "websockets>=15.0.1",
     "wyoming-satellite",
 ]
+
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [tool.uv.sources]
 wyoming-satellite = { git = "https://github.com/AnkushMalaker/wyoming-satellite.git" }
