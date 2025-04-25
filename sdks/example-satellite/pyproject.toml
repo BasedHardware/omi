@@ -1,0 +1,15 @@
+[project]
+name = "example-satellite"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "opuslib>=3.0.1",
+    "pysilero-vad>=2.1.0",
+    "websockets>=15.0.1",
+    "wyoming-satellite",
+]
+
+[tool.uv.sources]
+wyoming-satellite = { git = "https://github.com/AnkushMalaker/wyoming-satellite.git" }
