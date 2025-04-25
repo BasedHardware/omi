@@ -10,6 +10,7 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 
 class AppProvider extends BaseProvider {
   List<App> apps = [];
+  List<App> popularApps = [];
 
   bool filterChat = true;
   bool filterMemories = true;
@@ -232,6 +233,13 @@ class AppProvider extends BaseProvider {
     apps = await retrieveApps();
     appLoading = List.filled(apps.length, false, growable: true);
     filterApps();
+    setIsLoading(false);
+  }
+
+  Future getPopularApps() async {
+    setIsLoading(true);
+    popularApps = await retrievePopularApps();
+    print("Popular Apps: $popularApps");
     setIsLoading(false);
   }
 
