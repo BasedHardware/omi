@@ -39,14 +39,18 @@ Note: Open "firmware" folder in your code editor. Don't open the root omi folder
     - [x] Mic
     - [x] BLE
     - [x] Encoding (OPUS) and transmitting
-    - [ ] Fix the audio byte loss issue - currently about 30% https://github.com/BasedHardware/omi/pull/2217#issuecomment-2815077148 
+    - [ ] 💔 Fix the audio byte loss issue - currently about 30% https://github.com/BasedHardware/omi/pull/2217#issuecomment-2815077148 
       - [x] android, fixed by increasing the BLE connnection interval (7ms) - but tbh i don't think this is a good solution since our devkit work fine without tunning the connection interval. 100 rps, 50 bytes each is not a big deal! https://github.com/BasedHardware/omi/pull/2248#issuecomment-2820156590 
       - [ ] iOS, they doesn't allow increasing the connnection interval(CI). the feasible CI on iOS is about 15ms.
-  - [x] LEDs
+  - [x] LEDs (3/4)
     - [x] Charging
     - [x] BLE connected
     - [x] BLE disconnected
-  - [ ] Buttons
+    - [ ] Fix the issue: The led during charging + device off ~ green only, does not provide correct feedback. charging still works.
+  - [x] Buttons (2/3)
+    - [x] Turn the device on/off(entering the deepsleep mode)
+    - [x] Long press to chat with omi
+    - [ ] Test the deepsleep mode's battery draining.
   - [ ] SD Card
     - [ ] Store files
     - [ ] Transfer via BLE
