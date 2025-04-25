@@ -546,6 +546,7 @@ void test_pusher(void)
     while (1)
     {
         k_sleep(K_MSEC(1));
+        uint32_t runs_count = 0;
         struct bt_conn *conn = current_connection;
         if (conn)
         {
@@ -560,7 +561,7 @@ void test_pusher(void)
         {
             valid = false;
         }
-        else
+        else if (runs_count % 100 == 0)
         {
             valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
         }
@@ -573,6 +574,11 @@ void test_pusher(void)
                 // k_sleep(K_MSEC(50));
             }
         }
+        if (conn)
+        {
+            bt_conn_unref(conn);
+        }
+        runs_count++;
         k_yield();
     }
 }
