@@ -239,7 +239,6 @@ class AppProvider extends BaseProvider {
   Future getPopularApps() async {
     setIsLoading(true);
     popularApps = await retrievePopularApps();
-    print("Popular Apps: $popularApps");
     setIsLoading(false);
   }
 
