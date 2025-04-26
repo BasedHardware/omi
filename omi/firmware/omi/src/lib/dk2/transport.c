@@ -754,7 +754,7 @@ int transport_start()
     }
     LOG_INF("Transport bluetooth initialized");
     //  Enable accelerometer
-#ifdef CONFIG_ACCELEROMETER
+#ifdef CONFIG_OMI_ENABLE_ACCELEROMETER
     err = accel_start();
     if (!err)
     {
