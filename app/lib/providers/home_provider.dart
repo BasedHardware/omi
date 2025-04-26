@@ -139,7 +139,7 @@ class HomeProvider extends ChangeNotifier {
   }
 
   void showLanguageDialogIfNeeded(BuildContext context) {
-    if (!hasSetPrimaryLanguage) {
+    if (!hasSetPrimaryLanguage && SharedPreferencesUtil().onboardingCompleted) {
       LanguageSelectionDialog.show(context, isRequired: true);
     }
   }
