@@ -34,7 +34,7 @@ static struct bt_gatt_attr button_service_attr[] = {
 
 static struct bt_gatt_service button_service = BT_GATT_SERVICE(button_service_attr);
 
-static void button_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) 
+static void button_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value)
 {
     if (value == BT_GATT_CCC_NOTIFY)
     {
@@ -89,62 +89,62 @@ static uint32_t inc_count_0 = 0;
 static int final_button_state[2] = {0,0};
 const static int threshold = 10;
 
-static void reset_count() 
+static void reset_count()
 {
     inc_count_0 = 0;
     inc_count_1 = 0;
 }
-static inline void notify_press() 
+static inline void notify_press()
 {
     final_button_state[0] = BUTTON_PRESS;
     LOG_INF("Button pressed");
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL)
-    { 
+    {
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
     }
 }
 
-static inline void notify_unpress() 
+static inline void notify_unpress()
 {
-    final_button_state[0] = BUTTON_RELEASE; 
+    final_button_state[0] = BUTTON_RELEASE;
     LOG_INF("Button released");
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL)
-    { 
+    {
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
     }
 }
 
-static inline void notify_tap() 
+static inline void notify_tap()
 {
     final_button_state[0] = SINGLE_TAP;
     LOG_INF("Button single tap");
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL)
-    { 
+    {
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
     }
 }
 
-static inline void notify_double_tap() 
+static inline void notify_double_tap()
 {
     final_button_state[0] = DOUBLE_TAP; //button press
     LOG_INF("Button double tap");
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL)
-    { 
+    {
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
     }
 }
 
-static inline void notify_long_tap() 
+static inline void notify_long_tap()
 {
     final_button_state[0] = LONG_TAP; //button press
     LOG_INF("Button long tap");
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL)
-    { 
+    {
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
     }
 }
@@ -172,10 +172,10 @@ static bool btn_is_pressed;
 
 static u_int8_t btn_last_event = BUTTON_EVENT_NONE;
 
-void check_button_level(struct k_work *work_item) 
+void check_button_level(struct k_work *work_item)
 {
     current_time = current_time + 1;
-    
+
     u_int8_t btn_state = was_pressed ? BUTTON_PRESSED : BUTTON_RELEASED;
 
     ButtonEvent event = BUTTON_EVENT_NONE;
@@ -198,7 +198,7 @@ void check_button_level(struct k_work *work_item)
                 btn_last_tap_time = current_time;
             }
         }
-    } 
+    }
 
     // Check for single tap
     if (btn_state == BUTTON_RELEASED && !btn_is_pressed) {
@@ -267,23 +267,23 @@ void check_button_level(struct k_work *work_item)
     return 0;
 }
 
-static ssize_t button_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset) 
+static ssize_t button_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
 {
     LOG_INF("button_data_read_characteristic");
     LOG_PRINTK("was_pressed: %d\n", final_button_state[0]);
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &final_button_state, sizeof(final_button_state));
 }
 
-int button_init() 
+int button_init()
 {
     int ret;
-    
+
     // Initialize the buttons device from evt
     if (!device_is_ready(buttons)) {
         LOG_ERR("Buttons device not ready");
         return -ENODEV;
     }
-    
+
     // Enable runtime power management for the buttons device
     ret = pm_device_runtime_get(buttons);
     if (ret < 0) {
@@ -294,17 +294,17 @@ int button_init()
     return 0;
 }
 
-void activate_button_work() 
+void activate_button_work()
 {
      k_work_schedule(&button_work, K_MSEC(BUTTON_CHECK_INTERVAL));
 }
 
-void register_button_service() 
+void register_button_service()
 {
     bt_gatt_service_register(&button_service);
 }
 
-FSM_STATE_T get_current_button_state() 
+FSM_STATE_T get_current_button_state()
 {
     return current_button_state;
 }
@@ -312,10 +312,10 @@ FSM_STATE_T get_current_button_state()
 void turnoff_all()
 {
     int rc;
-    
+
     // Always turn off microphone
     mic_off();
-    
+
     // Turn off SD card if offline storage is enabled
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     sd_off();
@@ -342,20 +342,20 @@ void turnoff_all()
     set_led_blue(false);
     set_led_red(false);
     set_led_green(false);
-    
+
     // Put the buttons device to sleep if button is enabled
 #ifdef CONFIG_OMI_ENABLE_BUTTON
     pm_device_runtime_put(buttons);
 #endif
-    
+
     // Disable USB if enabled
 #ifdef CONFIG_OMI_ENABLE_USB
     NRF_USBD->INTENCLR = 0xFFFFFFFF;
 #endif
-    
+
     // Log system power off
     LOG_INF("System powering off");
-    
+
     // Configure usr_btn as input with interrupt to allow wake-up
     rc = gpio_pin_configure_dt(&usr_btn, GPIO_INPUT);
     if (rc < 0) {
@@ -368,9 +368,9 @@ void turnoff_all()
         LOG_ERR("Could not configure usr_btn GPIO interrupt (%d)", rc);
         return;
     }
-    
+
     LOG_INF("Entering system off; press usr_btn to restart");
-    
+
     // Power off the system using sys_poweroff
     sys_poweroff();
 }

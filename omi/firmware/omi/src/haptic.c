@@ -1,17 +1,16 @@
 #include <zephyr/kernel.h>
+#include <zephyr/shell/shell.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/bluetooth/uuid.h>
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/logging/log.h>
 
-#include "lib/dk2/haptic.h"
-
-LOG_MODULE_REGISTER(haptic, CONFIG_LOG_DEFAULT_LEVEL);
+static const struct gpio_dt_spec motor =
+   GPIO_DT_SPEC_GET_OR(DT_NODELABEL(motor_pin), gpios, {0});
 
 #define MAX_HAPTIC_DURATION 5000
 
-static const struct gpio_dt_spec haptic_pin =
-    GPIO_DT_SPEC_GET_OR(DT_NODELABEL(motor_pin), gpios, {0});
+LOG_MODULE_REGISTER(haptic, CONFIG_LOG_DEFAULT_LEVEL);
 
 // Haptic Off Work Item
 static struct k_work_delayable haptic_off_work;
@@ -76,24 +75,37 @@ static ssize_t haptic_write_handler(struct bt_conn *conn, const struct bt_gatt_a
 
 // Public Functions
 
-int haptic_init(void)
+int init_haptic_pin()
 {
     if (!gpio_is_ready_dt(&haptic_pin)) {
         LOG_ERR("Haptic GPIO device %s is not ready", haptic_pin.port->name);
         return -ENODEV;
     }
+    
+	if (gpio_pin_configure_dt(&motor, GPIO_OUTPUT_INACTIVE) < 0)
+    {
+		LOG_ERR("Error setting up Haptic Pin");
+        return -1;
+	}
+
+    gpio_pin_set_dt(&motor, 0);
 
     // Initialize the delayable work item
     k_work_init_delayable(&haptic_off_work, haptic_off_work_handler);
 
-    LOG_INF("Haptic system initialized");
     return 0;
 }
 
 void play_haptic_milli(uint32_t duration)
 {
-    if (!gpio_is_ready_dt(&haptic_pin)) {
+if (!gpio_is_ready_dt(&haptic_pin)) {
         LOG_ERR("Haptic GPIO device not ready");
+        return;
+    }
+    
+    if (duration > MAX_HAPTIC_DURATION)
+    {
+        LOG_ERR("Duration is too long");
         return;
     }
 
@@ -140,4 +152,3 @@ void haptic_off()
 {
     gpio_pin_set_dt(&haptic_pin, 0);
 }
-

@@ -9,7 +9,9 @@
 #include "lib/dk2/lib/battery/battery.h"
 #include "lib/dk2/led.h"
 #include "lib/dk2/button.h"
-#include "lib/dk2/haptic.h"
+#ifdef CONFIG_OMI_ENABLE_HAPTIC
+#include "haptic.h"
+#endif
 #include "spi_flash.h"
 #include "sd_card.h"
 
@@ -133,9 +135,9 @@ int main(void)
 {
     int ret;
 
-    printk("Starting omi ...\n");
+	printk("Starting omi ...\n");
 
-    // Suspend unused modules
+	// Suspend unused modules
     LOG_PRINTK("\n");
     LOG_INF("Suspending unused modules...\n");
     ret = suspend_unused_modules();
@@ -144,36 +146,37 @@ int main(void)
         LOG_ERR("Failed to suspend unused modules (err %d)", ret);
         ret = 0;
     }
+	
+	// Initialize LEDs
+	LOG_PRINTK("\n");
+	LOG_INF("Initializing LEDs...\n");
 
-    // Initialize LEDs
-    LOG_INF("Initializing LEDs...\n");
+	ret = led_start();
+	if (ret)
+	{
+		LOG_ERR("Failed to initialize LEDs (err %d)", ret);
+		return ret;
+	}
 
-    ret = led_start();
-    if (ret)
-    {
-        LOG_ERR("Failed to initialize LEDs (err %d)", ret);
-        return ret;
-    }
+	// Run the boot LED sequence
+	boot_led_sequence();
 
-    // Run the boot LED sequence
-    boot_led_sequence();
-
-    // Initialize battery
+	// Initialize battery
 #ifdef CONFIG_OMI_ENABLE_BATTERY
-    ret = battery_init();
-    if (ret)
-    {
-        LOG_ERR("Battery init failed (err %d)", ret);
-        return ret;
-    }
+	ret = battery_init();
+	if (ret)
+	{
+		LOG_ERR("Battery init failed (err %d)", ret);
+		return ret;
+	}
 
-    ret = battery_charge_start();
-    if (ret)
-    {
-        LOG_ERR("Battery failed to start (err %d)", ret);
-        return ret;
-    }
-    LOG_INF("Battery initialized");
+	ret = battery_charge_start();
+	if (ret)
+	{
+		LOG_ERR("Battery failed to start (err %d)", ret);
+		return ret;
+	}
+	LOG_INF("Battery initialized");
 #endif
 
     // Initialize button
@@ -188,52 +191,58 @@ int main(void)
     activate_button_work();
 #endif
 
-    // Initialize Haptic driver
+    // Enable haptic
 #ifdef CONFIG_OMI_ENABLE_HAPTIC
-    ret = haptic_init();
+    LOG_INF("Initializing haptic...\n");
+
+    ret = init_haptic_pin();
     if (ret)
     {
         LOG_ERR("Failed to initialize Haptic driver (err %d)", ret);
-    } else {
-        LOG_INF("Haptic driver initialized");
-        play_haptic_milli(100);
+        return ret;
     }
+    LOG_INF("Haptic driver initialized");
+    play_haptic_milli(100);
 #endif
 
     // Indicate transport initialization
     LOG_PRINTK("\n");
     LOG_INF("Initializing transport...\n");
 
-    // Start transport
-    int transportErr;
-    transportErr = transport_start();
-    if (transportErr)
-    {
-        LOG_ERR("Failed to start transport (err %d)", transportErr);
-        return transportErr;
-    }
+	// Indicate transport initialization
+	LOG_PRINTK("\n");
+	LOG_INF("Initializing transport...\n");
 
-    // Initialize codec
-    LOG_INF("Initializing codec...\n");
+	// Start transport
+	int transportErr;
+	transportErr = transport_start();
+	if (transportErr)
+	{
+		LOG_ERR("Failed to start transport (err %d)", transportErr);
+		return transportErr;
+	}
 
-    // Set codec callback
-    set_codec_callback(codec_handler);
-    ret = codec_start();
-    if (ret)
-    {
-        LOG_ERR("Failed to start codec: %d", ret);
-        return ret;
-    }
+	// Initialize codec
+	LOG_INF("Initializing codec...\n");
 
-    // Initialize microphone
-    LOG_INF("Initializing microphone...\n");
-    set_mic_callback(mic_handler);
-    ret = mic_start();
-    if (ret)
-    {
-        LOG_ERR("Failed to start microphone: %d", ret);
-        return ret;
-    }
+	// Set codec callback
+	set_codec_callback(codec_handler);
+	ret = codec_start();
+	if (ret)
+	{
+		LOG_ERR("Failed to start codec: %d", ret);
+		return ret;
+	}
+
+	// Initialize microphone
+	LOG_INF("Initializing microphone...\n");
+	set_mic_callback(mic_handler);
+	ret = mic_start();
+	if (ret)
+	{
+		LOG_ERR("Failed to start microphone: %d", ret);
+		return ret;
+	}
 
     LOG_INF("Device initialized successfully\n");
 
