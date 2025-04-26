@@ -31,6 +31,7 @@ extern uint32_t file_num_array[2];
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0;
+
 //
 // Internal
 //
@@ -66,7 +67,7 @@ static struct bt_gatt_attr audio_service_attr[] = {
     BT_GATT_CHARACTERISTIC(&audio_characteristic_data_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, audio_data_read_characteristic, NULL, NULL),
     BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
     BT_GATT_CHARACTERISTIC(&audio_characteristic_format_uuid.uuid, BT_GATT_CHRC_READ, BT_GATT_PERM_READ, audio_codec_read_characteristic, NULL, NULL),
-#ifdef CONFIG_ENABLE_SPEAKER
+#ifdef CONFIG_OMI_ENABLE_SPEAKER
     BT_GATT_CHARACTERISTIC(&audio_characteristic_speaker_uuid.uuid, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_WRITE, NULL, audio_data_write_handler, NULL),
     BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), //
 #endif
@@ -159,6 +160,7 @@ static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, ui
         LOG_ERR("Invalid CCC value: %u", value);
     }
 }
+
 int accel_start()
 {
     struct sensor_value odr_attr;
@@ -792,6 +794,7 @@ int bt_on()
 int transport_start()
 {
     k_mutex_init(&write_sdcard_mutex);
+
     // Configure callbacks
     bt_conn_cb_register(&_callback_references);
 
@@ -803,40 +806,17 @@ int transport_start()
         return err;
     }
     LOG_INF("Transport bluetooth initialized");
-    //  Enable accelerometer
-#ifdef CONFIG_ACCELEROMETER
-    err = accel_start();
-    if (!err)
-    {
-        LOG_INF("Accelerometer failed to activate\n");
-    }
-    else
-    {
-        LOG_INF("Accelerometer initialized");
-        bt_gatt_service_register(&accel_service);
-    }
-#endif
+
     //  Enable button
-#ifdef CONFIG_ENABLE_BUTTON
-    button_init();
+#ifdef CONFIG_OMI_ENABLE_BUTTON
     register_button_service();
-    activate_button_work();
 #endif
 
-#ifdef CONFIG_ENABLE_SPEAKER
-    err = speaker_init();
-    if (err)
-    {
-        LOG_ERR("Speaker failed to start");
-        return 0;
-    }
-    LOG_INF("Speaker initialized");
+#ifdef CONFIG_OMI_ENABLE_SPEAKER
     register_speaker_service();
-
-
 #endif
-    // Start advertising
 
+    // Start advertising
     memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);
     bt_gatt_service_register(&storage_service);
     bt_gatt_service_register(&audio_service);
@@ -863,8 +843,6 @@ int transport_start()
     {
         LOG_INF("Battery initialized");
     }
-
-    // friend_init();
 
     // Start pusher
     ring_buf_init(&ring_buf, sizeof(tx_queue), tx_queue);
