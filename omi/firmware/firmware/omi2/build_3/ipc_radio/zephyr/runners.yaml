@@ -1,0 +1,34 @@
+# Available runners configured by board.cmake.
+runners:
+- nrfjprog
+- nrfutil
+- jlink
+
+# Default flash runner if --runner is not given.
+flash-runner: nrfjprog
+
+# Default debug runner if --runner is not given.
+debug-runner: jlink
+
+# Common runner configuration values.
+config:
+  board_dir: /Users/nik/projects/omi/omi/firmware/firmware/boards/omi/omi2
+  # Build outputs:
+  elf_file: zephyr.elf
+  hex_file: /Users/nik/projects/omi/omi/firmware/firmware/omi2/build_3/merged_CPUNET.hex
+  bin_file: zephyr.bin
+  # Host tools:
+  gdb: /opt/nordic/ncs/toolchains/f8037e9b83/opt/zephyr-sdk/arm-zephyr-eabi/bin/arm-zephyr-eabi-gdb
+
+# Runner specific arguments
+args:
+  nrfjprog:
+    []
+
+  nrfutil:
+    []
+
+  jlink:
+    - --dt-flash=y
+    - --device=nrf5340_xxaa_net
+    - --speed=4000

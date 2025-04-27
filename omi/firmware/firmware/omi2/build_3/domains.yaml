@@ -1,0 +1,12 @@
+default: omi2
+build_dir: /Users/nik/projects/omi/omi/firmware/firmware/omi2/build_3
+domains:
+  - name: omi2
+    build_dir: /Users/nik/projects/omi/omi/firmware/firmware/omi2/build_3/omi2
+  - name: mcuboot
+    build_dir: /Users/nik/projects/omi/omi/firmware/firmware/omi2/build_3/mcuboot
+  - name: ipc_radio
+    build_dir: /Users/nik/projects/omi/omi/firmware/firmware/omi2/build_3/ipc_radio
+flash_order:
+  - ipc_radio
+  - omi2

@@ -1,0 +1,2 @@
+osource "/Users/nik/projects/omi/omi/firmware/firmware/boards/shields/*/Kconfig.shield"
+osource "/opt/nordic/ncs/v2.9.0/nrf/boards/shields/*/Kconfig.shield"
