@@ -1,0 +1,54 @@
+cmake:
+  application:
+    configuration-dir: /opt/nordic/ncs/v2.9.0/bootloader/mcuboot/boot/zephyr
+    source-dir: /opt/nordic/ncs/v2.9.0/bootloader/mcuboot/boot/zephyr
+  board:
+    name: omi2
+    qualifiers: nrf5340/cpuapp
+    revision: 
+  devicetree:
+    bindings-dirs:
+     - /opt/nordic/ncs/v2.9.0/nrf/dts/bindings
+     - /opt/nordic/ncs/v2.9.0/zephyr/dts/bindings
+    files:
+     - /Users/nik/projects/omi/omi/firmware/firmware/boards/omi/omi2/omi2_nrf5340_cpuapp.dts
+     - /opt/nordic/ncs/v2.9.0/bootloader/mcuboot/boot/zephyr/app.overlay
+    include-dirs:
+     - /opt/nordic/ncs/v2.9.0/nrf/include
+     - /opt/nordic/ncs/v2.9.0/nrf/dts
+     - /opt/nordic/ncs/v2.9.0/bootloader/mcuboot/boot/zephyr/include
+     - /opt/nordic/ncs/v2.9.0/zephyr/include
+     - /opt/nordic/ncs/v2.9.0/zephyr/include/zephyr
+     - /opt/nordic/ncs/v2.9.0/zephyr/dts/common
+     - /opt/nordic/ncs/v2.9.0/zephyr/dts/x86
+     - /opt/nordic/ncs/v2.9.0/zephyr/dts/xtensa
+     - /opt/nordic/ncs/v2.9.0/zephyr/dts/sparc
+     - /opt/nordic/ncs/v2.9.0/zephyr/dts/riscv
+     - /opt/nordic/ncs/v2.9.0/zephyr/dts/posix
+     - /opt/nordic/ncs/v2.9.0/zephyr/dts/nios2
+     - /opt/nordic/ncs/v2.9.0/zephyr/dts/arm64
+     - /opt/nordic/ncs/v2.9.0/zephyr/dts/arm
+     - /opt/nordic/ncs/v2.9.0/zephyr/dts/arc
+     - /opt/nordic/ncs/v2.9.0/zephyr/dts
+    user-files:
+     - /opt/nordic/ncs/v2.9.0/bootloader/mcuboot/boot/zephyr/app.overlay
+  kconfig:
+    extra-user-files:
+     - /Users/nik/projects/omi/omi/firmware/firmware/omi2/sysbuild/mcuboot.conf
+    files:
+     - /Users/nik/projects/omi/omi/firmware/firmware/boards/omi/omi2/omi2_nrf5340_cpuapp_defconfig
+     - /opt/nordic/ncs/v2.9.0/bootloader/mcuboot/boot/zephyr/prj.conf
+     - /Users/nik/projects/omi/omi/firmware/firmware/omi2/sysbuild/mcuboot.conf
+     - /Users/nik/projects/omi/omi/firmware/firmware/omi2/build_2/mcuboot/zephyr/.config.sysbuild
+    user-files:
+     - /opt/nordic/ncs/v2.9.0/bootloader/mcuboot/boot/zephyr/prj.conf
+  toolchain:
+    name: zephyr
+    path: /opt/nordic/ncs/toolchains/f8037e9b83/opt/zephyr-sdk
+  vendor-specific:
+    nordic:
+      svdfile: /opt/nordic/ncs/v2.9.0/modules/hal/nordic/nrfx/mdk/nrf5340_application.svd
+  zephyr:
+    version: 3.7.99
+    zephyr-base: /opt/nordic/ncs/v2.9.0/zephyr
+version: 0.1.0

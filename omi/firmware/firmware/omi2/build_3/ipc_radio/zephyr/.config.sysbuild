@@ -1,0 +1,4 @@
+# sysbuild controlled configuration settings
+CONFIG_PARTITION_MANAGER_ENABLED=y
+CONFIG_BUILD_OUTPUT_BIN=y
+CONFIG_BUILD_OUTPUT_HEX=y

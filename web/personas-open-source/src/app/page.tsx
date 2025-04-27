@@ -143,6 +143,7 @@ export default function HomePage() {
   const [platformSelectionMode] = useState<'create' | 'add'>('create');
   const [currentUserUid, setCurrentUserUid] = useState<string | null>(null);
   const [authInitialized, setAuthInitialized] = useState<boolean>(false);
+  const [isIntegrating, setIsIntegrating] = useState(false);
 
   // ----------------------------------------------------------------------------------
   // Helper: open ChatGPT workspace with the (temporary test) UID.
@@ -790,18 +791,71 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
     openChatGPTWithUid(uid);
   };
 
+  const handleIntegrationClick = async (provider: string) => {
+    if (isIntegrating) return; // Prevent concurrent runs
+    setIsIntegrating(true); // Set loading state
+
+    console.log(`[handleIntegrationClick] Clicked provider: ${provider}`);
+    let uid: string | null = null; // Define uid outside try for finally block
+
+    try { // Wrap core logic in try
+      uid = await getUid(); // Ensure we have a user ID
+      if (!uid) {
+        toast.error('Could not get user ID. Please try again.');
+        setIsIntegrating(false); // Reset on error
+        return;
+      }
+
+      // Call enable-plugins API before redirecting
+      try {
+        console.log(`[handleIntegrationClick] Calling /api/enable-plugins for UID: ${uid}`);
+        const enableRes = await fetch('/api/enable-plugins', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uid: uid })
+        });
+        if (!enableRes.ok) {
+          console.error(`[handleIntegrationClick] Failed to enable plugins via API for provider ${provider}:`, await enableRes.text());
+          // Non-fatal, continue with redirect
+        } else {
+          console.log(`[handleIntegrationClick] Successfully called /api/enable-plugins for UID: ${uid}`);
+        }
+      } catch (apiErr) {
+        console.error(`[handleIntegrationClick] Error calling /api/enable-plugins for provider ${provider}:`, apiErr);
+         // Non-fatal, continue with redirect
+      }
+
+      // Construct the Veyrax URL
+      const redirectUrl = `https://veyrax.com/user/omi?omi_user_id=${encodeURIComponent(uid)}&provider_tag=${encodeURIComponent(provider)}`;
+      console.log(`[handleIntegrationClick] Redirecting to: ${redirectUrl}`);
+
+      // Redirect the user
+      window.location.href = redirectUrl;
+      // NOTE: Setting state after redirect might not complete before page unload.
+      // Relying on visual button disable is more robust.
+
+    } catch (error) { // Catch errors from getUid or other sync issues
+        console.error(`[handleIntegrationClick] General error for provider ${provider}:`, error);
+        toast.error(`Failed to initiate integration for ${provider}.`);
+        setIsIntegrating(false); // Reset on general error
+    } 
+    // Removed finally block resetting state here, relying on visual disable and reset on error/success path completion before redirect.
+  };
+
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-black text-white flex flex-col">
       {/* <PreorderBanner botName="your favorite personal" /> */}
       <Header />
-      <div className="flex flex-col items-center px-4 py-8 md:py-16">
+      <div className="flex flex-col items-center justify-center px-4 py-8 md:py-16 flex-grow">
         <InputArea
           handle={handle}
           handleInputChange={handleInputChange}
           handleCreatePersona={handleCreatePersona}
+          handleIntegrationClick={handleIntegrationClick}
           isCreating={isCreating}
+          isIntegrating={isIntegrating}
         />
-        {!loading && (
+        {/* {!loading && (
           <ChatbotList
             chatbots={filteredChatbots}
             handleChatbotClick={handleChatbotClick}
@@ -810,7 +864,7 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
             ref={ref}
             hasMore={hasMore}
           />
-        )}
+        )} */}
       </div>
       <Footer />
       {/* Render the modal */}
