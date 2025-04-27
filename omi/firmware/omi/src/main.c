@@ -15,6 +15,9 @@
 #endif
 #include "spi_flash.h"
 #include "sd_card.h"
+#ifdef CONFIG_OMI_ENABLE_ACCELEROMETER
+#include "lib/dk2/accel.h"
+#endif
 
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -225,11 +228,12 @@ int main(void)
 
     // Enable accelerometer
 #ifdef CONFIG_OMI_ENABLE_ACCELEROMETER
-    err = accel_start();
-    if (err)
+    LOG_INF("Initializing IMU...\n");
+    ret = accel_start();
+    if (ret)
     {
-        LOG_ERR("Accelerometer failed to activated (err %d)", err);
-        return err;
+        LOG_ERR("Accelerometer failed to activate (err %d)", ret);
+        return ret;
     }
     LOG_INF("Accelerometer initialized");
 #endif
@@ -237,7 +241,39 @@ int main(void)
     // Enable sdcard
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     LOG_PRINTK("\n");
-    LOG_INF("Initializing transport...\n");
+    LOG_INF("Mount SD card...\n");
+
+    err = mount_sd_card();
+    if (err)
+    {
+        LOG_ERR("Failed to mount SD card (err %d)", err);
+        return err;
+    }
+
+    k_msleep(500);
+
+    LOG_PRINTK("\n");
+    LOG_INF("Initializing storage...\n");
+
+    err = storage_init();
+    if (err)
+    {
+        LOG_ERR("Failed to initialize storage (err %d)", err);
+    }
+#endif
+
+    // Enable usb
+#ifdef CONFIG_OMI_ENABLE_USB
+    LOG_PRINTK("\n");
+    LOG_INF("Initializing power supply check...\n");
+
+    err = init_usb();
+    if (err)
+    {
+        LOG_ERR("Failed to initialize power supply (err %d)", err);
+        return err;
+    }
+#endif
 
 	// Indicate transport initialization
 	LOG_PRINTK("\n");

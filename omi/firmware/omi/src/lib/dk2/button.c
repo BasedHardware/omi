@@ -15,6 +15,7 @@
 #include "led.h"
 #include "mic.h"
 #include "sdcard.h"
+#include "accel.h"
 
 LOG_MODULE_REGISTER(button, CONFIG_LOG_DEFAULT_LEVEL);
 

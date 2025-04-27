@@ -851,15 +851,10 @@ int transport_start()
     LOG_INF("Transport bluetooth initialized");
     //  Enable accelerometer
 #ifdef CONFIG_OMI_ENABLE_ACCELEROMETER
-    err = accel_start();
-    if (!err)
+    err = register_accel_service(current_connection);
+    if( err )
     {
-        LOG_INF("Accelerometer failed to activate\n");
-    }
-    else
-    {
-        LOG_INF("Accelerometer initialized");
-        register_accel_service(current_connection);
+        LOG_ERR("Failed to register accel service (%d)\n", err );
     }
 #endif
     //  Enable button

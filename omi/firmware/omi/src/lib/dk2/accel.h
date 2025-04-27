@@ -21,6 +21,8 @@ struct sensors {
 // Public functions
 int accel_start(void);
 void accel_off(void);
-void register_accel_service(struct bt_conn *conn);
+int register_accel_service(struct bt_conn *conn);
+
+int accel_read( struct sensors* sensors );
 
 #endif /* ACCEL_H */
