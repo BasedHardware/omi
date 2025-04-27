@@ -223,13 +223,28 @@ int main(void)
     play_haptic_milli(100);
 #endif
 
-    // Indicate transport initialization
+    // Enable accelerometer
+#ifdef CONFIG_OMI_ENABLE_ACCELEROMETER
+    err = accel_start();
+    if (err)
+    {
+        LOG_ERR("Accelerometer failed to activated (err %d)", err);
+        return err;
+    }
+    LOG_INF("Accelerometer initialized");
+#endif
+
+    // Enable sdcard
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     LOG_PRINTK("\n");
     LOG_INF("Initializing transport...\n");
 
 	// Indicate transport initialization
 	LOG_PRINTK("\n");
 	LOG_INF("Initializing transport...\n");
+
+    set_led_green(true);
+    set_led_green(false);
 
 	// Start transport
 	int transportErr;
@@ -240,6 +255,8 @@ int main(void)
 		return transportErr;
 	}
 
+    /** No speaker on Omi2 - TODO should there still be empty stubs? */
+
 	// Initialize codec
 	LOG_INF("Initializing codec...\n");
 
@@ -249,22 +266,57 @@ int main(void)
 	if (ret)
 	{
 		LOG_ERR("Failed to start codec: %d", ret);
+        // Blink blue LED to indicate error
+        for (int i = 0; i < 5; i++)
+        {
+            set_led_blue(!gpio_pin_get_dt(&led_blue));
+            k_msleep(200);
+        }
+        set_led_blue(false);
 		return ret;
 	}
 
+#ifdef CONFIG_OMI_ENABLE_HAPTIC
+    play_haptic_milli(500);
+#endif
+    set_led_blue(false);
+
 	// Initialize microphone
+    LOG_PRINTK("\n");
 	LOG_INF("Initializing microphone...\n");
+
+    set_led_red(true);
+    set_led_green(true);
+
 	set_mic_callback(mic_handler);
 	ret = mic_start();
 	if (ret)
 	{
 		LOG_ERR("Failed to start microphone: %d", ret);
-		return ret;
+		// Blink red and green LEDs to indicate error
+        for (int i = 0; i < 5; i++)
+        {
+            set_led_red(!gpio_pin_get_dt(&led_red));
+            set_led_green(!gpio_pin_get_dt(&led_green));
+            k_msleep(200);
+        }
+        set_led_red(false);
+        set_led_green(false);
+        return ret;
 	}
 
-    LOG_INF("Device initialized successfully\n");
+    set_led_red(false);
+    set_led_green(false);
 
-    while (1) {
+    // Indicate successful initialization
+    LOG_PRINTK("\n");
+	LOG_INF("Device initialized successfully\n");
+
+    set_led_blue(true);
+    k_msleep(1000);
+    set_led_blue(false);
+
+	while (1) {
         // Log total mic buffer bytes processed, GATT notify count, broadcast count, and write_to_tx_queue count
         LOG_INF("Total mic buffer bytes: %u, GATT notify count: %u, Broadcast count: %u, TX queue writes: %u",
                 total_mic_buffer_bytes, gatt_notify_count, broadcast_audio_count, write_to_tx_queue_count);
