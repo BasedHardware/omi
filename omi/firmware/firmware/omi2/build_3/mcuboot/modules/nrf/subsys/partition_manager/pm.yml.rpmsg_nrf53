@@ -1,0 +1,5 @@
+# This block of RAM is used for IPC
+rpmsg_nrf53_sram:
+  placement: {before: end}
+  size: 0x10000
+  region: sram_primary

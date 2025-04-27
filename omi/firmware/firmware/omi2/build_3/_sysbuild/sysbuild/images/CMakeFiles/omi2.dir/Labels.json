@@ -1,0 +1,43 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/Users/nik/projects/omi/omi/firmware/firmware/omi2/build_3/_sysbuild/sysbuild/images/CMakeFiles/omi2"
+		},
+		{
+			"file" : "/Users/nik/projects/omi/omi/firmware/firmware/omi2/build_3/_sysbuild/sysbuild/images/CMakeFiles/omi2.rule"
+		},
+		{
+			"file" : "/Users/nik/projects/omi/omi/firmware/firmware/omi2/build_3/_sysbuild/sysbuild/images/CMakeFiles/omi2-complete.rule"
+		},
+		{
+			"file" : "/Users/nik/projects/omi/omi/firmware/firmware/omi2/build_3/_sysbuild/sysbuild/images/omi2-prefix/src/omi2-stamp/omi2-build.rule"
+		},
+		{
+			"file" : "/Users/nik/projects/omi/omi/firmware/firmware/omi2/build_3/_sysbuild/sysbuild/images/omi2-prefix/src/omi2-stamp/omi2-configure.rule"
+		},
+		{
+			"file" : "/Users/nik/projects/omi/omi/firmware/firmware/omi2/build_3/_sysbuild/sysbuild/images/omi2-prefix/src/omi2-stamp/omi2-download.rule"
+		},
+		{
+			"file" : "/Users/nik/projects/omi/omi/firmware/firmware/omi2/build_3/_sysbuild/sysbuild/images/omi2-prefix/src/omi2-stamp/omi2-install.rule"
+		},
+		{
+			"file" : "/Users/nik/projects/omi/omi/firmware/firmware/omi2/build_3/_sysbuild/sysbuild/images/omi2-prefix/src/omi2-stamp/omi2-mkdir.rule"
+		},
+		{
+			"file" : "/Users/nik/projects/omi/omi/firmware/firmware/omi2/build_3/_sysbuild/sysbuild/images/omi2-prefix/src/omi2-stamp/omi2-patch.rule"
+		},
+		{
+			"file" : "/Users/nik/projects/omi/omi/firmware/firmware/omi2/build_3/_sysbuild/sysbuild/images/omi2-prefix/src/omi2-stamp/omi2-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"omi2"
+		],
+		"name" : "omi2"
+	}
+}
