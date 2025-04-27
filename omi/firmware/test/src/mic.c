@@ -11,11 +11,10 @@
 
 #define SAMPLE_RATE_HZ 16000
 #define SAMPLE_BITS 16
-#define CHANNEL_COUNT 2
-#define TIMEOUT_MS 2000
-#define CAPTURE_MS 1000
-#define BLOCK_SIZE ((SAMPLE_BITS / BITS_PER_BYTE) * (SAMPLE_RATE_HZ * CAPTURE_MS) / 1000) * CHANNEL_COUNT
-#define BLOCK_COUNT 2
+#define TIMEOUT_MS 1000
+#define CAPTURE_MS 500
+#define BLOCK_SIZE ((SAMPLE_BITS / BITS_PER_BYTE) * (SAMPLE_RATE_HZ * CAPTURE_MS) / 1000)
+#define BLOCK_COUNT 8
 
 static const struct device *const dmic = DEVICE_DT_GET(DT_ALIAS(dmic0));
 static const struct gpio_dt_spec mic_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(pdm_en_pin), gpios, {0});
@@ -43,7 +42,7 @@ static struct dmic_cfg cfg = {
 	.channel =
 		{
 			.req_num_streams = 1,
-			.req_num_chan = CHANNEL_COUNT,
+			.req_num_chan = 2,
 		},
 };
 
@@ -64,7 +63,7 @@ static int cmd_mic_capture(const struct shell *sh, size_t argc, char **argv)
 			shell_error(sh, "Invalid time argument");
 			return -EINVAL;
 		}
-		time *= (1000 / CAPTURE_MS);
+		time *= 2;
 	}
 
 	if (!initialized)
@@ -83,33 +82,24 @@ static int cmd_mic_capture(const struct shell *sh, size_t argc, char **argv)
 		shell_error(sh, "Failed to configure DMIC(%d)", ret);
 		goto cleanup;
 	}
-	ret = dmic_trigger(dmic, DMIC_TRIGGER_START);
-	if (ret < 0)
-	{
-		shell_error(sh, "START trigger failed (%d)", ret);
-		goto cleanup;
-	}
 
 	for (int i = 0; i < time; i++)
 	{
-		ret = dmic_trigger(dmic, DMIC_TRIGGER_RELEASE);
+		ret = dmic_trigger(dmic, DMIC_TRIGGER_START);
 		if (ret < 0)
 		{
-			shell_error(sh, "release trigger failed (%d)", ret);
+			shell_error(sh, "START trigger failed (%d)", ret);
+			goto cleanup;
 		}
-
+		
 		ret = dmic_read(dmic, 0, &buffer, &size, TIMEOUT_MS);
 		if (ret < 0)
 		{
-			shell_error(sh, "DMIC read failed (%d) %d", ret, i);
+			shell_error(sh, "DMIC read failed (%d)", ret);
 			dmic_trigger(dmic, DMIC_TRIGGER_STOP);
 			goto cleanup;
 		}
-		ret = dmic_trigger(dmic, DMIC_TRIGGER_PAUSE);
-		if (ret < 0)
-		{
-			shell_error(sh, "pause trigger failed (%d)", ret);
-		}
+
 		// Process captured data
 		for (int j = 0; j < size / sizeof(int16_t); j++)
 		{
@@ -118,11 +108,11 @@ static int cmd_mic_capture(const struct shell *sh, size_t argc, char **argv)
 
 		k_mem_slab_free(&mem_slab, buffer);
 		buffer = NULL;
-	}
-	ret = dmic_trigger(dmic, DMIC_TRIGGER_STOP);
-	if (ret < 0)
-	{
-		shell_error(sh, "STOP trigger failed (%d)", ret);
+		ret = dmic_trigger(dmic, DMIC_TRIGGER_STOP);
+		if (ret < 0)
+		{
+			shell_error(sh, "STOP trigger failed (%d)", ret);
+		}
 	}
 
 cleanup:
