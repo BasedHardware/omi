@@ -19,8 +19,7 @@
                 "CMAKE_BUILD_TYPE": "Debug",
                 "BOARD": "omi/nrf5340/cpuapp",
                 "CACHED_CONF_FILE": "${sourceDir}/omi.conf",
-                "CONF_FILE": "${sourceDir}/omi.conf",
-                "ipc_radio_CONFIG_MPSL_CX": "y"
+                "CONF_FILE": "${sourceDir}/omi.conf"
             }
         }
     ]
