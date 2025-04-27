@@ -21,7 +21,7 @@ export const InputArea: React.FC<InputAreaProps> = ({ handle, handleInputChange,
   <>
     {/* Create Section - Heading Only */}
     <div className="text-center mx-auto">
-      <h1 className="text-4xl md:text-5xl font-serif font-bold mb-3 md:mb-4">Make Your ChatGPT 5x more personal</h1>
+      <h1 className="text-4xl md:text-5xl font-serif font-bold mb-6 md:mb-8">Make Your ChatGPT 5x more personal</h1>
     </div>
 
     {/* Separated Paragraph */}
