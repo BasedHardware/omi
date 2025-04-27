@@ -26,7 +26,7 @@ export const InputArea: React.FC<InputAreaProps> = ({ handle, handleInputChange,
 
     {/* Separated Paragraph */}
     <p className="text-gray-400 text-sm md:text-base text-center mb-4">
-      Connect your apps:
+      Choose your most used app and connect it to ChatGPT
     </p>
     
     <div className="w-full max-w-sm space-y-4 mb-6 md:mb-8">
