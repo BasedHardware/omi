@@ -177,9 +177,15 @@ export default function HomePage() {
         })
         .catch(err => {
           console.error('[openChatGPTWithUid] Failed to copy UID to clipboard:', err);
-          toast.error('Could not copy UID. Please copy it manually.');
-          // Optionally still redirect after a delay or show UID for manual copy
-          // setTimeout(() => { window.location.href = baseChatGPTUrl; }, 3000);
+          // Show UID in the error toast for manual copying
+          toast.error(`Couldn't copy UID automatically. Please copy: ${uid}`, {
+             duration: 5000, // Give a bit more time to see/copy
+          });
+          // Still redirect after a delay, allowing time for manual copy
+          setTimeout(() => {
+            console.log(`[openChatGPTWithUid] Redirecting mobile (after copy fail) to base URL: ${baseChatGPTUrl}`);
+            window.location.href = baseChatGPTUrl;
+          }, 5000); // Increased delay
         });
     } else {
       // Desktop flow: Redirect immediately with UID parameter
@@ -891,10 +897,16 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
           .catch(err => {
             if (loadingToastId) toast.dismiss(loadingToastId);
             console.error('[handleIntegrationClick] Failed to copy UID to clipboard:', err);
-            toast.error('Could not copy UID automatically.');
-            // Redirect immediately even if copy fails?
-            console.log(`[handleIntegrationClick] Redirecting mobile (after copy fail) to Veyrax URL: ${redirectUrl}`);
-            window.location.href = redirectUrl; 
+            // Show UID in the error toast for manual copying
+            toast.error(`Couldn't copy UID automatically. Please copy: ${uid}. Redirecting...`, {
+                duration: 5000, // Give more time to see/copy
+            });
+            // Redirect after a delay, allowing time for manual copy
+            // Note: We are still redirecting even if copy fails, as the primary action is integration.
+            setTimeout(() => {
+                console.log(`[handleIntegrationClick] Redirecting mobile (after copy fail) to Veyrax URL: ${redirectUrl}`);
+                window.location.href = redirectUrl; 
+            }, 5000); // Increased delay
           });
       } else {
         // Desktop: Redirect immediately to Veyrax
