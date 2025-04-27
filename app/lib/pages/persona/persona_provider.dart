@@ -77,6 +77,9 @@ class PersonaProvider extends ChangeNotifier {
       if (res['status'] == 'notfound') {
         AppSnackbar.showSnackbarError('Twitter handle not found');
         _twitterProfile = {};
+      } else if (res['status'] == 'suspended') {
+        AppSnackbar.showSnackbarError('Twitter handle is suspended');
+        _twitterProfile = {};
       } else {
         _twitterProfile = res;
       }
