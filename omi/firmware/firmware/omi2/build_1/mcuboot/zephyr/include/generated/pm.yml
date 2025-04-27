@@ -1,0 +1,28 @@
+mcuboot:
+  size: 0xc000
+  placement:
+    before: [mcuboot_primary]
+    align: {end: 0x1000}
+mcuboot_primary_app:
+  # All images to be placed in MCUboot's slot 0 should be placed in this
+  # partition
+  span: [app]
+mcuboot_primary:
+  span: [mcuboot_pad, mcuboot_primary_app]
+# Partition for secondary slot is not created if building in single application
+# slot configuration.
+mcuboot_secondary:
+  share_size: [mcuboot_primary]
+  placement:
+    align: {start: 0x1000}
+    align_next: 0x1000 # Ensure that the next partition does not interfere with this image
+    after: mcuboot_primary
+# Padding placed before image to boot. This reserves space for the MCUboot image header
+# and it ensures that the boot image gets linked with the correct address offset in flash.
+mcuboot_pad:
+    # MCUboot pad must be placed before the primary application partition.
+    # The primary application partition includes the secure firmware if present.
+  size: 0x200
+  placement:
+    before: [mcuboot_primary_app]
+    align: {start: 0x1000}

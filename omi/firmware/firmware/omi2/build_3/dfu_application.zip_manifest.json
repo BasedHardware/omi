@@ -1,0 +1,20 @@
+{
+    "format-version": 1,
+    "time": 1745108249,
+    "files": [
+        {
+            "type": "application",
+            "board": "omi2",
+            "soc": "nrf5340",
+            "load_address": 49664,
+            "image_index": "0",
+            "slot_index_primary": "1",
+            "slot_index_secondary": "2",
+            "version_MCUBOOT": "0.0.0+0",
+            "size": 367848,
+            "file": "omi2.signed.bin",
+            "modtime": 1745108249
+        }
+    ],
+    "name": "omi2"
+}

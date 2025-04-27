@@ -1,0 +1,2 @@
+# Load Sysbuild board Kconfig descriptions.
+osource "/Users/nik/projects/omi/omi/firmware/firmware/boards/omi/omi2/Kconfig.sysbuild"
