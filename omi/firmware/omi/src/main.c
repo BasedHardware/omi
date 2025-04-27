@@ -1,6 +1,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/shell/shell.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/drivers/hwinfo.h>
 #include <zephyr/pm/device_runtime.h>
 #include "lib/dk2/mic.h"
 #include "lib/dk2/codec.h"
@@ -135,6 +136,10 @@ int main(void)
 {
     int ret;
 
+    // Store reset reason code
+    uint32_t reset_reason;
+    ret = hwinfo_get_reset_cause( &reset_reason );
+
 	printk("Starting omi ...\n");
 
 	// Suspend unused modules
@@ -147,6 +152,19 @@ int main(void)
         ret = 0;
     }
 	
+    // Log model, HW, and FW version
+    LOG_INF("Model: %s", CONFIG_BT_DIS_MODEL);
+    LOG_INF("Firmware revision: %s", CONFIG_BT_DIS_FW_REV_STR);
+    LOG_INF("Hardware revision: %s", CONFIG_BT_DIS_HW_REV_STR);
+
+    if( ret >= 0 )
+    {
+        LOG_DBG("Reset reason: %d\n", reset_reason);
+    } else {
+        LOG_DBG("Err reading reset reason: %d\n", ret);
+    }
+    hwinfo_clear_reset_cause();
+
 	// Initialize LEDs
 	LOG_PRINTK("\n");
 	LOG_INF("Initializing LEDs...\n");
