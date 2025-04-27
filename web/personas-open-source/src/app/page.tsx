@@ -793,53 +793,55 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
 
   const handleIntegrationClick = async (provider: string) => {
     if (isIntegrating) return; // Prevent concurrent runs
-    setIsIntegrating(true); // Set loading state
+    setIsIntegrating(true); // Set loading state immediately
 
     console.log(`[handleIntegrationClick] Clicked provider: ${provider}`);
-    let uid: string | null = null; // Define uid outside try for finally block
+    let uid: string | null = null;
 
-    try { // Wrap core logic in try
-      uid = await getUid(); // Ensure we have a user ID
+    try {
+      // 1. Await UID (still necessary for redirect URL)
+      uid = await getUid(); 
       if (!uid) {
         toast.error('Could not get user ID. Please try again.');
-        setIsIntegrating(false); // Reset on error
+        setIsIntegrating(false); // Reset state on failure
         return;
       }
+      console.log(`[handleIntegrationClick] Obtained UID: ${uid}`);
 
-      // Call enable-plugins API before redirecting
-      try {
-        console.log(`[handleIntegrationClick] Calling /api/enable-plugins for UID: ${uid}`);
-        const enableRes = await fetch('/api/enable-plugins', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ uid: uid })
-        });
-        if (!enableRes.ok) {
-          console.error(`[handleIntegrationClick] Failed to enable plugins via API for provider ${provider}:`, await enableRes.text());
-          // Non-fatal, continue with redirect
-        } else {
-          console.log(`[handleIntegrationClick] Successfully called /api/enable-plugins for UID: ${uid}`);
-        }
-      } catch (apiErr) {
-        console.error(`[handleIntegrationClick] Error calling /api/enable-plugins for provider ${provider}:`, apiErr);
-         // Non-fatal, continue with redirect
-      }
-
-      // Construct the Veyrax URL
+      // 2. Construct Redirect URL
       const redirectUrl = `https://veyrax.com/user/omi?omi_user_id=${encodeURIComponent(uid)}&provider_tag=${encodeURIComponent(provider)}`;
-      console.log(`[handleIntegrationClick] Redirecting to: ${redirectUrl}`);
+      console.log(`[handleIntegrationClick] Redirecting IMMEDIATELY to: ${redirectUrl}`);
 
-      // Redirect the user
+      // 3. Redirect IMMEDIATELY
       window.location.href = redirectUrl;
-      // NOTE: Setting state after redirect might not complete before page unload.
-      // Relying on visual button disable is more robust.
 
-    } catch (error) { // Catch errors from getUid or other sync issues
-        console.error(`[handleIntegrationClick] General error for provider ${provider}:`, error);
+      // 4. Trigger API Call (Fire-and-Forget - NO AWAIT)
+      console.log(`[handleIntegrationClick] Triggering background /api/enable-plugins for UID: ${uid}`);
+      fetch('/api/enable-plugins', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid: uid })
+      }).then(async response => { // Add .then() for background logging
+          if (!response.ok) {
+            console.error(`[handleIntegrationClick] Background /api/enable-plugins call failed for provider ${provider}:`, await response.text());
+          } else {
+            console.log(`[handleIntegrationClick] Background /api/enable-plugins call successful for UID: ${uid}`);
+          }
+        }).catch(apiErr => {
+          console.error(`[handleIntegrationClick] Background /api/enable-plugins fetch failed for provider ${provider}:`, apiErr);
+        });
+
+      // Reset state *after* initiating redirect and background fetch.
+      // Note: This might not fully execute before page unload, but reflects intent.
+      // The primary goal is preventing clicks during the getUid phase.
+      // setIsIntegrating(false); // Can potentially remove this if button disabling is sufficient
+
+    } catch (error) { // Catch errors mainly from getUid
+        console.error(`[handleIntegrationClick] Error getting UID for provider ${provider}:`, error);
         toast.error(`Failed to initiate integration for ${provider}.`);
-        setIsIntegrating(false); // Reset on general error
+        setIsIntegrating(false); // Reset state on error
     } 
-    // Removed finally block resetting state here, relying on visual disable and reset on error/success path completion before redirect.
+    // No finally block needed as state is reset on error path, and success path redirects.
   };
 
   return (
