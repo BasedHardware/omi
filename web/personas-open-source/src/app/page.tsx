@@ -24,6 +24,13 @@ import { Chatbot, TwitterProfile, LinkedinProfile } from '@/types/profiles';
 import { PreorderBanner } from '@/components/shared/PreorderBanner';
 import { signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
 
+// Helper function to detect mobile devices (basic check)
+const isMobileDevice = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  // Basic check using userAgent - consider a library like 'react-device-detect' for more robustness
+  return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+};
+
 const formatTwitterAvatarUrl = (url: string): string => {
   if (!url) return '/omi-avatar.svg';
   let formattedUrl = url.replace('http://', 'https://');
@@ -143,13 +150,49 @@ export default function HomePage() {
   const [platformSelectionMode] = useState<'create' | 'add'>('create');
   const [currentUserUid, setCurrentUserUid] = useState<string | null>(null);
   const [authInitialized, setAuthInitialized] = useState<boolean>(false);
+  const [isIntegrating, setIsIntegrating] = useState(false);
 
   // ----------------------------------------------------------------------------------
-  // Helper: open ChatGPT workspace with the (temporary test) UID.
+  // Helper: open ChatGPT workspace - NOW WITH MOBILE HANDLING
   // Comment or delete after tests together with TEST_UID declarations.
   const openChatGPTWithUid = (uid: string) => {
-    window.location.href =
-      `https://chatgpt.com/g/g-67e2772d0af081919a5baddf4a12aacf-omigpt?prompt=uid=${encodeURIComponent(uid)}`;
+    const isMobile = isMobileDevice();
+    const baseChatGPTUrl = 'https://chatgpt.com/g/g-67e2772d0af081919a5baddf4a12aacf-omigpt';
+
+    console.log(`[openChatGPTWithUid] Detected mobile: ${isMobile}`);
+
+    if (isMobile) {
+      // Mobile flow: Copy UID, show toast, redirect after delay
+      navigator.clipboard.writeText(uid)
+        .then(() => {
+          console.log('[openChatGPTWithUid] UID copied to clipboard for mobile.');
+          toast.success('UID copied! Paste it into ChatGPT.', {
+            duration: 3000, // Show toast for 3 seconds
+          });
+          // Redirect after toast duration
+          setTimeout(() => {
+            console.log(`[openChatGPTWithUid] Redirecting mobile to base URL: ${baseChatGPTUrl}`);
+            window.location.href = baseChatGPTUrl;
+          }, 3000);
+        })
+        .catch(err => {
+          console.error('[openChatGPTWithUid] Failed to copy UID to clipboard:', err);
+          // Show UID in the error toast for manual copying
+          toast.error(`Couldn't copy UID automatically. Please copy: ${uid}`, {
+             duration: 5000, // Give a bit more time to see/copy
+          });
+          // Still redirect after a delay, allowing time for manual copy
+          setTimeout(() => {
+            console.log(`[openChatGPTWithUid] Redirecting mobile (after copy fail) to base URL: ${baseChatGPTUrl}`);
+            window.location.href = baseChatGPTUrl;
+          }, 5000); // Increased delay
+        });
+    } else {
+      // Desktop flow: Redirect immediately with UID parameter
+      const redirectUrl = `${baseChatGPTUrl}?prompt=uid=${encodeURIComponent(uid)}`;
+      console.log(`[openChatGPTWithUid] Redirecting desktop to: ${redirectUrl}`);
+      window.location.href = redirectUrl;
+    }
   };
   // ----------------------------------------------------------------------------------
 
@@ -790,18 +833,110 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
     openChatGPTWithUid(uid);
   };
 
+  const handleIntegrationClick = async (provider: string) => {
+    if (isIntegrating) return; 
+    setIsIntegrating(true);
+
+    console.log(`[handleIntegrationClick] Clicked provider: ${provider}`);
+    const isMobile = isMobileDevice();
+    let loadingToastId: string | number | undefined = undefined;
+
+    // Show initial feedback immediately only on mobile
+    if (isMobile) {
+      loadingToastId = toast.loading('Connecting...');
+    }
+
+    let uid: string | null = null;
+
+    try {
+      // 1. Await UID 
+      uid = await getUid(); 
+      if (!uid) {
+        if (loadingToastId) toast.dismiss(loadingToastId);
+        toast.error('Could not get user ID. Please try again.');
+        setIsIntegrating(false); // Reset state on failure
+        return;
+      }
+      console.log(`[handleIntegrationClick] Obtained UID: ${uid}`);
+
+      // 2. Trigger API Call (Fire-and-Forget - before clipboard/redirect logic)
+      console.log(`[handleIntegrationClick] Triggering background /api/enable-plugins for UID: ${uid}`);
+      fetch('/api/enable-plugins', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid: uid })
+      }).then(async response => {
+          if (!response.ok) {
+            console.error(`[handleIntegrationClick] Background /api/enable-plugins call failed for provider ${provider}:`, await response.text());
+          } else {
+            console.log(`[handleIntegrationClick] Background /api/enable-plugins call successful for UID: ${uid}`);
+          }
+        }).catch(apiErr => {
+          console.error(`[handleIntegrationClick] Background /api/enable-plugins fetch failed for provider ${provider}:`, apiErr);
+        });
+
+      // 3. Construct Veyrax Redirect URL
+      const redirectUrl = `https://veyrax.com/user/omi?omi_user_id=${encodeURIComponent(uid)}&provider_tag=${encodeURIComponent(provider)}`;
+
+      // 4. Handle Mobile vs Desktop Redirect/Feedback
+      if (isMobile) {
+        // Mobile: Copy UID, show success toast, delay redirect
+        navigator.clipboard.writeText(uid)
+          .then(() => {
+            if (loadingToastId) toast.dismiss(loadingToastId);
+            console.log('[handleIntegrationClick] UID copied to clipboard for mobile.');
+            toast.success('UID copied! Paste it into ChatGPT. Redirecting to integration partner...', {
+              duration: 3000,
+            });
+            // Redirect after toast duration
+            setTimeout(() => {
+              console.log(`[handleIntegrationClick] Redirecting mobile to Veyrax URL: ${redirectUrl}`);
+              window.location.href = redirectUrl;
+            }, 3000);
+          })
+          .catch(err => {
+            if (loadingToastId) toast.dismiss(loadingToastId);
+            console.error('[handleIntegrationClick] Failed to copy UID to clipboard:', err);
+            // Show UID in the error toast for manual copying
+            toast.error(`Couldn't copy UID automatically. Please copy: ${uid}. Redirecting...`, {
+                duration: 5000, // Give more time to see/copy
+            });
+            // Redirect after a delay, allowing time for manual copy
+            // Note: We are still redirecting even if copy fails, as the primary action is integration.
+            setTimeout(() => {
+                console.log(`[handleIntegrationClick] Redirecting mobile (after copy fail) to Veyrax URL: ${redirectUrl}`);
+                window.location.href = redirectUrl; 
+            }, 5000); // Increased delay
+          });
+      } else {
+        // Desktop: Redirect immediately to Veyrax
+        if (loadingToastId) toast.dismiss(loadingToastId); // Dismiss if somehow shown
+        console.log(`[handleIntegrationClick] Redirecting desktop to Veyrax URL: ${redirectUrl}`);
+        window.location.href = redirectUrl;
+      }
+
+    } catch (error) { // Catch errors mainly from getUid
+      if (loadingToastId) toast.dismiss(loadingToastId);
+      console.error(`[handleIntegrationClick] Error processing integration for provider ${provider}:`, error);
+      toast.error(`Failed to initiate integration for ${provider}.`);
+      setIsIntegrating(false); // Reset state on error
+    } 
+  };
+
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-black text-white flex flex-col">
       {/* <PreorderBanner botName="your favorite personal" /> */}
-      <Header />
-      <div className="flex flex-col items-center px-4 py-8 md:py-16">
+      <Header uid={currentUserUid} />
+      <div className="flex flex-col items-center justify-center px-4 py-8 md:py-16 flex-grow">
         <InputArea
           handle={handle}
           handleInputChange={handleInputChange}
           handleCreatePersona={handleCreatePersona}
+          handleIntegrationClick={handleIntegrationClick}
           isCreating={isCreating}
+          isIntegrating={isIntegrating}
         />
-        {!loading && (
+        {/* {!loading && (
           <ChatbotList
             chatbots={filteredChatbots}
             handleChatbotClick={handleChatbotClick}
@@ -810,7 +945,7 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
             ref={ref}
             hasMore={hasMore}
           />
-        )}
+        )} */}
       </div>
       <Footer />
       {/* Render the modal */}

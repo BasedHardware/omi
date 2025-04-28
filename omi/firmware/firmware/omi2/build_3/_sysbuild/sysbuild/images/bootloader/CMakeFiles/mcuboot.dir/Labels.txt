@@ -1,0 +1,13 @@
+# Target labels
+ mcuboot
+# Source files and their labels
+/Users/nik/projects/omi/omi/firmware/firmware/omi2/build_3/_sysbuild/sysbuild/images/bootloader/CMakeFiles/mcuboot
+/Users/nik/projects/omi/omi/firmware/firmware/omi2/build_3/_sysbuild/sysbuild/images/bootloader/CMakeFiles/mcuboot.rule
+/Users/nik/projects/omi/omi/firmware/firmware/omi2/build_3/_sysbuild/sysbuild/images/bootloader/CMakeFiles/mcuboot-complete.rule
+/Users/nik/projects/omi/omi/firmware/firmware/omi2/build_3/_sysbuild/sysbuild/images/bootloader/mcuboot-prefix/src/mcuboot-stamp/mcuboot-build.rule
+/Users/nik/projects/omi/omi/firmware/firmware/omi2/build_3/_sysbuild/sysbuild/images/bootloader/mcuboot-prefix/src/mcuboot-stamp/mcuboot-configure.rule
+/Users/nik/projects/omi/omi/firmware/firmware/omi2/build_3/_sysbuild/sysbuild/images/bootloader/mcuboot-prefix/src/mcuboot-stamp/mcuboot-download.rule
+/Users/nik/projects/omi/omi/firmware/firmware/omi2/build_3/_sysbuild/sysbuild/images/bootloader/mcuboot-prefix/src/mcuboot-stamp/mcuboot-install.rule
+/Users/nik/projects/omi/omi/firmware/firmware/omi2/build_3/_sysbuild/sysbuild/images/bootloader/mcuboot-prefix/src/mcuboot-stamp/mcuboot-mkdir.rule
+/Users/nik/projects/omi/omi/firmware/firmware/omi2/build_3/_sysbuild/sysbuild/images/bootloader/mcuboot-prefix/src/mcuboot-stamp/mcuboot-patch.rule
+/Users/nik/projects/omi/omi/firmware/firmware/omi2/build_3/_sysbuild/sysbuild/images/bootloader/mcuboot-prefix/src/mcuboot-stamp/mcuboot-update.rule

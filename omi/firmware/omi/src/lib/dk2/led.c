@@ -5,6 +5,10 @@
 
 LOG_MODULE_REGISTER(led, CONFIG_LOG_DEFAULT_LEVEL);
 
+static const struct gpio_dt_spec led_red = GPIO_DT_SPEC_GET(DT_ALIAS(led0), gpios);
+static const struct gpio_dt_spec led_green = GPIO_DT_SPEC_GET(DT_ALIAS(led1), gpios);
+static const struct gpio_dt_spec led_blue = GPIO_DT_SPEC_GET(DT_ALIAS(led2), gpios);
+
 int led_start()
 {
     ASSERT_TRUE(gpio_is_ready_dt(&led_red));

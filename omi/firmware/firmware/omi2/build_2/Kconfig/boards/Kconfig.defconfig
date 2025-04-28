@@ -1,0 +1,2 @@
+# Load Zephyr board defconfig descriptions.
+osource "/Users/nik/projects/omi/omi/firmware/firmware/boards/omi/omi2/Kconfig.defconfig"

@@ -211,7 +211,6 @@ int main(void)
         LOG_ERR("Failed to mount SD card (err %d)", err);
         return err;
     }
-
     k_msleep(500);
 
     LOG_PRINTK("\n");
@@ -239,7 +238,7 @@ int main(void)
 #endif
 
     // Enable usb
-#ifdef CONFIG_ENABLE_USB
+#ifdef CONFIG_OMI_ENABLE_USB
     LOG_PRINTK("\n");
     LOG_INF("Initializing power supply check...\n");
 
@@ -265,28 +264,19 @@ int main(void)
     {
         LOG_ERR("Failed to start transport (err %d)", transportErr);
         // TODO: Detect the current core is app core or net core
-        // // Blink green LED to indicate error
-        // for (int i = 0; i < 5; i++)
-        // {
-        //     set_led_green(!gpio_pin_get_dt(&led_green));
-        //     k_msleep(200);
-        // }
-        // set_led_green(false);
-        // // return err;
+        // Blink green LED to indicate error
+        for (int i = 0; i < 5; i++)
+        {
+            set_led_green(!gpio_pin_get_dt(&led_green));
+            k_msleep(200);
+        }
+        set_led_green(false);
+
         return transportErr;
     }
 
 #ifdef CONFIG_OMI_ENABLE_SPEAKER
-#ifndef CONFIG_UART_CONSOLE
-    LOG_PRINTK("\n");
-    LOG_INF("Play boot sound...\n");
-
-    // This messes up the UART console, so comment out
-    // if console logs are enabled
     play_boot_sound();
-#else
-    LOG_INF("UART console enabled, not playing boot sound");
-#endif
 #endif
 
     LOG_PRINTK("\n");

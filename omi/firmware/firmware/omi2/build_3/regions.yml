@@ -1,0 +1,24 @@
+flash_primary:
+  base_address: 0x0
+  default_driver_kconfig: CONFIG_SOC_FLASH_NRF
+  device: flash_controller
+  dynamic_partition: null
+  name: flash_primary
+  placement_strategy: complex
+  size: 0x100000
+otp:
+  base_address: 0xff8100
+  default_driver_kconfig: ''
+  device: ''
+  dynamic_partition: null
+  name: otp
+  placement_strategy: start_to_end
+  size: 0x2fc
+sram_primary:
+  base_address: 0x20000000
+  default_driver_kconfig: ''
+  device: ''
+  dynamic_partition: sram_primary
+  name: sram_primary
+  placement_strategy: complex
+  size: 0x80000
