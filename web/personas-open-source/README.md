@@ -1,7 +1,7 @@
 # Personas - Open Source AI Chat Platform With 11 Million Views, 300K Users
 
-Personas is an open-source AI chat platform that allows users to interact with various AI models through a beautiful, modern interface. 
-We recently went viral on Twitter with 11 Million Views, 300K+ users. 
+Personas is an open-source AI chat platform that allows users to interact with various AI models through a beautiful, modern interface.
+We recently went viral on Twitter with 11 Million Views, 300K+ users.
 
 Built with Next.js 13, Firebase, and various AI APIs, it offers a seamless experience for users to engage with different AI personalities through Twitter.
 
@@ -17,6 +17,7 @@ Built with Next.js 13, Firebase, and various AI APIs, it offers a seamless exper
 ## Prerequisites
 
 Before you begin, ensure you have:
+
 - Node.js 18 or later
 - npm or yarn
 - Git
@@ -26,21 +27,25 @@ Before you begin, ensure you have:
 You'll need to obtain the following API keys and credentials:
 
 1. **Firebase Configuration**
+
    - Create a project at [Firebase Console](https://console.firebase.google.com/)
    - Enable Authentication (Google Sign-in)
    - Enable Firestore Database
    - Get your Firebase configuration keys
 
 2. **OpenRouter API**
+
    - Sign up at [OpenRouter](https://openrouter.ai/)
    - Get your API key
    - Access to models like Claude Sonnet and Gemini Flash (100x cheaper than direct API access)
 
 3. **RapidAPI Twitter API**
-   - Subscribe to [Twitter API]([https://rapidapi.com/twitterapi/api/twitter-api/](https://rapidapi.com/alexanderxbx/api/twitter-api45/playground/apiendpoint_27b38e0c-f394-4715-a7c2-7a68eec23b99))
+   -Subscribe to [Twitter API](https://rapidapi.com/alexanderxbx/api/twitter-api45)
+
    - Get your API key
 
 4. **Mixpanel**
+
    - Create an account at [Mixpanel](https://mixpanel.com)
    - Get your project token
 
@@ -48,21 +53,24 @@ You'll need to obtain the following API keys and credentials:
    - Subscribe to [LinkedIn API](https://rapidapi.com/rockapis-rockapis-default/api/linkedin-api8)
    - Get your API key
    - Access to profile data and posts
-   
+
 ## Setup Instructions
 
 1. Clone the repository:
+
    ```bash
    git clone https://github.com/BasedHardware/omi.git
    cd omi/personas-open-source
    ```
 
 2. Install dependencies:
+
    ```bash
    npm install
    ```
 
 3. Create a `.env.local` file in the root directory with the following variables:
+
    ```env
    # Firebase Configuration
    NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_api_key
@@ -87,6 +95,7 @@ You'll need to obtain the following API keys and credentials:
    ```
 
 4. Run the development server:
+
    ```bash
    npm run dev
    ```
@@ -98,6 +107,7 @@ You'll need to obtain the following API keys and credentials:
 To run using Docker:
 
 1. Build the image:
+
    ```bash
    docker build -t personas .
    ```
