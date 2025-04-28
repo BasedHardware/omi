@@ -92,13 +92,12 @@ async def transcribe_wyoming(audio_queue: Queue, wyoming_url: str):
         segment_has_audio = False
         chunk = None # Initialize chunk to handle potential early exit
 
+        # 1. Connect to the server
+        logger.info(f"Attempting to connect to Wyoming server at {wyoming_url}")
+        client = AsyncClient.from_uri(wyoming_url)
+        await client.connect()
+        logger.info(f"Connected to Wyoming server at {wyoming_url}")
         try:
-            # 1. Connect for this segment
-            logger.info(f"Attempting to connect to Wyoming server at {wyoming_url} for new segment...")
-            client = AsyncClient.from_uri(wyoming_url)
-            await client.connect()
-            logger.info(f"Connected to Wyoming server at {wyoming_url}")
-
             # 2. Tell the server what we intend to do
             logger.debug("Wyoming: Sending Transcribe intent...")
             await client.write_event(
