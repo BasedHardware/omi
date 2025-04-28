@@ -167,9 +167,11 @@ class CaptureProvider extends ChangeNotifier
     debugPrint('is ws null: ${_socket == null}');
 
     // Connect to the transcript socket
-    String language = SharedPreferencesUtil().recordingsLanguage;
-    _socket = await ServiceManager.instance().socket.conversation(
-        codec: codec, sampleRate: sampleRate, language: language, force: force);
+    String language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
+    _socket = await ServiceManager.instance()
+        .socket
+        .conversation(codec: codec, sampleRate: sampleRate, language: language, force: force);
     if (_socket == null) {
       _startKeepAliveServices();
       debugPrint("Can not create new conversation socket");
@@ -388,10 +390,9 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
     var codec = SharedPreferencesUtil().deviceCodec;
-    var language = SharedPreferencesUtil().recordingsLanguage;
-    if (language != _socket?.language ||
-        codec != _socket?.codec ||
-        _socket?.state != SocketServiceState.connected) {
+    var language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
+    if (language != _socket?.language || codec != _socket?.codec || _socket?.state != SocketServiceState.connected) {
       await _initiateWebsocket(audioCodec: codec, force: true);
     }
   }
@@ -486,6 +487,7 @@ class CaptureProvider extends ChangeNotifier
   Future streamDeviceRecording({BtDevice? device}) async {
     debugPrint("streamDeviceRecording $device");
     if (device != null) _updateRecordingDevice(device);
+
     await _resetState();
   }
 
@@ -593,6 +595,15 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
 
+    if (event.type == MessageEventType.translating) {
+      if (event.segments == null || event.segments?.isEmpty == true) {
+        debugPrint("No segments received in translating event. Content is: $event");
+        return;
+      }
+      _handleTranslationEvent(event.segments!);
+      return;
+    }
+
     if (event.type == MessageEventType.serviceStatus) {
       if (event.status == null) {
         return;
@@ -652,6 +663,24 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
+  void _handleTranslationEvent(List<TranscriptSegment> translatedSegments) {
+    try {
+      if (translatedSegments.isEmpty) return;
+      
+      debugPrint("Received ${translatedSegments.length} translated segments");
+      
+      // Update the segments with the translated ones
+      var remainSegments = TranscriptSegment.updateSegments(segments, translatedSegments);
+      if (remainSegments.isNotEmpty) {
+        debugPrint("Adding ${remainSegments.length} new translated segments");
+      }
+      
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error handling translation event: $e");
+    }
+  }
+
   @override
   void onSegmentReceived(List<TranscriptSegment> newSegments) {
     if (newSegments.isEmpty) return;
@@ -661,7 +690,9 @@ class CaptureProvider extends ChangeNotifier
       FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
       _loadInProgressConversation();
     }
-    TranscriptSegment.combineSegments(segments, newSegments);
+    var remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
+    TranscriptSegment.combineSegments(segments, remainSegments);
+
     hasTranscripts = true;
     notifyListeners();
   }
@@ -969,10 +1000,5 @@ class CaptureProvider extends ChangeNotifier
       return [];
     }
     return connection.getStorageList();
-  }
-
-  void _setsdCardReady(bool value) {
-    sdCardReady = value;
-    notifyListeners();
   }
 }

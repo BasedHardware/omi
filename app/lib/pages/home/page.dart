@@ -105,6 +105,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   void _initiateApps() {
     context.read<AppProvider>().getApps();
+    context.read<AppProvider>().getPopularApps();
   }
 
   @override
@@ -510,17 +511,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   child: Row(
                     children: [
                       const Spacer(),
-                      SpeechLanguageSheet(
-                        recordingLanguage: provider.recordingLanguage,
-                        setRecordingLanguage: (language) {
-                          provider.setRecordingLanguage(language);
-                          // Notify capture provider
-                          if (context.mounted) {
-                            context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                          }
-                        },
-                        availableLanguages: provider.availableLanguages,
-                      ),
                     ],
                   ),
                 );

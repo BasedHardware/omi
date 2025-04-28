@@ -19,7 +19,7 @@ class _CountryBottomSheetState extends State<CountryBottomSheet> {
   void initState() {
     super.initState();
     _searchController.addListener(() {
-      context.read<PaymentMethodProvider>().updateSearchQuery(_searchController.text);
+      context.read<PaymentMethodProvider>().updateSearchQuery(_searchController.text.decodeString);
     });
   }
 

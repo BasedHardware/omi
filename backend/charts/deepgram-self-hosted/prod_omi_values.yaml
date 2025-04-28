@@ -67,7 +67,7 @@ scaling:
 api:
   image:
     path: us-central1-docker.pkg.dev/based-hardware/deepgram/self-hosted-api
-    tag: release-250130
+    tag: release-250331
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -100,7 +100,7 @@ api:
 engine:
   image:
     path: us-central1-docker.pkg.dev/based-hardware/deepgram/self-hosted-engine
-    tag: release-250130
+    tag: release-250331
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -136,7 +136,7 @@ licenseProxy:
   enabled: true
   image:
     path: us-central1-docker.pkg.dev/based-hardware/deepgram/self-hosted-license-proxy
-    tag: release-250130
+    tag: release-250331
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:

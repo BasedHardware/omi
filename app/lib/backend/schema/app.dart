@@ -223,6 +223,7 @@ class App {
   List<String> thumbnailIds;
   List<String> thumbnailUrls;
   String? username;
+  bool? isPopular;
 
   App({
     required this.id,
@@ -260,6 +261,7 @@ class App {
     this.username,
     this.connectedAccounts = const [],
     this.twitter,
+    this.isPopular = false,
   });
 
   String getName() {
@@ -318,6 +320,7 @@ class App {
       username: json['username'],
       connectedAccounts: (json['connected_accounts'] as List<dynamic>?)?.cast<String>() ?? [],
       twitter: json['twitter'],
+      isPopular: json['is_popular'] ?? false,
     );
   }
 

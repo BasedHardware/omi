@@ -67,7 +67,7 @@ class IntercomManager {
       'Apps Integrations Enabled Count': _preferences.enabledAppsIntegrationsCount,
       'Speaker Profile': _preferences.hasSpeakerProfile,
       'Calendar Enabled': _preferences.calendarEnabled,
-      'Recordings Language': _preferences.recordingsLanguage,
+      'Primary Language': _preferences.userPrimaryLanguage,
       'Authorized Storing Recordings': _preferences.permissionStoreRecordingsEnabled,
     });
   }

@@ -116,10 +116,10 @@ class AppResponse {
 
   AppResponse(this.content, {this.id = 0, this.appId});
 
-  toJson() => {'pluginId': appId, 'content': content};
+  toJson() => {'appId': appId, 'content': content};
 
   factory AppResponse.fromJson(Map<String, dynamic> json) {
-    return AppResponse(json['content'], appId: json['pluginId'] ?? json['plugin_id']);
+    return AppResponse(json['content'], appId: json['appId'] ?? json['app_id']);
   }
 }
 

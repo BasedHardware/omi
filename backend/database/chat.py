@@ -76,7 +76,7 @@ def get_plugin_messages(uid: str, plugin_id: str, limit: int = 20, offset: int =
 
     # Fetch all conversations at once
     conversations = {}
-    conversations_ref = user_ref.collection('memories')
+    conversations_ref = user_ref.collection('conversations')
     doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversations_id]
     docs = db.get_all(doc_refs)
     for doc in docs:
@@ -129,7 +129,7 @@ def get_messages(
 
     # Fetch all conversations at once
     conversations = {}
-    conversations_ref = user_ref.collection('memories')
+    conversations_ref = user_ref.collection('conversations')
     doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversations_id]
     docs = db.get_all(doc_refs)
     for doc in docs:

@@ -3,6 +3,8 @@ import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:provider/provider.dart';
 
 class NameWidget extends StatefulWidget {
   final Function goNext;
@@ -23,6 +25,7 @@ class _NameWidgetState extends State<NameWidget> {
     // focusNode.requestFocus();
     super.initState();
   }
+
 
   @override
   Widget build(BuildContext context) {

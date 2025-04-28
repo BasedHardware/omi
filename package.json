@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "expo-file-system": "^18.0.12",
+    "ioredis": "^5.6.1"
+  },
+  "devDependencies": {
+    "dotenv-cli": "^8.0.0"
+  }
+}

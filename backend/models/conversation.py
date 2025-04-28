@@ -54,9 +54,14 @@ class ConversationPhoto(BaseModel):
     base64: str
     description: str
 
-
+# TODO: remove this class when the app is updated to use apps_results
 class PluginResult(BaseModel):
     plugin_id: Optional[str]
+    content: str
+
+
+class AppResult(BaseModel):
+    app_id: Optional[str]
     content: str
 
 
@@ -164,7 +169,7 @@ class Conversation(BaseModel):
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
 
-    source: Optional[ConversationSource] = ConversationSource.omi  # TODO: once released migrate db to include this field
+    source: Optional[ConversationSource] = ConversationSource.omi
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
 
     structured: Structured
@@ -172,6 +177,9 @@ class Conversation(BaseModel):
     geolocation: Optional[Geolocation] = None
     photos: List[ConversationPhoto] = []
 
+    apps_results: List[AppResult] = []
+
+    # TODO: plugins_results for backward compatibility with the old memories routes and app
     plugins_results: List[PluginResult] = []
 
     external_data: Optional[Dict] = None
@@ -181,9 +189,18 @@ class Conversation(BaseModel):
     deleted: bool = False
     visibility: ConversationVisibility = ConversationVisibility.private
 
-    # processing_memory_id should be migrated to processing_conversation_id once the memories routes are deprecated
+    # TODO: processing_memory_id for backward compatibility with the old memories routes and app
     processing_memory_id: Optional[str] = None
+
+    processing_conversation_id: Optional[str] = None
+    
     status: Optional[ConversationStatus] = ConversationStatus.completed
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        # Update plugins_results based on apps_results
+        self.plugins_results = [PluginResult(plugin_id=app.app_id, content=app.content) for app in self.apps_results]
+        self.processing_memory_id = self.processing_conversation_id
 
     @staticmethod
     def conversations_to_string(conversations: List['Conversation'], use_transcript: bool = False) -> str:
@@ -223,9 +240,15 @@ class Conversation(BaseModel):
         conversation_dict['structured']['events'] = [
             {**event, 'start': event['start'].isoformat()} for event in conversation_dict['structured']['events']
         ]
+
+        if 'external_data' in conversation_dict and conversation_dict['external_data']:
+            conversation_dict['external_data']['started_at'] = conversation_dict['started_at'].isoformat()
+            conversation_dict['external_data']['finished_at'] = conversation_dict['finished_at'].isoformat()
+
         conversation_dict['created_at'] = conversation_dict['created_at'].isoformat()
         conversation_dict['started_at'] = conversation_dict['started_at'].isoformat() if conversation_dict['started_at'] else None
         conversation_dict['finished_at'] = conversation_dict['finished_at'].isoformat() if conversation_dict['finished_at'] else None
+
         return conversation_dict
 
 

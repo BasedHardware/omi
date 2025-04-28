@@ -3,7 +3,7 @@ description: A new Flutter project.
 
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.53+216
+version: 1.0.61+283
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -63,6 +63,10 @@ dependencies:
   awesome_notifications: any
   instabug_flutter: ^13.3.0
   nordic_dfu: ^6.1.4+hotfix
+  mcumgr_flutter: ^0.4.2
+  flutter_archive: ^6.0.3
+  json_annotation: ^4.9.0
+  json_serializable: 6.8.0
   package_info_plus: ^8.0.1
   path_provider: any
   flutter_foreground_task: 8.13.0
@@ -78,7 +82,7 @@ dependencies:
   manage_calendar_events: ^2.0.3
   flutter_timezone: ^2.0.0
   sign_in_with_apple: ^6.1.1
-  google_sign_in: ^6.2.1
+  google_sign_in: 6.2.1
   location: ^7.0.0
   cached_network_image: ^3.3.1
   map_launcher: ^3.3.1
@@ -106,6 +110,7 @@ dependency_overrides:
   http: ^1.2.1
   uuid: ^4.4.0
   js: ^0.7.1
+  google_sign_in_ios: 5.8.1
   opus_flutter_ios:
     git:
       url: https://github.com/mdmohsin7/opus_flutter.git
