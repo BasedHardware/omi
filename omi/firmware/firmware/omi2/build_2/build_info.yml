@@ -1,6 +1,0 @@
-west:
-  command: /opt/nordic/ncs/toolchains/f8037e9b83/bin/west build --build-dir /Users/nik/projects/omi/omi/firmware/firmware/omi2/build_2
-    /Users/nik/projects/omi/omi/firmware/firmware/omi2 --pristine --board omi2/nrf5340/cpuapp
-    -- -DNCS_TOOLCHAIN_VERSION=NONE -DBOARD_ROOT=/Users/nik/projects/omi/omi/firmware/firmware
-  topdir: /opt/nordic/ncs/v2.9.0
-  version: 1.2.0
