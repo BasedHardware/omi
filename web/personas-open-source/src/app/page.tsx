@@ -368,6 +368,12 @@ export default function HomePage() {
       return;
     }
 
+    // Track the click event in Mixpanel
+    Mixpanel.track('Create Persona Clicked', {
+      input: handleToUse,
+      timestamp: new Date().toISOString()
+    });
+
     try {
       setIsCreating(true);
       const cleanHandle = extractHandle(handleToUse);
@@ -838,6 +844,13 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
     setIsIntegrating(true);
 
     console.log(`[handleIntegrationClick] Clicked provider: ${provider}`);
+    
+    // Track the click event in Mixpanel
+    Mixpanel.track('Integration Clicked', {
+      provider: provider,
+      timestamp: new Date().toISOString()
+    });
+    
     const isMobile = isMobileDevice();
     let loadingToastId: string | number | undefined = undefined;
 
@@ -923,6 +936,9 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
     } 
   };
 
+  // URL for the Veyrax page to add more tools - Updated path
+  const addToolsUrl = currentUserUid ? `https://veyrax.com/omi/auth?omi_user_id=${encodeURIComponent(currentUserUid)}` : '#';
+
   return (
     <div className="min-h-screen bg-black text-white flex flex-col">
       {/* <PreorderBanner botName="your favorite personal" /> */}
@@ -936,16 +952,65 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
           isCreating={isCreating}
           isIntegrating={isIntegrating}
         />
-        {/* {!loading && (
-          <ChatbotList
-            chatbots={filteredChatbots}
-            handleChatbotClick={handleChatbotClick}
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            ref={ref}
-            hasMore={hasMore}
-          />
-        )} */}
+
+        {/* Add more tools link (conditionally rendered) */}
+        {currentUserUid && (
+          <div className="mt-4 text-center">
+            <a
+              href={addToolsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-base text-white hover:text-zinc-300 hover:underline"
+              onClick={() => Mixpanel.track('Add More Tools Clicked', { timestamp: new Date().toISOString() })}
+            >
+              Add more tools
+            </a>
+          </div>
+        )}
+
+        {/* Before/After Comparison */}
+        <div className="w-full max-w-5xl mt-12 md:mt-16 px-4">
+          <div className="grid md:grid-cols-2 gap-8">
+            {/* Before Section */}
+            <div className="bg-zinc-900 p-6 rounded-lg border border-zinc-700">
+              <h3 className="text-lg font-semibold mb-4 text-center text-zinc-400">ChatGPT</h3>
+              <div className="space-y-3">
+                {/* User Bubble */}
+                <div className="flex justify-end">
+                  <div className="bg-zinc-700 p-3 rounded-lg max-w-[80%] text-white">
+                    What should I do today?
+                  </div>
+                </div>
+                {/* AI Bubble (Generic) */}
+                <div className="flex justify-start">
+                  <div className="bg-zinc-700 p-3 rounded-lg max-w-[80%] text-zinc-200">
+                    You could organize your tasks, check the weather forecast, brainstorm new ideas, or maybe learn a new skill online.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* After Section */}
+            <div className="bg-zinc-900 p-6 rounded-lg border border-purple-600 shadow-lg shadow-purple-600/20">
+              <h3 className="text-lg font-semibold mb-4 text-center text-white">omiGPT</h3>
+              <div className="space-y-3">
+                {/* User Bubble */}
+                <div className="flex justify-end">
+                  <div className="bg-zinc-700 p-3 rounded-lg max-w-[80%] text-white">
+                    What should I do today?
+                  </div>
+                </div>
+                {/* AI Bubble (Personalized) */}
+                <div className="flex justify-start">
+                  <div className="bg-zinc-600 p-3 rounded-lg max-w-[80%] text-white">
+                    Based on your calendar, you have the 'Marketing Sync' at 2 PM. Your Notion page 'Q3 Launch Plan' needs review. How about blocking 1 hour now to finalize those presentation slides? Also, remember you starred that new cafe near the meeting spot on Maps.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
       <Footer />
       {/* Render the modal */}
