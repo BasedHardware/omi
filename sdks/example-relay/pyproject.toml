@@ -11,4 +11,3 @@ dependencies = [
 
 [tool.uv.sources]
 easy-audio-interfaces = { git = "https://github.com/AnkushMalaker/python-audio-interfaces.git" }
-omi-sdk = { path = "../python" }
