@@ -678,7 +678,7 @@ async def _listen(
             while websocket_active:
                 data = await websocket.receive_bytes()
                 if codec == 'opus' and sample_rate == 16000:
-                    data = decoder.decode(bytes(data), frame_size=160)
+                    data = decoder.decode(bytes(data), frame_size=320)
                     # audio_data.extend(data)
 
                 # STT

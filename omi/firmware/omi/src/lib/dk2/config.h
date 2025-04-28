@@ -7,6 +7,7 @@
 #define AUDIO_BUFFER_SAMPLES 16000 // 1s
 #define NETWORK_RING_BUF_SIZE 32 // number of frames * CODEC_OUTPUT_MAX_BYTES
 #define MINIMAL_PACKET_SIZE 100    // Less than that doesn't make sence to send anything at all
+#define PACKETS_TO_COMBINE_PER_GATT_PUSH 1 // Number of audio packets to combine before sending via GATT
 
 // PIN definitions
 // https://github.com/Seeed-Studio/Adafruit_nRF52_Arduino/blob/5aa3573913449410fd60f76b75673c53855ff2ec/variants/Seeed_XIAO_nRF52840_Sense/variant.cpp#L34
@@ -22,8 +23,8 @@
 #endif
 
 #if CODEC_OPUS
-#define CODEC_PACKAGE_SAMPLES 160
-#define CODEC_OUTPUT_MAX_BYTES CODEC_PACKAGE_SAMPLES * 2
+#define CODEC_PACKAGE_SAMPLES 160*2
+#define CODEC_OUTPUT_MAX_BYTES CODEC_PACKAGE_SAMPLES / 2
 #define CODEC_OPUS_APPLICATION OPUS_APPLICATION_RESTRICTED_LOWDELAY
 #define CODEC_OPUS_BITRATE 32000
 #define CODEC_OPUS_VBR 1 // Or 1
