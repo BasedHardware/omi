@@ -29,6 +29,7 @@
 #define CODEC_OPUS_VBR 1 // Or 1
 #define CODEC_OPUS_COMPLEXITY 3
 #endif
+// TODO: If this is a CONFIG_ , it should be driven by a Kconfig setting.
 #define CONFIG_OPUS_MODE CONFIG_OPUS_MODE_CELT
 
 // Codec IDs

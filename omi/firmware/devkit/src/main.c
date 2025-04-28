@@ -11,6 +11,9 @@
 #include "storage.h"
 #include "speaker.h"
 #include "usb.h"
+#if defined(CONFIG_OMI_ENABLE_BATTERY)
+#include "lib/battery/battery.h"
+#endif
 #define BOOT_BLINK_DURATION_MS 600
 #define BOOT_PAUSE_DURATION_MS 200
 #define VBUS_DETECT (1U << 20)

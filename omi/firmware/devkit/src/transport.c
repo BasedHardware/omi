@@ -48,6 +48,8 @@ static ssize_t audio_codec_read_characteristic(struct bt_conn *conn, const struc
 static void dfu_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
 
+static const char *phy2str(uint8_t phy);
+
 //
 // Service and Characteristic
 //
@@ -93,7 +95,7 @@ static struct bt_gatt_service dfu_service = BT_GATT_SERVICE(dfu_service_attr);
 //this code activates the onboard accelerometer. some cute ideas may include shaking the necklace to color strobe
 //
 static struct sensors mega_sensor;
-static struct device *lsm6dsl_dev;
+static const struct device *lsm6dsl_dev;
 //Arbritrary uuid, feel free to change
 static struct bt_uuid_128 accel_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x32403790,0x0000,0x1000,0x7450,0xBF445E5829A2));
 static struct bt_uuid_128 accel_uuid_x = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x32403791,0x0000,0x1000,0x7450,0xBF445E5829A2));
@@ -142,7 +144,7 @@ void broadcast_accel(struct k_work *work_item) {
     k_work_reschedule(&accel_work, K_MSEC(ACCEL_REFRESH_INTERVAL));
 }
 
-struct gpio_dt_spec accel_gpio_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio1)), .pin=8, .dt_flags = GPIO_INT_DISABLE};
+struct gpio_dt_spec accel_gpio_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio1)), .pin=8, .dt_flags = 0};
 
 //use d4,d5
 static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value)
@@ -267,7 +269,9 @@ static ssize_t audio_data_write_handler(struct bt_conn *conn, const struct bt_ga
 {
     uint16_t amount = 400;
     int16_t *int16_buf = (int16_t *)buf;
+    (void)int16_buf;
     uint8_t *data = (uint8_t *)buf;
+    (void)data;
     bt_gatt_notify(conn, attr, &amount, sizeof(amount));
     amount = speak(len, buf);
     return len;
@@ -568,7 +572,7 @@ static bool push_to_gatt(struct bt_conn *conn)
 #define OPUS_PADDED_LENGTH 80
 #define MAX_WRITE_SIZE 440
 static uint8_t storage_temp_data[MAX_WRITE_SIZE];
-static uint32_t offset = 0;
+__attribute__((unused)) static uint32_t offset = 0;
 static uint16_t buffer_offset = 0;
 // bool write_to_storage(void)
 // {
@@ -636,10 +640,10 @@ bool write_to_storage(void) {//max possible packing
     return true;
 }
 
-static bool use_storage = true;
+__attribute__((unused)) static bool use_storage = true;
 #define MAX_FILES 10
 #define MAX_AUDIO_FILE_SIZE 300000
-static int recent_file_size_updated = 0;
+__attribute__((unused)) static int recent_file_size_updated = 0;
 static uint8_t heartbeat_count = 0;
 void update_file_size()
 {
@@ -782,6 +786,9 @@ int bt_off()
 int bt_on()
 {
    int err = bt_enable(NULL);
+   if( err < 0 ) {
+     return err;
+   }
    bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
    bt_gatt_service_register(&storage_service);
    sd_on();
@@ -879,4 +886,17 @@ int broadcast_audio_packets(uint8_t *buffer, size_t size)
 void accel_off()
 {
     gpio_pin_set_dt(&accel_gpio_pin, 0);
+}
+
+
+// This helper function appears to not be exported anywhere in the SDK
+static const char *phy2str(uint8_t phy)
+{
+	switch (phy) {
+	case 0: return "No packets";
+	case BT_GAP_LE_PHY_1M: return "LE 1M";
+	case BT_GAP_LE_PHY_2M: return "LE 2M";
+	case BT_GAP_LE_PHY_CODED: return "LE Coded";
+	default: return "Unknown";
+	}
 }
