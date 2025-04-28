@@ -155,6 +155,14 @@ class SDCardWalSync implements IWalSync {
 
   SDCardWalSync(this.listener);
 
+  Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return BleAudioCodec.pcm8;
+    }
+    return connection.getAudioCodec();
+  }
+
   Future<List<int>> _getStorageList(String deviceId) async {
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
@@ -178,8 +186,9 @@ class SDCardWalSync implements IWalSync {
     if (_device == null) {
       return [];
     }
+    String deviceId = _device!.id;
     List<Wal> wals = [];
-    var storageFiles = await _getStorageList(_device!.id);
+    var storageFiles = await _getStorageList(deviceId);
     if (storageFiles.isEmpty) {
       return [];
     }
@@ -193,9 +202,11 @@ class SDCardWalSync implements IWalSync {
       debugPrint("SDCard bad state, offset > total");
       storageOffset = 0;
     }
+
     //> 10s
-    if (totalBytes - storageOffset > 10 * 80 * 100) {
-      var seconds = ((totalBytes - storageOffset) / 80) ~/ 100; // 80: frame length, 100: frame per seconds
+    BleAudioCodec codec = await _getAudioCodec(deviceId);
+    if (totalBytes - storageOffset > 10 * codec.getFramesLengthInBytes() * codec.getFramesPerSecond()) {
+      var seconds = ((totalBytes - storageOffset) / codec.getFramesLengthInBytes()) ~/ codec.getFramesPerSecond();
       var timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - seconds;
       wals.add(Wal(
         timerStart: timerStart,
@@ -515,6 +526,9 @@ class LocalWalSync implements IWalSync {
 
   IWalSyncListener listener;
 
+  // TODO: Support opusFS320, frames per second 50
+  int framesPerSecond = 100;
+
   LocalWalSync(this.listener);
 
   @override
@@ -548,11 +562,10 @@ class LocalWalSync implements IWalSync {
       return;
     }
 
-    var framesPerSeconds = 100;
-    var lossesThreshold = 10 * framesPerSeconds; // 10s
+    var lossesThreshold = 10 * framesPerSecond; // 10s
     var newFrameSyncDelaySeconds = 15; // wait 15s for new frame synced
     var timerEnd = DateTime.now().millisecondsSinceEpoch ~/ 1000 - newFrameSyncDelaySeconds;
-    var pivot = _frames.length - newFrameSyncDelaySeconds * framesPerSeconds;
+    var pivot = _frames.length - newFrameSyncDelaySeconds * framesPerSecond;
     if (pivot <= 0) {
       return;
     }
@@ -560,7 +573,7 @@ class LocalWalSync implements IWalSync {
     // Scan backward
     var high = pivot;
     while (high > 0) {
-      var low = high - framesPerSeconds * chunkSizeInSeconds;
+      var low = high - framesPerSecond * chunkSizeInSeconds;
       if (low < 0) {
         low = 0;
       }
@@ -578,7 +591,7 @@ class LocalWalSync implements IWalSync {
           }
         }
       }
-      var timerStart = timerEnd - (high - low) ~/ framesPerSeconds;
+      var timerStart = timerEnd - (high - low) ~/ framesPerSecond;
       if (!synced) {
         var missWalIdx = _wals.indexWhere((w) => w.timerStart == timerStart && w.device == "phone");
         Wal missWal;

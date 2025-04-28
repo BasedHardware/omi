@@ -12,14 +12,30 @@ enum BleAudioCodec {
   mulaw16,
   mulaw8,
   opus,
+  opusFS320,
   unknown;
 
   @override
   String toString() => mapCodecToName(this);
+
+  bool isOpusSupported() {
+    return this == BleAudioCodec.opusFS320 || this == BleAudioCodec.opus;
+  }
+
+  int getFramesPerSecond() {
+    return this == BleAudioCodec.opusFS320 ? 50 : 100;
+  }
+
+  int getFramesLengthInBytes() {
+    // TODO: add support opusFS320
+    return this == BleAudioCodec.opusFS320 ? 160 : 80;
+  }
 }
 
 String mapCodecToName(BleAudioCodec codec) {
   switch (codec) {
+    case BleAudioCodec.opusFS320:
+      return 'opus_fs320';
     case BleAudioCodec.opus:
       return 'opus';
     case BleAudioCodec.pcm16:
@@ -33,6 +49,8 @@ String mapCodecToName(BleAudioCodec codec) {
 
 BleAudioCodec mapNameToCodec(String codec) {
   switch (codec) {
+    case 'opus_fs320':
+      return BleAudioCodec.opusFS320;
     case 'opus':
       return BleAudioCodec.opus;
     case 'pcm16':
@@ -46,6 +64,8 @@ BleAudioCodec mapNameToCodec(String codec) {
 
 int mapCodecToSampleRate(BleAudioCodec codec) {
   switch (codec) {
+    case BleAudioCodec.opusFS320:
+      return 16000;
     case BleAudioCodec.opus:
       return 16000;
     case BleAudioCodec.pcm16:
@@ -59,6 +79,8 @@ int mapCodecToSampleRate(BleAudioCodec codec) {
 
 int mapCodecToBitDepth(BleAudioCodec codec) {
   switch (codec) {
+    case BleAudioCodec.opusFS320:
+      return 16;
     case BleAudioCodec.opus:
       return 16;
     case BleAudioCodec.pcm16:

@@ -41,13 +41,19 @@ router = APIRouter()
 async def _listen(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = None,
-        including_combined_segments: bool = False
+        including_combined_segments: bool = False,
 ):
     print('_listen', uid, language, sample_rate, codec, include_speech_profile, stt_service)
 
     if not uid or len(uid) <= 0:
         await websocket.close(code=1008, reason="Bad uid")
         return
+
+    # Frame size, codec
+    frame_size: int = 160
+    if codec == "opus_fs320":
+        codec = "opus"
+        frame_size = 320
 
     # Convert 'auto' to 'multi' for consistency
     language = 'multi' if language == 'auto' else language
@@ -678,7 +684,7 @@ async def _listen(
             while websocket_active:
                 data = await websocket.receive_bytes()
                 if codec == 'opus' and sample_rate == 16000:
-                    data = decoder.decode(bytes(data), frame_size=320)
+                    data = decoder.decode(bytes(data), frame_size=frame_size)
                     # audio_data.extend(data)
 
                 # STT
