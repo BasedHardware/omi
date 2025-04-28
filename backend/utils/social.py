@@ -43,14 +43,14 @@ class TwitterProfile(BaseModel):
     def from_dict(cls, data: Dict[str, Any]) -> "TwitterProfile":
         """Create a TwitterProfile instance from API response dictionary"""
         return cls(
-            name=data.get("name", ""),
-            profile=data.get("profile", ""),
-            rest_id=data.get("rest_id", ""),
+            name=data.get("name") or "",
+            profile=data.get("profile") or "",
+            rest_id=data.get("rest_id") or "",
             avatar=(data.get("avatar") or "").replace("_normal", ""),  # Get full-size avatar
-            desc=data.get("desc", ""),
-            friends=data.get("friends", 0),
-            sub_count=data.get("sub_count", 0),
-            id=data.get("id", ""),
+            desc=data.get("desc") or "",
+            friends=data.get("friends") or 0,
+            sub_count=data.get("sub_count") or 0,
+            id=data.get("id") or "",
             status=data.get("status", "error")
         )
 
