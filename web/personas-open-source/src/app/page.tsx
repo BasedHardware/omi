@@ -936,16 +936,50 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
           isCreating={isCreating}
           isIntegrating={isIntegrating}
         />
-        {/* {!loading && (
-          <ChatbotList
-            chatbots={filteredChatbots}
-            handleChatbotClick={handleChatbotClick}
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            ref={ref}
-            hasMore={hasMore}
-          />
-        )} */}
+
+        {/* Before/After Comparison */}
+        <div className="w-full max-w-5xl mt-12 md:mt-16 px-4">
+          <div className="grid md:grid-cols-2 gap-8">
+            {/* Before Section */}
+            <div className="bg-zinc-900 p-6 rounded-lg border border-zinc-700">
+              <h3 className="text-lg font-semibold mb-4 text-center text-zinc-400">ChatGPT</h3>
+              <div className="space-y-3">
+                {/* User Bubble */}
+                <div className="flex justify-end">
+                  <div className="bg-zinc-700 p-3 rounded-lg max-w-[80%] text-white">
+                    What should I do today?
+                  </div>
+                </div>
+                {/* AI Bubble (Generic) */}
+                <div className="flex justify-start">
+                  <div className="bg-zinc-700 p-3 rounded-lg max-w-[80%] text-zinc-200">
+                    You could organize your tasks, check the weather forecast, brainstorm new ideas, or maybe learn a new skill online.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* After Section */}
+            <div className="bg-zinc-900 p-6 rounded-lg border border-purple-600 shadow-lg shadow-purple-600/20">
+              <h3 className="text-lg font-semibold mb-4 text-center text-white">omiGPT</h3>
+              <div className="space-y-3">
+                {/* User Bubble */}
+                <div className="flex justify-end">
+                  <div className="bg-zinc-700 p-3 rounded-lg max-w-[80%] text-white">
+                    What should I do today?
+                  </div>
+                </div>
+                {/* AI Bubble (Personalized) */}
+                <div className="flex justify-start">
+                  <div className="bg-zinc-600 p-3 rounded-lg max-w-[80%] text-white">
+                    Based on your calendar, you have the 'Marketing Sync' at 2 PM. Your Notion page 'Q3 Launch Plan' needs review. How about blocking 1 hour now to finalize those presentation slides? Also, remember you starred that new cafe near the meeting spot on Maps.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
       <Footer />
       {/* Render the modal */}
