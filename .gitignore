@@ -1,6 +1,7 @@
 *.env
 .env*
 *__pycache__/
+*.egg-info
 *venv/
 libraries/
 myenv/

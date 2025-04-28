@@ -1,0 +1,14 @@
+[project]
+name = "example-relay"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "easy-audio-interfaces",
+    "omi-sdk",
+]
+
+[tool.uv.sources]
+easy-audio-interfaces = { git = "https://github.com/AnkushMalaker/python-audio-interfaces.git" }
+omi-sdk = { path = "../python" }
