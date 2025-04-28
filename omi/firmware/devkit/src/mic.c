@@ -21,6 +21,8 @@ static int16_t _buffer_1[MIC_BUFFER_SAMPLES];
 static volatile uint8_t _next_buffer_index = 0;
 static volatile mix_handler _callback = NULL;
 
+static const nrfx_pdm_t pdm0_instance = NRFX_PDM_INSTANCE(0);
+
 static void pdm_irq_handler(nrfx_pdm_evt_t const *event)
 {
     // Ignore error (how to handle?)
@@ -36,12 +38,12 @@ static void pdm_irq_handler(nrfx_pdm_evt_t const *event)
         LOG_DBG("Audio buffer requested");
         if (_next_buffer_index == 0)
         {
-            nrfx_pdm_buffer_set(_buffer_0, MIC_BUFFER_SAMPLES);
+            nrfx_pdm_buffer_set(&pdm0_instance, _buffer_0, MIC_BUFFER_SAMPLES);
             _next_buffer_index = 1;
         }
         else
         {
-            nrfx_pdm_buffer_set(_buffer_1, MIC_BUFFER_SAMPLES);
+            nrfx_pdm_buffer_set(&pdm0_instance, _buffer_1, MIC_BUFFER_SAMPLES);
             _next_buffer_index = 0;
         }
     }
@@ -75,8 +77,9 @@ int mic_start()
     pdm_config.mode = NRF_PDM_MODE_MONO;
     pdm_config.edge = NRF_PDM_EDGE_LEFTFALLING;
     pdm_config.ratio = NRF_PDM_RATIO_80X;
-    IRQ_DIRECT_CONNECT(PDM_IRQn, 5, nrfx_pdm_irq_handler, 0); // IMPORTANT!
-    if (nrfx_pdm_init(&pdm_config, pdm_irq_handler) != NRFX_SUCCESS)
+
+    IRQ_DIRECT_CONNECT(PDM_IRQn, 5, nrfx_pdm_0_irq_handler, 0); // IMPORTANT!
+    if (nrfx_pdm_init(&pdm0_instance, &pdm_config, pdm_irq_handler) != NRFX_SUCCESS)
     {
         LOG_ERR("Audio unable to initialize PDM");
         return -1;
@@ -87,7 +90,7 @@ int mic_start()
     nrfy_gpio_pin_set(PDM_PWR_PIN);
 
     // Start PDM
-    if (nrfx_pdm_start() != NRFX_SUCCESS)
+    if (nrfx_pdm_start(&pdm0_instance) != NRFX_SUCCESS)
     {
         LOG_ERR("Audio unable to start PDM");
         return -1;
@@ -97,7 +100,7 @@ int mic_start()
     return 0;
 }
 
-void set_mic_callback(mix_handler callback) 
+void set_mic_callback(mix_handler callback)
 {
     _callback = callback;
 }
