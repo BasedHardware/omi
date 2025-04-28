@@ -479,62 +479,31 @@ static bool read_from_tx_queue()
 //
 
 // Thread
-K_THREAD_STACK_DEFINE(pusher_stack, 4096); // Ensure stack is large enough for new buffers
+K_THREAD_STACK_DEFINE(pusher_stack, 4096);
 static struct k_thread pusher_thread;
 static uint16_t packet_next_index = 0;
 
 // Define buffer sizes based on configuration and potential MTU
 #define MAX_POSSIBLE_MTU 517
-
-// Static buffers used within push_to_gatt
-static uint8_t combined_buffer[PACKETS_TO_COMBINE_PER_GATT_PUSH * (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)];
 static uint8_t pusher_temp_data[MAX_POSSIBLE_MTU];
 
 
 static bool push_to_gatt(struct bt_conn *conn)
 {
-    uint32_t total_data_size = 0;
-    uint32_t write_offset = RING_BUFFER_HEADER_SIZE;
-
-    // Read packets and combine *data* into buffer
-    for (int i = 0; i < PACKETS_TO_COMBINE_PER_GATT_PUSH; ++i) {
-        if (!read_from_tx_queue()) {
-            break;
-        }
-        uint16_t package_size = tx_buffer_size;
-        uint8_t *buffer = tx_buffer + RING_BUFFER_HEADER_SIZE;
-        memcpy(combined_buffer + write_offset, buffer, package_size);
-        write_offset += package_size;
-        total_data_size += package_size;
+    if (!read_from_tx_queue()) {
+         return false;
     }
-
-    // If no data was combined (e.g., ring buffer was empty), return false
-    if (total_data_size == 0) {
-        return false;
-    }
-
-    // Write the total *data* size to the beginning of the combined buffer
-    combined_buffer[0] = total_data_size & 0xFF;
-    combined_buffer[1] = (total_data_size >> 8) & 0xFF;
     
-    // if (!read_from_tx_queue()) {
-    //      return false;
-    // }
-    // 
-    // uint32_t total_data_size = tx_buffer_size;
-    // // *combined_buffer = tx_buffer;
-
-    // Fragment and send the combined buffer
-    uint8_t *buffer = combined_buffer + RING_BUFFER_HEADER_SIZE;
+    uint8_t *buffer = tx_buffer + RING_BUFFER_HEADER_SIZE;
     uint32_t offset = 0;
     uint8_t index = 0;
     int retry_count = 0;
     const int max_retries = 3;
 
-    while (offset < total_data_size)
+    while (offset < tx_buffer_size)
     {
         uint32_t id = packet_next_index++;
-        uint32_t packet_size = MIN(current_mtu - NET_BUFFER_HEADER_SIZE, total_data_size - offset);
+        uint32_t packet_size = MIN(current_mtu - NET_BUFFER_HEADER_SIZE, tx_buffer_size - offset);
         pusher_temp_data[0] = id & 0xFF;
         pusher_temp_data[1] = (id >> 8) & 0xFF;
         pusher_temp_data[2] = index;
@@ -679,6 +648,18 @@ void test_pusher(void)
             conn = bt_conn_ref(conn);
         }
         bool valid = true;
+        if (current_mtu < MINIMAL_PACKET_SIZE)
+        {
+            valid = false;
+        }
+        else if (!conn)
+        {
+            valid = false;
+        }
+        else if (runs_count % 100 == 0)
+        {
+            valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
+        }
         if (valid)
         {
             // Expected 100 packages per seconds

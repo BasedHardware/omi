@@ -239,7 +239,6 @@ class CaptureProvider extends ChangeNotifier
     debugPrint('streamAudioToWs in capture_provider');
     _bleBytesStream?.cancel();
     _bleBytesStream = await _getBleAudioBytesListener(id, onAudioBytesReceived: (List<int> value) {
-      debugPrint("${value.length} bytes");
       if (value.isEmpty) return;
 
       // command button triggered
