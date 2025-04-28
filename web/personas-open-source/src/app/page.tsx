@@ -923,6 +923,9 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
     } 
   };
 
+  // URL for the Veyrax page to add more tools - Updated path
+  const addToolsUrl = currentUserUid ? `https://veyrax.com/omi/auth?omi_user_id=${encodeURIComponent(currentUserUid)}` : '#';
+
   return (
     <div className="min-h-screen bg-black text-white flex flex-col">
       {/* <PreorderBanner botName="your favorite personal" /> */}
@@ -936,6 +939,20 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
           isCreating={isCreating}
           isIntegrating={isIntegrating}
         />
+
+        {/* Add more tools link (conditionally rendered) */}
+        {currentUserUid && (
+          <div className="mt-4 text-center">
+            <a
+              href={addToolsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-base text-white hover:text-zinc-300 hover:underline"
+            >
+              Add more tools
+            </a>
+          </div>
+        )}
 
         {/* Before/After Comparison */}
         <div className="w-full max-w-5xl mt-12 md:mt-16 px-4">
