@@ -368,6 +368,12 @@ export default function HomePage() {
       return;
     }
 
+    // Track the click event in Mixpanel
+    Mixpanel.track('Create Persona Clicked', {
+      input: handleToUse,
+      timestamp: new Date().toISOString()
+    });
+
     try {
       setIsCreating(true);
       const cleanHandle = extractHandle(handleToUse);
@@ -838,6 +844,13 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
     setIsIntegrating(true);
 
     console.log(`[handleIntegrationClick] Clicked provider: ${provider}`);
+    
+    // Track the click event in Mixpanel
+    Mixpanel.track('Integration Clicked', {
+      provider: provider,
+      timestamp: new Date().toISOString()
+    });
+    
     const isMobile = isMobileDevice();
     let loadingToastId: string | number | undefined = undefined;
 
@@ -948,6 +961,7 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
               target="_blank"
               rel="noopener noreferrer"
               className="text-base text-white hover:text-zinc-300 hover:underline"
+              onClick={() => Mixpanel.track('Add More Tools Clicked', { timestamp: new Date().toISOString() })}
             >
               Add more tools
             </a>
