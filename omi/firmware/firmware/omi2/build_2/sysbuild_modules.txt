@@ -1,2 +1,0 @@
-"nrf":"/opt/nordic/ncs/v2.9.0/nrf":"/opt/nordic/ncs/v2.9.0/nrf/sysbuild"
-"mcuboot":"/opt/nordic/ncs/v2.9.0/bootloader/mcuboot":"/opt/nordic/ncs/v2.9.0/bootloader/mcuboot/boot/zephyr/sysbuild"
