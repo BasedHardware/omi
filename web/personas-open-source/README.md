@@ -40,8 +40,8 @@ You'll need to obtain the following API keys and credentials:
    - Access to models like Claude Sonnet and Gemini Flash (100x cheaper than direct API access)
 
 3. **RapidAPI Twitter API**
-   -Subscribe to [Twitter API](https://rapidapi.com/alexanderxbx/api/twitter-api45)
 
+   - Subscribe to [Twitter API](https://rapidapi.com/alexanderxbx/api/twitter-api45)
    - Get your API key
 
 4. **Mixpanel**
