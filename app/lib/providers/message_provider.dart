@@ -8,6 +8,7 @@ import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
@@ -268,10 +269,12 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future sendVoiceMessageStreamToServer(List<List<int>> audioBytes, {Function? onFirstChunkRecived}) async {
+  Future sendVoiceMessageStreamToServer(List<List<int>> audioBytes,
+      {Function? onFirstChunkRecived, BleAudioCodec? codec}) async {
     var file = await FileUtils.saveAudioBytesToTempFile(
       audioBytes,
       DateTime.now().millisecondsSinceEpoch ~/ 1000 - (audioBytes.length / 100).ceil(),
+      codec?.getFrameSize() ?? 160,
     );
 
     setShowTypingIndicator(true);
