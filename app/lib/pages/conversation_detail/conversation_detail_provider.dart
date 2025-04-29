@@ -307,4 +307,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     }
     return null;
   }
+
+  void setPreferredSummarizationApp(String appId) {
+    setPreferredSummarizationAppServer(appId);
+    notifyListeners();
+  }
 }
