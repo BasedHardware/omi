@@ -84,11 +84,12 @@ class WavBytes {
 
 class WavBytesUtil {
   BleAudioCodec codec;
+  int framesPerSecond;
   List<List<int>> frames = [];
   List<List<int>> rawPackets = [];
   final SimpleOpusDecoder opusDecoder = SimpleOpusDecoder(sampleRate: 16000, channels: 1);
 
-  WavBytesUtil({this.codec = BleAudioCodec.pcm8});
+  WavBytesUtil({required this.codec, required this.framesPerSecond});
 
   // needed variables for `storeFramePacket`
   int lastPacketIndex = -1;
@@ -142,7 +143,7 @@ class WavBytesUtil {
     int toSecond = 0,
   }) {
     debugPrint('removing frames from ${fromSecond}s to ${toSecond}s');
-    frames.removeRange(fromSecond * 100, min(toSecond * 100, frames.length));
+    frames.removeRange(fromSecond * framesPerSecond, min(toSecond * framesPerSecond, frames.length));
     debugPrint('frames length: ${frames.length}');
   }
 
@@ -255,7 +256,9 @@ class WavBytesUtil {
     List<List<int>> framesCopy;
     if (removeLastNSeconds > 0) {
       debugPrint(' in this branch');
-      removeFramesRange(fromSecond: (frames.length ~/ 100) - removeLastNSeconds, toSecond: frames.length ~/ 100);
+      removeFramesRange(
+          fromSecond: (frames.length ~/ framesPerSecond) - removeLastNSeconds,
+          toSecond: frames.length ~/ framesPerSecond);
       framesCopy = List<List<int>>.from(frames); // after trimming, copy the frames
     } else {
       debugPrint(' in other branch');
@@ -279,7 +282,7 @@ class WavBytesUtil {
       throw UnimplementedError('mulaw codec not implemented');
       // Int16List samples = getMulawSamples(frames);
       // wavBytes = getUInt8ListBytes(samples, codec == BleAudioCodec.mulaw8 ? 8000 : 16000);
-    } else if (codec == BleAudioCodec.opus) {
+    } else if (codec.isOpusSupported()) {
       List<int> decodedSamples = [];
       try {
         for (var frame in frames) {
@@ -310,7 +313,7 @@ class WavBytesUtil {
     return file;
   }
 
-  Uint8List getUInt8ListBytes(List<int> audioBytes, int sampleRate) {
+  static Uint8List getUInt8ListBytes(List<int> audioBytes, int sampleRate) {
     // https://discord.com/channels/1192313062041067520/1231903583717425153/1256187110554341386
     // https://github.com/BasedHardware/omi/blob/main/docs/_developer/Protocol.md
     Uint8List wavHeader = getWavHeader(audioBytes.length * 2, sampleRate);
@@ -439,7 +442,7 @@ class ImageBytesUtil {
 }
 
 class StorageBytesUtil extends WavBytesUtil {
-  StorageBytesUtil() : super();
+  StorageBytesUtil({required super.codec, required super.framesPerSecond}) : super();
 
 // @override
   int count = 0;
@@ -543,7 +546,7 @@ class StorageBytesUtil extends WavBytesUtil {
     for (var frame in frames) {
       decodedSamples.addAll(opusDecoder.decode(input: Uint8List.fromList(frame)));
     }
-    wavBytes = getUInt8ListBytes(decodedSamples, 16000);
+    wavBytes = WavBytesUtil.getUInt8ListBytes(decodedSamples, 16000);
     return createWav(wavBytes);
   }
 

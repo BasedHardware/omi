@@ -145,7 +145,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
             routeToPage(context, const HomePageWrapper(), replace: true);
           } else {
             var codec = await _getAudioCodec(provider.deviceId);
-            if (codec == BleAudioCodec.opus) {
+            if (codec.isOpusSupported()) {
               _goNext(); // Go to Speech Profile page
             } else {
               // Device selected, but not Opus, skip speech profile
