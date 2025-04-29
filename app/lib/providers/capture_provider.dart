@@ -246,7 +246,7 @@ class CaptureProvider extends ChangeNotifier
         _commandBytes.add(value.sublist(3));
       }
 
-      // support: opus codec, 1m from the first device connectes
+      // support: opus codec, 1m from the first device connects
       var deviceFirstConnectedAt = _deviceService.getFirstConnectedAt();
       var checkWalSupported = codec.isOpusSupported() &&
           (deviceFirstConnectedAt != null &&
@@ -379,19 +379,18 @@ class CaptureProvider extends ChangeNotifier
     if (SharedPreferencesUtil().deviceCodec != codec) {
       debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $codec');
       SharedPreferencesUtil().deviceCodec = codec;
-      notifyInfo('FIM_CHANGE');
       await _ensureDeviceSocketConnection();
     }
 
-    // Why is the _recordingDevice null at this point?
-    if (_recordingDevice != null) {
-      await streamButton(_recordingDevice!.id);
-      await streamAudioToWs(_recordingDevice!.id, codec);
-    } else {
-      // Is the app in foreground when this happens?
+    if (_recordingDevice == null) {
       Logger.handle(Exception('Device Not Connected'), StackTrace.current,
           message: 'Device Not Connected. Please make sure the device is turned on and nearby.');
+      notifyListeners();
+      return;
     }
+    await _wal.getSyncs().phone.onFramesPerSecondChanged(codec.getFramesPerSecond());
+    await streamButton(_recordingDevice!.id);
+    await streamAudioToWs(_recordingDevice!.id, codec);
 
     notifyListeners();
   }

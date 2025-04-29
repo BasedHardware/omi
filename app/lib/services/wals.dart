@@ -526,7 +526,6 @@ class LocalWalSync implements IWalSync {
 
   IWalSyncListener listener;
 
-  // TODO: Support opusFS320, frames per second 50
   int framesPerSecond = 100;
 
   LocalWalSync(this.listener);
@@ -554,6 +553,22 @@ class LocalWalSync implements IWalSync {
     _frames = [];
     _syncFrameSeq.clear();
     _wals = [];
+  }
+
+  Future onFramesPerSecondChanged(int fps) async {
+    if (fps == framesPerSecond) {
+      return;
+    }
+
+    // clean
+    await _chunk();
+    await _flush();
+    _frames = [];
+    _syncFrameSeq.clear();
+    _wals = [];
+
+    // update fps
+    framesPerSecond = fps;
   }
 
   Future _chunk() async {

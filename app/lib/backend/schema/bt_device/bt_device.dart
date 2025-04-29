@@ -27,7 +27,6 @@ enum BleAudioCodec {
   }
 
   int getFramesLengthInBytes() {
-    // TODO: add support opusFS320
     return this == BleAudioCodec.opusFS320 ? 160 : 80;
   }
 }
