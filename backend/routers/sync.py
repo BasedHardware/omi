@@ -1,4 +1,5 @@
 import os
+import re
 import struct
 import threading
 import time
@@ -101,7 +102,17 @@ def decode_files_to_wav(files_path: List[str]):
     wav_files = []
     for path in files_path:
         wav_path = path.replace('.bin', '.wav')
-        decode_opus_file_to_wav(path, wav_path)
+        filename = os.path.basename(path)
+        frame_size = 160  # Default frame size
+        match = re.search(r'_fs(\d+)', filename)
+        if match:
+            try:
+                frame_size = int(match.group(1))
+                print(f"Found frame size {frame_size} in filename: {filename}")
+            except ValueError:
+                print(f"Invalid frame size format in filename: {filename}, using default {frame_size}")
+
+        decode_opus_file_to_wav(path, wav_path, frame_size=frame_size)
         try:
             aseg = AudioSegment.from_wav(wav_path)
         except Exception as e:
