@@ -31,7 +31,7 @@ from utils.llm import obtain_emotional_message, retrieve_metadata_fields_from_tr
     trends_extractor, get_email_structure, get_post_structure, get_message_structure, \
     retrieve_metadata_from_email, retrieve_metadata_from_post, retrieve_metadata_from_message, \
     retrieve_metadata_from_text, select_best_app_for_conversation, \
-    extract_memories_from_text
+    extract_memories_from_text, get_reprocess_transcript_structure
 from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
 from utils.retrieval.rag import retrieve_rag_conversation_context
@@ -68,7 +68,8 @@ def _get_structured(
         # from Omi
         if force_process:
             # reprocess endpoint
-            return get_transcript_structure(conversation.get_transcript(False), conversation.started_at, language_code, tz), False
+
+            return get_reprocess_transcript_structure(conversation.get_transcript(False), conversation.started_at, language_code, tz, conversation.structured.title), False
 
         discarded = should_discard_conversation(conversation.get_transcript(False))
         if discarded:
