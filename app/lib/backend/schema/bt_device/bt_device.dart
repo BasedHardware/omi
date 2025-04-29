@@ -29,6 +29,11 @@ enum BleAudioCodec {
   int getFramesLengthInBytes() {
     return this == BleAudioCodec.opusFS320 ? 160 : 80;
   }
+
+  // PDM frame size
+  int getFrameSize() {
+    return this == BleAudioCodec.opusFS320 ? 320 : 160;
+  }
 }
 
 String mapCodecToName(BleAudioCodec codec) {

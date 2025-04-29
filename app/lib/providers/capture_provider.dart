@@ -388,7 +388,7 @@ class CaptureProvider extends ChangeNotifier
       notifyListeners();
       return;
     }
-    await _wal.getSyncs().phone.onFramesPerSecondChanged(codec.getFramesPerSecond());
+    await _wal.getSyncs().phone.onAudioCodecChanged(codec);
     await streamButton(_recordingDevice!.id);
     await streamAudioToWs(_recordingDevice!.id, codec);
 

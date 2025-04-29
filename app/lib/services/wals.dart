@@ -68,7 +68,7 @@ enum WalStorage {
 
 class Wal {
   int timerStart; // in seconds
-  String codec;
+  BleAudioCodec codec;
   int channel;
   int sampleRate;
   int seconds;
@@ -87,11 +87,13 @@ class Wal {
   DateTime? syncStartedAt;
   int? syncEtaSeconds;
 
+  int frameSize = 160;
+
   String get id => '${device}_$timerStart';
 
   Wal(
       {required this.timerStart,
-      this.codec = "opus",
+      required this.codec,
       this.sampleRate = 16000,
       this.channel = 1,
       this.status = WalStatus.inProgress,
@@ -102,12 +104,14 @@ class Wal {
       this.storageOffset = 0,
       this.storageTotalBytes = 0,
       this.fileNum = 1,
-      this.data = const []});
+      this.data = const []}) {
+    frameSize = codec.getFrameSize();
+  }
 
   factory Wal.fromJson(Map<String, dynamic> json) {
     return Wal(
       timerStart: json['timer_start'],
-      codec: json['codec'],
+      codec: mapNameToCodec(json['codec']),
       channel: json['channel'],
       sampleRate: json['sample_rate'],
       status: WalStatus.values.asNameMap()[json['status']] ?? WalStatus.inProgress,
@@ -124,7 +128,7 @@ class Wal {
   Map<String, dynamic> toJson() {
     return {
       'timer_start': timerStart,
-      'codec': codec,
+      'codec': codec.toString(),
       'channel': channel,
       'sample_rate': sampleRate,
       'status': status.name,
@@ -141,7 +145,7 @@ class Wal {
   static List<Wal> fromJsonList(List<dynamic> jsonList) => jsonList.map((e) => Wal.fromJson(e)).toList();
 
   getFileName() {
-    return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_${timerStart}.bin";
+    return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_fs${frameSize}_${timerStart}.bin";
   }
 }
 
@@ -209,6 +213,7 @@ class SDCardWalSync implements IWalSync {
       var seconds = ((totalBytes - storageOffset) / codec.getFramesLengthInBytes()) ~/ codec.getFramesPerSecond();
       var timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - seconds;
       wals.add(Wal(
+        codec: codec,
         timerStart: timerStart,
         status: WalStatus.miss,
         storage: WalStorage.sdcard,
@@ -526,7 +531,8 @@ class LocalWalSync implements IWalSync {
 
   IWalSyncListener listener;
 
-  int framesPerSecond = 100;
+  int _framesPerSecond = 100;
+  BleAudioCodec _codec = BleAudioCodec.opus;
 
   LocalWalSync(this.listener);
 
@@ -555,8 +561,8 @@ class LocalWalSync implements IWalSync {
     _wals = [];
   }
 
-  Future onFramesPerSecondChanged(int fps) async {
-    if (fps == framesPerSecond) {
+  Future onAudioCodecChanged(BleAudioCodec codec) async {
+    if (codec.getFramesPerSecond() == _framesPerSecond && codec == _codec) {
       return;
     }
 
@@ -568,7 +574,8 @@ class LocalWalSync implements IWalSync {
     _wals = [];
 
     // update fps
-    framesPerSecond = fps;
+    _framesPerSecond = codec.getFramesPerSecond();
+    _codec = codec;
   }
 
   Future _chunk() async {
@@ -577,10 +584,10 @@ class LocalWalSync implements IWalSync {
       return;
     }
 
-    var lossesThreshold = 10 * framesPerSecond; // 10s
+    var lossesThreshold = 10 * _framesPerSecond; // 10s
     var newFrameSyncDelaySeconds = 15; // wait 15s for new frame synced
     var timerEnd = DateTime.now().millisecondsSinceEpoch ~/ 1000 - newFrameSyncDelaySeconds;
-    var pivot = _frames.length - newFrameSyncDelaySeconds * framesPerSecond;
+    var pivot = _frames.length - newFrameSyncDelaySeconds * _framesPerSecond;
     if (pivot <= 0) {
       return;
     }
@@ -588,7 +595,7 @@ class LocalWalSync implements IWalSync {
     // Scan backward
     var high = pivot;
     while (high > 0) {
-      var low = high - framesPerSecond * chunkSizeInSeconds;
+      var low = high - _framesPerSecond * chunkSizeInSeconds;
       if (low < 0) {
         low = 0;
       }
@@ -606,12 +613,14 @@ class LocalWalSync implements IWalSync {
           }
         }
       }
-      var timerStart = timerEnd - (high - low) ~/ framesPerSecond;
+      var timerStart = timerEnd - (high - low) ~/ _framesPerSecond;
       if (!synced) {
-        var missWalIdx = _wals.indexWhere((w) => w.timerStart == timerStart && w.device == "phone");
+        var missWalIdx =
+            _wals.indexWhere((w) => w.timerStart == timerStart && w.device == "phone" && w.codec == _codec);
         Wal missWal;
         if (missWalIdx < 0) {
           missWal = Wal(
+            codec: _codec,
             timerStart: timerStart,
             data: chunk,
             storage: WalStorage.mem,
