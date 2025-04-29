@@ -961,9 +961,9 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
               target="_blank"
               rel="noopener noreferrer"
               className="text-base text-white hover:text-zinc-300 hover:underline"
-              onClick={() => Mixpanel.track('Add More Tools Clicked', { timestamp: new Date().toISOString() })}
+              onClick={() => Mixpanel.track('Show All Integrations Clicked', { timestamp: new Date().toISOString() })}
             >
-              Add more tools
+              Show all 100+ integrations →
             </a>
           </div>
         )}
