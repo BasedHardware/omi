@@ -291,6 +291,8 @@ class OmiDeviceConnection extends DeviceConnection {
       //   codec = BleAudioCodec.mulaw8;
       case 20:
         codec = BleAudioCodec.opus;
+      case 21:
+        codec = BleAudioCodec.opusFS320;
       default:
         logErrorMessage('Unknown codec id: $codecId', deviceId);
     }

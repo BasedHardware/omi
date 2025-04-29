@@ -202,7 +202,7 @@ int main(void)
         // Update LED state based on connection and charging status
         set_led_state();
         
-        k_msleep(500);
+        k_msleep(1000);
 	}
 
     printk("Exiting omi...");
