@@ -24,7 +24,7 @@ import shutil
 import wave
 
 
-def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, channels=1):
+def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, channels=1, frame_size: int = 160):
     decoder = Decoder(sample_rate, channels)
     with open(opus_file_path, 'rb') as f:
         pcm_data = []
@@ -45,7 +45,7 @@ def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, ch
                 print(f"Unexpected end of file at frame {frame_count}.")
                 break
             try:
-                pcm_frame = decoder.decode(opus_data, frame_size=160)
+                pcm_frame = decoder.decode(opus_data, frame_size=frame_size)
                 pcm_data.append(pcm_frame)
                 frame_count += 1
             except Exception as e:
