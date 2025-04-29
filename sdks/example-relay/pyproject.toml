@@ -5,7 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "easy-audio-interfaces",
+    "easy-audio-interfaces[local-audio]",
     "omi-sdk",
 ]
 
