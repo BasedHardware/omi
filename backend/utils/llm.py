@@ -1578,7 +1578,9 @@ class OutputQuestion(BaseModel):
 
 
 class BestAppSelection(BaseModel):
-    app_id: str = Field(description='The ID of the best app for processing this conversation, or an empty string if none are suitable.')
+    app_id: str = Field(
+        description='The ID of the best app for processing this conversation, or an empty string if none are suitable.')
+
 
 def select_best_app_for_conversation(conversation: Conversation, apps: List[App]) -> Optional[App]:
     """
@@ -1647,11 +1649,12 @@ def select_best_app_for_conversation(conversation: Conversation, apps: List[App]
         if selected_app:
             return selected_app
         else:
-             return None
+            return None
 
     except Exception as e:
         print(f"Error selecting best app: {e}")
         return None
+
 
 def extract_question_from_conversation(messages: List[Message]) -> str:
     # user last messages

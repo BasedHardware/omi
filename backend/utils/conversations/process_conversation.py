@@ -15,6 +15,7 @@ import database.notifications as notification_db
 import database.tasks as tasks_db
 import database.trends as trends_db
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
+from database.redis_db import get_user_preferred_app
 from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
 from models.memories import MemoryDB, Memory
@@ -145,7 +146,13 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
 
         # Select the best app for this conversation
         if filtered_apps and len(filtered_apps) > 0:
-            best_app = select_best_app_for_conversation(conversation, filtered_apps)
+            # Check if the user has a preferred app
+            preferred_app_id = get_user_preferred_app(uid)
+            if preferred_app_id is None:
+                best_app = select_best_app_for_conversation(conversation, filtered_apps)
+            else:
+                best_app = next((app for app in filtered_apps if app.id == preferred_app_id), None)
+
             if best_app:
                 print(f"Selected best app for conversation: {best_app.name}")
 

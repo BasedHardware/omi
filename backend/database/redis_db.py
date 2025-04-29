@@ -1,7 +1,7 @@
 import base64
 import json
 import os
-from typing import List, Union
+from typing import List, Union, Optional
 
 import redis
 
@@ -473,3 +473,16 @@ def get_proactive_noti_sent_at(uid: str, plugin_id: str):
 
 def get_proactive_noti_sent_at_ttl(uid: str, plugin_id: str):
     return r.ttl(f'{uid}:{plugin_id}:proactive_noti_sent_at')
+
+
+def set_user_preferred_app(uid: str, app_id: str):
+    """Stores the user's preferred app ID."""
+    key = f'user:{uid}:preferred_app'
+    r.set(key, app_id)
+
+
+def get_user_preferred_app(uid: str) -> Optional[str]:
+    """Retrieves the user's preferred app ID, if set."""
+    key = f'user:{uid}:preferred_app'
+    app_id = r.get(key)
+    return app_id.decode() if app_id else None
