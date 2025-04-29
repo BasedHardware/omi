@@ -27,14 +27,14 @@ west zephyr-export
 
 # Build firmware with exact same parameters as used in the IDE
 echo "Building firmware for xiao_ble/nrf52840/sense board..."
-west build -b xiao_ble/nrf52840/sense --pristine always ../app -- \
+west build -b xiao_ble/nrf52840/sense --pristine always ../devkit -- \
     -DNCS_TOOLCHAIN_VERSION="NONE" \
     -DCONF_FILE="prj_xiao_ble_sense_devkitv2-adafruit.conf" \
-    -DDTC_OVERLAY_FILE="/omi/firmware/app/overlay/xiao_ble_sense_devkitv2-adafruit.overlay" \
+    -DDTC_OVERLAY_FILE="/omi/firmware/devkit/overlay/xiao_ble_sense_devkitv2-adafruit.overlay" \
     -DCMAKE_EXPORT_COMPILE_COMMANDS="YES" \
     -DCMAKE_BUILD_TYPE="Debug" \
     -DPLATFORM=nrf52840 \
-    -DCACHED_CONF_FILE="/omi/firmware/app/prj_xiao_ble_sense_devkitv2-adafruit.conf"
+    -DCACHED_CONF_FILE="/omi/firmware/devkit/prj_xiao_ble_sense_devkitv2-adafruit.conf"
 
 # Copy build artifacts to output directory
 echo "Copying build artifacts to output directory..."

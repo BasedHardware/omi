@@ -61,7 +61,7 @@ docker run --rm -it $PLATFORM_FLAG \
     -e PATH="/root/.local/bin:$PATH" \
     ghcr.io/zephyrproject-rtos/ci \
     bash -c "pip install --user adafruit-nrfutil && \
-             /omi/firmware/build-firmware-in-docker.sh"
+             /omi/firmware/scripts/build-firmware-in-docker.sh"
 
 # Check if the build was successful
 if [ -d "$REPO_ROOT/firmware/build/docker_build" ] && [ "$(ls -A "$REPO_ROOT/firmware/build/docker_build")" ]; then
