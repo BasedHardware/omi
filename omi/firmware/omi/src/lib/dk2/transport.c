@@ -546,8 +546,26 @@ void test_pusher(void)
     while (1)
     {
         k_sleep(K_MSEC(1));
+        uint32_t runs_count = 0;
         struct bt_conn *conn = current_connection;
         if (conn)
+        {
+            conn = bt_conn_ref(conn);
+        }
+        bool valid = true;
+        if (current_mtu < MINIMAL_PACKET_SIZE)
+        {
+            valid = false;
+        }
+        else if (!conn)
+        {
+            valid = false;
+        }
+        else if (runs_count % 100 == 0)
+        {
+            valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
+        }
+        if (valid)
         {
             // Expected 100 packages per seconds
             bool sent = push_to_gatt(conn);
@@ -556,6 +574,11 @@ void test_pusher(void)
                 // k_sleep(K_MSEC(50));
             }
         }
+        if (conn)
+        {
+            bt_conn_unref(conn);
+        }
+        runs_count++;
         k_yield();
     }
 }
@@ -682,14 +705,18 @@ int bt_off()
     }
 
     // Turn off other peripherals
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
     sd_off();
     k_mutex_unlock(&write_sdcard_mutex);
+#endif
+
     mic_off();
 
     // Ensure all Bluetooth resources are cleaned up
     is_connected = false;
     current_mtu = 0;
+
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     storage_is_on = false;
 #endif
@@ -727,7 +754,7 @@ int transport_start()
     }
     LOG_INF("Transport bluetooth initialized");
     //  Enable accelerometer
-#ifdef CONFIG_ACCELEROMETER
+#ifdef CONFIG_OMI_ENABLE_ACCELEROMETER
     err = accel_start();
     if (!err)
     {

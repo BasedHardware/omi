@@ -19,7 +19,7 @@ workflows:
       vars:
         APP_ID: 6502156163
       flutter: 3.22.3
-      xcode: 15.4
+      xcode: 16.0
       cocoapods: 1.15.2
     cache:
       cache_paths:

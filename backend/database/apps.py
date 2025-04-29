@@ -86,6 +86,18 @@ def get_public_approved_apps_db() -> List:
     return [doc.to_dict() for doc in public_apps]
 
 
+def get_popular_apps_db() -> List:
+    filters = [FieldFilter('approved', '==', True), FieldFilter('deleted', '==', False),
+               FieldFilter('is_popular', '==', True)]
+    popular_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
+    return [doc.to_dict() for doc in popular_apps]
+
+
+def set_app_popular_db(app_id: str, popular: bool):
+    app_ref = db.collection('plugins_data').document(app_id)
+    app_ref.update({'is_popular': popular})
+
+
 # This returns public unapproved apps for a user
 def get_public_unapproved_apps_db(uid: str) -> List:
     filters = [FieldFilter('approved', '==', False), FieldFilter('uid', '==', uid), FieldFilter('deleted', '==', False),
@@ -240,7 +252,8 @@ def record_app_usage(
         'type': usage_type,
     }
 
-    db.collection('plugins').document(app_id).collection('usage_history').document(conversation_id or message_id).set(data)
+    db.collection('plugins').document(app_id).collection('usage_history').document(conversation_id or message_id).set(
+        data)
     return data
 
 
@@ -294,6 +307,7 @@ def get_persona_by_uid_db(uid: str):
         return None
     return doc.to_dict()
 
+
 def get_user_persona_by_uid(uid: str):
     filters = [
         FieldFilter('capabilities', 'array_contains', 'persona'),
@@ -309,6 +323,7 @@ def get_user_persona_by_uid(uid: str):
     if not doc:
         return None
     return {'id': doc.id, **doc.to_dict()}
+
 
 def create_user_persona_db(persona_data: dict):
     """Create a new user persona in the database"""
@@ -360,6 +375,7 @@ def get_omi_personas_by_uid_db(uid: str):
     docs = [doc.to_dict() for doc in docs if 'omi' in doc.to_dict().get('connected_accounts', [])]
     return docs
 
+
 def get_omi_persona_apps_by_uid_db(uid: str):
     filters = [FieldFilter('uid', '==', uid),
                FieldFilter('category', '==', 'personality-emulation'),
@@ -370,6 +386,7 @@ def get_omi_persona_apps_by_uid_db(uid: str):
         return []
     docs = [doc.to_dict() for doc in docs]
     return docs
+
 
 def add_persona_to_db(persona_data: dict):
     persona_ref = db.collection('plugins_data')
@@ -421,7 +438,8 @@ def get_api_key_by_hash_db(app_id: str, hashed_key: str):
 
 def list_api_keys_db(app_id: str):
     """List all API keys for an app (excluding the hashed values)"""
-    api_keys_ref = db.collection('plugins_data').document(app_id).collection('api_keys').order_by('created_at', direction='DESCENDING').stream()
+    api_keys_ref = db.collection('plugins_data').document(app_id).collection('api_keys').order_by('created_at',
+                                                                                                  direction='DESCENDING').stream()
     return [{k: v for k, v in doc.to_dict().items() if k != 'hashed'} for doc in api_keys_ref]
 
 

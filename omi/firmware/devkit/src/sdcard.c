@@ -52,6 +52,7 @@ int mount_sd_card(void)
         return -1;
 	}
     sd_enabled = true;
+
     //initialize the sd card
     const char *disk_pdrv = "SD";  
 	int err = disk_access_init(disk_pdrv); 
