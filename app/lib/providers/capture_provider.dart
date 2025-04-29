@@ -182,9 +182,14 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
 
-    await messageProvider?.sendVoiceMessageStreamToServer(data, onFirstChunkRecived: () {
-      _playSpeakerHaptic(deviceId, 2);
-    });
+    BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
+    await messageProvider?.sendVoiceMessageStreamToServer(
+      data,
+      onFirstChunkRecived: () {
+        _playSpeakerHaptic(deviceId, 2);
+      },
+      codec: codec,
+    );
   }
 
   // Just incase the ble connection get loss
