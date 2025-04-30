@@ -9,6 +9,8 @@
 #include "lib/dk2/lib/battery/battery.h"
 #include "lib/dk2/led.h"
 #include "lib/dk2/button.h"
+#include "lib/dk2/haptic.h"
+
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
 bool is_connected = false;
@@ -156,7 +158,19 @@ int main(void)
 	LOG_INF("Button initialized");
 	activate_button_work();
 #endif
-	
+
+	// Initialize Haptic driver
+#ifdef CONFIG_OMI_ENABLE_HAPTIC
+	ret = haptic_init();
+	if (ret)
+	{
+		LOG_ERR("Failed to initialize Haptic driver (err %d)", ret);
+	} else {
+		LOG_INF("Haptic driver initialized");
+		play_haptic_milli(100);
+	}
+#endif
+
 	// Indicate transport initialization
 	LOG_PRINTK("\n");
 	LOG_INF("Initializing transport...\n");
