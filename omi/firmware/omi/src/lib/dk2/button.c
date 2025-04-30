@@ -333,10 +333,10 @@ void turnoff_all()
 
     // Play haptic feedback if enabled
 #ifdef CONFIG_OMI_ENABLE_HAPTIC
-    play_haptic_milli(50);
-#endif
-
+    play_haptic_milli(100);
     k_msleep(100);
+    haptic_off();
+#endif
     
     // Always turn off LEDs
     set_led_blue(false);

@@ -19,7 +19,7 @@ static struct k_work_delayable haptic_off_work;
 // Work handler to turn off haptic motor
 static void haptic_off_work_handler(struct k_work *work)
 {
-    gpio_pin_set_dt(&haptic_pin, 0);
+    haptic_off();
     LOG_INF("Haptic turned off by work handler");
 }
 
@@ -135,3 +135,9 @@ void register_haptic_service(void)
         LOG_INF("Haptic GATT service registered");
     }
 }
+
+void haptic_off()
+{
+    gpio_pin_set_dt(&haptic_pin, 0);
+}
+

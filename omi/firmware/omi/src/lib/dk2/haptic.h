@@ -30,4 +30,6 @@ void play_haptic_milli(uint32_t duration);
  */
 void register_haptic_service(void);
 
+void haptic_off();
+
 #endif // HAPTIC_H_
