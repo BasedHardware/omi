@@ -6,9 +6,9 @@ import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:path_provider/path_provider.dart';
 
 class FileUtils {
-  static Future<File> saveAudioBytesToTempFile(List<List<int>> chunk, int timerStart) async {
+  static Future<File> saveAudioBytesToTempFile(List<List<int>> chunk, int timerStart, int frameSize) async {
     final directory = await getTemporaryDirectory();
-    String filePath = '${directory.path}/audio_${timerStart}.bin';
+    String filePath = '${directory.path}/audio_fs${frameSize}_${timerStart}.bin';
     List<int> data = [];
     for (int i = 0; i < chunk.length; i++) {
       var frame = chunk[i];
@@ -26,7 +26,7 @@ class FileUtils {
 
     return file;
   }
-  
+
   static Future<File> convertPcmToWavFile(Uint8List pcmBytes, int sampleRate, int channels) async {
     try {
       // Convert PCM to WAV bytes
@@ -35,12 +35,12 @@ class FileUtils {
         sampleRate: sampleRate,
         numChannels: channels,
       ).asBytes();
-      
+
       // Create a temporary file
       final tempDir = await getTemporaryDirectory();
       final tempPath = '${tempDir.path}/recording_${DateTime.now().millisecondsSinceEpoch}.wav';
       final file = File(tempPath);
-      
+
       // Write WAV bytes to file
       await file.writeAsBytes(wavBytes);
       return file;

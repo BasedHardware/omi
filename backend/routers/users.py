@@ -2,15 +2,16 @@ import threading
 import uuid
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import cache_user_geolocation, set_user_webhook_db, get_user_webhook_db, disable_user_webhook_db, \
-    enable_user_webhook_db, user_webhook_status_db
+    enable_user_webhook_db, user_webhook_status_db, set_user_preferred_app
 from database.users import *
 from models.conversation import Geolocation, Conversation
 from models.other import Person, CreatePerson
 from models.users import WebhookType
+from utils.apps import get_available_app_by_id
 from utils.llm import followup_question_prompt
 from utils.other import endpoints as auth
 from utils.other.storage import delete_all_conversation_recordings, get_user_person_speech_samples, \
@@ -249,3 +250,25 @@ def set_user_language(data: dict, uid: str = Depends(auth.get_current_user_uid))
         raise HTTPException(status_code=400, detail="Language is required")
     set_user_language_preference(uid, language)
     return {'status': 'ok'}
+
+
+@router.put('/v1/users/preferences/app', tags=['v1'])
+def set_preferred_app_for_user(
+        app_id: str = Query(..., description="The ID of the app to set as preferred"),
+        uid: str = Depends(auth.get_current_user_uid)
+):
+    """Sets the user's preferred app for future processing."""
+
+    app_id_to_set = app_id
+
+    selected_app = get_available_app_by_id(app_id_to_set, uid)
+    if not selected_app:
+        raise HTTPException(status_code=404, detail=f"App with ID '{app_id_to_set}' not found or not accessible.")
+
+    try:
+        set_user_preferred_app(uid, app_id_to_set)
+    except Exception as e:
+        print(f"Failed to set preferred app in Redis for user {uid}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to store app preference.")
+
+    return {"status": "ok", "message": f"App {app_id_to_set} set as preferred app for user {uid}."}

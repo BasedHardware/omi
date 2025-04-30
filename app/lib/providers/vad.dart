@@ -62,7 +62,6 @@ class AudioProcessorService {
 
   /// Opus decoder instance
   late SimpleOpusDecoder opusDecoder;
-  WavBytesUtil wavBytesUtil = WavBytesUtil();
   final validFrames = <int>[];
 
   /// Initializes the VAD model and prepares the service for processing audio data.
@@ -86,7 +85,7 @@ class AudioProcessorService {
     // });
     Timer(const Duration(seconds: 30), () async {
       print('Timer started');
-      Uint8List wavBytes = wavBytesUtil.getUInt8ListBytes(validFrames, sampleRate);
+      Uint8List wavBytes = WavBytesUtil.getUInt8ListBytes(validFrames, sampleRate);
       final file = File('${(await getApplicationDocumentsDirectory()).path}/output.wav');
       await file.writeAsBytes(wavBytes);
     });

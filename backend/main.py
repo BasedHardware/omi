@@ -6,7 +6,7 @@ from fastapi import FastAPI
 
 from modal import Image, App, asgi_app, Secret
 from routers import workflow, chat, firmware, plugins, memories_deprecated, transcribe, notifications, \
-    speech_profile, agents, facts_deprecated, users, processing_conversations, trends, sdcard, sync, apps, custom_auth, \
+    speech_profile, agents, facts_deprecated, users, processing_conversations, trends, sync, apps, custom_auth, \
     payment, integration, conversations, memories
 
 from utils.other.timeout import TimeoutMiddleware
@@ -37,7 +37,6 @@ app.include_router(processing_conversations.router)
 app.include_router(trends.router)
 
 app.include_router(firmware.router)
-app.include_router(sdcard.router)
 app.include_router(sync.router)
 
 app.include_router(apps.router)

@@ -20,6 +20,8 @@
 #include "button.h"
 #include "mic.h"
 #include "accel.h"
+#include "haptic.h"
+#include <math.h> // For float conversion in logs
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 // Counters for tracking function calls
@@ -54,6 +56,16 @@ static ssize_t audio_codec_read_characteristic(struct bt_conn *conn, const struc
 
 static void dfu_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
+
+// Forward declarations for update functions and callbacks
+static void update_phy(struct bt_conn *conn);
+static void update_data_length(struct bt_conn *conn);
+static void update_mtu(struct bt_conn *conn);
+static void exchange_func(struct bt_conn *conn, uint8_t att_err, struct bt_gatt_exchange_params *params);
+
+// --- GATT Exchange MTU Params ---
+static struct bt_gatt_exchange_params exchange_params;
+
 
 //
 // Service and Characteristic
@@ -153,6 +165,22 @@ static ssize_t audio_data_write_handler(struct bt_conn *conn, const struct bt_ga
     return len;
 }
 
+
+// --- MTU Update Callback ---
+static void exchange_func(struct bt_conn *conn, uint8_t att_err, struct bt_gatt_exchange_params *params)
+{
+    if (att_err) {
+        LOG_ERR("MTU exchange failed (err %u)", att_err);
+    } else {
+        uint16_t mtu = bt_gatt_get_mtu(conn);
+        LOG_INF("MTU exchange successful. New MTU: %u (Payload: %u)", mtu, mtu - 3);
+        // Update current_mtu based on the negotiated value, considering header
+        // Note: bt_gatt_get_mtu includes the ATT header (3 bytes)
+        current_mtu = mtu; // Store the full MTU size
+    }
+}
+
+
 //
 // DFU Service Handlers
 //
@@ -250,39 +278,25 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
 
     LOG_INF("bluetooth activated");
     current_connection = bt_conn_ref(conn);
-    current_mtu = 512; // TODO: info.le.data_len->tx_max_len;
+    uint16_t mtu = bt_gatt_get_mtu(conn);
+    current_mtu = MAX(mtu, CONFIG_BT_L2CAP_TX_MTU);
 
     LOG_INF("Transport connected");
-    LOG_INF("current mtu %d", current_mtu);
-    LOG_DBG("Interval: %d, latency: %d, timeout: %d", info.le.interval, info.le.latency, info.le.timeout);
-    LOG_DBG("TX PHY %s, RX PHY %s", phy2str(info.le.phy->tx_phy), phy2str(info.le.phy->rx_phy));
-    LOG_DBG("LE data len updated: TX (len: %d time: %d) RX (len: %d time: %d)", info.le.data_len->tx_max_len, info.le.data_len->tx_max_time, info.le.data_len->rx_max_len, info.le.data_len->rx_max_time);
 
-    // TODO: recheck needed, should be the hardware issue ?
-    // Request optimal connection parameters for high-throughput
-    // These configs enhanced the BLE performance
-    // - Updated 0: using interval max 12 helps on increasing the rps to 65
-    // - Updated 1: using interval max 6 helps on increasing the rps > 100
-    struct bt_le_conn_param param = {
-        .interval_min = 6,    // 7.5ms (6 * 1.25ms)
-        .interval_max = 6,   // 15ms (12 * 1.25ms)
-        .latency = 0,         // No slave latency
-        .timeout = 400,       // 4s (400 * 10ms)
-    };
-    err = bt_conn_le_param_update(conn, &param);
-    if (err) {
-        LOG_WRN("Failed to update connection parameters (err %d)", err);
-    }
+    // Log initial connection parameters
+    double connection_interval = info.le.interval * 1.25; // in ms
+    uint16_t supervision_timeout = info.le.timeout * 10; // in ms
+    LOG_INF("Initial conn params: interval %.2f ms, latency %d intervals, timeout %d ms",
+            connection_interval, info.le.latency, supervision_timeout);
+    LOG_INF("Initial MTU: %u", mtu);
 
-    // Request 2M PHY for higher throughput
-    struct bt_conn_le_phy_param phy_param = {
-        .options = 0,
-        .pref_tx_phy = BT_GAP_LE_PHY_2M,
-        .pref_rx_phy = BT_GAP_LE_PHY_2M,
-    };
-    bt_conn_le_phy_update(conn, &phy_param);
-    // END
-     
+    // Initiate PHY, Data Length, and MTU updates
+    update_phy(current_connection);
+    // Add a delay before data length and MTU updates as per Nordic example
+    k_sleep(K_MSEC(1000));
+    update_data_length(current_connection);
+    update_mtu(current_connection);
+
 #ifdef CONFIG_OMI_ENABLE_BATTERY
     k_work_schedule(&battery_work, K_MSEC(100)); // run immediately
 #endif
@@ -315,29 +329,36 @@ static bool _le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
     return true;
 }
 
-static void _le_param_updated(struct bt_conn *conn, uint16_t interval,
-                              uint16_t latency, uint16_t timeout)
+static void _le_param_updated(struct bt_conn *conn, uint16_t interval, uint16_t latency, uint16_t timeout)
 {
-    LOG_INF("Connection parameters updated.");
-    LOG_DBG("[ interval: %d, latency: %d, timeout: %d ]", interval, latency, timeout);
+    double connection_interval = interval * 1.25; // in ms
+    uint16_t supervision_timeout = timeout * 10; // in ms
+    LOG_INF("Connection parameters updated: interval %.2f ms, latency %d intervals, timeout %d ms",
+            connection_interval, latency, supervision_timeout);
 }
 
-static void _le_phy_updated(struct bt_conn *conn,
-                            struct bt_conn_le_phy_info *param)
+static void _le_phy_updated(struct bt_conn *conn, struct bt_conn_le_phy_info *param)
 {
-    // LOG_DBG("LE PHY updated: TX PHY %s, RX PHY %s",
-    //        phy2str(param->tx_phy), phy2str(param->rx_phy));
+    LOG_INF("PHY updated: TX PHY %u, RX PHY %u", param->tx_phy, param->rx_phy);
+    // Detailed logging based on PHY type
+    if (param->tx_phy == BT_CONN_LE_TX_POWER_PHY_1M) {
+        LOG_INF("PHY updated. New PHY: 1M");
+    } else if (param->tx_phy == BT_CONN_LE_TX_POWER_PHY_2M) {
+        LOG_INF("PHY updated. New PHY: 2M");
+    } else if (param->tx_phy == BT_CONN_LE_TX_POWER_PHY_CODED_S8) {
+        LOG_INF("PHY updated. New PHY: Coded S8 (Long Range)");
+    } else if (param->tx_phy == BT_CONN_LE_TX_POWER_PHY_CODED_S2) {
+         LOG_INF("PHY updated. New PHY: Coded S2 (Long Range)");
+    } else {
+         LOG_INF("PHY updated. New PHY: Unknown (%u)", param->tx_phy);
+    }
 }
 
-static void _le_data_length_updated(struct bt_conn *conn,
-                                    struct bt_conn_le_data_len_info *info)
+static void _le_data_length_updated(struct bt_conn *conn, struct bt_conn_le_data_len_info *info)
 {
-    LOG_INF("LE data len updated: TX (len: %d time: %d)"
-           " RX (len: %d time: %d)",
-           info->tx_max_len,
-           info->tx_max_time, info->rx_max_len, info->rx_max_time);
-    current_mtu = info->tx_max_len;
-    LOG_INF("current mtu: %d", current_mtu);
+    LOG_INF("Data length updated: TX %u bytes/%u us, RX %u bytes/%u us",
+            info->tx_max_len, info->tx_max_time, info->rx_max_len, info->rx_max_time);
+    // Note: current_mtu is updated in exchange_func after MTU negotiation
 }
 
 static struct bt_conn_cb _callback_references = {
@@ -348,6 +369,53 @@ static struct bt_conn_cb _callback_references = {
     .le_phy_updated = _le_phy_updated,
     .le_data_len_updated = _le_data_length_updated,
 };
+
+
+// --- Update Request Functions ---
+
+static void update_phy(struct bt_conn *conn)
+{
+    int err;
+    // Prefer 2M PHY for higher throughput
+    const struct bt_conn_le_phy_param preferred_phy = {
+        .options = BT_CONN_LE_PHY_OPT_NONE,
+        .pref_rx_phy = BT_GAP_LE_PHY_2M,
+        .pref_tx_phy = BT_GAP_LE_PHY_2M,
+    };
+    LOG_INF("Requesting PHY update...");
+    err = bt_conn_le_phy_update(conn, &preferred_phy);
+    if (err) {
+        LOG_ERR("bt_conn_le_phy_update() failed (err %d)", err);
+    }
+}
+
+static void update_data_length(struct bt_conn *conn)
+{
+    int err;
+    // Request maximum data length
+    struct bt_conn_le_data_len_param data_len_param = {
+        .tx_max_len = BT_GAP_DATA_LEN_MAX,
+        .tx_max_time = BT_GAP_DATA_TIME_MAX,
+    };
+    LOG_INF("Requesting data length update...");
+    err = bt_conn_le_data_len_update(conn, &data_len_param);
+    if (err) {
+        LOG_ERR("bt_conn_le_data_len_update() failed (err %d)", err);
+    }
+}
+
+static void update_mtu(struct bt_conn *conn)
+{
+    int err;
+    exchange_params.func = exchange_func; // Set the callback function
+
+    LOG_INF("Requesting MTU exchange...");
+    err = bt_gatt_exchange_mtu(conn, &exchange_params);
+    if (err) {
+        LOG_ERR("bt_gatt_exchange_mtu() failed (err %d)", err);
+    }
+}
+
 
 //
 // Ring Buffer
@@ -393,8 +461,9 @@ static bool read_from_tx_queue()
 
     // Read from ring buffer
     // memset(tx_buffer, 0, sizeof(tx_buffer));
-    tx_buffer_size = ring_buf_get(&ring_buf, tx_buffer, (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)); // It always fits completely or not at all
-    if (tx_buffer_size != (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE))
+    uint32_t package_size = CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE;
+    tx_buffer_size = ring_buf_get(&ring_buf, tx_buffer, package_size); // It always fits completely or not at all
+    if (tx_buffer_size != package_size)
     {
         // LOG_ERR("Failed to read from ring buffer. not enough data %d", tx_buffer_size);
         return false;
@@ -414,46 +483,73 @@ static bool read_from_tx_queue()
 K_THREAD_STACK_DEFINE(pusher_stack, 4096);
 static struct k_thread pusher_thread;
 static uint16_t packet_next_index = 0;
-static uint8_t pusher_temp_data[CODEC_OUTPUT_MAX_BYTES + NET_BUFFER_HEADER_SIZE];
+
+// Define buffer sizes based on configuration and potential MTU
+#define MAX_POSSIBLE_MTU 517
+static uint8_t pusher_temp_data[MAX_POSSIBLE_MTU];
+
 
 static bool push_to_gatt(struct bt_conn *conn)
 {
-    // Read data from ring buffer
-    if (!read_from_tx_queue())
-    {
-        return false;
+    if (!read_from_tx_queue()) {
+         return false;
     }
-
-    // Push each frame
+    
     uint8_t *buffer = tx_buffer + RING_BUFFER_HEADER_SIZE;
     uint32_t offset = 0;
     uint8_t index = 0;
+    int retry_count = 0;
+    const int max_retries = 3;
 
-    // Recombine packet
-    uint32_t id = packet_next_index++;
-    uint32_t packet_size = MIN(current_mtu - NET_BUFFER_HEADER_SIZE, tx_buffer_size - offset);
-    //LOG_INF("push_to_gatt package size: %d, %d, %d, %d, %d", packet_size, current_mtu, NET_BUFFER_HEADER_SIZE, tx_buffer_size, offset);
-    pusher_temp_data[0] = id & 0xFF;
-    pusher_temp_data[1] = (id >> 8) & 0xFF;
-    pusher_temp_data[2] = index;
-    memcpy(pusher_temp_data + NET_BUFFER_HEADER_SIZE, buffer + offset, packet_size);
-
-    offset += packet_size;
-    index++;
-
-    // Try send notification
-    int err = bt_gatt_notify(conn, &audio_service.attrs[1], pusher_temp_data, packet_size + NET_BUFFER_HEADER_SIZE);
-    // Increment the notify counter regardless of success or failure
-    gatt_notify_count++;
-    if (err)
+    while (offset < tx_buffer_size)
     {
-        LOG_ERR("bt_gatt_notify failed (err %d)", err);
-        LOG_ERR("MTU: %d, packet_size: %d", current_mtu, packet_size + NET_BUFFER_HEADER_SIZE);
-        return false;
+        uint32_t id = packet_next_index++;
+        uint32_t packet_size = MIN(current_mtu - NET_BUFFER_HEADER_SIZE, tx_buffer_size - offset);
+        pusher_temp_data[0] = id & 0xFF;
+        pusher_temp_data[1] = (id >> 8) & 0xFF;
+        pusher_temp_data[2] = index;
+        memcpy(pusher_temp_data + NET_BUFFER_HEADER_SIZE, buffer + offset, packet_size);
+
+        offset += packet_size;
+        index++;
+
+        retry_count = 0;
+        while (retry_count < max_retries)
+        {
+            // Try send notification
+            int err = bt_gatt_notify(conn, &audio_service.attrs[1], pusher_temp_data, packet_size + NET_BUFFER_HEADER_SIZE);
+            gatt_notify_count++;
+
+            // Log failure
+            if (err)
+            {
+                LOG_DBG("bt_gatt_notify failed (err %d)", err);
+                LOG_DBG("MTU: %d, packet_size: %d", current_mtu, packet_size + NET_BUFFER_HEADER_SIZE);
+                k_sleep(K_MSEC(1));
+                retry_count++;
+                continue;
+            }
+
+            // Try to send more data if possible
+            if (err == -EAGAIN || err == -ENOMEM)
+            {
+                retry_count++;
+                continue;
+            }
+
+            // Break if success
+            break;
+        }
+
+        if (retry_count >= max_retries) {
+            LOG_ERR("Failed to send packet after %d retries", max_retries);
+            return false;
+        }
     }
 
     return true;
 }
+
 #define OPUS_PREFIX_LENGTH 1
 #define OPUS_PADDED_LENGTH 80
 #define MAX_WRITE_SIZE 440
@@ -543,10 +639,10 @@ void update_file_size()
 
 void test_pusher(void)
 {
+    uint32_t runs_count = 0;
     while (1)
     {
         k_sleep(K_MSEC(1));
-        uint32_t runs_count = 0;
         struct bt_conn *conn = current_connection;
         if (conn)
         {
@@ -773,6 +869,13 @@ int transport_start()
     activate_button_work();
 #endif
 
+// Initialize and register Haptic service if enabled
+#ifdef CONFIG_OMI_ENABLE_HAPTIC
+    // Note: haptic_init() is called in main.c
+    register_haptic_service();
+    LOG_INF("Haptic service registered via transport");
+#endif
+
 #ifdef CONFIG_OMI_ENABLE_SPEAKER
     err = speaker_init();
     if (err)
@@ -829,7 +932,7 @@ int transport_start()
     
     struct k_thread *thread = k_thread_create(&pusher_thread, pusher_stack, K_THREAD_STACK_SIZEOF(pusher_stack), 
                                              (k_thread_entry_t)test_pusher, NULL, NULL, NULL, 
-                                             K_PRIO_PREEMPT(4), 0, K_NO_WAIT);
+                                             K_PRIO_PREEMPT(7), 0, K_NO_WAIT);
     if (thread == NULL) {
         LOG_ERR("Failed to create pusher thread");
         return -1;

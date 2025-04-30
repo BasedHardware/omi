@@ -153,7 +153,7 @@ class CaptureProvider extends ChangeNotifier
     debugPrint('initiateWebsocket in capture_provider');
 
     BleAudioCodec codec = audioCodec ?? SharedPreferencesUtil().deviceCodec;
-    sampleRate ??= (codec == BleAudioCodec.opus ? 16000 : 8000);
+    sampleRate ??= (codec.isOpusSupported() ? 16000 : 8000);
 
     debugPrint('is ws null: ${_socket == null}');
 
@@ -182,9 +182,14 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
 
-    await messageProvider?.sendVoiceMessageStreamToServer(data, onFirstChunkRecived: () {
-      _playSpeakerHaptic(deviceId, 2);
-    });
+    BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
+    await messageProvider?.sendVoiceMessageStreamToServer(
+      data,
+      onFirstChunkRecived: () {
+        _playSpeakerHaptic(deviceId, 2);
+      },
+      codec: codec,
+    );
   }
 
   // Just incase the ble connection get loss
@@ -246,9 +251,9 @@ class CaptureProvider extends ChangeNotifier
         _commandBytes.add(value.sublist(3));
       }
 
-      // support: opus codec, 1m from the first device connectes
+      // support: opus codec, 1m from the first device connects
       var deviceFirstConnectedAt = _deviceService.getFirstConnectedAt();
-      var checkWalSupported = codec == BleAudioCodec.opus &&
+      var checkWalSupported = codec.isOpusSupported() &&
           (deviceFirstConnectedAt != null &&
               deviceFirstConnectedAt.isBefore(DateTime.now().subtract(const Duration(seconds: 15)))) &&
           SharedPreferencesUtil().localSyncEnabled;
@@ -379,19 +384,18 @@ class CaptureProvider extends ChangeNotifier
     if (SharedPreferencesUtil().deviceCodec != codec) {
       debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $codec');
       SharedPreferencesUtil().deviceCodec = codec;
-      notifyInfo('FIM_CHANGE');
       await _ensureDeviceSocketConnection();
     }
 
-    // Why is the _recordingDevice null at this point?
-    if (_recordingDevice != null) {
-      await streamButton(_recordingDevice!.id);
-      await streamAudioToWs(_recordingDevice!.id, codec);
-    } else {
-      // Is the app in foreground when this happens?
+    if (_recordingDevice == null) {
       Logger.handle(Exception('Device Not Connected'), StackTrace.current,
           message: 'Device Not Connected. Please make sure the device is turned on and nearby.');
+      notifyListeners();
+      return;
     }
+    await _wal.getSyncs().phone.onAudioCodecChanged(codec);
+    await streamButton(_recordingDevice!.id);
+    await streamAudioToWs(_recordingDevice!.id, codec);
 
     notifyListeners();
   }
@@ -621,15 +625,15 @@ class CaptureProvider extends ChangeNotifier
   void _handleTranslationEvent(List<TranscriptSegment> translatedSegments) {
     try {
       if (translatedSegments.isEmpty) return;
-      
+
       debugPrint("Received ${translatedSegments.length} translated segments");
-      
+
       // Update the segments with the translated ones
       var remainSegments = TranscriptSegment.updateSegments(segments, translatedSegments);
       if (remainSegments.isNotEmpty) {
         debugPrint("Adding ${remainSegments.length} new translated segments");
       }
-      
+
       notifyListeners();
     } catch (e) {
       debugPrint("Error handling translation event: $e");
@@ -711,7 +715,8 @@ class CaptureProvider extends ChangeNotifier
   Future<void> initiateStorageBytesStreaming() async {
     debugPrint('initiateStorageBytesStreaming');
     if (_recordingDevice == null) return;
-    var storageFiles = await _getStorageList(_recordingDevice!.id);
+    String deviceId = _recordingDevice!.id;
+    var storageFiles = await _getStorageList(deviceId);
     if (storageFiles.isEmpty) {
       return;
     }
@@ -727,180 +732,16 @@ class CaptureProvider extends ChangeNotifier
     }
 
     // 80: frame length, 100: frame per seconds
-    sdCardSecondsTotal = totalBytes / 80 / 100;
-    sdCardSecondsReceived = storageOffset / 80 / 100;
+    BleAudioCodec codec = await _getAudioCodec(deviceId);
+    sdCardSecondsTotal = totalBytes / codec.getFramesLengthInBytes() / codec.getFramesPerSecond();
+    sdCardSecondsReceived = storageOffset / codec.getFramesLengthInBytes() / codec.getFramesPerSecond();
 
     // > 10s
-    if (totalBytes - storageOffset > 10 * 80 * 100) {
+    if (totalBytes - storageOffset > 10 * codec.getFramesLengthInBytes() * codec.getFramesPerSecond()) {
       sdCardReady = true;
     }
 
     notifyListeners();
-
-    /* TODO: Remove
-    if (_recordingDevice == null) return;
-    currentStorageFiles = await _getStorageList(_recordingDevice!.id);
-    if (currentStorageFiles.isEmpty) {
-      debugPrint('No storage files found');
-      SharedPreferencesUtil().deviceIsV2 = false;
-      debugPrint('Device is not V2');
-      return;
-    }
-    SharedPreferencesUtil().deviceIsV2 = true;
-    debugPrint('Device is V2');
-    debugPrint('Device model name: ${_recordingDevice!.name}');
-    debugPrint('Storage files: $currentStorageFiles');
-    totalStorageFileBytes = currentStorageFiles[0];
-    var storageOffset = currentStorageFiles.length < 2 ? 0 : currentStorageFiles[1];
-    debugPrint('storageOffset: $storageOffset');
-    // SharedPreferencesUtil().previousStorageBytes = totalStorageFileBytes;
-    //check if new or old file
-    if (totalStorageFileBytes < SharedPreferencesUtil().previousStorageBytes) {
-      totalBytesReceived = 0;
-      currentTotalBytesReceived = 0;
-      SharedPreferencesUtil().currentStorageBytes = 0;
-    } else {
-      totalBytesReceived = SharedPreferencesUtil().currentStorageBytes;
-    }
-    if (totalBytesReceived > totalStorageFileBytes) {
-      totalBytesReceived = 0;
-      currentTotalBytesReceived = 0;
-    }
-    totalBytesReceived = storageOffset;
-    SharedPreferencesUtil().previousStorageBytes = totalStorageFileBytes;
-    sdCardSecondsTotal =
-        ((totalStorageFileBytes.toDouble() / 80.0) / 100.0) * 2.2; // change 2.2 depending on empirical dl speed
-    sdCardSecondsReceived = ((storageOffset.toDouble() / 80.0) / 100.0) * 2.2;
-    currentSdCardSecondsReceived = 0.0;
-    debugPrint('totalBytesReceived in initiateStorageBytesStreaming: $totalBytesReceived');
-    debugPrint(
-        'previousStorageBytes in initiateStorageBytesStreaming: ${SharedPreferencesUtil().previousStorageBytes}');
-    btConnectedTime = DateTime.now().toUtc().toString();
-
-    if (totalStorageFileBytes > 100) {
-      sdCardReady = true;
-    }
-    notifyListeners();
-		*/
-  }
-
-  @Deprecated("Unsued")
-  Future sendStorage(String id) async {
-    if (_storageStream != null) {
-      _storageStream?.cancel();
-    }
-    if (totalStorageFileBytes == 0) {
-      return;
-    }
-    await sdCardSocket.setupSdCardWebSocket(
-      //replace
-      onMessageReceived: () {
-        debugPrint('onMessageReceived');
-        conversationProvider?.getConversationsFromServer();
-        notifyListeners();
-        _notifySdCardComplete();
-        return;
-      },
-      btConnectedTime: btConnectedTime,
-    );
-    if (sdCardSocket.sdCardConnectionState != WebsocketConnectionStatus.connected) {
-      sdCardSocket.sdCardChannel?.sink.close();
-      await sdCardSocket.setupSdCardWebSocket(
-        onMessageReceived: () {
-          debugPrint('onMessageReceived');
-          conversationProvider?.getMoreConversationsFromServer();
-          _notifySdCardComplete();
-
-          return;
-        },
-        btConnectedTime: btConnectedTime,
-      );
-    }
-    // debugPrint('sd card connection state: ${sdCardSocketService?.sdCardConnectionState}');
-    _storageStream = await _getBleStorageBytesListener(id, onStorageBytesReceived: (List<int> value) async {
-      if (value.isEmpty) return;
-
-      if (value.length == 1) {
-        //result codes i guess
-        debugPrint('returned $value');
-        if (value[0] == 0) {
-          //valid command
-          DateTime storageStartTime = DateTime.now();
-          debugPrint('good to go');
-        } else if (value[0] == 3) {
-          debugPrint('bad file size. finishing...');
-        } else if (value[0] == 4) {
-          //file size is zero.
-          debugPrint('file size is zero. going to next one....');
-          // getFileFromDevice(sdCardFileNum + 1);
-        } else if (value[0] == 100) {
-          //valid end command
-
-          sdCardDownloadDone = true;
-          sdCardIsDownloading = false;
-          debugPrint('done. sending to backend....trying to dl more');
-
-          sdCardSocket.sdCardChannel?.sink.add(value); //replace
-          SharedPreferencesUtil().currentStorageBytes = 0;
-          SharedPreferencesUtil().previousStorageBytes = 0;
-          _clearFileFromDevice(sdCardFileNum);
-        } else {
-          //bad bit
-          debugPrint('Error bit returned');
-        }
-      } else if (value.length >= 80) {
-        //enforce a min packet size, large
-        if (value.length == 83) {
-          totalBytesReceived += 80;
-          currentTotalBytesReceived += 80;
-        } else {
-          totalBytesReceived += value.length;
-          currentTotalBytesReceived += value.length;
-        }
-        if (sdCardSocket.sdCardConnectionState != WebsocketConnectionStatus.connected) {
-          debugPrint('websocket provider state: ${sdCardSocket.sdCardConnectionState}');
-          //means we are disconnected, stop all transmission. attempt reconnection
-          if (!sdCardIsDownloading) {
-            debugPrint('sdCardIsDownloading: $sdCardIsDownloading');
-            return;
-          }
-          sdCardIsDownloading = false;
-          _pauseFileFromDevice(sdCardFileNum);
-          debugPrint('paused file from device');
-          //attempt reconnection
-          sdCardSocket.sdCardChannel?.sink.close();
-          sdCardSocket.attemptReconnection(
-            onMessageReceived: () {
-              debugPrint('onMessageReceived');
-              conversationProvider?.getMoreConversationsFromServer();
-              _notifySdCardComplete();
-              return;
-            },
-            btConnectedTime: btConnectedTime,
-          );
-          sdCardReconnectionTimer?.cancel();
-          sdCardReconnectionTimer = Timer(const Duration(seconds: 10), () {
-            debugPrint('sdCardReconnectionTimer');
-            if (sdCardSocket.sdCardConnectionState == WebsocketConnectionStatus.connected) {
-              sdCardIsDownloading = true;
-              _getFileFromDevice(sdCardFileNum, totalBytesReceived);
-            }
-          });
-
-          //call attempt reconnection
-          return;
-        }
-
-        sdCardSocket.sdCardChannel?.sink.add(value);
-        sdCardSecondsReceived = ((totalBytesReceived.toDouble() / 80.0) / 100.0) * 2.2;
-        currentSdCardSecondsReceived = ((currentTotalBytesReceived.toDouble() / 80.0) / 100.0) * 2.2;
-        SharedPreferencesUtil().currentStorageBytes = totalBytesReceived;
-      }
-      notifyListeners();
-    });
-
-    _getFileFromDevice(sdCardFileNum, totalBytesReceived);
-    //  notifyListeners();
   }
 
   Future _getFileFromDevice(int fileNum, int offset) async {
