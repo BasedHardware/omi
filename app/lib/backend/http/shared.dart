@@ -101,6 +101,9 @@ Future<http.Response> _performRequest(
     case 'PATCH':
       headers['Content-Type'] = 'application/json';
       return await client.patch(Uri.parse(url), headers: headers, body: body);
+    case 'PUT':
+      headers['Content-Type'] = 'application/json';
+      return await client.put(Uri.parse(url), headers: headers, body: body);
     default:
       throw Exception('Unsupported HTTP method: $method');
   }
