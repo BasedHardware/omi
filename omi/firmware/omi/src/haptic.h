@@ -19,3 +19,9 @@ int init_haptic_pin();
  * @return a sound hopefully
  */
 void play_haptic_milli(uint32_t duration);
+
+/**
+ * @brief Turns off haptic GPIO.
+ *
+ */
+void haptic_off();
