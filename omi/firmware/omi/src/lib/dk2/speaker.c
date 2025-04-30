@@ -24,7 +24,6 @@ LOG_MODULE_REGISTER(speaker, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define PI 3.14159265358979323846
 
-#define MAX_HAPTIC_DURATION 5000
 K_MEM_SLAB_DEFINE_STATIC(mem_slab, MAX_BLOCK_SIZE, BLOCK_COUNT, 2);
 
 struct device *audio_speaker;
@@ -37,78 +36,45 @@ static int16_t *clear_ptr;
 static uint16_t current_length;
 static uint16_t offset;
 
-struct gpio_dt_spec haptic_gpio_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio1)), .pin=11, .dt_flags = GPIO_INT_DISABLE};
-
-
 struct gpio_dt_spec speaker_gpio_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio0)), .pin=4, .dt_flags = GPIO_INT_DISABLE};
 
-// ble service
+// ble service for speaker audio
 //
 
-static void speaker_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
-static ssize_t speaker_haptic_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
+// Forward declaration for speaker audio write handler if needed
+// static ssize_t speaker_audio_write_handler(...)
 
-static struct bt_uuid_128 speaker_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0xCAB1AB95, 0x2EA5, 0x4F4D, 0xBB56, 0x874B72CFC984));
-static struct bt_uuid_128 speaker_haptic_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0xCAB1AB96, 0x2EA5, 0x4F4D, 0xBB56, 0x874B72CFC984));
+// Speaker Service UUID (assuming this remains for audio)
+static struct bt_uuid_128 speaker_service_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0xCAB1AB95, 0x2EA5, 0x4F4D, 0xBB56, 0x874B72CFC984));
+// Speaker Audio Characteristic UUID (assuming a characteristic for audio data write)
+// static struct bt_uuid_128 speaker_audio_char_uuid = BT_UUID_INIT_128(...)
 
-static struct bt_gatt_attr speaker_service_attr[] = {
-    BT_GATT_PRIMARY_SERVICE(&speaker_uuid),
-    BT_GATT_CHARACTERISTIC(&speaker_haptic_uuid.uuid, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_WRITE, NULL, speaker_haptic_handler, NULL),
-    BT_GATT_CCC(speaker_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+// Speaker Service Attributes (only speaker-related characteristics)
+static struct bt_gatt_attr speaker_service_attrs[] = {
+    BT_GATT_PRIMARY_SERVICE(&speaker_service_uuid),
+    // Add speaker audio characteristic(s) here if needed
+    // Example:
+    // BT_GATT_CHARACTERISTIC(&speaker_audio_char_uuid.uuid, BT_GATT_CHRC_WRITE, BT_GATT_PERM_WRITE, NULL, speaker_audio_write_handler, NULL),
 };
-static struct bt_gatt_service speaker_service = BT_GATT_SERVICE(speaker_service_attr);
+static struct bt_gatt_service speaker_service = BT_GATT_SERVICE(speaker_service_attrs);
 
-void register_speaker_service() 
+// Register Speaker Service (only speaker-related)
+void register_speaker_service()
 {
-    bt_gatt_service_register(&speaker_service);
+    // Check if there are any attributes before registering
+    if (ARRAY_SIZE(speaker_service_attrs) > 1) {
+         int err = bt_gatt_service_register(&speaker_service);
+         if (err) {
+             LOG_ERR("Failed to register Speaker GATT service (err %d)", err);
+         } else {
+             LOG_INF("Speaker GATT service registered");
+         }
+    } else {
+        LOG_WRN("No speaker characteristics defined, service not registered.");
+    }
 }
 
-static void speaker_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) 
-{
-    if (value == BT_GATT_CCC_NOTIFY)
-    {
-        LOG_INF("Client subscribed for notifications");
-    }
-    else if (value == 0)
-    {
-        LOG_INF("Client unsubscribed from notifications");
-    }
-    else
-    {
-        LOG_ERR("Invalid CCC value: %u", value);
-    }
-
-}
-
-static ssize_t speaker_haptic_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags) 
-{
-    LOG_INF("play the haptic");
-
-    uint8_t value = ((uint8_t*)buf)[0];
-    LOG_INF("value %d  ", value);
-
-	if (value < 1 || value > 3)
-	{
-		return 0;
-	}
-
-	if (value == 1)
-	{
-		play_haptic_milli(20);
-	}
-	else if (value == 2)
-	{
-		play_haptic_milli(50);
-	}
-	else if (value == 3)
-	{
-		play_haptic_milli(500);
-	}
-
-    return 1;
-}
-
-int speaker_init() 
+int speaker_init()
 {
     LOG_INF("Speaker init");
     audio_speaker = device_get_binding("I2S_0");
@@ -131,7 +97,7 @@ int speaker_init()
 	}
 	if (gpio_pin_configure_dt(&speaker_gpio_pin, GPIO_OUTPUT_INACTIVE) < 0) 
     {
-		LOG_PRINTK("Error setting up Haptic Pin\n");
+		LOG_PRINTK("Error setting up Speaker Pin\n");
         return -1;
 	}
     gpio_pin_set_dt(&speaker_gpio_pin, 1);
@@ -296,55 +262,6 @@ int play_boot_sound(void)
     k_sleep(K_MSEC(3000));  
 
     return 0;
-}
-
-int init_haptic_pin() 
-{
-    if (gpio_is_ready_dt(&haptic_gpio_pin)) 
-    {
-		LOG_INF("Haptic Pin ready");
-	}
-    else 
-    {
-		LOG_ERR("Error setting up Haptic Pin");
-        return -1;
-	}
-	if (gpio_pin_configure_dt(&haptic_gpio_pin, GPIO_OUTPUT_INACTIVE) < 0) 
-    {
-		LOG_ERR("Error setting up Haptic Pin");
-        return -1;
-	}
-    gpio_pin_set_dt(&haptic_gpio_pin, 0);
-
-    return 0;
-}
-K_SEM_DEFINE(haptic_sem, 0, 1);
-void haptic_timer_callback(struct k_timer *timer);
-
-K_TIMER_DEFINE(my_status_timer, haptic_timer_callback, NULL);
-
-void haptic_timer_callback(struct k_timer *timer)
-{
-    // k_sem_give(&haptic_sem);
-    gpio_pin_set_dt(&haptic_gpio_pin, 0);
-}
-
-void play_haptic_milli(uint32_t duration)
-{
-    if (duration > MAX_HAPTIC_DURATION)
-    {
-        LOG_ERR("Duration is too long");
-        return;
-    }
-    gpio_pin_set_dt(&haptic_gpio_pin, 1);
-    // if (k_sem_take(&haptic_sem, K_MSEC(50)) != 0) 
-    // {
-
-    // } 
-    // else
-    // {
-    k_timer_start(&my_status_timer, K_MSEC(duration), K_NO_WAIT);
-    // }
 }
 
 void speaker_off()
