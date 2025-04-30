@@ -1,0 +1,35 @@
+[project]
+name = "omi-sdk"
+version = "0.1.3"
+dependencies = [
+    "aiohttp>=3.11.14",
+    "bleak>=0.22.3",
+    "httpx>=0.28.1",
+    "numpy>=2.2.4",
+    "opuslib>=3.0.1",
+    "websockets>=14.0.0",
+]
+requires-python = ">= 3.10"
+description = "Omi SDK"
+
+[project.urls]
+Homepage = "https://github.com/BasedHardware/omi"
+
+[project.optional-dependencies]
+deepgram = ["deepgram-sdk>=3.11.0"]
+dev = ["mypy>=1.15.0", "mypy-extensions>=1.1.0"]
+
+
+[build-system]
+requires = ["setuptools >= 80.0.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["omi*"]
+
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+publish-url = "https://test.pypi.org/legacy/"
+explicit = true

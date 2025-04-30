@@ -1,0 +1,19 @@
+[project]
+name = "example-backend"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.12",
+    "numpy>=2.2.4",
+    "opuslib>=3.0.1",
+    "pydantic>=2.11.2",
+    "pyogg>=0.6.14a1",
+    "python-dotenv>=1.1.0",
+    "python-multipart>=0.0.20",
+    "soundfile>=0.13.1",
+    "uvicorn[standard]>=0.34.0",
+    "websockets>=15.0.1",
+    "wyoming>=1.6.0",
+]

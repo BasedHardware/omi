@@ -1,0 +1,19 @@
+services:
+  omi-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./audio_files:/app/audio_files
+    environment:
+      - WHISPER_HOST=whisper
+      - WHISPER_PORT=10300
+    networks:
+      - whisper-network
+
+networks:
+  whisper-network:
+    external: true
+    name: my-services_default
