@@ -91,7 +91,13 @@
 		gpios = <&gpio1 10 GPIO_ACTIVE_HIGH>;
 		status = "okay";
 	};
-	
+
+	rfsw_en_pin: rfsw-en {
+		compatible = "nordic,gpio-pins";
+		gpios = <&gpio1 3 GPIO_ACTIVE_HIGH>;
+		status = "okay";
+	};
+
 	chosen {
 		zephyr,sram = &sram0_image;
 		zephyr,flash = &flash0;
