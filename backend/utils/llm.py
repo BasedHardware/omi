@@ -19,7 +19,7 @@ from database.redis_db import add_filter_category_item
 from models.app import App
 from models.chat import Message, MessageSender
 from models.memories import Memory, MemoryCategory
-from models.conversation import Structured, ConversationPhoto, CategoryEnum, Conversation
+from models.conversation import Structured, ConversationPhoto, CategoryEnum, Conversation, ActionItem, Event
 from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment
 from models.trend import TrendEnum, ceo_options, company_options, software_product_options, hardware_product_options, \
@@ -122,6 +122,39 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
 
     response = chain.invoke({
         'transcript': transcript.strip(),
+        'format_instructions': parser.get_format_instructions(),
+        'language_code': language_code,
+        'started_at': started_at.isoformat(),
+        'tz': tz,
+    })
+
+    for event in (response.events or []):
+        if event.duration > 180:
+            event.duration = 180
+        event.created = False
+    return response
+
+
+def get_reprocess_transcript_structure(transcript: str, started_at: datetime, language_code: str, tz: str, title: str) -> Structured:
+    prompt_text = '''You are an expert conversation analyzer. Your task is to analyze the conversation and provide structure and clarity to the recording transcription of a conversation.
+    The conversation language is {language_code}. Use the same language {language_code} for your response.
+
+    For the title, use ```{title}```, if it is empty, use the main topic of the conversation.
+    For the overview, condense the conversation into a summary with the main topics discussed, make sure to capture the key points and important details from the conversation.
+    For the action items, include a list of commitments, specific tasks or actionable steps from the conversation that the user is planning to do or has to do on that specific day or in future. Remember the speaker is busy so this has to be very efficient and concise, otherwise they might miss some critical tasks. Specify which speaker is responsible for each action item.
+    For the category, classify the conversation into one of the available categories.
+    For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on {started_at}. {tz} is the user's timezone, convert it to UTC and respond in UTC.
+
+    Transcript: ```{transcript}```
+
+    {format_instructions}'''.replace('    ', '').strip()
+
+    prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
+    chain = prompt | llm_mini | parser
+
+    response = chain.invoke({
+        'transcript': transcript.strip(),
+        'title': title,
         'format_instructions': parser.get_format_instructions(),
         'language_code': language_code,
         'started_at': started_at.isoformat(),
@@ -1578,21 +1611,30 @@ class OutputQuestion(BaseModel):
 
 
 class BestAppSelection(BaseModel):
-    app_id: str = Field(description='The ID of the best app for processing this conversation.')
+    app_id: str = Field(
+        description='The ID of the best app for processing this conversation, or an empty string if none are suitable.')
+
 
 def select_best_app_for_conversation(conversation: Conversation, apps: List[App]) -> Optional[App]:
-    """Select the best app for the given conversation based on its content and structure."""
+    """
+    Select the best app for the given conversation based on its structured content
+    and the specific task/outcome each app provides.
+    """
     if not apps:
         return None
 
-    # Use LLM to select the best app
-    conversation_summary = f"""
-    Title: {conversation.structured.title}
-    Category: {conversation.structured.category.value}
-    Overview: {conversation.structured.overview}
+    if not conversation.structured:
+        return None
+
+    structured_data = conversation.structured
+    conversation_details = f"""
+    Title: {structured_data.title or 'N/A'}
+    Category: {structured_data.category.value if structured_data.category else 'N/A'}
+    Overview: {structured_data.overview or 'N/A'}
+    Action Items: {ActionItem.actions_to_string(structured_data.action_items) if structured_data.action_items else 'None'}
+    Events Mentioned: {Event.events_to_string(structured_data.events) if structured_data.events else 'None'}
     """
 
-    # Format apps as XML to handle complex content better
     apps_xml = "<apps>\n"
     for app in apps:
         apps_xml += f"""  <app>
@@ -1603,26 +1645,28 @@ def select_best_app_for_conversation(conversation: Conversation, apps: List[App]
     apps_xml += "</apps>"
 
     prompt = f"""
-    You are an expert app selector tasked with carefully analyzing a conversation and determining if any available app is truly suitable for processing it.
+    You are an expert app selector. Your goal is to determine if any available app is genuinely suitable for processing the given conversation details based on the app's specific task and the potential value of its outcome.
 
-    <conversation>
-    {conversation_summary}
-    </conversation>
+    <conversation_details>
+    {conversation_details.strip()}
+    </conversation_details>
 
-    {apps_xml}
+    <available_apps>
+    {apps_xml.strip()}
+    </available_apps>
 
     Task:
-    1. Carefully analyze the conversation's content, themes, and context
-    2. Thoroughly examine each app's purpose, functionality, and domain expertise
-    3. Determine if there is a strong, meaningful match between the conversation and any app
+    1. Analyze the conversation's content, themes, action items, and events provided in `<conversation_details>`.
+    2. For each app in `<available_apps>`, evaluate its specific `<task>` and `<description>`.
+    3. Determine if applying an app's `<task>` to this specific conversation would produce a meaningful, relevant, and valuable outcome.
+    4. Select the single best app whose task aligns most strongly with the conversation content and provides the most useful potential outcome.
 
-    Important instructions:
-    - It is CRITICAL that you only select an app if there is a genuine, strong alignment between the conversation content and the app's purpose
-    - If the conversation topics don't meaningfully relate to any app's domain (e.g., a business conversation when all apps are for medical analysis), you MUST return an empty app_id
-    - Do not force a match when none exists - it's better to return empty than select an inappropriate app
-    - If you do find a suitable match, provide only the app_id of the best matching app
-
-    Provide only the app_id that represents the best match, or an empty string if no app is suitable.
+    Critical Instructions:
+    - Only select an app if its specific task is highly relevant to the conversation's topics and details. A generic match based on description alone is NOT sufficient.
+    - Consider the *potential outcome* of applying the app's task. Would the result be insightful given this conversation?
+    - If no app's task strongly aligns with the conversation content or offers a valuable potential outcome (e.g., a business conversation when all apps are for medical analysis), you MUST return an empty `app_id`.
+    - Do not force a match. It is better to return an empty `app_id` than to select an inappropriate app.
+    - Provide ONLY the `app_id` of the best matching app, or an empty string if no app is suitable.
     """
 
     try:
@@ -1633,15 +1677,17 @@ def select_best_app_for_conversation(conversation: Conversation, apps: List[App]
         if not selected_app_id or selected_app_id.strip() == "":
             return None
 
-        # Find the app with the matching ID
-        for app in apps:
-            if app.id == selected_app_id:
-                return app
+        # Find the app object with the matching ID
+        selected_app = next((app for app in apps if app.id == selected_app_id), None)
+        if selected_app:
+            return selected_app
+        else:
+            return None
+
     except Exception as e:
         print(f"Error selecting best app: {e}")
+        return None
 
-    # Return None if no suitable app was found
-    return None
 
 def extract_question_from_conversation(messages: List[Message]) -> str:
     # user last messages
