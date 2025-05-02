@@ -4,14 +4,18 @@ enable_language(C ASM) # OPUS
 
 project(omi)
 
-file(GLOB app_sources src/main.c
+file(GLOB app_sources
+    src/main.c
     src/mic.c
     src/battery.c
     src/led.c
     src/haptic.c
+    src/sd_card.c
+    src/spi_flash.c
 )
-file(GLOB dk2_sources src/lib/dk2/codec.c
+file(GLOB dk2_sources
     src/lib/dk2/config.h
+    src/lib/dk2/codec.c
     src/lib/dk2/transport.c
     src/lib/dk2/button.c
 )
