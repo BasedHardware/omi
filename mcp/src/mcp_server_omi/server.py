@@ -1,29 +1,11 @@
-"""
-Example FastMCP server that uses Unicode characters in various places to help test
-Unicode handling in tools and inspectors.
-"""
-
 from enum import Enum
 import json
-from typing import List, Optional
-from mcp.server.fastmcp import FastMCP
-from datetime import datetime
+from typing import List
 import requests
 import logging
-from pathlib import Path
-from typing import Sequence
 from mcp.server import Server
-from mcp.server.session import ServerSession
 from mcp.server.stdio import stdio_server
-from mcp.types import (
-    ClientCapabilities,
-    TextContent,
-    Tool,
-    ListRootsResult,
-    RootsCapability,
-)
-from enum import Enum
-import git
+from mcp.types import TextContent, Tool
 from pydantic import BaseModel
 
 
@@ -83,6 +65,7 @@ class GetMemories(BaseModel):
     Returns:
         str: A JSON object containing the list of memories.
     """
+
     uid: str
     limit: int = 100
     categories: List[MemoryCategoryEnum] = []
@@ -93,7 +76,6 @@ def get_memories(
     limit: int = 100,
     categories: List[MemoryCategoryEnum] = [],
 ) -> List:
-
     response = requests.get(
         f"{base_url}/memories",
         # params={"limit": limit, "categories": categories},
