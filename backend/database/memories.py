@@ -4,13 +4,15 @@ from typing import List
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from models.memory import CategoryEnum
+
 from ._client import db
 
 memories_collection = 'memories'
 users_collection = 'users'
 
 
-def get_memories(uid: str, limit: int = 100, offset: int = 0, category: str = None, visibility: str = None):
+def get_memories(uid: str, limit: int = 100, offset: int = 0, categories: List[CategoryEnum] = []):
     print('get_memories', uid, limit, offset)
     memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
     memories_ref = (
@@ -19,10 +21,8 @@ def get_memories(uid: str, limit: int = 100, offset: int = 0, category: str = No
         .where(filter=FieldFilter('deleted', '==', False))
     )
     # TODO: double check this fields are correct
-    if category:
-        memories_ref = memories_ref.where(filter=FieldFilter('category', '==', category))
-    if visibility:
-        memories_ref = memories_ref.where(filter=FieldFilter('visibility', '==', visibility))
+    if categories:
+        memories_ref = memories_ref.where(filter=FieldFilter('category', 'in', categories))
 
     memories_ref = memories_ref.limit(limit).offset(offset)
     # TODO: put user review to firestore query
