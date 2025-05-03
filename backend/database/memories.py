@@ -10,7 +10,7 @@ memories_collection = 'memories'
 users_collection = 'users'
 
 
-def get_memories(uid: str, limit: int = 100, offset: int = 0):
+def get_memories(uid: str, limit: int = 100, offset: int = 0, category: str = None, visibility: str = None):
     print('get_memories', uid, limit, offset)
     memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
     memories_ref = (
@@ -18,6 +18,11 @@ def get_memories(uid: str, limit: int = 100, offset: int = 0):
         .order_by('created_at', direction=firestore.Query.DESCENDING)
         .where(filter=FieldFilter('deleted', '==', False))
     )
+    if category:
+        memories_ref = memories_ref.where(filter=FieldFilter('category', '==', category))
+    if visibility:
+        memories_ref = memories_ref.where(filter=FieldFilter('visibility', '==', visibility))
+
     memories_ref = memories_ref.limit(limit).offset(offset)
     # TODO: put user review to firestore query
     memories = [doc.to_dict() for doc in memories_ref.stream()]
