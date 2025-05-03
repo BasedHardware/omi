@@ -26,10 +26,10 @@ def create_memory(memory: Memory, uid: str = Header(None)):
 def get_memories(
     limit: int = 100,
     offset: int = 0,
-    category: Optional[CategoryEnum] = None, # TODO: make it a list to filter
+    categories: List[CategoryEnum] = [], # TODO: finish
     # visibility: Literal["public", "private"] = None, # TODO: is this working
     uid: str = Header(None),
 ):
-    return memories_db.get_memories(uid, limit, offset, category)
+    return memories_db.get_memories(uid, limit, offset, categories)
 
 
