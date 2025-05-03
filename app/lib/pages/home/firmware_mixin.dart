@@ -6,10 +6,11 @@ import 'package:flutter/widgets.dart';
 import 'package:nordic_dfu/nordic_dfu.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/http/api/device.dart';
-import 'package:omi/services/services.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/manifest/manifest.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:http/http.dart' as http;
 import 'package:mcumgr_flutter/mcumgr_flutter.dart' as mcumgr;
@@ -26,15 +27,6 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   bool isLegacySecureDFU = true;
   List<String> otaUpdateSteps = [];
   final mcumgr.FirmwareUpdateManagerFactory? managerFactory = mcumgr.FirmwareUpdateManagerFactory();
-
-  // TODO: thinh, use connection directly
-  Future _bleDisconnectDevice(BtDevice btDevice) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
-    if (connection == null) {
-      return Future.value(null);
-    }
-    return await connection.disconnect();
-  }
 
   /// Process ZIP file and return firmware image list
   Future<List<mcumgr.Image>> processZipFile(Uint8List zipFileData) async {
@@ -97,7 +89,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     setState(() {
       isInstalling = true;
     });
-    await _bleDisconnectDevice(btDevice);
+    await Provider.of<DeviceProvider>(context, listen: false).prepareDFU();
     await Future.delayed(const Duration(seconds: 2));
 
     String firmwareFile = zipFilePath ?? '${(await getApplicationDocumentsDirectory()).path}/firmware.zip';
@@ -147,7 +139,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     setState(() {
       isInstalling = true;
     });
-    await _bleDisconnectDevice(btDevice);
+    await Provider.of<DeviceProvider>(context, listen: false).prepareDFU();
     await Future.delayed(const Duration(seconds: 2));
     String firmwareFile = '${(await getApplicationDocumentsDirectory()).path}/firmware.zip';
     NordicDfu dfu = NordicDfu();
