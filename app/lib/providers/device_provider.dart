@@ -27,8 +27,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   int batteryLevel = -1;
   bool _hasLowBatteryAlerted = false;
   Timer? _reconnectionTimer;
-  int connectionCheckSeconds = 7;
   DateTime? _reconnectAt;
+  final int _connectionCheckSeconds = 7;
 
   bool _havingNewFirmware = false;
   bool get havingNewFirmware => _havingNewFirmware && pairedDevice != null && isConnected;
@@ -140,8 +140,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   Future periodicConnect(String printer) async {
     _reconnectionTimer?.cancel();
-    _reconnectionTimer = Timer.periodic(Duration(seconds: connectionCheckSeconds), (t) async {
-      debugPrint("Period connect seconds: $connectionCheckSeconds, triggered timer at ${DateTime.now()}");
+    _reconnectionTimer = Timer.periodic(Duration(seconds: _connectionCheckSeconds), (t) async {
+      debugPrint("Period connect seconds: $_connectionCheckSeconds, triggered timer at ${DateTime.now()}");
       if (SharedPreferencesUtil().btDevice.id.isEmpty) {
         t.cancel();
         return;
@@ -186,30 +186,31 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (isConnected) {
       if (connectedDevice == null) {
         connectedDevice = await _getConnectedDevice();
-        // SharedPreferencesUtil().btDevice = connectedDevice!;
         SharedPreferencesUtil().deviceName = connectedDevice!.name;
         MixpanelManager().deviceConnected();
       }
 
       setIsConnected(true);
       updateConnectingStatus(false);
-    } else {
-      var device = await _scanAndConnectDevice();
-      print('inside scanAndConnectToDevice $device in device_provider');
-      if (device != null) {
-        var cDevice = await _getConnectedDevice();
-        if (cDevice != null) {
-          setConnectedDevice(cDevice);
-          setIsDeviceV2Connected();
-          // SharedPreferencesUtil().btDevice = cDevice;
-          SharedPreferencesUtil().deviceName = cDevice.name;
-          MixpanelManager().deviceConnected();
-          setIsConnected(true);
-        }
-        print('device is not null $cDevice');
-      }
-      updateConnectingStatus(false);
+      notifyListeners();
+      return;
     }
+
+    // else
+    var device = await _scanAndConnectDevice();
+    debugPrint('inside scanAndConnectToDevice $device in device_provider');
+    if (device != null) {
+      var cDevice = await _getConnectedDevice();
+      if (cDevice != null) {
+        setConnectedDevice(cDevice);
+        setIsDeviceV2Connected();
+        SharedPreferencesUtil().deviceName = cDevice.name;
+        MixpanelManager().deviceConnected();
+        setIsConnected(true);
+      }
+      debugPrint('device is not null $cDevice');
+    }
+    updateConnectingStatus(false);
 
     notifyListeners();
   }
@@ -222,10 +223,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void setIsConnected(bool value) {
     isConnected = value;
     if (isConnected) {
-      connectionCheckSeconds = 8;
       _reconnectionTimer?.cancel();
-    } else {
-      connectionCheckSeconds = 4;
     }
     notifyListeners();
   }
