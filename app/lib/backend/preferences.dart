@@ -71,12 +71,6 @@ class SharedPreferencesUtil {
 
   String get deviceName => getString('deviceName') ?? '';
 
-  set deviceCodec(BleAudioCodec value) => saveString('deviceCodec', mapCodecToName(value));
-
-  Future setDeviceCodec(BleAudioCodec value) => saveString('deviceCodec', mapCodecToName(value));
-
-  BleAudioCodec get deviceCodec => mapNameToCodec(getString('deviceCodec') ?? '');
-
   bool get deviceIsV2 => getBool('deviceIsV2') ?? false;
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);

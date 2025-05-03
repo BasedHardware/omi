@@ -27,7 +27,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   int batteryLevel = -1;
   bool _hasLowBatteryAlerted = false;
   Timer? _reconnectionTimer;
-  int connectionCheckSeconds = 4;
+  int connectionCheckSeconds = 7;
+  DateTime? _reconnectAt;
 
   bool _havingNewFirmware = false;
   bool get havingNewFirmware => _havingNewFirmware && pairedDevice != null && isConnected;
@@ -75,6 +76,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   // TODO: thinh, use connection directly
+  Future _bleDisconnectDevice(BtDevice btDevice) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
+    if (connection == null) {
+      return Future.value(null);
+    }
+    return await connection.disconnect();
+  }
+
   Future<StreamSubscription<List<int>>?> _getBleBatteryLevelListener(
     String deviceId, {
     void Function(int)? onBatteryLevelChange,
@@ -130,14 +139,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   Future periodicConnect(String printer) async {
-    debugPrint("period connect");
     _reconnectionTimer?.cancel();
     _reconnectionTimer = Timer.periodic(Duration(seconds: connectionCheckSeconds), (t) async {
-      debugPrint("period connect...");
-      print('seconds: $connectionCheckSeconds');
-      print('triggered timer at ${DateTime.now()}');
+      debugPrint("Period connect seconds: $connectionCheckSeconds, triggered timer at ${DateTime.now()}");
       if (SharedPreferencesUtil().btDevice.id.isEmpty) {
         t.cancel();
+        return;
+      }
+      if (_reconnectAt != null && _reconnectAt!.isAfter(DateTime.now())) {
         return;
       }
       print("isConnected: $isConnected, isConnecting: $isConnecting, connectedDevice: $connectedDevice");
@@ -242,8 +251,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Wals
     ServiceManager.instance().wal.getSyncs().sdcard.setDevice(null);
 
-    print('after resetState inside initiateConnectionListener');
-
     InstabugLog.logInfo('Omi Device Disconnected');
     _disconnectNotificationTimer?.cancel();
     _disconnectNotificationTimer = Timer(const Duration(seconds: 30), () {
@@ -285,6 +292,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     setIsDeviceV2Connected();
     setIsConnected(true);
+
     await initiateBleBatteryListener();
     if (batteryLevel != -1 && batteryLevel < 20) {
       _hasLowBatteryAlerted = false;
@@ -411,4 +419,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   @override
   void onStatusChanged(DeviceServiceStatus status) {}
+
+  prepareDFU() {
+    if (connectedDevice == null) {
+      return;
+    }
+    _bleDisconnectDevice(connectedDevice!);
+    _reconnectAt = DateTime.now().add(Duration(seconds: 30));
+  }
 }
