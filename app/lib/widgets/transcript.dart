@@ -71,11 +71,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     return ListView.builder(
       controller: _scrollController,
       padding: EdgeInsets.zero,
-      // Don't use shrinkWrap: true for large lists as it's expensive
-      shrinkWrap: widget.segments.length < 100,
       itemCount: widget.segments.length + 2,
-      // Allow scrolling when there are many segments
-      physics: widget.segments.length > 100 ? const ClampingScrollPhysics() : const NeverScrollableScrollPhysics(),
       itemBuilder: (context, idx) {
         // Handle header and footer items
         if (idx == 0) return SizedBox(height: widget.topMargin ? 32 : 0);
