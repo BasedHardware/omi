@@ -18,6 +18,7 @@ def get_memories(uid: str, limit: int = 100, offset: int = 0, category: str = No
         .order_by('created_at', direction=firestore.Query.DESCENDING)
         .where(filter=FieldFilter('deleted', '==', False))
     )
+    # TODO: double check this fields are correct
     if category:
         memories_ref = memories_ref.where(filter=FieldFilter('category', '==', category))
     if visibility:
