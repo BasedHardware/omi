@@ -1,10 +1,11 @@
 import threading
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Header
 
 import database.memories as memories_db
 from models.memories import MemoryDB, Memory, MemoryCategory
+from models.memory import CategoryEnum
 from utils.apps import update_personas_async
 from utils.llm import identify_category_for_memory
 
@@ -25,10 +26,10 @@ def create_memory(memory: Memory, uid: str = Header(None)):
 def get_memories(
     limit: int = 100,
     offset: int = 0,
-    category: str = None,
-    visibility: Literal["public", "private"] = None,
+    category: Optional[CategoryEnum] = None, # TODO: make it a list to filter
+    # visibility: Literal["public", "private"] = None, # TODO: is this working
     uid: str = Header(None),
 ):
-    return memories_db.get_memories(uid, limit, offset, category, visibility)
+    return memories_db.get_memories(uid, limit, offset, category)
 
 
