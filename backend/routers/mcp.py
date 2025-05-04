@@ -24,7 +24,7 @@ def create_memory(memory: Memory, uid: str = Header(None)):
 
 @router.get("/v1/mcp/memories", tags=["mcp"], response_model=List[MemoryDB])
 def get_memories(
-    limit: int = 100,
+    limit: int = 25,
     offset: int = 0,
     categories: List[CategoryEnum] = [], # TODO: finish
     # visibility: Literal["public", "private"] = None, # TODO: is this working
