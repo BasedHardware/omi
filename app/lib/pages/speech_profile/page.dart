@@ -37,7 +37,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
       context.read<SpeechProfileProvider>().close();
       await context.read<SpeechProfileProvider>().updateDevice();
-      
+
       // Check if user has set primary language
       if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
         await LanguageSelectionDialog.show(context);
@@ -325,7 +325,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                         if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
                                           await LanguageSelectionDialog.show(context);
                                         }
-                                        
+
                                         BleAudioCodec codec;
                                         try {
                                           codec = await _getAudioCodec(provider.device!.id);
@@ -348,7 +348,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                           return;
                                         }
 
-                                        if (codec != BleAudioCodec.opus) {
+                                        if (!codec.isOpusSupported()) {
                                           showDialog(
                                             context: context,
                                             builder: (c) => getDialog(
