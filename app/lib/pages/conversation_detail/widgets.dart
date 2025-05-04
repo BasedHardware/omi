@@ -74,6 +74,7 @@ class GetSummaryWidgets extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             conversation.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
+            const ActionItemsListWidget(),
           ],
         );
       },
@@ -878,7 +879,7 @@ class _GetShareOptionsState extends State<GetShareOptions> {
                   changeLoadingShareTranscript(true);
                   String content = '''
               ${widget.conversation.structured.title}
-              
+
               ${widget.conversation.getTranscript(generate: true)}
               '''
                       .replaceAll('  ', '')
