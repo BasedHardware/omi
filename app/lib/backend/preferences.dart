@@ -225,9 +225,11 @@ class SharedPreferencesUtil {
 
   enableApp(String value) {
     final List<App> apps = appsList;
-    final app = apps.firstWhere((element) => element.id == value);
-    app.enabled = true;
-    appsList = apps;
+    App? app = apps.firstWhereOrNull((element) => element.id == value);
+    if (app != null) {
+      app.enabled = true;
+      appsList = apps;
+    }
   }
 
   disableApp(String value) {

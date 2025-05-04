@@ -644,7 +644,7 @@ async def _listen(
 
                 # Send to external trigger
                 if transcript_send is not None:
-                    transcript_send(updates_segments,current_conversation_id)
+                    transcript_send([segment.dict() for segment in transcript_segments], current_conversation_id)
 
                 # Translate
                 if translation_enabled:
