@@ -114,59 +114,37 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                       controller: _controller,
                       physics: const NeverScrollableScrollPhysics(),
                       children: [
-                        // Transcript tab
-                        ListView(
-                          shrinkWrap: true,
-                          children: [
-                            const SizedBox(height: 16),
-                            provider.segments.isEmpty
-                                ? Column(
-                                    children: [
-                                      const SizedBox(height: 80),
-                                      Center(
-                                        child: Text(
-                                          conversationSource == ConversationSource.omi ? "No transcript" : "Empty",
-                                        ),
-                                      ),
-                                    ],
-                                  )
-                                : Container(
-                                    height: provider.segments.length > 100 
-                                        ? MediaQuery.of(context).size.height - 200 
-                                        : null,
-                                    child: getTranscriptWidget(
-                                      false,
-                                      provider.segments,
-                                      [],
-                                      deviceProvider.connectedDevice,
-                                    ),
-                                  ),
-                            const SizedBox(height: 100), // Add space at bottom for the floating bar
-                          ],
-                        ),
-                        // Summary tab
-                        Padding(
-                          padding: const EdgeInsets.only(top: 40),
-                          child: ListView(
-                            shrinkWrap: true,
-                            children: [
-                              const SizedBox(height: 80),
-                              Center(
+                        // Transcript Tab
+                        provider.segments.isEmpty
+                            ? Center(
                                 child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                                  padding: const EdgeInsets.only(bottom: 50.0), // Adjust padding to roughly center
                                   child: Text(
-                                    provider.segments.isEmpty
-                                        ? "No summary"
-                                        : "Conversation is summarized after 2 minutes of no speech 🤫",
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(fontSize: provider.segments.isEmpty ? 16 : 22),
+                                    conversationSource == ConversationSource.omi ? "No transcript" : "Empty",
                                   ),
                                 ),
+                              )
+                            : Padding(
+                                padding: const EdgeInsets.only(bottom: 80),
+                                child: getTranscriptWidget(
+                                  false,
+                                  provider.segments,
+                                  [],
+                                  deviceProvider.connectedDevice,
+                                ),
                               ),
-                              const SizedBox(
-                                height: 16,
-                              ),
-                            ],
+                        // Summary Tab
+                        Center(
+                          child: Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 32.0).copyWith(bottom: 50.0), // Adjust padding
+                            child: Text(
+                              provider.segments.isEmpty
+                                  ? "No summary"
+                                  : "Conversation is summarized after 2 minutes of no speech 🤫",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: provider.segments.isEmpty ? 16 : 22),
+                            ),
                           ),
                         ),
                       ],
@@ -183,9 +161,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                     ? const SizedBox()
                     : ConversationBottomBar(
                         mode: ConversationBottomBarMode.recording,
-                        selectedTab: _controller!.index == 0 
-                            ? ConversationTab.transcript 
-                            : ConversationTab.summary,
+                        selectedTab: _controller!.index == 0 ? ConversationTab.transcript : ConversationTab.summary,
                         hasSegments: provider.segments.isNotEmpty,
                         onTabSelected: (tab) {
                           _controller!.animateTo(tab == ConversationTab.transcript ? 0 : 1);
