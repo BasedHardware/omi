@@ -4,22 +4,6 @@ The Omi App is a Flutter-based mobile application that serves as the companion a
 
 ## 📚 **[View Full App setup instructions in the documentation](https://docs.omi.me/docs/developer/AppSetup)**
 
-## What's in the Documentation?
-
-### 🛠 Development Setup
-- **Firebase Setup**: Complete guide for configuring Firebase authentication and services
-- **Environment Setup**: Step-by-step guide for .env configuration and API keys
-- **Build Configuration**: Instructions for build runner and platform-specific setups
-- **Manual Setup Option**: Alternative to automated setup for custom configurations
-- **Troubleshooting Guide**: Common setup issues and their solutions
-
-### 🚀 Advanced Topics
-- **Backend Integration**: Guide for connecting to custom backend services
-- **Production Setup**: Detailed Firebase configuration for production environment
-- **Authentication**: Complete OAuth setup including SHA key generation
-- **Multi-Environment**: Managing development and production configurations
-- **Platform Specifics**: iOS and Android platform-specific requirements
-
 ### Quick Setup
 
 1. Navigate to the app directory:
