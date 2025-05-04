@@ -1,6 +1,6 @@
 from enum import Enum
 import json
-from typing import List
+from typing import List, Optional
 import requests
 import logging
 from mcp.server import Server
@@ -55,6 +55,24 @@ class OmiTools(str, Enum):
     DELETE_MEMORY = "delete_memory"
     EDIT_MEMORY = "edit_memory"
     GET_CONVERSATIONS = "get_conversations"
+    CREATE_USER = "create_user"
+
+
+class UserCredentials(BaseModel):
+    """User credentials for signup.
+
+    Args:
+        email (str): User's email address
+        password (str): User's password
+        name (str, optional): User's name. Defaults to None.
+
+    Returns:
+        dict: Status of the signup operation. Including the user's unique identifier. (uid)
+    """
+
+    email: str
+    password: str
+    name: str
 
 
 class GetMemories(BaseModel):
@@ -146,6 +164,14 @@ class GetConversations(BaseModel):
     limit: int = 25
 
 
+def create_user(email: str, password: str, name: str) -> dict:
+    response = requests.post(
+        f"{base_url}users",
+        json={"email": email, "password": password, "name": name},
+    )
+    return response.json()
+
+
 def get_memories(
     uid: str,
     limit: int = 100,
@@ -211,6 +237,11 @@ async def serve(uid: str | None) -> None:
     async def list_tools() -> list[Tool]:
         return [
             Tool(
+                name=OmiTools.CREATE_USER,
+                description="Create a new user",
+                inputSchema=UserCredentials.model_json_schema(),
+            ),
+            Tool(
                 name=OmiTools.GET_MEMORIES,
                 description="Retrieve a list of memories",
                 inputSchema=GetMemories.model_json_schema(),
@@ -240,6 +271,14 @@ async def serve(uid: str | None) -> None:
     @server.call_tool()
     async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         logger.info(f"Calling tool: {name} with arguments: {arguments}")
+
+        if name == OmiTools.CREATE_USER:
+            result = create_user(
+                email=arguments["email"],
+                password=arguments["password"],
+                name=arguments.get("name"),
+            )
+            return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
         # _uid = arguments["uid"] if not uid else uid
         # if _uid is None:
