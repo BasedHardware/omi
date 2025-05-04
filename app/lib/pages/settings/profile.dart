@@ -114,7 +114,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         )
                         .key
                     : 'Not set';
-                
+
                 return ListTile(
                   contentPadding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
                   title: const Text('Primary Language', style: TextStyle(color: Colors.white)),
@@ -158,6 +158,17 @@ class _ProfilePageState extends State<ProfilePage> {
                 style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                 textAlign: TextAlign.start,
               ),
+            ),
+            SwitchListTile(
+              contentPadding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
+              title: const Text('Show Action Items', style: TextStyle(color: Colors.white)),
+              subtitle: const Text('Display action items in conversation details'),
+              value: SharedPreferencesUtil().showActionItems,
+              onChanged: (value) {
+                setState(() {
+                  SharedPreferencesUtil().showActionItems = value;
+                });
+              },
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(0, 0, 24, 0),

@@ -187,6 +187,10 @@ class SharedPreferencesUtil {
 
   set showDiscardedMemories(bool value) => saveBool('showDiscardedMemories', value);
 
+  bool get showActionItems => getBool('showActionItems') ?? true;
+
+  set showActionItems(bool value) => saveBool('showActionItems', value);
+
   // User primary language preferences
   String get userPrimaryLanguage => getString('userPrimaryLanguage') ?? '';
 

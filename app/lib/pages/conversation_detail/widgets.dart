@@ -87,6 +87,12 @@ class ActionItemsListWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool showActionItems = SharedPreferencesUtil().showActionItems;
+
+    if (!showActionItems) {
+      return const SizedBox.shrink();
+    }
+
     return Consumer<ConversationDetailProvider>(builder: (context, provider, child) {
       return Column(
         children: [
