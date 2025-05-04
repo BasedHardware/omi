@@ -19,7 +19,23 @@ To build the firmware, you can use VS Code.
 
 4.Scroll to the bottom and click "Build Configuration." This will start the nRFConnect SDK building your firmware file. A VSCode notification popup will notify you of the progress of your build.
 
-##
+## Debugging Tips
+
+### Flashing
+For a simpler flashing experience with verbose output, use the provided flash script:
+```
+./omi/firmware/devkit/flash.sh
+```
+
+### Monitoring Device Logs
+There's a convenient script that auto-detects the device and logs the output to a file:
+```
+# Run the monitoring script
+omi/firmware/scripts/monitor_device.sh
+
+# View the logs in real-time
+tail -f logs/device.log
+```
 
 ## OTA
 
