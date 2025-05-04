@@ -4,21 +4,29 @@ from typing import List
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from models.memory import CategoryEnum
+
 from ._client import db
 
 memories_collection = 'memories'
 users_collection = 'users'
 
 
-def get_memories(uid: str, limit: int = 100, offset: int = 0):
-    print('get_memories', uid, limit, offset)
+def get_memories(uid: str, limit: int = 100, offset: int = 0, categories: List[str] = []):
+    print('get_memories', uid, limit, offset, categories)
     memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
+    if categories:
+        memories_ref = memories_ref.where(filter=FieldFilter('category', 'in', categories))
+        
     memories_ref = (
-        memories_ref.order_by('scoring', direction=firestore.Query.DESCENDING)
-        .order_by('created_at', direction=firestore.Query.DESCENDING)
+        memories_ref
         .where(filter=FieldFilter('deleted', '==', False))
+        .order_by('scoring', direction=firestore.Query.DESCENDING)
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+        .limit(limit)
+        .offset(offset)
     )
-    memories_ref = memories_ref.limit(limit).offset(offset)
+
     # TODO: put user review to firestore query
     memories = [doc.to_dict() for doc in memories_ref.stream()]
     result = [memory for memory in memories if memory['user_review'] is not False]
