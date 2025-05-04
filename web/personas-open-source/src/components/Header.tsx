@@ -4,7 +4,10 @@
  * @author HarshithSunku
  * @license MIT
  */
+import { useState } from 'react';
 import Link from 'next/link';
+import { LoginButton } from '@/components/LoginButton';
+import { auth } from '@/lib/firebase';
 
 // Define props interface
 interface HeaderProps {
@@ -21,7 +24,18 @@ interface HeaderProps {
  * @returns {JSX.Element} Rendered Header component
  */
 export const Header = ({ uid }: HeaderProps) => {
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [authResponse, setAuthResponse] = useState<any>(null);
   const addToolsUrl = uid ? `https://veyrax.com/user/omi/auth?omi_user_id=${encodeURIComponent(uid)}` : '#';
+
+  const handleLoadingChange = (isLoading: boolean) => {
+    setIsAuthLoading(isLoading);
+  };
+
+  const handleResponse = (response: any) => {
+    setAuthResponse(response);
+    console.log('Auth response received in Header:', response);
+  };
 
   return (
     <div className="p-4 border-b border-zinc-800">
@@ -32,7 +46,12 @@ export const Header = ({ uid }: HeaderProps) => {
         </Link>
         {/* Ensure right-side items stay together */}
         <div className="flex items-center gap-4"> {/* Keep gap for items within this group if needed in future */}
-          {/* Existing "Train AI" link - adjust padding/text size for mobile */}
+          {(isAuthLoading || !uid || (uid && auth.currentUser?.isAnonymous)) && (
+            <LoginButton 
+              onLoadingChange={handleLoadingChange}
+              onResponse={handleResponse}
+            />
+          )}
           <Link
             href="https://www.omi.me/pages/product?ref=personas"
             target="_blank"

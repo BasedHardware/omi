@@ -7,23 +7,22 @@
 // export const TEST_UID = "kiTPO8XwMlOpFpb4x1diyMg213j2"; // <-- commented after tests
 // ------------------------------------------------------------------------------------
 
-import { SetStateAction, useEffect, useState, useCallback } from 'react';
+import { SetStateAction, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, query, where, getDocs, orderBy, startAfter, limit, doc, setDoc, getDoc, or } from 'firebase/firestore';
+import { collection, addDoc, query, where, getDocs, orderBy, startAfter, limit, doc, setDoc, or } from 'firebase/firestore';
 import { toast } from 'sonner';
 import { Mixpanel } from '@/lib/mixpanel';
 import { useInView } from 'react-intersection-observer';
 import { ulid } from 'ulid';
-import { auth, googleProvider } from '@/lib/firebase';
+import { auth } from '@/lib/firebase';
 import { Header } from '@/components/Header';
 import { InputArea } from '@/components/InputArea';
 import { ChatbotList } from '@/components/ChatbotList';
 import { Footer } from '@/components/Footer';
-import { LoginDialog } from '@/components/LoginDialog';
 import { Chatbot, TwitterProfile, LinkedinProfile } from '@/types/profiles';
 import { PreorderBanner } from '@/components/shared/PreorderBanner';
-import { signInAnonymously, onAuthStateChanged, User, signInWithPopup } from 'firebase/auth';
+import { signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
 
 // Helper function to detect mobile devices (basic check)
 const isMobileDevice = (): boolean => {
@@ -152,8 +151,6 @@ export default function HomePage() {
   const [currentUserUid, setCurrentUserUid] = useState<string | null>(null);
   const [authInitialized, setAuthInitialized] = useState<boolean>(false);
   const [isIntegrating, setIsIntegrating] = useState(false);
-  const [showLoginDialog, setShowLoginDialog] = useState(false);
-  const [pendingProvider, setPendingProvider] = useState<string | null>(null);
 
   // ----------------------------------------------------------------------------------
   // Helper: open ChatGPT workspace - NOW WITH MOBILE HANDLING
@@ -191,57 +188,68 @@ export default function HomePage() {
           }, 5000); // Increased delay
         });
     } else {
+      // Desktop flow: Redirect immediately with UID parameter
       const redirectUrl = `${baseChatGPTUrl}?prompt=uid=${encodeURIComponent(uid)}`;
       console.log(`[openChatGPTWithUid] Redirecting desktop to: ${redirectUrl}`);
       window.location.href = redirectUrl;
     }
   };
+  // ----------------------------------------------------------------------------------
 
+  // Effect to observe Firebase Auth state and store the UID
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
       if (user) {
+        console.log('[Auth State] User found:', user.uid);
         setCurrentUserUid(user.uid);
       } else {
-        console.log('No authenticated user found.');
+        console.log('[Auth State] No user found.');
         setCurrentUserUid(null);
       }
-      setAuthInitialized(true);
+      setAuthInitialized(true); // Mark auth as initialized
     });
 
+    // Cleanup subscription on unmount
     return () => unsubscribe();
-  }, []);
+  }, []); // Empty dependency array ensures this runs only once on mount
 
+  // Helper function to reliably get UID, creating anonymous if needed
   const getUid = async (): Promise<string | null> => {
     if (!authInitialized) {
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Auth hasn't initialized yet, wait briefly or handle differently?
+      // For now, try direct check + anonymous creation as fallback
+      console.warn('[getUid] Auth not initialized, attempting direct check/creation.');
     }
 
+    // 1. Check state first (set by onAuthStateChanged)
     if (currentUserUid) {
+      console.log('[getUid] Using UID from state:', currentUserUid);
       return currentUserUid;
     }
 
+    // 2. Check current auth object directly (might be null if not initialized)
     if (auth.currentUser) {
-      setCurrentUserUid(auth.currentUser.uid);
+      console.log('[getUid] Using UID from auth.currentUser:', auth.currentUser.uid);
+      setCurrentUserUid(auth.currentUser.uid); // Update state
       return auth.currentUser.uid;
     }
 
-    if (pendingProvider || handle) {
-      setShowLoginDialog(true);
-      return null;
-    }
-
+    // 3. If no user found, create an anonymous one
+    console.log('[getUid] No user found, attempting anonymous sign-in...');
     try {
       const result = await signInAnonymously(auth);
       const newUid = result.user.uid;
-      setCurrentUserUid(newUid);
+      console.log('[getUid] Signed in anonymously, new UID:', newUid);
+      setCurrentUserUid(newUid); // Update state
       return newUid;
     } catch (err) {
-      console.error('Anonymous sign-in failed:', err);
+      console.error('[getUid] Anonymous sign-in failed:', err);
       toast.error('Failed to initialize user session.');
-      return null;
+      return null; // Indicate failure
     }
   };
 
+  // Handle profile parameter on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const profileParam = params.get('profile');
@@ -257,6 +265,7 @@ export default function HomePage() {
     setHandle(e.target.value);
   };
   
+  //function to retrieve the document id from Firestore.
   const getProfileDocId = async (cleanHandle: string, category: 'twitter' | 'linkedin'): Promise<string | null> => {
     const q = query(
       collection(db, 'plugins_data'),
@@ -349,7 +358,7 @@ export default function HomePage() {
     return null;
   };
 
-  // Modified handleCreatePersona to accept a new optional handle parameter
+  // Modified handleCreatePersona to accept an optional handle parameter
   const handleCreatePersona = async (inputHandle?: string) => {
     if (isCreating) return;
     
@@ -359,14 +368,14 @@ export default function HomePage() {
       return;
     }
 
-    setIsCreating(true);
-
+    // Track the click event in Mixpanel
     Mixpanel.track('Create Persona Clicked', {
       input: handleToUse,
       timestamp: new Date().toISOString()
     });
 
     try {
+      setIsCreating(true);
       const cleanHandle = extractHandle(handleToUse);
       let twitterResult = false;
       let linkedinResult = false;
@@ -471,6 +480,7 @@ export default function HomePage() {
 
       const querySnapshot = await getDocs(q);
 
+      // Single Map for all bots, keyed by lowercase username and category
       const allBotsMap = new Map();
 
       querySnapshot.docs.forEach(doc => {
@@ -483,6 +493,7 @@ export default function HomePage() {
         const key = `${normalizedUsername}-${category}`;
         const existingBot = allBotsMap.get(key);
 
+        // Only update if new bot has higher sub_count
         if (!existingBot || ((bot.sub_count || 0) > (existingBot.sub_count || 0))) {
           allBotsMap.set(key, bot);
         }
@@ -496,6 +507,7 @@ export default function HomePage() {
         setChatbots(prev => {
           const masterMap = new Map();
 
+          // First add existing bots to master map
           prev.forEach(bot => {
             const username = bot.username?.toLowerCase().trim();
             const category = bot.category;
@@ -505,6 +517,7 @@ export default function HomePage() {
             }
           });
 
+          // Then add new bots, only updating if sub_count is higher
           uniqueBots.forEach(bot => {
             const username = bot.username?.toLowerCase().trim();
             const category = bot.category;
@@ -634,17 +647,20 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
         const enableRes = await fetch('/api/enable-plugins', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ uid: uid }) 
+          body: JSON.stringify({ uid: uid }) // Use real UID
         });
         if (!enableRes.ok) {
           console.error('Failed to enable plugins via API:', await enableRes.text());
+          // Non-fatal, continue with fact storage
         }
       } catch (apiErr) {
         console.error('Error calling /api/enable-plugins:', apiErr);
+         // Non-fatal
       }
 
+      // Store facts into OMI then redirect
       const memories = [profileData.desc || '', ...recentTweets];
-      storeFactsAndRedirect(uid, memories.filter(Boolean)); 
+      storeFactsAndRedirect(uid, memories.filter(Boolean)); // Use real UID
 
       toast.success('Profile saved successfully!');
 
@@ -719,7 +735,8 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
       try {
         const uid = await getUid();
         if (!uid) {
-          return false; 
+          // getUid already shows a toast on failure
+          return false; // Cannot proceed without UID
         }
 
         const persona_id = ulid();
@@ -753,21 +770,25 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
           await setDoc(doc(db, 'plugins_data', persona_id), docData);
         }
 
+        // Enable default plugins in Redis
         try {
           const enableRes = await fetch('/api/enable-plugins', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ uid: uid }) 
+            body: JSON.stringify({ uid: uid }) // Use real UID
           });
           if (!enableRes.ok) {
-            console.log('Failed to enable plugins via API:', await enableRes.text());
+            console.error('Failed to enable plugins via API:', await enableRes.text());
+            // Non-fatal, continue with fact storage
           }
         } catch (apiErr) {
-          console.log('Error calling /api/enable-plugins:', apiErr);
+          console.error('Error calling /api/enable-plugins:', apiErr);
+           // Non-fatal
         }
 
+        // Store facts then redirect
         const memories = [summary, recentPosts].filter(Boolean);
-        storeFactsAndRedirect(uid, memories); 
+        storeFactsAndRedirect(uid, memories); // Use real UID
 
         toast.success('Profile saved successfully!');
         return true;
@@ -784,15 +805,17 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
     }
   };
 
+  // Helper to store scraped memories in OMI and redirect to ChatGPT
   const storeFactsAndRedirect = async (uid: string, memories: string[]) => {
     if (!uid || memories.length === 0) {
       console.warn('[storeFactsAndRedirect] No UID or no memories provided, redirecting anyway.');
-      openChatGPTWithUid(uid || 'NO_UID_PROVIDED'); 
+      openChatGPTWithUid(uid || 'NO_UID_PROVIDED'); // Redirect even if memories are empty, handle missing UID case.
       return;
     }
     
+    // Initiate the background fact storage - DO NOT await this
     try {
-      fetch('/api/store-facts', {
+      fetch('/api/store-facts', { // No await here!
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -801,40 +824,28 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
       }).then(response => {
         if (!response.ok) {
           console.error(`[storeFactsAndRedirect] Background /api/store-facts call failed with status: ${response.status}`);
+          // Optionally log response.text() here if needed, but don't block
         }
       }).catch(err => {
          console.error('[storeFactsAndRedirect] Background fetch to /api/store-facts failed:', err);
       });
     } catch (err) {
+      // Catch synchronous errors initiating the fetch, though unlikely
       console.error('[storeFactsAndRedirect] Error initiating background fact storage:', err);
     }
     
+    // Redirect immediately after initiating the background fetch
     console.log('[storeFactsAndRedirect] Initiated background fact storage. Redirecting NOW...');
     openChatGPTWithUid(uid);
   };
 
-  const handleAuthSuccess = (userId: string) => {
-    setCurrentUserUid(userId);
-    setShowLoginDialog(false);
-
-    if (pendingProvider) {
-      const savedProvider = pendingProvider;
-      setPendingProvider(null);
-      handleIntegrationClick(savedProvider);
-    }
-  };
-
   const handleIntegrationClick = async (provider: string) => {
     if (isIntegrating) return; 
-    
-    if (!auth.currentUser || auth.currentUser.isAnonymous) {
-      setPendingProvider(provider);
-      setShowLoginDialog(true);
-      return;
-    }
-    
     setIsIntegrating(true);
 
+    console.log(`[handleIntegrationClick] Clicked provider: ${provider}`);
+    
+    // Track the click event in Mixpanel
     Mixpanel.track('Integration Clicked', {
       provider: provider,
       timestamp: new Date().toISOString()
@@ -843,6 +854,7 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
     const isMobile = isMobileDevice();
     let loadingToastId: string | number | undefined = undefined;
 
+    // Show initial feedback immediately only on mobile
     if (isMobile) {
       loadingToastId = toast.loading('Connecting...');
     }
@@ -850,18 +862,18 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
     let uid: string | null = null;
 
     try {
-      if (auth.currentUser) {
-        uid = auth.currentUser.uid;
-      } else {
-        uid = await getUid(); 
-      }
+      // 1. Await UID 
+      uid = await getUid(); 
       if (!uid) {
         if (loadingToastId) toast.dismiss(loadingToastId);
         toast.error('Could not get user ID. Please try again.');
-        setIsIntegrating(false); 
+        setIsIntegrating(false); // Reset state on failure
         return;
       }
-      
+      console.log(`[handleIntegrationClick] Obtained UID: ${uid}`);
+
+      // 2. Trigger API Call (Fire-and-Forget - before clipboard/redirect logic)
+      console.log(`[handleIntegrationClick] Triggering background /api/enable-plugins for UID: ${uid}`);
       fetch('/api/enable-plugins', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -875,46 +887,61 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
         }).catch(apiErr => {
           console.error(`[handleIntegrationClick] Background /api/enable-plugins fetch failed for provider ${provider}:`, apiErr);
         });
-        
+
+      // 3. Construct Veyrax Redirect URL
       const redirectUrl = `https://veyrax.com/user/omi?omi_user_id=${encodeURIComponent(uid)}&provider_tag=${encodeURIComponent(provider)}`;
 
+      // 4. Handle Mobile vs Desktop Redirect/Feedback
       if (isMobile) {
+        // Mobile: Copy UID, show success toast, delay redirect
         navigator.clipboard.writeText(uid)
           .then(() => {
             if (loadingToastId) toast.dismiss(loadingToastId);
+            console.log('[handleIntegrationClick] UID copied to clipboard for mobile.');
             toast.success('UID copied! Paste it into ChatGPT. Redirecting to integration partner...', {
               duration: 3000,
             });
+            // Redirect after toast duration
             setTimeout(() => {
+              console.log(`[handleIntegrationClick] Redirecting mobile to Veyrax URL: ${redirectUrl}`);
               window.location.href = redirectUrl;
             }, 3000);
           })
           .catch(err => {
             if (loadingToastId) toast.dismiss(loadingToastId);
+            console.error('[handleIntegrationClick] Failed to copy UID to clipboard:', err);
+            // Show UID in the error toast for manual copying
             toast.error(`Redirecting to an integration partner`, {
-                duration: 5000, 
+                duration: 5000, // Give more time to see/copy
             });
-
+            // Redirect after a delay, allowing time for manual copy
+            // Note: We are still redirecting even if copy fails, as the primary action is integration.
             setTimeout(() => {
-              window.location.href = redirectUrl; 
-            }, 5000);
+                console.log(`[handleIntegrationClick] Redirecting mobile (after copy fail) to Veyrax URL: ${redirectUrl}`);
+                window.location.href = redirectUrl; 
+            }, 5000); // Increased delay
           });
       } else {
-        if (loadingToastId) toast.dismiss(loadingToastId);
+        // Desktop: Redirect immediately to Veyrax
+        if (loadingToastId) toast.dismiss(loadingToastId); // Dismiss if somehow shown
+        console.log(`[handleIntegrationClick] Redirecting desktop to Veyrax URL: ${redirectUrl}`);
         window.location.href = redirectUrl;
       }
 
-    } catch (error) {
+    } catch (error) { // Catch errors mainly from getUid
       if (loadingToastId) toast.dismiss(loadingToastId);
+      console.error(`[handleIntegrationClick] Error processing integration for provider ${provider}:`, error);
       toast.error(`Failed to initiate integration for ${provider}.`);
-      setIsIntegrating(false);
+      setIsIntegrating(false); // Reset state on error
     } 
   };
 
+  // URL for the Veyrax page to add more tools - Updated path
   const addToolsUrl = currentUserUid ? `https://veyrax.com/omi/auth?omi_user_id=${encodeURIComponent(currentUserUid)}` : '#';
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col">
+      {/* <PreorderBanner botName="your favorite personal" /> */}
       <Header uid={currentUserUid} />
       <div className="flex flex-col items-center justify-center px-4 py-8 md:py-16 flex-grow">
         <InputArea
@@ -926,7 +953,8 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
           isIntegrating={isIntegrating}
         />
 
-        {currentUserUid && !auth.currentUser?.isAnonymous && (
+        {/* Add more tools link (conditionally rendered) */}
+        {currentUserUid && (
           <div className="mt-4 text-center">
             <a
               href={addToolsUrl}
@@ -940,16 +968,20 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
           </div>
         )}
 
+        {/* Before/After Comparison */}
         <div className="w-full max-w-5xl mt-12 md:mt-16 px-4">
           <div className="grid md:grid-cols-2 gap-8">
+            {/* Before Section */}
             <div className="bg-zinc-900 p-6 rounded-lg order-2 md:order-1">
               <h3 className="text-lg font-semibold mb-4 text-center text-zinc-400">ChatGPT</h3>
               <div className="space-y-3">
+                {/* User Bubble */}
                 <div className="flex justify-end">
                   <div className="bg-zinc-700 p-3 rounded-lg max-w-[80%] text-white">
                     What should I do today?
                   </div>
                 </div>
+                {/* AI Bubble (Generic) */}
                 <div className="flex justify-start">
                   <div className="bg-zinc-700 p-3 rounded-lg max-w-[80%] text-zinc-200">
                     You could organize your tasks, check the weather forecast, brainstorm new ideas, or maybe learn a new skill online.
@@ -958,14 +990,17 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
               </div>
             </div>
 
+            {/* After Section */}
             <div className="bg-zinc-800 p-6 rounded-lg order-1 md:order-2 shadow-lg">
               <h3 className="text-lg font-semibold mb-4 text-center text-white">omiGPT</h3>
               <div className="space-y-3">
+                {/* User Bubble */}
                 <div className="flex justify-end">
                   <div className="bg-zinc-700 p-3 rounded-lg max-w-[80%] text-white">
                     What should I do today?
                   </div>
                 </div>
+                {/* AI Bubble (Personalized) */}
                 <div className="flex justify-start">
                   <div className="bg-zinc-600 p-3 rounded-lg max-w-[80%] text-white">
                     Based on your calendar, you have the 'Marketing Sync' at 2 PM. Your Notion page 'Q3 Launch Plan' needs review. How about blocking 1 hour now to finalize those presentation slides? Also, remember you starred that new cafe near the meeting spot on Maps.
@@ -978,6 +1013,7 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
 
       </div>
       <Footer />
+      {/* Render the modal */}
       <PlatformSelectionModal
         isOpen={showPlatformModal}
         onClose={() => {
@@ -988,13 +1024,6 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
         onSelect={handlePlatformSelect}
         mode={platformSelectionMode}
       />
-      
-      <LoginDialog 
-        showLoginDialog={showLoginDialog}
-        setShowLoginDialog={setShowLoginDialog}
-        onAuthSuccess={handleAuthSuccess}
-      />
     </div>
   );
 }
-
