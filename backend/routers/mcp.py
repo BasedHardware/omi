@@ -65,6 +65,7 @@ def get_conversations(
 ):
     # TODO: do retrieval, + mixed db search, this works for now.
     # --- should rather send lots of context? and let front do retrieval? or add as potential other endpoint?
+    # TODO: Return all fields? some conversations might be gigantic, what to do about it?
     print("get_conversations", uid, limit, offset)
     return conversations_db.get_conversations(
         uid,
