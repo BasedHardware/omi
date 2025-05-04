@@ -5,9 +5,10 @@ from .server import serve
 
 
 @click.command()
-@click.option("--uid", "-u", type=str, help="User ID")
+# @click.option("--uid", "-u", type=str, help="User ID")
+# uid: str | None, 
 @click.option("-v", "--verbose", count=True)
-def main(uid: str | None, verbose: bool) -> None:
+def main(verbose: bool) -> None: 
     """MCP Omi Server - Omi functionality for MCP"""
     import asyncio
 
@@ -18,8 +19,7 @@ def main(uid: str | None, verbose: bool) -> None:
         logging_level = logging.DEBUG
 
     logging.basicConfig(level=logging_level, stream=sys.stderr)
-    print("Server starting...")
-    asyncio.run(serve(uid))
+    asyncio.run(serve(None))
 
 
 if __name__ == "__main__":
