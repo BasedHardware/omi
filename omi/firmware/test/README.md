@@ -13,13 +13,13 @@ To build the firmware, you can use VS Code.
 #### Using VSCode:
 1.Open nRF Connect Extension inside VS Code.
 
-2.Click “Open an existing application” and navigate to the firmware/test folder in the root of this repository.
+2.Click "Open an existing application" and navigate to the firmware/test folder in the root of this repository.
 
 3.In the application panel of the extension, click the Add Build Configuration icon. Choose a CMake Preset that matches your hardware.
 
-4.Scroll to the bottom and click “Build Configuration.” This will start the nRFConnect SDK building your firmware file. A VSCode notification popup will notify you of the progress of your build.
+4.Scroll to the bottom and click "Build Configuration." This will start the nRFConnect SDK building your firmware file. A VSCode notification popup will notify you of the progress of your build.
 
-## 
+##
 
 ## OTA
 
@@ -28,6 +28,10 @@ The firmware can be updated over the air (OTA) using the nRF Connect app. The fi
 2. Connect to the OMI_shell device using the app.
 3. Navigate to the DFU (Device Firmware Update) section in the app.
 4. Select the `dfu_application.zip` file from your build directory and upload it to the device.
+
+## BLE Throughput Test
+
+This test allows you to measure the BLE throughput performance of your device. For detailed instructions on setting up and running the test, see [BLE_THROUGHPUT_TEST.md](./BLE_THROUGHPUT_TEST.md).
 
 ## Commands
 
