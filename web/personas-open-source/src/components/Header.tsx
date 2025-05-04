@@ -25,16 +25,10 @@ interface HeaderProps {
  */
 export const Header = ({ uid }: HeaderProps) => {
   const [isAuthLoading, setIsAuthLoading] = useState(false);
-  const [authResponse, setAuthResponse] = useState<any>(null);
   const addToolsUrl = uid ? `https://veyrax.com/user/omi/auth?omi_user_id=${encodeURIComponent(uid)}` : '#';
 
   const handleLoadingChange = (isLoading: boolean) => {
     setIsAuthLoading(isLoading);
-  };
-
-  const handleResponse = (response: any) => {
-    setAuthResponse(response);
-    console.log('Auth response received in Header:', response);
   };
 
   return (
@@ -49,7 +43,6 @@ export const Header = ({ uid }: HeaderProps) => {
           {(isAuthLoading || !uid || (uid && auth.currentUser?.isAnonymous)) && (
             <LoginButton 
               onLoadingChange={handleLoadingChange}
-              onResponse={handleResponse}
             />
           )}
           <Link

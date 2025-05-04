@@ -6,10 +6,9 @@ import { toast } from "sonner";
 
 interface LoginButtonProps {
   onLoadingChange?: (isLoading: boolean) => void;
-  onResponse?: (response: any) => void;
 }
 
-export const LoginButton = ({ onLoadingChange, onResponse }: LoginButtonProps) => {
+export const LoginButton = ({ onLoadingChange }: LoginButtonProps) => {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleGoogleSignIn = async () => {
@@ -23,7 +22,7 @@ export const LoginButton = ({ onLoadingChange, onResponse }: LoginButtonProps) =
       
       if (currentUser && currentUser.isAnonymous && currentUser.uid !== user.uid) {
         try {
-          const migrateResponse = await fetch('https://www.veyrax.com/api/integrations/omi/merge', {
+          await fetch('https://www.veyrax.com/api/integrations/omi/merge', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
@@ -31,16 +30,8 @@ export const LoginButton = ({ onLoadingChange, onResponse }: LoginButtonProps) =
               new_uid: user.uid 
             })
           });
-          
-          if (migrateResponse.ok) {
-            console.log('Data migration initiated successfully');
-          } else {
-            console.error('Failed to initiate data migration:', await migrateResponse.text());
-          }
-          
-          if (onResponse) onResponse(migrateResponse);
-        } catch (migrateError) {
-          console.error('Error calling migration API:', migrateError);
+        } catch (error) {
+          console.log('Falied to migrate')
         }
       }
 
@@ -54,11 +45,10 @@ export const LoginButton = ({ onLoadingChange, onResponse }: LoginButtonProps) =
           created_at: new Date(),
         });
       }
-
+      
       toast.success('Signed in successfully');
     } catch (error: any) {
-      console.error("Sign in error:", error);
-      toast.error('Failed to sign in. Please try again.');
+      toast.error('Failed to sign in with Google')
     } finally {
       setIsLoading(false);
       if (onLoadingChange) onLoadingChange(false);
