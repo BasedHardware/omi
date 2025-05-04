@@ -70,6 +70,7 @@ class GetMemories(BaseModel):
         str: A JSON object containing the list of memories.
     """
 
+    uid: str
     limit: int = 100
     categories: List[MemoryFilterOptions] = []
 
@@ -88,6 +89,7 @@ class CreateMemory(BaseModel):
         dict: The created memory object.
     """
 
+    uid: str
     content: str
     category: MemoryFilterOptions
 
@@ -104,6 +106,7 @@ class DeleteMemory(BaseModel):
         dict: Status of the operation.
     """
 
+    uid: str
     memory_id: str
 
 
@@ -119,6 +122,7 @@ class EditMemory(BaseModel):
         dict: Status of the operation.
     """
 
+    uid: str
     memory_id: str
     content: str
 
@@ -137,6 +141,7 @@ class GetConversations(BaseModel):
         List: A list of conversation objects.
     """
 
+    uid: str
     include_discarded: bool = False
     limit: int = 25
 
@@ -196,11 +201,11 @@ def get_conversations(
 
 async def serve(uid: str | None) -> None:
     logger = logging.getLogger(__name__)
-
-    if uid is not None:
-        logger.info(f"Using uid: {uid}")
+    # if uid is not None:
+    #     logger.info(f"Using uid: {uid}")
 
     server = Server("mcp-omi")
+    logger.info("mcp-omi server started")
 
     @server.list_tools()
     async def list_tools() -> list[Tool]:
@@ -236,9 +241,13 @@ async def serve(uid: str | None) -> None:
     async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         logger.info(f"Calling tool: {name} with arguments: {arguments}")
 
+        # _uid = arguments["uid"] if not uid else uid
+        # if _uid is None:
+        #     raise ValueError(f"uid is required {arguments}")
+        _uid = arguments["uid"]
         if name == OmiTools.GET_MEMORIES:
             result = get_memories(
-                uid,
+                _uid,
                 limit=arguments["limit"],
                 categories=arguments["categories"],
             )
@@ -246,19 +255,19 @@ async def serve(uid: str | None) -> None:
 
         elif name == OmiTools.CREATE_MEMORY:
             result = create_memory(
-                uid,
+                _uid,
                 content=arguments["content"],
                 category=arguments["category"],
             )
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
         elif name == OmiTools.DELETE_MEMORY:
-            result = delete_memory(uid, memory_id=arguments["memory_id"])
+            result = delete_memory(_uid, memory_id=arguments["memory_id"])
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
         elif name == OmiTools.EDIT_MEMORY:
             result = edit_memory(
-                uid,
+                _uid,
                 memory_id=arguments["memory_id"],
                 content=arguments["content"],
             )
@@ -266,7 +275,7 @@ async def serve(uid: str | None) -> None:
 
         elif name == OmiTools.GET_CONVERSATIONS:
             result = get_conversations(
-                uid,
+                _uid,
                 include_discarded=arguments["include_discarded"],
                 limit=arguments["limit"],
             )
