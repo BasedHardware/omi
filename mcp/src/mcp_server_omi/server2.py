@@ -7,7 +7,9 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 from pydantic import BaseModel
+from mcp.server.fastmcp import FastMCP
 
+mcp = FastMCP("omi")
 
 class MemoryCategoryEnum(str, Enum):
     personal = "personal"
@@ -49,11 +51,12 @@ class MemoryCategoryEnum(str, Enum):
 base_url = "http://127.0.0.1:8000/v1/mcp/"
 
 
-class OmiTools(str, Enum):
-    GET_MEMORIES = "get_memories"
-
-
-class GetMemories(BaseModel):
+@mcp.tool()
+def get_memories(
+    uid: str,
+    limit: int = 100,
+    categories: List[MemoryCategoryEnum] = [],
+) -> List:
     """Retrieve a list of user memories.
     Memories are pieces of information about the user's life accross different domains.
 
@@ -65,59 +68,12 @@ class GetMemories(BaseModel):
     Returns:
         str: A JSON object containing the list of memories.
     """
-
-    uid: str
-    limit: int = 100
-    categories: List[MemoryCategoryEnum] = []
-
-
-def get_memories(
-    uid: str,
-    limit: int = 100,
-    categories: List[MemoryCategoryEnum] = [],
-) -> List:
     response = requests.get(
-        f"{base_url}/memories",
+        f"{base_url}memories",
         # params={"limit": limit, "categories": categories},
         headers={"uid": uid},
     )
     return response.json()
 
-
-async def serve(uid: str | None) -> None:
-    logger = logging.getLogger(__name__)
-
-    if uid is not None:
-        logger.info(f"Using uid: {uid}")
-
-    server = Server("mcp-omi")
-
-    @server.list_tools()
-    async def list_tools() -> list[Tool]:
-        return [
-            Tool(
-                name=OmiTools.GET_MEMORIES,
-                description="Retrieve a list of memories",
-                inputSchema=GetMemories.model_json_schema(),
-            ),
-        ]
-
-    @server.call_tool()
-    async def call_tool(name: str, arguments: dict) -> list[TextContent]:
-        logger.info(f"Calling tool: {name} with arguments: {arguments}")
-
-        # TODO: correct? both accept uid or env var?
-        uid = arguments["uid"] if uid is None else uid  # noqa: F823
-        if name == OmiTools.GET_MEMORIES:
-            result = get_memories(
-                uid,
-                limit=arguments["limit"],
-                categories=arguments["categories"],
-            )
-            return [TextContent(type="text", text=json.dumps(result, indent=2))]
-
-        raise ValueError(f"Unknown tool: {name}")
-
-    options = server.create_initialization_options()
-    async with stdio_server() as (read_stream, write_stream):
-        await server.run(read_stream, write_stream, options, raise_exceptions=True)
+if __name__ == "__main__":
+    mcp.run(transport="stdio")

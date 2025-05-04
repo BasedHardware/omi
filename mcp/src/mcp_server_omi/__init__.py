@@ -18,6 +18,7 @@ def main(uid: str | None, verbose: bool) -> None:
         logging_level = logging.DEBUG
 
     logging.basicConfig(level=logging_level, stream=sys.stderr)
+    print("Server starting...")
     asyncio.run(serve(uid))
 
 
