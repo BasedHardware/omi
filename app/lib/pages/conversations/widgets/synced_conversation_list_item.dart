@@ -5,6 +5,7 @@ import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart'
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
@@ -174,15 +175,37 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
             width: 16,
           ),
           Expanded(
-            child: Text(
-              dateTimeFormat('MMM d, h:mm a', conversation.startedAt ?? conversation.createdAt),
-              style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-              maxLines: 1,
-              textAlign: TextAlign.end,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  dateTimeFormat('MMM d, h:mm a', conversation.startedAt ?? conversation.createdAt),
+                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                  maxLines: 1,
+                  textAlign: TextAlign.end,
+                ),
+                if (conversation.transcriptSegments.isNotEmpty)
+                  Text(
+                    _getConversationDuration(),
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                    maxLines: 1,
+                    textAlign: TextAlign.end,
+                  ),
+              ],
             ),
           )
         ],
       ),
     );
+  }
+
+  String _getConversationDuration() {
+    if (conversation.transcriptSegments.isEmpty) return '';
+
+    // Get the total duration in seconds
+    int durationSeconds = conversation.getDurationInSeconds();
+    if (durationSeconds <= 0) return '';
+
+    return secondsToCompactDuration(durationSeconds);
   }
 }
