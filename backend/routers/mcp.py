@@ -1,3 +1,4 @@
+from datetime import datetime
 import threading
 from typing import List, Optional
 
@@ -6,7 +7,9 @@ from pydantic import BaseModel
 
 import database.memories as memories_db
 import database.conversations as conversations_db
-from models.conversation import Conversation
+
+# from database.redis_db import get_filter_category_items
+# from database.vector_db import query_vectors_by_metadata
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.memory import CategoryEnum
 from utils.apps import update_personas_async
@@ -58,27 +61,94 @@ def get_memories(
     )
 
 
-@router.get("/v1/mcp/conversations", response_model=List[Conversation], tags=["mcp"])
+class SimpleStructured(BaseModel):
+    title: str
+    overview: str
+    category: CategoryEnum
+
+
+class SimpleTranscriptSegment(BaseModel):
+    id: Optional[str] = None
+    text: str
+    speaker_id: Optional[int] = None
+    start: float
+    end: float
+
+
+class SimpleConversation(BaseModel):
+    id: str
+    started_at: Optional[datetime]
+    finished_at: Optional[datetime]
+    structured: SimpleStructured
+    transcript_segments: List[SimpleTranscriptSegment] = []
+    language: Optional[str] = None
+
+
+# Step 2 do retrieval
+# @router.get("/v1/mcp/conversations/available-filters", tags=["mcp"])
+# def get_conversations_available_filters(uid: str = Header(None)):
+#     return {
+#         "people": get_filter_category_items(uid, "people"),
+#         "topics": get_filter_category_items(uid, "topics"),
+#         "entities": get_filter_category_items(uid, "entities"),
+#     }
+
+
+@router.get(
+    "/v1/mcp/conversations", response_model=List[SimpleConversation], tags=["mcp"]
+)
 def get_conversations(
-    include_discarded: bool = False,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    categories: Optional[str] = None,
     limit: int = 25,
     offset: int = 0,
     uid: str = Header(None),
 ):
-    # TODO: do retrieval, + mixed db search, this works for now.
-    # --- should rather send lots of context? and let front do retrieval? or add as potential other endpoint?
-    # TODO: Return all fields? some conversations might be gigantic, what to do about it?
-    print("get_conversations", uid, limit, offset)
-    return conversations_db.get_conversations(
+    print("get_conversations", uid, limit, offset, start_date, end_date, categories)
+    category_list = (
+        [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()]
+        if categories
+        else []
+    )
+    conversations = conversations_db.get_conversations(
         uid,
         limit,
         offset,
-        include_discarded=include_discarded,
-        statuses=[],  # statuses.split(",") if len(statuses) > 0 else [],
+        include_discarded=False,
+        statuses=["completed"],
+        start_date=start_date,
+        end_date=end_date,
+        categories=[c.value for c in category_list],
     )
+    return conversations
 
+    # TODO: further steps, perform retrieval
+    # related_to_people = (
+    #     [p.strip() for p in related_to_people.split(",")] if related_to_people else []
+    # )
+    # related_to_topics = (
+    #     [t.strip() for t in related_to_topics.split(",")] if related_to_topics else []
+    # )
+    # related_to_entities = (
+    #     [e.strip() for e in related_to_entities.split(",")]
+    #     if related_to_entities
+    #     else []
+    # )
 
-# Not super sure about this, but still was requested, I just don't see a clear use case.
+    # vector = [0] * 3072  # pass something closer?
+    # memories_id = query_vectors_by_metadata(
+    #     uid,
+    #     vector,
+    #     dates_filter=[start_date, end_date],
+    #     people=related_to_people,
+    #     topics=related_to_topics,
+    #     entities=related_to_entities,
+    #     dates=[],
+    #     limit=200,
+    # )
+
+    # conversations = conversations_db.get_conversations_by_id(uid, memories_id)
 
 
 class UserCredentials(BaseModel):
