@@ -49,7 +49,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   void initState() {
     super.initState();
 
-    _controller = TabController(length: 3, vsync: this, initialIndex: 1); // Update length to 3 for the action items tab
+    _controller = TabController(length: 3, vsync: this, initialIndex: 1); // Start with summary tab
     _controller!.addListener(() {
       setState(() {
         if (_controller!.index == 0) {
@@ -218,12 +218,19 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                           conversation.transcriptSegments.isNotEmpty || conversation.externalIntegration != null,
                       onTabSelected: (tab) {
                         int index;
-                        if (tab == ConversationTab.transcript) {
-                          index = 0;
-                        } else if (tab == ConversationTab.summary) {
-                          index = 1;
-                        } else {
-                          index = 2; // action_items tab
+                        switch (tab) {
+                          case ConversationTab.transcript:
+                            index = 0;
+                            break;
+                          case ConversationTab.summary:
+                            index = 1;
+                            break;
+                          case ConversationTab.action_items:
+                            index = 2;
+                            break;
+                          default:
+                            debugPrint('Invalid tab selected: $tab');
+                            index = 1; // Default to summary tab
                         }
                         _controller!.animateTo(index);
                       },
