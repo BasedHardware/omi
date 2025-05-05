@@ -49,7 +49,7 @@ class ConversationBottomBar extends StatelessWidget {
       borderRadius: BorderRadius.circular(28),
       child: Container(
         height: 56,
-        width: mode == ConversationBottomBarMode.recording ? 180 : 290,
+        width: mode == ConversationBottomBarMode.recording ? 180 : 360,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: Colors.grey.shade900,
