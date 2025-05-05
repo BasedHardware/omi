@@ -878,7 +878,7 @@ class _GetShareOptionsState extends State<GetShareOptions> {
                   changeLoadingShareTranscript(true);
                   String content = '''
               ${widget.conversation.structured.title}
-              
+
               ${widget.conversation.getTranscript(generate: true)}
               '''
                       .replaceAll('  ', '')
