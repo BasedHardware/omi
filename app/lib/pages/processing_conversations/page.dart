@@ -3,6 +3,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/utils/enums.dart';
 import 'package:provider/provider.dart';
 
 class ProcessingConversationPage extends StatefulWidget {
@@ -114,7 +115,8 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
                                     Center(child: Text("No Transcript")),
                                   ],
                                 )
-                              : getTranscriptWidget(false, widget.conversation.transcriptSegments, [], null)
+                              : getTranscriptWidget(false, widget.conversation.transcriptSegments, [], null,
+                                  recordingState: RecordingState.stop)
                         ],
                       ),
                       ListView(
