@@ -217,7 +217,14 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                       hasSegments:
                           conversation.transcriptSegments.isNotEmpty || conversation.externalIntegration != null,
                       onTabSelected: (tab) {
-                        int index = tab == ConversationTab.transcript ? 0 : 1;
+                        int index;
+                        if (tab == ConversationTab.transcript) {
+                          index = 0;
+                        } else if (tab == ConversationTab.summary) {
+                          index = 1;
+                        } else {
+                          index = 2; // action_items tab
+                        }
                         _controller!.animateTo(index);
                       },
                       onStopPressed: () {
