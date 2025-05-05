@@ -51,10 +51,10 @@ Note: Open "firmware" folder in your code editor. Don't open the root omi folder
     - [x] BLE connected
     - [x] BLE disconnected
     - [ ] Fix the issue: The led during charging + device off ~ green only, does not provide correct feedback. charging still works.
-  - [x] Buttons (2/3)
+  - [x] Buttons
     - [x] Turn the device on/off(entering the deepsleep mode)
     - [x] Long press to chat with omi
-    - [ ] Test the deepsleep mode's battery draining.
+    - [x] Test the deepsleep mode's battery draining.
   - [ ] SD Card
     - [ ] Store files
     - [ ] Transfer via BLE
