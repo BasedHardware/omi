@@ -68,7 +68,12 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   @override
   Widget build(BuildContext context) {
     // Use ListView.builder instead of ListView.separated for better performance
-    return ListView.builder(
+    return Scrollbar(
+      controller: _scrollController,
+      thumbVisibility: true,
+      thickness: 6,
+      radius: const Radius.circular(10),
+      child: ListView.builder(
       controller: _scrollController,
       padding: EdgeInsets.zero,
       itemCount: widget.segments.length + 2,
@@ -90,6 +95,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
         return _buildSegmentItem(idx - 1);
       },
+      ),
     );
   }
 
