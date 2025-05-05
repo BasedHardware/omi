@@ -49,7 +49,7 @@ def get_memories_from_conversations(
         parsed_memories = []
         response += memories
         for memory in memories:
-            parsed_memories.append(MemoryDB.from_memory(memory, uid, conversation['id'], conversation['structured']['category'], False))
+            parsed_memories.append(MemoryDB.from_memory(memory, uid, conversation['id'], False))
         memories_db.save_memories(uid, [memory.dict() for memory in parsed_memories])
 
     return response

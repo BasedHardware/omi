@@ -61,10 +61,8 @@ class MemoryDB(Memory):
 
     # TODO: remove these fields and use conversation_id and conversation_category after migration
     memory_id: Optional[str] = None
-    memory_category: Optional[CategoryEnum] = None
 
     conversation_id: Optional[str] = None
-    conversation_category: Optional[CategoryEnum] = None
 
     reviewed: bool = False
     user_review: Optional[bool] = None
@@ -78,7 +76,6 @@ class MemoryDB(Memory):
 
     def __init__(self, **data):
         super().__init__(**data)
-        self.memory_category = self.conversation_category
         self.memory_id = self.conversation_id
 
     @staticmethod
@@ -92,7 +89,7 @@ class MemoryDB(Memory):
         return "{:02d}_{:02d}_{:010d}".format(user_manual_added_boost, cat_boost, int(memory.created_at.timestamp()))
 
     @staticmethod
-    def from_memory(memory: Memory, uid: str, conversation_id: str, conversation_category: CategoryEnum,
+    def from_memory(memory: Memory, uid: str, conversation_id: str,
                     manually_added: bool) -> 'MemoryDB':
         memory_db = MemoryDB(
             id=document_id_from_seed(memory.content),
@@ -103,7 +100,6 @@ class MemoryDB(Memory):
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
             conversation_id=conversation_id,
-            conversation_category=conversation_category,
             manually_added=manually_added,
             user_review=True if manually_added else None,
             reviewed=True if manually_added else False,
