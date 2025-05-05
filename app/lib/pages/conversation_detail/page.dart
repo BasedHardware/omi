@@ -49,10 +49,16 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   void initState() {
     super.initState();
 
-    _controller = TabController(length: 2, vsync: this, initialIndex: 1); // Start with summary tab
+    _controller = TabController(length: 3, vsync: this, initialIndex: 1); // Update length to 3 for the action items tab
     _controller!.addListener(() {
       setState(() {
-        selectedTab = _controller!.index == 0 ? ConversationTab.transcript : ConversationTab.summary;
+        if (_controller!.index == 0) {
+          selectedTab = ConversationTab.transcript;
+        } else if (_controller!.index == 1) {
+          selectedTab = ConversationTab.summary;
+        } else {
+          selectedTab = ConversationTab.action_items;
+        }
       });
     });
 
@@ -188,6 +194,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               },
                             ),
                             const SummaryTab(),
+                            const ActionItemsTab(),
                           ],
                         );
                       }),
@@ -554,5 +561,29 @@ class EditSegmentWidget extends StatelessWidget {
         ),
       );
     });
+  }
+}
+
+class ActionItemsTab extends StatelessWidget {
+  const ActionItemsTab({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: ListView(
+        shrinkWrap: true,
+        children: [
+          const SizedBox(height: 24),
+          Text(
+            'Action Items',
+            style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32),
+          ),
+          const SizedBox(height: 16),
+          const ActionItemsListWidget(),
+          const SizedBox(height: 150)
+        ],
+      ),
+    );
   }
 }
