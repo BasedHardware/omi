@@ -204,7 +204,7 @@ def _extract_memories(uid: str, conversation: Conversation):
 
     parsed_memories = []
     for fact in new_memories:
-        parsed_memories.append(MemoryDB.from_memory(fact, uid, conversation.id, conversation.structured.category, False))
+        parsed_memories.append(MemoryDB.from_memory(fact, uid, conversation.id, False))
         print('_extract_memories:', fact.category.value.upper(), '|', fact.content)
 
     if len(parsed_memories) == 0:

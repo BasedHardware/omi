@@ -16,7 +16,7 @@ router = APIRouter()
 def create_memory(memory: Memory, uid: str = Depends(auth.get_current_user_uid)):
     categories = [category for category in MemoryCategory]
     memory.category = identify_category_for_memory(memory.content, categories)
-    memory_db = MemoryDB.from_memory(memory, uid, None, None, True)
+    memory_db = MemoryDB.from_memory(memory, uid, None, True)
     memories_db.create_memory(uid, memory_db.dict())
     threading.Thread(target=update_personas_async, args=(uid,)).start()
     return memory_db

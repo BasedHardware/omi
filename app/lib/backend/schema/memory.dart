@@ -10,7 +10,6 @@ class Memory {
   DateTime createdAt;
   DateTime updatedAt;
   String? conversationId;
-  String? conversationCategory;
   bool reviewed;
   bool? userReview;
   bool manuallyAdded;
@@ -26,7 +25,6 @@ class Memory {
     required this.createdAt,
     required this.updatedAt,
     this.conversationId,
-    this.conversationCategory,
     this.reviewed = false,
     this.userReview,
     this.manuallyAdded = false,
@@ -47,7 +45,6 @@ class Memory {
       createdAt: DateTime.parse(json['created_at']).toLocal(),
       updatedAt: DateTime.parse(json['updated_at']).toLocal(),
       conversationId: json['conversation_id'],
-      conversationCategory: json['conversation_category'],
       reviewed: json['reviewed'] ?? false,
       userReview: json['user_review'],
       manuallyAdded: json['manually_added'] ?? false,
@@ -68,7 +65,6 @@ class Memory {
       'created_at': createdAt.toUtc().toIso8601String(),
       'updated_at': updatedAt.toUtc().toIso8601String(),
       'memory_id': conversationId,
-      'memory_category': conversationCategory?.toString().split('.').last,
       'reviewed': reviewed,
       'user_review': userReview,
       'manually_added': manuallyAdded,

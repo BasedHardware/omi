@@ -89,7 +89,6 @@ class MemoriesProvider extends BaseProvider {
       reviewed: false,
       userReview: null,
       conversationId: null,
-      conversationCategory: null,
       deleted: false,
       visibility: visibility,
     ));
