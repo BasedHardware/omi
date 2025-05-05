@@ -240,11 +240,21 @@ class _ConversationListItemState extends State<ConversationListItem> {
                         textAlign: TextAlign.end,
                       ),
                       if (widget.conversation.transcriptSegments.isNotEmpty)
-                        Text(
-                          _getConversationDuration(),
-                          style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                          maxLines: 1,
-                          textAlign: TextAlign.end,
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2.0),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade800,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              _getConversationDuration(),
+                              style: TextStyle(color: Colors.grey.shade300, fontSize: 11),
+                              maxLines: 1,
+                              textAlign: TextAlign.end,
+                            ),
+                          ),
                         ),
                     ],
                   ),
