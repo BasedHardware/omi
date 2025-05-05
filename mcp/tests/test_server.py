@@ -1,4 +1,4 @@
-from mcp_server_omi.server import get_memories, get_conversations, MemoryFilterOptions
+from mcp_server_omi.server import get_memories, get_conversations, MemoryCategory
 
 
 def test_get_memories(uid):
@@ -12,7 +12,7 @@ def test_get_memories(uid):
     assert len(result) <= 5
 
     # Test getting memories with categories filter
-    categories = [MemoryFilterOptions.personal, MemoryFilterOptions.work]
+    categories = [MemoryCategory.personal, MemoryCategory.work]
     result = get_memories(uid, categories=categories)
     assert isinstance(result, list)
 
