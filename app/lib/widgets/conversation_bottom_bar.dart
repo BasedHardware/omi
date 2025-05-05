@@ -69,9 +69,15 @@ class ConversationBottomBar extends StatelessWidget {
             // Transcript tab
             _buildTranscriptTab(),
 
-            // Stop button or Summary tab
-            if (mode == ConversationBottomBarMode.recording) _buildStopButton() else _buildSummaryTab(context),
-            if (mode == ConversationBottomBarMode.detail) _buildActionItemsTab(),
+            // Stop button or Summary/Action Items tabs
+            ...switch (mode) {
+              ConversationBottomBarMode.recording => [_buildStopButton()],
+              ConversationBottomBarMode.detail => [
+                _buildSummaryTab(context),
+                _buildActionItemsTab(),
+              ],
+              _ => [_buildSummaryTab(context)],
+            },
           ],
         ),
       ),
