@@ -45,15 +45,16 @@ String secondsToCompactDuration(int seconds) {
   } else if (seconds < 3600) {
     var minutes = (seconds / 60).floor();
     var remainingSeconds = seconds % 60;
-    if (remainingSeconds == 0) {
+    if (remainingSeconds == 0 || minutes >= 10) {
       return '${minutes}m';
     } else {
+      // Only show seconds for durations less than 10 minutes
       return '${minutes}m ${remainingSeconds}s';
     }
   } else {
     var hours = (seconds / 3600).floor();
     var remainingMinutes = (seconds % 3600 / 60).floor();
-    if (remainingMinutes == 0) {
+    if (remainingMinutes == 0 || hours >= 10) {
       return '${hours}h';
     } else {
       return '${hours}h ${remainingMinutes}m';
