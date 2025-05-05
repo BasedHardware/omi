@@ -157,7 +157,7 @@ class UserCredentials(BaseModel):
     name: Optional[str] = None
 
 
-@router.post("/v1/mcp/users")
+@router.post("/v1/mcp/users", tags=["mcp"])
 def create_user(credentials: UserCredentials):
     try:
         user = auth.create_user(
