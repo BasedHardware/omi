@@ -154,7 +154,7 @@ int main(void)
         LOG_ERR("Failed to suspend unused modules (err %d)", ret);
         ret = 0;
     }
-	
+
     // Log model, HW, and FW version
     LOG_INF("Model: %s", CONFIG_BT_DIS_MODEL);
     LOG_INF("Firmware revision: %s", CONFIG_BT_DIS_FW_REV_STR);
@@ -286,10 +286,19 @@ int main(void)
 	int transportErr;
 	transportErr = transport_start();
 	if (transportErr)
-	{
-		LOG_ERR("Failed to start transport (err %d)", transportErr);
-		return transportErr;
-	}
+    {
+        LOG_ERR("Failed to start transport (err %d)", transportErr);
+        // TODO: Detect the current core is app core or net core
+        // Blink green LED to indicate error
+        for (int i = 0; i < 5; i++)
+        {
+            set_led_green(!gpio_pin_get_dt(&led_green));
+            k_msleep(200);
+        }
+        set_led_green(false);
+
+        return transportErr;
+    }
 
     /** No speaker on Omi2 - TODO should there still be empty stubs? */
 
