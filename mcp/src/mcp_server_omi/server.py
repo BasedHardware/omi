@@ -1,6 +1,7 @@
 from enum import Enum
 import json
 from typing import List, Optional
+from datetime import datetime
 import requests
 import logging
 from mcp.server import Server
@@ -8,8 +9,21 @@ from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 from pydantic import BaseModel
 
+# TODO: can use pydantic Fields on descriptions?
 
-class MemoryFilterOptions(str, Enum):
+class MemoryCategory(str, Enum):
+    core = "core"
+    hobbies = "hobbies"
+    lifestyle = "lifestyle"
+    interests = "interests"
+    habits = "habits"
+    work = "work"
+    skills = "skills"
+    learnings = "learnings"
+    other = "other"
+
+
+class ConversationCategory(str, Enum):
     personal = "personal"
     education = "education"
     health = "health"
@@ -32,7 +46,6 @@ class MemoryFilterOptions(str, Enum):
     literature = "literature"
     history = "history"
     architecture = "architecture"
-    # Added at 2024-01-23
     music = "music"
     weather = "weather"
     news = "news"
@@ -90,10 +103,9 @@ class GetMemories(BaseModel):
 
     uid: str
     limit: int = 100
-    categories: List[MemoryFilterOptions] = []
+    categories: List[MemoryCategory] = []
 
 
-# TODO: why doesn't allow same list of categories?
 class CreateMemory(BaseModel):
     """Create a new memory for the user.
     A memory is a piece of information about the user's life accross different domains.
@@ -101,7 +113,7 @@ class CreateMemory(BaseModel):
     Args:
         uid (str): The user's unique identifier.
         content (str): The content of the memory.
-        category (MemoryCategoryEnum): The category of the memory.
+        category (MemoryCategory): The category of the memory.
 
     Returns:
         dict: The created memory object.
@@ -109,8 +121,7 @@ class CreateMemory(BaseModel):
 
     uid: str
     content: str
-    category: MemoryFilterOptions
-
+    category: MemoryCategory
 
 class DeleteMemory(BaseModel):
     """Delete a memory by its ID.
@@ -152,16 +163,22 @@ class GetConversations(BaseModel):
 
     Args:
         uid (str): The user's unique identifier.
-        include_discarded (bool, optional): Whether to include discarded conversations. Defaults to False.
+        start_date (datetime, optional): Filter conversations after this date
+        end_date (datetime, optional): Filter conversations before this date
+        categories (List[str], optional): Filter by categories. Defaults to [].
         limit (int, optional): The maximum number of conversations to retrieve. Defaults to 25.
+        offset (int, optional): Number of conversations to skip. Defaults to 0.
 
     Returns:
         List: A list of conversation objects.
     """
 
     uid: str
-    include_discarded: bool = False
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    categories: List[ConversationCategory] = []
     limit: int = 25
+    offset: int = 0
 
 
 def create_user(email: str, password: str, name: str) -> dict:
@@ -175,7 +192,7 @@ def create_user(email: str, password: str, name: str) -> dict:
 def get_memories(
     uid: str,
     limit: int = 100,
-    categories: List[MemoryFilterOptions] = [],
+    categories: List[MemoryCategory] = [],
 ) -> List:
     params = {"limit": limit}
     if categories:
@@ -189,7 +206,7 @@ def get_memories(
     return response.json()
 
 
-def create_memory(uid: str, content: str, category: MemoryFilterOptions) -> dict:
+def create_memory(uid: str, content: str, category: MemoryCategory) -> dict:
     response = requests.post(
         f"{base_url}memories",
         headers={"uid": uid},
@@ -213,13 +230,26 @@ def edit_memory(uid: str, memory_id: str, content: str) -> dict:
 
 
 def get_conversations(
+    logger: logging.Logger,
     uid: str,
-    include_discarded: bool = False,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    categories: List[ConversationCategory] = [],
     limit: int = 25,
+    offset: int = 0,
 ) -> List:
+    params = {"limit": limit, "offset": offset}
+    if start_date:
+        params["start_date"] = start_date.isoformat()
+    if end_date:
+        params["end_date"] = end_date.isoformat()
+    if categories:
+        params["categories"] = ",".join(categories)
+
+    logger.info(f"Getting conversations with params: {params}")
     response = requests.get(
         f"{base_url}conversations",
-        params={"include_discarded": include_discarded, "limit": limit},
+        params=params,
         headers={"uid": uid},
     )
     return response.json()
@@ -293,6 +323,7 @@ async def serve(uid: str | None) -> None:
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
         elif name == OmiTools.CREATE_MEMORY:
+            # return [TextContent(type="text", text=json.dumps(arguments, indent=2))]
             result = create_memory(
                 _uid,
                 content=arguments["content"],
@@ -314,9 +345,13 @@ async def serve(uid: str | None) -> None:
 
         elif name == OmiTools.GET_CONVERSATIONS:
             result = get_conversations(
+                logger,
                 _uid,
-                include_discarded=arguments["include_discarded"],
-                limit=arguments["limit"],
+                start_date=arguments.get("start_date"),
+                end_date=arguments.get("end_date"),
+                categories=arguments.get("categories", []),
+                limit=arguments.get("limit", 25),
+                offset=arguments.get("offset", 0),
             )
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
