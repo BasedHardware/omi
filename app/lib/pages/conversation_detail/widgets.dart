@@ -327,9 +327,57 @@ class AppResultDetailWidget extends StatelessWidget {
     required this.conversation,
   });
 
+  // Helper function to parse markdown into sections based on '## ' headings
+  List<Map<String, String>> _parseMarkdownIntoSections(String markdown) {
+    final sections = <Map<String, String>>[];
+    final lines = markdown.split(RegExp(r'\r?\n'));
+
+    String? currentTitle;
+    List<String> currentBodyLines = [];
+
+    for (final line in lines) {
+      if (line.startsWith('## ')) {
+        // Finalize the previous section
+        if (currentTitle != null && currentBodyLines.isNotEmpty) {
+          sections.add({
+            'title': currentTitle.trim(),
+            'body': currentBodyLines.join('\\n').trim(),
+          });
+        }
+        // Start a new section
+        currentTitle = line.substring(3);
+        currentBodyLines = [];
+      } else if (currentTitle != null) {
+        if (line.trim().isNotEmpty) {
+          currentBodyLines.add(line);
+        }
+      }
+    }
+
+    // Add the last section
+    if (currentTitle != null && currentBodyLines.isNotEmpty) {
+      sections.add({
+        'title': currentTitle.trim(),
+        'body': currentBodyLines.join('\\n').trim(),
+      });
+    }
+
+    if (sections.isEmpty && markdown.trim().isNotEmpty) {
+      sections.add({
+        'title': '', // No title derived from heading
+        'body': markdown.trim(),
+      });
+    }
+    return sections;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final String content = appResponse.content.trim().decodeString;
+    final String rawContent = appResponse.content.trim().decodeString;
+    final sections = _parseMarkdownIntoSections(rawContent);
+
+    // Determine if there's any actual content to show after parsing
+    final bool hasDisplayableContent = sections.any((s) => s['body']?.trim().isNotEmpty ?? false);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -337,38 +385,79 @@ class AppResultDetailWidget extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: content.isEmpty
-                ? Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+          // Handle empty or non-displayable content
+          if (rawContent.isEmpty || !hasDisplayableContent)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.transparent,
+                          builder: (context) => const SummarizedAppsBottomSheet(),
+                        );
+                      },
+                      child: RichText(
+                        textAlign: TextAlign.center, // Center the text
+                        text: const TextSpan(
+                            style: TextStyle(color: Colors.grey, fontSize: 16), // Style consistency
+                            text: "No summary available for this app.\nTry another app for better results."),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          // Render sections as cards
+          else
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: sections.length,
+              itemBuilder: (context, index) {
+                final section = sections[index];
+                final title = section['title'] ?? '';
+                final body = section['body'] ?? '';
+
+                if (body.trim().isEmpty) return const SizedBox.shrink();
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 16), // Spacing between cards
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1C1C1E),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            showModalBottomSheet(
-                              context: context,
-                              isScrollControlled: true,
-                              backgroundColor: Colors.transparent,
-                              builder: (context) => const SummarizedAppsBottomSheet(),
-                            );
-                          },
-                          child: RichText(
-                            text: const TextSpan(
-                                style: TextStyle(color: Colors.grey),
-                                text: "No summary available for this app. Try another app for better results."),
+                      // Section Title
+                      if (title.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10.0), // Increased bottom padding
+                          child: Text(
+                            title,
+                            // Consistent styling with other titles on the page
+                            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 20),
                           ),
                         ),
+                      // Section Body
+                      SelectionArea(
+                        child: getMarkdownWidget(context, body),
                       ),
                     ],
-                  )
-                : SelectionArea(
-                    child: getMarkdownWidget(context, content),
                   ),
-          ),
+                );
+              },
+            ),
 
-          // App info in a more subtle format below the content - only show if content is not empty
-          if (content.isNotEmpty)
+          // App info section - only show if there was displayable content
+          if (hasDisplayableContent)
             GestureDetector(
               onTap: () async {
                 if (app != null) {
