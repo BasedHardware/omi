@@ -154,17 +154,18 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
     // Convert ADC value to millivolts
     err |= adc_raw_to_millivolts(adc_vref, ADC_GAIN, ADC_RESOLUTION, &adc_mv);
 
-    // Calculate battery voltage.
-    *battery_millivolt = adc_mv * ((R1 + R2) / R2);
-
-    // /* Trigger offset calibration
-    //  * As this generates a _DONE and _RESULT event
-    //  * the first result will be incorrect.
-    //  */
-    // NRF_SAADC_S->TASKS_CALIBRATEOFFSET = 1;
+    // ISSUE FIXED: In firmware 2.0.2 to 2.0.8 update, battery showed 0% due to integer division
+    // in voltage calculation formula. Integer division of (R1 + R2) / R2 truncated the result
+    // causing the battery voltage to be underestimated.
+    //
+    // FIX: Use floating point calculation to get accurate voltage divider ratio
+    // and convert back to integer for final result
+    float voltage_divider_ratio = (float)(R1 + R2) / (float)R2;
+    *battery_millivolt = (uint16_t)(adc_mv * voltage_divider_ratio);
 
     LOG_DBG("ADC raw value: %d ", adc_mv);
-    LOG_DBG("Measured voltage: %f", battery_millivolt);
+    LOG_DBG("Voltage divider ratio: %f", voltage_divider_ratio);
+    LOG_DBG("Measured voltage: %d mV", *battery_millivolt);
     gpio_pin_configure_dt(&bat_read_pin, GPIO_INPUT);
 
     LOG_DBG("Charging status: %d", is_charging);
