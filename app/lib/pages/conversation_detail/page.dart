@@ -52,12 +52,19 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     _controller = TabController(length: 3, vsync: this, initialIndex: 1); // Start with summary tab
     _controller!.addListener(() {
       setState(() {
-        if (_controller!.index == 0) {
-          selectedTab = ConversationTab.transcript;
-        } else if (_controller!.index == 1) {
-          selectedTab = ConversationTab.summary;
-        } else {
-          selectedTab = ConversationTab.action_items;
+        switch (_controller!.index) {
+          case 0:
+            selectedTab = ConversationTab.transcript;
+            break;
+          case 1:
+            selectedTab = ConversationTab.summary;
+            break;
+          case 2:
+            selectedTab = ConversationTab.action_items;
+            break;
+          default:
+            debugPrint('Invalid tab index: ${_controller!.index}');
+            selectedTab = ConversationTab.summary;
         }
       });
     });
