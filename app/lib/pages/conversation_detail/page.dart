@@ -596,11 +596,6 @@ class ActionItemsTab extends StatelessWidget {
         shrinkWrap: true,
         children: [
           const SizedBox(height: 24),
-          Text(
-            'Action Items',
-            style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32),
-          ),
-          const SizedBox(height: 16),
           const ActionItemsListWidget(),
           const SizedBox(height: 150)
         ],
