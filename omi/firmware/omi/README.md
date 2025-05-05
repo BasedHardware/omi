@@ -30,6 +30,8 @@ Note: Open "firmware" folder in your code editor. Don't open the root omi folder
     - [x] LEDs
     - [ ] Wi-Fi, partially
     - [x] Motors
+    - [ ] Qspi flash
+    - [ ] Sd Card
   - [x] Add support for MCUBoot
     - [x] Add basic MCUBoot
     - [x] Test with the OMI app (iOS/Android)
@@ -37,8 +39,8 @@ Note: Open "firmware" folder in your code editor. Don't open the root omi folder
   - [x] Initialize project, basic main loop with tests and devkit firmware as libs
   - [x] Streaming and transcribing
     - [x] Mic (1/2)
-      - [x] capturing audio bytes
-      - [ ] activating the 2nd mic
+      - [x] Capturing audio bytes
+      - [ ] Activating the 2nd mic
     - [x] BLE
     - [x] Encoding (OPUS) and transmitting
     - [x] Fix the audio byte loss issue - currently about 30% https://github.com/BasedHardware/omi/pull/2217#issuecomment-2815077148 
