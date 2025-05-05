@@ -99,6 +99,7 @@ class MemoryDB(Memory):
             uid=uid,
             content=memory.content,
             category=memory.category,
+            tags=memory.tags,
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
             conversation_id=conversation_id,
