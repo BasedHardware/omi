@@ -3,7 +3,9 @@ anyio==4.9.0
 certifi==2025.4.26
 charset-normalizer==3.4.2
 click==8.1.8
+colorama==0.4.6
 distro==1.9.0
+griffe==1.7.3
 h11==0.16.0
 httpcore==1.0.9
 httpx==0.28.1
@@ -22,6 +24,7 @@ langgraph-sdk==0.1.66
 langsmith==0.3.42
 mcp==1.7.1
 openai==1.77.0
+openai-agents==0.0.14
 orjson==3.10.18
 ormsgpack==1.9.1
 packaging==24.2
@@ -40,6 +43,7 @@ starlette==0.46.2
 tenacity==9.1.2
 tiktoken==0.9.0
 tqdm==4.67.1
+types-requests==2.32.0.20250328
 typing-inspection==0.4.0
 typing_extensions==4.13.2
 urllib3==2.4.0
