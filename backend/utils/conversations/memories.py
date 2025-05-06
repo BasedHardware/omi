@@ -7,7 +7,7 @@ from utils.llm import extract_memories_from_text
 
 
 def process_external_integration_memory(uid: str, memory_data: ExternalIntegrationCreateMemory, app_id: str) -> List[
-    MemoryDB]:
+        MemoryDB]:
     memory_data.app_id = app_id
     saved_memories = []
 
@@ -22,7 +22,7 @@ def process_external_integration_memory(uid: str, memory_data: ExternalIntegrati
             )
 
             # Convert to MemoryDB
-            memory_db = MemoryDB.from_memory(memory, uid, None, None, False)
+            memory_db = MemoryDB.from_memory(memory, uid, None, False)
             memory_db.manually_added = False
             memory_db.app_id = app_id
             saved_memories.append(memory_db)
@@ -38,7 +38,7 @@ def process_external_integration_memory(uid: str, memory_data: ExternalIntegrati
         if extracted_memories and len(extracted_memories) > 0:
             # Save each extracted memory
             for memory in extracted_memories:
-                memory_db = MemoryDB.from_memory(memory, uid, None, None, False)
+                memory_db = MemoryDB.from_memory(memory, uid, None, False)
                 memory_db.manually_added = False
                 memory_db.app_id = app_id
                 saved_memories.append(memory_db)
@@ -65,7 +65,7 @@ def process_twitter_memories(uid: str, tweets_text: str, persona_id: str) -> Lis
     # Convert extracted memories to database format
     saved_memories = []
     for memory in extracted_memories:
-        memory_db = MemoryDB.from_memory(memory, uid, None, None, False)
+        memory_db = MemoryDB.from_memory(memory, uid, None, False)
         memory_db.manually_added = False
         memory_db.app_id = persona_id
         saved_memories.append(memory_db)
