@@ -41,19 +41,19 @@ scaling:
     api:
       metrics:
         # -- Scale the API deployment to this Engine-to-Api pod ratio
-        engineToApiRatio: 1
+        engineToApiRatio: 2
 
     engine:
       # -- Minimum number of Engine replicas.
-      minReplicas: 2
+      minReplicas: 5
       # -- Maximum number of Engine replicas.
-      maxReplicas: 10
+      maxReplicas: 20
       metrics:
         speechToText:
           batch:
             requestsPerPod: # Discuss a reasonable value with your Deepgram Account Representative
           streaming:
-            requestsPerPod: 30
+            requestsPerPod: 18
         textToSpeech:
           batch:
             requestsPerPod: # Discuss a reasonable value with your Deepgram Account Representative
@@ -62,7 +62,7 @@ scaling:
         requestCapacityRatio:
       behavior:
         scaleUp:
-          stabilizationWindowSeconds: 120  # Wait 2 minutes before scaling up
+          stabilizationWindowSeconds: 60  # Wait 1 minute before scaling up
 
 api:
   image:
