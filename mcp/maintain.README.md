@@ -17,3 +17,9 @@
 Run `sh release.sh` this will upgrade the version in `__about__.py`, publish to pypi, build and deploy the `Dockerfile` as well.
 
 (Dockerfile might be on Joan's account, switch to Omi organization)
+
+
+**Next Steps**
+- [ ] Check TODO's
+- [ ] Improve retrieval so that conversation retrieval can have QA sort of
+- [ ] Connect authentication / key handling (@thinh?)
