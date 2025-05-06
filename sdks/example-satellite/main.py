@@ -1,436 +1,297 @@
 #!/usr/bin/env python3
+"""Omi-Bluetooth Wyoming satellite."""
+
 import argparse
 import asyncio
+import contextlib
 import logging
-import sys
+import socket
 from pathlib import Path
 from typing import Optional
 
-# WebSocket and Opus decoding
-import websockets
-
-# Local imports for satellite and settings
-from omi_satellite.omi_vad_satellite import (
-    OPUS_CHANNELS,
-    OPUS_FRAME_SIZE,
-    OPUS_SAMPLE_RATE,
-    SatelliteHandler,
-    WebSocketVadSatellite,
+from bleak.exc import BleakDeviceNotFoundError
+from omi.bluetooth import listen_to_omi
+from omi.decoder import OmiOpusDecoder
+from wyoming.audio import AudioChunk
+from wyoming.event import Event
+from wyoming.info import Attribution, Describe, Info, Satellite
+from wyoming.server import AsyncEventHandler, AsyncTcpServer
+from wyoming_satellite.satellite import (
+    AlwaysStreamingSatellite,
+    SatelliteBase,
+    WakeStreamingSatellite,
 )
-from opuslib import Decoder as OpusDecoder
-from wyoming.server import AsyncServer
 from wyoming_satellite.settings import (
-    EventSettings,
     MicSettings,
     SatelliteSettings,
     SndSettings,
-    TimerSettings,
-    VadSettings,
     WakeSettings,
+    WakeWordAndPipeline,
 )
-from wyoming_satellite.utils import run_event_command, split_command
+from zeroconf import ServiceInfo, Zeroconf
 
-_LOGGER = logging.getLogger(__name__) # Use module name
+_LOGGER = logging.getLogger(__name__)
+_LOGGER.setLevel(logging.INFO)
 
-async def main() -> None:
-    """Main entry point."""
-    parser = argparse.ArgumentParser()
+###############################################################################
+# Constants (PCM format and Bluetooth identifiers)
+###############################################################################
+RATE, WIDTH, CHANNELS = 16_000, 2, 1  # 16-kHz/16-bit/mono
+# CHUNK_MS = 32
+# CHUNK_LEN = int(RATE * CHUNK_MS / 1000) * WIDTH
 
-    # --- Server Connection ---
-    parser.add_argument("--server-uri", required=True, help="unix:// or tcp:// URI of the central Wyoming server (e.g., Home Assistant)")
+DEFAULT_OMI_MAC = "C67EDFB1-56C8-7A6F-0776-7303E8F697AF"
+DEFAULT_OMI_CHAR_UUID = "19B10001-E8F2-537E-4F6C-D104768A1214"
 
-    # --- WebSocket Audio Input ---
-    parser.add_argument("--websocket-host", default="0.0.0.0", help="Host for WebSocket audio input server")
-    parser.add_argument("--websocket-port", type=int, default=8765, help="Port for WebSocket audio input server")
+###############################################################################
+# BLE → PCM helper
+###############################################################################
+class _OmiMic:
+    """Background task that feeds decoded PCM into an asyncio.Queue."""
 
-    # --- VAD Settings ---
-    parser.add_argument("--vad-threshold", type=float, default=0.5)
-    parser.add_argument("--vad-trigger-level", type=int, default=1)
-    parser.add_argument("--vad-buffer-seconds", type=float, default=2)
-    parser.add_argument(
-        "--vad-wake-word-timeout",
-        type=float,
-        default=5.0,
-        help="Seconds before stopping stream if wake word isn't detected by server (used by server pipeline)",
-    )
+    def __init__(self, mac: str, char_uuid: str):
+        self._mac = mac
+        self._char_uuid = char_uuid
+        self._decoder = OmiOpusDecoder()
+        self._q: asyncio.Queue[bytes] = asyncio.Queue(maxsize=50)
+        self._task: Optional[asyncio.Task] = None
 
-    # --- Sound Output ---
-    parser.add_argument("--snd-uri", help="URI of Wyoming sound service")
-    parser.add_argument("--snd-command", help="Program to run for sound output")
-    parser.add_argument(
-        "--snd-command-rate",
-        type=int,
-        default=22050,
-        help="Sample rate of snd-command (hertz, default: 22050)",
-    )
-    parser.add_argument(
-        "--snd-command-width",
-        type=int,
-        default=2,
-        help="Sample width of snd-command (bytes, default: 2)",
-    )
-    parser.add_argument(
-        "--snd-command-channels",
-        type=int,
-        default=1,
-        help="Sample channels of snd-command (default: 1)",
-    )
-    parser.add_argument("--snd-volume-multiplier", type=float, default=1.0)
+    # public -----------------------------------------------------------------
+    async def start(self):
+        if self._task is None:
+            self._task = asyncio.create_task(self._ble_loop(), name="ble-omi")
 
-    # --- External Event Handlers ---
-    parser.add_argument(
-        "--event-uri", help="URI of Wyoming service to forward events to"
-    )
-    parser.add_argument(
-        "--startup-command", help="Command run when the satellite starts"
-    )
-    parser.add_argument(
-        "--transcript-command",
-        help="Command to run when speech to text transcript is returned",
-    )
-    parser.add_argument(
-        "--stt-start-command",
-        help="Command to run when the user starts speaking",
-    )
-    parser.add_argument(
-        "--stt-stop-command",
-        help="Command to run when the user stops speaking",
-    )
-    parser.add_argument(
-        "--synthesize-command",
-        help="Command to run when text to speech text is returned",
-    )
-    parser.add_argument(
-        "--tts-start-command",
-        help="Command to run when text to speech response starts",
-    )
-    parser.add_argument(
-        "--tts-stop-command",
-        help="Command to run when text to speech response stops",
-    )
-    parser.add_argument(
-        "--tts-played-command",
-        help="Command to run when text-to-speech audio stopped playing",
-    )
-    parser.add_argument(
-        "--streaming-start-command",
-        help="Command to run when audio streaming starts",
-    )
-    parser.add_argument(
-        "--streaming-stop-command",
-        help="Command to run when audio streaming stops",
-    )
-    parser.add_argument(
-        "--error-command",
-        help="Command to run when an error occurs",
-    )
-    parser.add_argument(
-        "--connected-command",
-        help="Command to run when connected to the server",
-    )
-    parser.add_argument(
-        "--disconnected-command",
-        help="Command to run when disconnected from the server",
-    )
-    parser.add_argument(
-        "--timer-started-command",
-        help="Command to run when a timer starts",
-    )
-    parser.add_argument(
-        "--timer-updated-command",
-        help="Command to run when a timer is paused, resumed, or has time added or removed",
-    )
-    parser.add_argument(
-        "--timer-cancelled-command",
-        "--timer-canceled-command",
-        help="Command to run when a timer is cancelled",
-    )
-    parser.add_argument(
-        "--timer-finished-command",
-        help="Command to run when a timer finishes",
-    )
+    async def stop(self):
+        if self._task:
+            self._task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._task
+            self._task = None
 
-    # --- Sounds ---
-    parser.add_argument(
-        "--done-wav", help="WAV file to play when voice command is done"
-    )
-    parser.add_argument(
-        "--timer-finished-wav", help="WAV file to play when a timer finishes"
-    )
-    parser.add_argument(
-        "--timer-finished-wav-repeat",
-        nargs=2,
-        metavar=("repeat", "delay"),
-        type=float,
-        default=(1, 0),
-        help="Number of times to play timer finished WAV and delay between repeats in seconds",
-    )
+    async def pcm_iter(self):
+        # buf = bytearray()
+        while True:
+            pcm = await self._q.get()
+            yield pcm
+            # buf.extend(pcm)
+            # while len(buf) >= CHUNK_LEN:
+            #     yield bytes(buf[:CHUNK_LEN])
+            #     del buf[:CHUNK_LEN]
 
-    # --- Satellite Details ---
-    parser.add_argument(
-        "--name", default="Omi WebSocket VAD Satellite", help="Name of the satellite"
-    )
-    parser.add_argument("--area", help="Area name of the satellite")
+    # internal ---------------------------------------------------------------
+    async def _ble_loop(self):
+        def _cb(_: int, data: bytes):
+            pcm = self._decoder.decode_packet(data)
+            if pcm is not None:
+                try:
+                    self._q.put_nowait(pcm)
+                except asyncio.QueueFull:
+                    _LOGGER.warning("PCM queue full - dropping packet")
+        await listen_to_omi(self._mac, self._char_uuid, _cb)
 
-    # --- Debugging/Misc ---
-    parser.add_argument(
-        "--debug-recording-dir", help="Directory to store audio for debugging (PCM after decode)"
-    )
-    parser.add_argument("--debug", action="store_true", help="Log DEBUG messages")
-    parser.add_argument(
-        "--log-format", default=logging.BASIC_FORMAT, help="Format for log messages"
-    )
-    parser.add_argument(
-        "--version",
-        action="version",
-        version="69.0",
-        help="Print version and exit",
-    )
-    args = parser.parse_args()
+###############################################################################
+# Satellite mix-in: consume _OmiMic instead of built-in mic service
+###############################################################################
+class _BluetoothMixin(SatelliteBase):
+    def __init__(self, settings: SatelliteSettings, mic_src: _OmiMic):
+        super().__init__(settings)
+        self._mic_src = mic_src
+        self._pump_task: Optional[asyncio.Task] = None
 
-    # --- Validate Args & Setup Logging ---
-    # VAD dependency check
-    try:
-        import pysilero_vad  # noqa: F401
-    except ImportError:
-        _LOGGER.exception("Extras for silerovad are not installed (pip install wyoming_satellite[silerovad])")
-        sys.exit(1)
+    async def started(self):
+        await super().started()
+        if self._pump_task is None:
+            self._pump_task = asyncio.create_task(self._pump(), name="pcm-pump")
 
-    # Opus dependency check
-    try:
-        import opuslib  # noqa: F401
-    except ImportError:
-        _LOGGER.exception("python-opus is not installed (pip install python-opus)")
-        sys.exit(1)
+    async def stopped(self):
+        if self._pump_task:
+            self._pump_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._pump_task
+            self._pump_task = None
+        await super().stopped()
 
-    # WebSocket dependency check
-    try:
-        import websockets  # noqa: F401
-    except ImportError:
-        _LOGGER.exception("websockets is not installed (pip install websockets)")
-        sys.exit(1)
+    async def _pump(self):
+        async for pcm in self._mic_src.pcm_iter():
+            evt = AudioChunk(rate=RATE, width=WIDTH, channels=CHANNELS, audio=pcm).event()
+            await self.event_from_mic(evt, audio_bytes=pcm)
 
-    if args.done_wav and (not Path(args.done_wav).is_file()):
-        _LOGGER.fatal("%s does not exist", args.done_wav)
-        sys.exit(1)
+###############################################################################
+# Handler bridging TCP client ↔ satellite
+###############################################################################
+class _SatHandler(AsyncEventHandler):
+    def __init__(self, *args, satellite: SatelliteBase, **kwargs):
+        _LOGGER.info(f"SatHandler __init__: {args}, {kwargs}")
+        super().__init__(*args, **kwargs)
+        self._sat = satellite
+        self._peer = str(self.writer.get_extra_info("peername"))
+        _LOGGER.info(f"Setting server for {self._peer}")
 
-    if args.timer_finished_wav and (not Path(args.timer_finished_wav).is_file()):
-        _LOGGER.fatal("%s does not exist", args.timer_finished_wav)
-        sys.exit(1)
+    async def handle_event(self, event: Event) -> bool:  # noqa: D401
+        _LOGGER.info(f"Received event {event} from client {self._peer}")
+        await self._sat.event_from_server(event)
+        if Describe.is_type(event.type):
+            if self._sat._writer is None:
+                await self._sat.set_server(self._peer, self.writer)
+            _LOGGER.info(f"Received describe event from client {self._peer}")
+            info = Info(
+                satellite=Satellite(
+                    name="Omi Bluetooth Satellite",
+                    attribution=Attribution(
+                        name="Omi",
+                        url="https://omi.com"
+                    ),
+                    installed=True,
+                    description="Omi Bluetooth Satellite",
+                    version="0.1.0"
+                )
+            )
+            await self.write_event(info.event())
+        return True
 
-    logging.basicConfig(
-        level=logging.DEBUG if args.debug else logging.INFO, format=args.log_format
-    )
-    _LOGGER.debug(args)
+    async def disconnect(self) -> None:
+        """Called when client disconnects."""
+        _LOGGER.info(f"Client {self._peer} disconnected")
+        await self._sat.clear_server()
+        await super().disconnect()
 
-    debug_recording_path: Optional[Path] = None
-    if args.debug_recording_dir:
-        debug_recording_path = Path(args.debug_recording_dir)
-        _LOGGER.info("Recording audio to %s", debug_recording_path)
+###############################################################################
+# SatelliteSettings factory (matches frozen dataclass definition)
+###############################################################################
 
-    # --- Construct settings from args ---
-    settings = SatelliteSettings(
-        mic=MicSettings(), # Default empty MicSettings
-        vad=VadSettings(
-            enabled=True, # Force VAD enabled
-            threshold=args.vad_threshold,
-            trigger_level=args.vad_trigger_level,
-            buffer_seconds=args.vad_buffer_seconds,
-            wake_word_timeout=args.vad_wake_word_timeout,
-        ),
-        wake=WakeSettings(), # Default empty object
-        snd=SndSettings(
-            uri=args.snd_uri,
-            command=split_command(args.snd_command),
-            rate=args.snd_command_rate,
-            width=args.snd_command_width,
-            channels=args.snd_command_channels,
-            volume_multiplier=args.snd_volume_multiplier,
-            awake_wav=None, # Not used
-            done_wav=args.done_wav,
-        ),
-        event=EventSettings(
-            uri=args.event_uri,
-            startup=split_command(args.startup_command),
-            streaming_start=split_command(args.streaming_start_command),
-            streaming_stop=split_command(args.streaming_stop_command),
-            detect=None, # Not used
-            detection=None, # Not used
-            played=split_command(args.tts_played_command),
-            transcript=split_command(args.transcript_command),
-            stt_start=split_command(args.stt_start_command),
-            stt_stop=split_command(args.stt_stop_command),
-            synthesize=split_command(args.synthesize_command),
-            tts_start=split_command(args.tts_start_command),
-            tts_stop=split_command(args.tts_stop_command),
-            error=split_command(args.error_command),
-            connected=split_command(args.connected_command),
-            disconnected=split_command(args.disconnected_command),
-        ),
-        timer=TimerSettings(
-            started=split_command(args.timer_started_command),
-            updated=split_command(args.timer_updated_command),
-            cancelled=split_command(args.timer_cancelled_command),
-            finished=split_command(args.timer_finished_command),
-            finished_wav=args.timer_finished_wav,
-            finished_wav_plays=int(args.timer_finished_wav_repeat[0]),
-            finished_wav_delay=args.timer_finished_wav_repeat[1],
-        ),
-        # Pass the Path object for debug recording dir
-        debug_recording_dir=debug_recording_path,
+def build_settings(*, wake_uri: str | None, wake_names: list[str] | None) -> SatelliteSettings:
+    mic = MicSettings(
+        uri=None,
+        command=None,
     )
 
-    if settings.event and settings.event.startup:
-        await run_event_command(settings.event.startup)
-
-    _LOGGER.info("Starting WebSocket VAD satellite")
-
-    # --- Create Satellite Instance ---
-    satellite = WebSocketVadSatellite(settings)
-
-    # --- Wyoming Server Connection (to Home Assistant) ---
-    server = AsyncServer.from_uri(args.server_uri)
-
-    # Use a factory function for the handler, passing args for info generation
-    def handler_factory(*args_factory, **kwargs_factory):
-        # Pass the parsed args namespace, not the satellite settings object
-        return SatelliteHandler(satellite, args, *args_factory, **kwargs_factory)
-
-    # --- Start Tasks ---
-    # Task for the satellite's internal processing (event handling, sound output, etc.)
-    satellite_task = asyncio.create_task(satellite.run(), name="satellite run")
-
-    # Task for connecting to the main Wyoming server (Home Assistant)
-    server_task = asyncio.create_task(server.run(handler_factory), name="server connection")
-
-    # Task for the WebSocket audio input server
-    websocket_server_task = asyncio.create_task(
-        run_websocket_server(satellite, args.websocket_host, args.websocket_port),
-        name="websocket server"
-    )
-
-    _LOGGER.info(f"WebSocket audio server listening on ws://{args.websocket_host}:{args.websocket_port}")
-    _LOGGER.info(f"Waiting for Wyoming server to connect to {args.server_uri}")
-
-    # --- Wait for Tasks --- 
-    try:
-        # Wait for any task to finish (likely an error or cancellation)
-        done, pending = await asyncio.wait(
-            [satellite_task, server_task, websocket_server_task],
-            return_when=asyncio.FIRST_COMPLETED,
+    # vad = VadSettings(enabled=False)
+    snd = SndSettings(
+        awake_wav="./sounds/awake_sound.wav",
+        done_wav="./sounds/done_sound.wav",
+        command=["sox", "-t", "raw", "-r", "22050", "-c", "1", "-e", "signed-integer", "-b", "16", "-", "-t", "coreaudio"]
         )
+    # event = EventSettings()
+    # timer = TimerSettings()
 
-        # Check for exceptions in completed tasks
-        for task in done:
-            exc = task.exception()
-            if exc:
-                # Log specific connection errors differently
-                if isinstance(exc, ConnectionRefusedError):
-                     _LOGGER.fatal("Connection refused to server at %s", args.server_uri)
-                elif isinstance(exc, websockets.exceptions.WebSocketException):
-                     _LOGGER.error(f"WebSocket server error: {exc}")
-                else:
-                     _LOGGER.error(f"Task {task.get_name()} failed: {exc}", exc_info=exc)
+    if wake_uri:
+        wake = WakeSettings(
+            uri=wake_uri,
+            command=None,
+            reconnect_seconds=1.0,
+            names=[WakeWordAndPipeline(name=n, pipeline="Omi BT Wakeword Pipeline") for n in (wake_names or [])],
+            rate=RATE,
+            width=WIDTH,
+            channels=CHANNELS,
+            refractory_seconds=None,
+        )
+    else:
+        wake = WakeSettings(uri=None)
 
-    except asyncio.CancelledError:
-        _LOGGER.info("Main task cancelled, shutting down...")
-    except Exception:
-        _LOGGER.exception("Unexpected error in main task loop")
-    finally:
-        _LOGGER.info("Shutting down...")
-        # Gracefully stop tasks
-        all_tasks = [websocket_server_task, server_task, satellite_task]
-        for task in all_tasks:
-            if task and not task.done():
-                task.cancel()
-        
-        # Wait for tasks to actually cancel
-        await asyncio.gather(*all_tasks, return_exceptions=True)
+    return SatelliteSettings(
+        mic=mic,
+        wake=wake,
+        snd=snd,
+        debug_recording_dir=Path("./debug"),
+    )
 
-        _LOGGER.info("Shutdown complete")
 
-# -----------------------------------------------------------------------------
-# WebSocket Server Implementation (belongs in main.py)
-# -----------------------------------------------------------------------------
+def register_service(ip: str, port: int):
+    desc = {'uri': f'tcp://{ip}:{port}'}
+    info = ServiceInfo(
+        "_wyoming._tcp.local.",
+        "OmiSatellite._wyoming._tcp.local.",
+        addresses=[socket.inet_aton(ip)],
+        port=port,
+        properties=desc,
+        server="omi-satellite.local.",
+    )
 
-async def run_websocket_server(satellite: WebSocketVadSatellite, host: str, port: int):
-    """Runs the WebSocket server for audio input."""
-    
-    # Use partial to pass satellite instance to the handler factory
-    # handler_with_satellite = partial(websocket_audio_handler, satellite=satellite)
-    
-    # Need to define the handler inside or pass satellite differently
-    # because serve() expects a coroutine websocket_handler(websocket, path)
-    async def websocket_audio_handler(websocket: websockets.ServerConnection):
-        """Handles a single WebSocket client connection."""
-        _LOGGER.info(f"WebSocket client connected: {websocket.remote_address}")
-        decoder = OpusDecoder(OPUS_SAMPLE_RATE, OPUS_CHANNELS)
-        try:
-            while True:
-                # Set a timeout for receiving data to detect stalled connections
-                try:
-                    opus_data = await asyncio.wait_for(websocket.recv(), timeout=30.0)
-                except asyncio.TimeoutError:
-                    _LOGGER.warning(f"WebSocket timeout receiving from {websocket.remote_address}")
-                    # Send a ping to see if client is still responsive
-                    try:
-                        await websocket.ping()
-                        continue # Continue loop if ping is acked implicitly or successful
-                    except websockets.exceptions.ConnectionClosed:
-                        _LOGGER.warning(f"WebSocket client {websocket.remote_address} closed after ping timeout.")
-                        break
-                except asyncio.CancelledError:
-                    raise # Propagate cancellation
+    zeroconf = Zeroconf()
+    zeroconf.register_service(info)
+    return zeroconf
 
-                if not isinstance(opus_data, bytes):
-                    _LOGGER.warning(f"Received non-bytes data from {websocket.remote_address}, ignoring.")
-                    continue
-                
-                if not opus_data:
-                    _LOGGER.info(f"Received empty bytes from {websocket.remote_address}, client may be closing.")
-                    continue # Or break?
+###############################################################################
+# Entry-point
+###############################################################################
+async def _run_satellite(sat: SatelliteBase, host: str, port: int):
+    _LOGGER.info(f"Satellite server starting at {host}:{port}")
+    server = AsyncTcpServer(host, port)
+    try:
+        await server.run(lambda r, w: _SatHandler(r, w, satellite=sat))
+        _LOGGER.info("Satellite server started")
+    except Exception as e:
+        _LOGGER.error(f"Failed to start satellite server: {e}")
+        raise
 
-                try:
-                    # Decode Opus packet
-                    pcm_data = decoder.decode(opus_data, OPUS_FRAME_SIZE, decode_fec=False)
-                    if pcm_data:
-                        # Pass PCM data to the satellite for VAD processing
-                        await satellite.process_audio_chunk(pcm_data)
-                except Exception as e:
-                    _LOGGER.error(f"Opus decode error for client {websocket.remote_address}: {e}")
-                    # Optionally break or continue depending on desired robustness
-                    continue
+async def main():
+    p = argparse.ArgumentParser()
+    p.add_argument("--host", default="0.0.0.0")
+    p.add_argument("--port", type=int, default=10700)
+    p.add_argument("--omi-mac", default=DEFAULT_OMI_MAC)
+    p.add_argument("--omi-char-uuid", default=DEFAULT_OMI_CHAR_UUID)
+    p.add_argument("--wake-uri")
+    p.add_argument("--wake-word-name", action="append")
+    p.add_argument("--debug", action="store_true")
+    args = p.parse_args()
 
-        except websockets.exceptions.ConnectionClosedOK:
-            _LOGGER.info(f"WebSocket client disconnected normally: {websocket.remote_address}")
-        except websockets.exceptions.ConnectionClosedError as e:
-            _LOGGER.warning(f"WebSocket client {websocket.remote_address} disconnected with error: {e}")
-        except asyncio.CancelledError:
-            _LOGGER.info(f"WebSocket handler for {websocket.remote_address} cancelled.")
-            # Do not re-raise cancellation here, allow server to handle shutdown
-        except Exception as e:
-            _LOGGER.exception(f"Unexpected error in WebSocket handler for {websocket.remote_address}: {e}")
-        finally:
-            _LOGGER.info(f"WebSocket connection closed: {websocket.remote_address}")
+    logging_level = logging.DEBUG if args.debug else logging.INFO
+    print(f"Logging level: {logging_level}")
+    logging.basicConfig(level=logging_level, format="%(asctime)s %(levelname)s: %(message)s")
 
     try:
-        # The serve function runs the server until cancelled
-        server = await websockets.serve(websocket_audio_handler, host, port)
-        _LOGGER.info(f"WebSocket server started on ws://{host}:{port}")
-        await server.wait_closed() # Keep server running until stopped
-    except asyncio.CancelledError:
-        _LOGGER.info("WebSocket server task cancelled.")
-    except Exception as e:
-        _LOGGER.exception(f"WebSocket server failed to start or run: {e}")
-    finally:
-        _LOGGER.info("WebSocket server stopped.")
+        mic_src = _OmiMic(args.omi_mac, args.omi_char_uuid)
+        await mic_src.start()
 
-# -----------------------------------------------------------------------------
+        settings = build_settings(wake_uri=args.wake_uri, wake_names=args.wake_word_name)
+
+        sat_cls = type(
+            "OmiBluetoothSatellite",
+            (_BluetoothMixin, WakeStreamingSatellite if args.wake_uri else AlwaysStreamingSatellite),
+            {},
+        )
+        _LOGGER.info(f"Creating satellite with class: {sat_cls.__name__}")
+        satellite: SatelliteBase = sat_cls(settings, mic_src)  # type: ignore[arg-type]
+
+
+                
+        # Initialize satellite
+        await satellite.started()
+        
+        try:
+            
+            await asyncio.gather(
+                asyncio.create_task(_run_satellite(satellite, args.host, args.port), name="tcp"),
+                asyncio.create_task(satellite.run(), name="sat-loop"),
+            )
+        finally:
+            await satellite.stopped()
+            await mic_src.stop()
+    except Exception as e:
+        _LOGGER.error(f"Error in main: {e}", exc_info=True)
+        raise
+
+def get_lan_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # doesn't have to be reachable
+        s.connect(("10.255.255.255", 1))
+        ip = s.getsockname()[0]
+    except Exception:
+        ip = "127.0.0.1"
+    finally:
+        s.close()
+    return ip
 
 if __name__ == "__main__":
     try:
+        zeroconf = register_service(get_lan_ip(), 10700)
         asyncio.run(main())
+    except BleakDeviceNotFoundError:
+        _LOGGER.error("OMI device not found – check MAC address")
+        exit(1)
     except KeyboardInterrupt:
-        _LOGGER.info("Received KeyboardInterrupt, shutting down...")
-    except Exception as e:
-        _LOGGER.exception(f"Unhandled error in main execution: {e}")
+        pass
+    finally:
+        zeroconf.unregister_all_services()
+        zeroconf.close()
