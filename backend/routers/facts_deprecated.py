@@ -20,7 +20,7 @@ router = APIRouter()
 
 @router.post('/v1/facts', tags=['facts'], response_model=MemoryDB)
 def create_fact(fact: Memory, uid: str = Depends(auth.get_current_user_uid)):
-    memory_db = MemoryDB.from_memory(fact, uid, None, None, True)
+    memory_db = MemoryDB.from_memory(fact, uid, None, True)
     memories_db.create_memory(uid, memory_db.dict())
     threading.Thread(target=update_personas_async, args=(uid,)).start()
     return memory_db
@@ -30,7 +30,7 @@ def create_fact(fact: Memory, uid: str = Depends(auth.get_current_user_uid)):
 def create_fact(fact: Memory, uid: str = Depends(auth.get_current_user_uid)):
     categories = [category for category in MemoryCategory]
     fact.category = identify_category_for_memory(fact.content, categories)
-    memory_db = MemoryDB.from_memory(fact, uid, None, None, True)
+    memory_db = MemoryDB.from_memory(fact, uid, None, True)
     memories_db.create_memory(uid, memory_db.dict())
     threading.Thread(target=update_personas_async, args=(uid,)).start()
     return memory_db
