@@ -39,7 +39,7 @@ def get_conversation(uid, conversation_id):
 
 def get_conversations(uid: str, limit: int = 100, offset: int = 0, include_discarded: bool = False,
                       statuses: List[str] = [], start_date: Optional[datetime] = None,
-                      end_date: Optional[datetime] = None):
+                      end_date: Optional[datetime] = None, categories: Optional[List[str]] = None):
     conversations_ref = (
         db.collection('users').document(uid).collection(conversations_collection)
         .where(filter=FieldFilter('deleted', '==', False))
@@ -48,6 +48,9 @@ def get_conversations(uid: str, limit: int = 100, offset: int = 0, include_disca
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
     if len(statuses) > 0:
         conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
+
+    if categories:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))
 
     # Apply date range filters if provided
     if start_date:

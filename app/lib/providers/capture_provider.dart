@@ -139,20 +139,17 @@ class CaptureProvider extends ChangeNotifier
   }) async {
     debugPrint("changeAudioRecordProfile");
     await _resetState();
-
-    // New codec
-    SharedPreferencesUtil().deviceCodec = audioCodec;
     await _initiateWebsocket(audioCodec: audioCodec, sampleRate: sampleRate);
   }
 
   Future<void> _initiateWebsocket({
-    BleAudioCodec? audioCodec,
+    required BleAudioCodec audioCodec,
     int? sampleRate,
     bool force = false,
   }) async {
     debugPrint('initiateWebsocket in capture_provider');
 
-    BleAudioCodec codec = audioCodec ?? SharedPreferencesUtil().deviceCodec;
+    BleAudioCodec codec = audioCodec;
     sampleRate ??= (codec.isOpusSupported() ? 16000 : 8000);
 
     debugPrint('is ws null: ${_socket == null}');
@@ -281,7 +278,6 @@ class CaptureProvider extends ChangeNotifier
   Future<void> _resetState() async {
     debugPrint('resetState');
     _cleanupCurrentState();
-    await _recheckDeviceCodecChange();
     await _ensureDeviceSocketConnection();
     await _initiateDeviceAudioStreaming();
     await initiateStorageBytesStreaming(); // ??
@@ -351,24 +347,11 @@ class CaptureProvider extends ChangeNotifier
     return connection.getBleButtonState();
   }
 
-  Future<bool> _recheckDeviceCodecChange() async {
-    if (_recordingDevice == null) {
-      return false;
-    }
-    BleAudioCodec newCodec = await _getAudioCodec(_recordingDevice!.id);
-    if (SharedPreferencesUtil().deviceCodec != newCodec) {
-      debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $newCodec');
-      await SharedPreferencesUtil().setDeviceCodec(newCodec);
-      return true;
-    }
-    return false;
-  }
-
   Future<void> _ensureDeviceSocketConnection() async {
     if (_recordingDevice == null) {
       return;
     }
-    var codec = SharedPreferencesUtil().deviceCodec;
+    BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
     var language =
         SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     if (language != _socket?.language || codec != _socket?.codec || _socket?.state != SocketServiceState.connected) {
@@ -380,12 +363,7 @@ class CaptureProvider extends ChangeNotifier
     if (_recordingDevice == null) {
       return;
     }
-    BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
-    if (SharedPreferencesUtil().deviceCodec != codec) {
-      debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $codec');
-      SharedPreferencesUtil().deviceCodec = codec;
-      await _ensureDeviceSocketConnection();
-    }
+    await _ensureDeviceSocketConnection();
 
     if (_recordingDevice == null) {
       Logger.handle(Exception('Device Not Connected'), StackTrace.current,
@@ -393,6 +371,7 @@ class CaptureProvider extends ChangeNotifier
       notifyListeners();
       return;
     }
+    BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
     await _wal.getSyncs().phone.onAudioCodecChanged(codec);
     await streamButton(_recordingDevice!.id);
     await streamAudioToWs(_recordingDevice!.id, codec);
@@ -497,7 +476,8 @@ class CaptureProvider extends ChangeNotifier
           t.cancel();
           return;
         }
-        await _initiateWebsocket();
+        BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
+        await _initiateWebsocket(audioCodec: codec);
       });
     }
   }
@@ -588,14 +568,12 @@ class CaptureProvider extends ChangeNotifier
     );
     processInProgressConversation().then((result) {
       if (result == null || result.conversation == null) {
-        _initiateWebsocket();
         conversationProvider!.removeProcessingConversation('0');
         return;
       }
       conversationProvider!.removeProcessingConversation('0');
       result.conversation!.isNew = true;
       _processConversationCreated(result.conversation, result.messages);
-      _initiateWebsocket();
     });
 
     return;

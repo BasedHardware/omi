@@ -2633,6 +2633,7 @@ def generate_persona_intro_message(prompt: str, name: str):
 # **************************************************
 
 def identify_category_for_memory(memory: str, categories: List) -> str:
+    # TODO: this should be structured output!!
     categories_str = ', '.join(categories)
     prompt = f"""
     You are an AI tasked with identifying the category of a fact from a list of predefined categories. 
