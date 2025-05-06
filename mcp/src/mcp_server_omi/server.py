@@ -105,7 +105,7 @@ class GetMemories(BaseModel):
     """
 
     uid: str
-    # limit: int = 100
+     # limit: int = 100
     categories: List[MemoryCategory] = []
 
 

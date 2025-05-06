@@ -73,6 +73,8 @@ We will use [uvx](https://docs.astral.sh/uv/guides/tools/) to directly run *mcp-
 <details>
 <summary>Using docker</summary>
 
+Install docker, https://orbstack.dev/ is great.
+
 ```json
 "mcpServers": {
   "omi": {
