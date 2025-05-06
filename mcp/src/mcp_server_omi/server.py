@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 # TODO: can use pydantic Fields on descriptions?
 
+
 class MemoryCategory(str, Enum):
     core = "core"
     hobbies = "hobbies"
@@ -60,6 +61,9 @@ class ConversationCategory(str, Enum):
 
 
 base_url = "https://backend-208440318997.us-central1.run.app/v1/mcp/"
+# base_url = "http://127.0.0.1:8000/v1/mcp/"
+
+# TODO: get conversation by id (with transcript segments) endpoint
 
 
 class OmiTools(str, Enum):
@@ -123,6 +127,7 @@ class CreateMemory(BaseModel):
     content: str
     category: MemoryCategory
 
+
 class DeleteMemory(BaseModel):
     """Delete a memory by its ID.
     A memory is a piece of information about the user's life accross different domains.
@@ -177,8 +182,8 @@ class GetConversations(BaseModel):
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     categories: List[ConversationCategory] = []
-    limit: int = 25
-    offset: int = 0
+    # limit: int = 25
+    # offset: int = 0
 
 
 def create_user(email: str, password: str, name: str) -> dict:
@@ -235,10 +240,10 @@ def get_conversations(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     categories: List[ConversationCategory] = [],
-    limit: int = 25,
-    offset: int = 0,
+    # limit: int = 25,
+    # offset: int = 0,
 ) -> List:
-    params = {"limit": limit, "offset": offset}
+    params = {"limit": 10, "offset": 0, "include_transcript_segments": False}
     if start_date:
         params["start_date"] = start_date.isoformat()
     if end_date:
@@ -350,8 +355,8 @@ async def serve(uid: str | None) -> None:
                 start_date=arguments.get("start_date"),
                 end_date=arguments.get("end_date"),
                 categories=arguments.get("categories", []),
-                limit=arguments.get("limit", 25),
-                offset=arguments.get("offset", 0),
+                # limit=arguments.get("limit", 25),
+                # offset=arguments.get("offset", 0),
             )
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
