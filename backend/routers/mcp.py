@@ -19,7 +19,7 @@ from firebase_admin import auth
 router = APIRouter()
 
 
-@router.post("/v1/mcp/memories", tags=["mcp"], response_model=MemoryDB)
+@router.post("/v1/mcp/memories", tags=["mcp"], response_model=Memory)
 def create_memory(memory: Memory, uid: str = Header(None)):
     categories = [category for category in MemoryCategory]
     memory.category = identify_category_for_memory(memory.content, categories)
@@ -41,7 +41,7 @@ def edit_memory(memory_id: str, value: str, uid: str = Header(None)):
     return {"status": "ok"}
 
 
-@router.get("/v1/mcp/memories", tags=["mcp"], response_model=List[MemoryDB])
+@router.get("/v1/mcp/memories", tags=["mcp"], response_model=List[Memory])
 def get_memories(
     limit: int = 25,
     offset: int = 0,
@@ -98,6 +98,7 @@ class SimpleConversation(BaseModel):
     "/v1/mcp/conversations", response_model=List[SimpleConversation], tags=["mcp"]
 )
 def get_conversations(
+    include_transcript_segments: bool = False,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     categories: Optional[str] = None,
@@ -121,6 +122,9 @@ def get_conversations(
         end_date=end_date,
         categories=[c.value for c in category_list],
     )
+    for i in range(len(conversations)):
+        if not include_transcript_segments:
+            conversations[i]["transcript_segments"] = []
     return conversations
 
     # TODO: further steps, perform retrieval
