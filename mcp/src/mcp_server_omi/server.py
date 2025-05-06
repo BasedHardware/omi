@@ -98,15 +98,14 @@ class GetMemories(BaseModel):
 
     Args:
         uid (str): The user's unique identifier.
-        limit (int, optional): The maximum number of memories to retrieve. Defaults to 100.
-        categories (List[MemoryCategoryEnum], optional): The categories of memories to retrieve. Defaults to [].
+        categories (List[MemoryCategoryEnum], optional): The categories of memories to filter by. Defaults to no filter.
 
     Returns:
         str: A JSON object containing the list of memories.
     """
 
     uid: str
-    limit: int = 100
+    # limit: int = 100
     categories: List[MemoryCategory] = []
 
 
@@ -322,8 +321,8 @@ async def serve(uid: str | None) -> None:
         if name == OmiTools.GET_MEMORIES:
             result = get_memories(
                 _uid,
-                limit=arguments["limit"],
-                categories=arguments["categories"],
+                limit=arguments.get("limit", 100),
+                categories=arguments.get("categories", []),
             )
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
