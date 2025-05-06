@@ -98,7 +98,7 @@ class GetMemories(BaseModel):
 
     Args:
         uid (str): The user's unique identifier.
-        categories (List[MemoryCategoryEnum], optional): The categories of memories to filter by. Defaults to no filter.
+        categories (List[MemoryCategoryEnum], optional): The categories of memories to filter by. Defaults to no.
 
     Returns:
         str: A JSON object containing the list of memories.
