@@ -126,6 +126,44 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
     deactivate
     ```
 
+## Running with Logging Enabled
+
+1. Start the backend with logging enabled:
+   Running the server with your virtual environment, add the logging parameters:
+
+   ```bash
+   # Enable logging with debug level
+   source venv/bin/activate && uvicorn main:app --reload --env-file .env --log-config logging_config.json
+   ```
+
+
+2.  Or via Docker:
+
+```bash
+# Build and run with Docker, then follow logs
+docker compose up --build -d && docker compose logs -f
+```
+
+### Tracking and Viewing Logs
+
+1. Log files are created in the backend directory:
+   - `debug.log` - Contains all debug-level and above messages
+   - `error.log` - Contains only error-level messages
+
+2. Monitor logs in real-time using the terminal:
+   ```bash
+   # Follow the debug log in real-time
+   tail -f debug.log
+
+   # Follow only error logs
+   tail -f error.log
+   ```
+
+### Customizing Logging
+
+The `logging_config.json` file controls how logging works:
+- Adjust log levels (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`)
+
 ## Running with Docker
 
 The backend can be easily run using Docker. This approach ensures consistency across different development environments and simplifies the setup process.

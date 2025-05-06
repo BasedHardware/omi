@@ -25,7 +25,8 @@ build/
 dist/
 .build/
 .swiftpm/
-.vscode
+.vscode/*
+!.vscode/launch.json
 
 # Android specific
 **/android/**/build/
