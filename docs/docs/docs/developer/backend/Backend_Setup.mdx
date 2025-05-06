@@ -73,13 +73,10 @@ Before you start, make sure you have the following:
         - **Mac (using brew):** `brew install git ffmpeg`
         - **Nix Envdir:** Git and FFmpeg are pre-installed
         - **Windows (using choco):** `choco install git.install ffmpeg`
-    - **Install opus:**
+    - **Install opus library (required before PyOgg can work):**
         - **Mac (using brew):** `brew install opus`
         - **Windows:** You should already have it installed if you are on Windows 10 version 1903 and above
-    - **Install PyOgg:**
-        - **All Platforms:** `pip install PyOgg`
-    - **Install All Required Dependencies:**
-        - **All Platforms:** `brew install -r requirements.txt`
+        - **Linux:** `sudo apt-get install libopus0 libopus-dev`
 
 2. **Clone the Backend Repository: 📂**
     - Open your terminal and navigate to your desired directory
@@ -174,17 +171,29 @@ Before you start, make sure you have the following:
       ```bash
       ngrok http --domain=example.ngrok-free.app 8000
       ```
-    - Run this command in your terminal. Ngrok will provide you with a public URL (like `https://example.ngrok-free.app`) that points to your local backend
+    - Run this command in a new terminal. Ngrok will provide you with a public URL (like `https://example.ngrok-free.app`) that points to your local backend
+    - Keep this terminal window open while you're developing
 
 2. **Start the Backend Server: 🖥️**
+    - Make sure you're in the backend directory
+    - If you're using a virtual environment, ensure it's activated:
+      ```bash
+      source venv/bin/activate  # for macOS/Linux
+      # OR
+      venv\Scripts\activate  # for Windows
+      ```
     - In your terminal, run:
       ```bash
       uvicorn main:app --reload --env-file .env
       ```
         - `--reload` automatically restarts the server when code changes are saved, making development easier
         - `--env-file .env` loads environment variables from your `.env` file
-        - `--host 0.0.0.0` listens to every interface on your computer so you don't have to set up `ngrok` when developing in your network
-        -  `--port 8000` port for backend to listen
+        - `--host 0.0.0.0` listens to every interface on your computer so you don't have to set up `ngrok` when developing in your network (optional)
+        -  `--port 8000` port for backend to listen (the default is 8000 if not specified)
+    - For convenience, you can combine activation and starting the server into a single command:
+      ```bash
+      source venv/bin/activate && uvicorn main:app --reload --env-file .env
+      ```
 
 3. **Troubleshooting SSL Errors: 🔒**
     - **SSL Errors:** If you encounter SSL certificate errors during model downloads, add this to `utils/stt/vad.py`:
@@ -198,6 +207,8 @@ Before you start, make sure you have the following:
       ```bash
       pip install -r requirements.txt --upgrade --force-reinstall
       ```
+    - **Opus Library Missing:** If you get "Exception: Could not find Opus library. Make sure it is installed", ensure you have installed the system-level Opus library (see step 1) before installing PyOgg.
+      - On Windows, you may need to download the Opus DLL manually if you're still having issues.
 
 4. **Connect the App to the Backend: 🔗**
     - In your Omi app's environment variables, set the `API_BASE_URL` to the public URL provided by Ngrok (e.g., `https://example.ngrok-free.app`)

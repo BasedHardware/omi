@@ -36,6 +36,7 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
 7. Install `opus` (required for audio processing)
    - Mac: `brew install opus`
    - Windows: You should already have it if you're on Windows 10 version 1903 and above
+   - Linux: `sudo apt-get install libopus0 libopus-dev`
 
 8. Move to the backend directory: `cd backend`
 
@@ -81,21 +82,33 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
 13. Sign up on [ngrok](https://ngrok.com/) and follow the steps to configure it
     - During onboarding, get your authentication token and run `ngrok config add-authtoken <your-token>`
 
-14. During the onboarding flow, under the `Static Domain` section, Ngrok should provide you with a static domain and a command to point your localhost to that static domain. Replace the port from 80 to 8000 in that command and run it in your terminal:
+14. During the onboarding flow, under the `Static Domain` section, Ngrok should provide you with a static domain and a command to point your localhost to that static domain. Replace the port from 80 to 8000 in that command and run it in a new terminal:
     ```bash
     ngrok http --domain=example.ngrok-free.app 8000
     ```
+    Note: Keep this terminal window open during your development session.
 
-15. Start the backend server:
+15. Start the backend server (in a separate terminal window):
     ```bash
+    # Make sure your virtual environment is activated first (if using one)
+    source venv/bin/activate
+
+    # Start the server
     uvicorn main:app --reload --env-file .env
     ```
 
-16. Troubleshooting: If you get any error mentioning "no internet connection" while downloading models, add the following lines in the `utils/stt/vad.py` file after the import statements:
-    ```python
-    import ssl
-    ssl._create_default_https_context = ssl._create_unverified_context
+    Alternatively, you can use this combined command:
+    ```bash
+    source venv/bin/activate && uvicorn main:app --reload --env-file .env
     ```
+
+16. Troubleshooting:
+    - If you get any error mentioning "no internet connection" while downloading models, add the following lines in the `utils/stt/vad.py` file after the import statements:
+      ```python
+      import ssl
+      ssl._create_default_https_context = ssl._create_unverified_context
+      ```
+    - If you get "Exception: Could not find Opus library. Make sure it is installed", make sure you have properly installed the opus library at the system level (step 7) before installing the Python dependencies.
 
 17. Now try running the server again: `uvicorn main:app --reload --env-file .env`
 
@@ -107,6 +120,68 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
     ```bash
     deactivate
     ```
+
+## Running with Docker
+
+The backend can be easily run using Docker. This approach ensures consistency across different development environments and simplifies the setup process.
+
+### Prerequisites
+
+- Docker installed on your system
+- Docker Compose installed on your system
+
+### Running the Backend with Docker
+
+1. Navigate to the backend directory:
+   ```bash
+   cd backend
+   ```
+
+2. Build and start the container in detached mode:
+   ```bash
+   docker compose up --build -d
+   ```
+
+   This command:
+   - Builds the Docker image defined in the Dockerfile
+   - Creates and starts the container in the background
+   - Uses the environment variables from .dev.env
+   - Exposes the backend on port 8000
+
+3. View the logs (optional):
+   ```bash
+   docker compose logs -f
+   ```
+
+   The `-f` flag follows the log output in real-time. Press Ctrl+C to stop following the logs.
+
+4. Your backend API is now available at:
+   ```
+   http://localhost:8000
+   ```
+
+### Managing the Container
+
+- To stop the container:
+  ```bash
+  docker compose down
+  ```
+
+- To restart the container:
+  ```bash
+  docker compose restart
+  ```
+
+- To rebuild and restart (after code changes):
+  ```bash
+  docker compose up --build -d
+  ```
+
+### Notes
+
+- The backend runs on port 8000 by default, matching the behavior of running with uvicorn directly
+- The container uses the same environment variables from .dev.env as the local development setup
+- Any changes to the code will require rebuilding the container
 
 ## Additional Resources
 
