@@ -50,6 +50,7 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
     - [Deepgram API Key](https://console.deepgram.com/api-keys)
     - Redis credentials from your [Upstash Console](https://console.upstash.com/)
     - Set `ADMIN_KEY` to a temporary value (e.g., `123`) for local development
+    - **IMPORTANT:** Set `GOOGLE_CLOUD_PROJECT` to your Google Cloud Project ID. This is required for language detection and translation services.
     - **IMPORTANT:** For Pinecone vector database:
       - Make sure to set `PINECONE_INDEX_NAME` to the name of your Pinecone index
       - If you don't have a Pinecone index yet, [create one in the Pinecone Console](https://app.pinecone.io/)
@@ -109,6 +110,10 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
       ssl._create_default_https_context = ssl._create_unverified_context
       ```
     - If you get "Exception: Could not find Opus library. Make sure it is installed", make sure you have properly installed the opus library at the system level (step 7) before installing the Python dependencies.
+    - If you encounter language detection or translation errors like "Invalid 'parent'; Invalid resource name project id", make sure:
+      - `GOOGLE_CLOUD_PROJECT` is set correctly in your `.env` file
+      - The [Cloud Translation API](https://console.cloud.google.com/apis/library/translate.googleapis.com) is enabled in your Google Cloud project
+      - Your service account has permission to use the Translation API
 
 17. Now try running the server again: `uvicorn main:app --reload --env-file .env`
 
