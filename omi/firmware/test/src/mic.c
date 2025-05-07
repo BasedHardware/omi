@@ -43,7 +43,7 @@ static struct dmic_cfg cfg = {
 	.channel =
 		{
 			.req_num_streams = 1,
-			.req_num_chan = CAPTURE_MS,
+			.req_num_chan = CHANNEL_COUNT,
 		},
 };
 
