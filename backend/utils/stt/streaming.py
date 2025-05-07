@@ -37,20 +37,20 @@ soniox_multi_languages = soniox_supported_languages
 
 # Languages supported by Deepgram, nova-2/nova-3 model
 deepgram_supported_languages = {'multi','bg','ca', 'zh', 'zh-CN', 'zh-Hans', 'zh-TW', 'zh-Hant', 'zh-HK', 'cs', 'da', 'da-DK', 'nl', 'en', 'en-US', 'en-AU', 'en-GB', 'en-NZ', 'en-IN', 'et', 'fi', 'nl-BE', 'fr', 'fr-CA', 'de', 'de-CH', 'el' 'hi', 'hu', 'id', 'it', 'ja', 'ko', 'ko-KR', 'lv', 'lt', 'ms', 'no', 'pl', 'pt', 'pt-BR', 'pt-PT', 'ro', 'ru', 'sk', 'es', 'es-419', 'sv', 'sv-SE', 'th', 'th-TH', 'tr', 'uk', 'vi'}
-deepgram_nova2_multi_languages = ['multi', 'en', 'es']
-deepgram_multi_languages = ["multi", "en", "en-US", "en-AU", "en-GB", "en-NZ", "en-IN", "es", "es-419", "fr", "fr-CA", "de", "hi", "ru", "pt", "pt-BR", "pt-PT", "ja", "it", "nl", "nl-BE"]
+deepgram_multi_languages = ['multi', 'en', 'es']
+deepgram_nova3_multi_languages = ["multi", "en", "en-US", "en-AU", "en-GB", "en-NZ", "en-IN", "es", "es-419", "fr", "fr-CA", "de", "hi", "ru", "pt", "pt-BR", "pt-PT", "ja", "it", "nl", "nl-BE"]
 
 def get_stt_service_for_language(language: str):
     # # Soniox's 'multi'
     # if language in soniox_multi_languages:
     #     return STTService.soniox, 'multi', 'stt-rt-preview'
 
-    # Deepgram's 'multi', nova-3
-    if language in deepgram_multi_languages:
-        return STTService.deepgram, 'multi', 'nova-3'
+    # Deepgram's 'multi'
+    # if language in deepgram_multi_languages:
+    #    return STTService.deepgram, 'multi', 'nova-3'
 
     # Deepgram's 'multi', nova-2
-    if language in deepgram_nova2_multi_languages:
+    if language in deepgram_multi_languages:
         return STTService.deepgram, 'multi', 'nova-2-general'
 
     # Deepgram
