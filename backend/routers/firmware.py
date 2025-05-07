@@ -106,21 +106,41 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
     assets = release_data.get("assets")
     asset = None
     for a in assets:
-        if "ota" in a.get("name", "").lower():
+        if "ota" in a.get("name", "").lower() and a.get("name", "").endswith(".zip"):
             asset = a
             break
     if not asset:
         raise HTTPException(status_code=500, detail="No OTA zip found in the release")
 
+    # Safely get values with defaults
+    version = kv.get("release_firmware_version")
+    min_version = kv.get("minimum_firmware_required")
+    min_app_version = kv.get("minimum_app_version")
+    min_app_version_code = kv.get("minimum_app_version_code")
+    changelog_text = kv.get("changelog", "")
+    ota_steps = kv.get('ota_update_steps', [])
+    is_legacy_dfu_str = kv.get('is_legacy_secure_dfu', 'True')
+
+    # Attempt to parse boolean, default to True on error
+    try:
+        is_legacy_dfu = ast.literal_eval(is_legacy_dfu_str.capitalize())
+    except (ValueError, SyntaxError):
+        is_legacy_dfu = True
+
+    # Basic validation (optional but recommended)
+    if not all([version, asset.get("browser_download_url")]):
+        raise HTTPException(status_code=500, detail="Essential release information missing")
+
     return {
-        "version": kv.get("release_firmware_version"),
-        "min_version": kv.get("minimum_firmware_required"),
-        "min_app_version": kv.get("minimum_app_version"),
-        "min_app_version_code": kv.get("minimum_app_version_code"),
+        "version": version,
+        "min_version": min_version,
+        "min_app_version": min_app_version,
+        "min_app_version_code": min_app_version_code,
         "zip_url": asset.get("browser_download_url"),
         "draft": False,
-        "ota_update_steps": kv.get('ota_update_steps', []),
-        "is_legacy_secure_dfu": ast.literal_eval(kv.get('is_legacy_secure_dfu', 'True')),
+        "ota_update_steps": ota_steps,
+        "is_legacy_secure_dfu": is_legacy_dfu,
+        "changelog": changelog_text,
     }
 
 
@@ -187,24 +207,36 @@ async def get_latest_version_v1(device: int):
 
 
 def extract_key_value_pairs(markdown_content):
+    if not markdown_content:
+        return {}
+
     key_value_pattern = re.compile(r'<!-- KEY_VALUE_START\s*(.*?)\s*KEY_VALUE_END -->', re.DOTALL)
     key_value_match = key_value_pattern.search(markdown_content)
 
     if not key_value_match:
         return {}
 
-    key_value_string = key_value_match.group(1)
+    key_value_string = key_value_match.group(1).strip()
     lines = key_value_string.split('\n')
     key_value_map = {}
 
     for line in lines:
-        key_value = line.split(':')
-        if len(key_value) == 2:
-            key = key_value[0].strip()
-            value = key_value[1].strip()
+        line = line.strip()
+        if not line:
+            continue
+
+        # Use split with maxsplit=1 to handle values containing colons
+        parts = line.split(':', 1)
+        if len(parts) == 2:
+            key = parts[0].strip()
+            value = parts[1].strip()
+
             if key == 'ota_update_steps':
-                # Parse comma-separated steps
-                key_value_map[key] = [step.strip() for step in value.split(',')]
+                # Split by comma, filter empty strings
+                key_value_map[key] = [step.strip() for step in value.split(',') if step.strip()]
+            elif key == 'changelog':
+                 # Split by pipe, filter empty strings
+                key_value_map[key] = [item.strip() for item in value.split('|') if item.strip()]
             else:
                 key_value_map[key] = value
 

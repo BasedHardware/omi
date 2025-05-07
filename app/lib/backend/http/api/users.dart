@@ -316,3 +316,15 @@ Future<bool> setUserPrimaryLanguage(String languageCode) async {
   debugPrint('setUserPrimaryLanguage response: ${response.body}');
   return response.statusCode == 200;
 }
+
+Future<bool> setPreferredSummarizationAppServer(String appId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/preferences/app?app_id=$appId',
+    headers: {},
+    method: 'PUT',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('setPreferredSummarizationAppServer response: ${response.body}');
+  return response.statusCode == 200;
+}

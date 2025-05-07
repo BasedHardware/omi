@@ -71,12 +71,6 @@ class SharedPreferencesUtil {
 
   String get deviceName => getString('deviceName') ?? '';
 
-  set deviceCodec(BleAudioCodec value) => saveString('deviceCodec', mapCodecToName(value));
-
-  Future setDeviceCodec(BleAudioCodec value) => saveString('deviceCodec', mapCodecToName(value));
-
-  BleAudioCodec get deviceCodec => mapNameToCodec(getString('deviceCodec') ?? '');
-
   bool get deviceIsV2 => getBool('deviceIsV2') ?? false;
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);
@@ -231,9 +225,11 @@ class SharedPreferencesUtil {
 
   enableApp(String value) {
     final List<App> apps = appsList;
-    final app = apps.firstWhere((element) => element.id == value);
-    app.enabled = true;
-    appsList = apps;
+    App? app = apps.firstWhereOrNull((element) => element.id == value);
+    if (app != null) {
+      app.enabled = true;
+      appsList = apps;
+    }
   }
 
   disableApp(String value) {

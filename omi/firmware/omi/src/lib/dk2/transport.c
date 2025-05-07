@@ -20,6 +20,7 @@
 #include "button.h"
 #include "mic.h"
 #include "accel.h"
+#include "haptic.h"
 #include <math.h> // For float conversion in logs
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -866,6 +867,13 @@ int transport_start()
     button_init();
     register_button_service();
     activate_button_work();
+#endif
+
+// Initialize and register Haptic service if enabled
+#ifdef CONFIG_OMI_ENABLE_HAPTIC
+    // Note: haptic_init() is called in main.c
+    register_haptic_service();
+    LOG_INF("Haptic service registered via transport");
 #endif
 
 #ifdef CONFIG_OMI_ENABLE_SPEAKER

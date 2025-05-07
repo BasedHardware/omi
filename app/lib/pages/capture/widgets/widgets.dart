@@ -147,17 +147,26 @@ getTranscriptWidget(
     );
   }
 
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      if (photos.isNotEmpty) const PhotosGridComponent(),
-      if (segments.isNotEmpty)
-        TranscriptWidget(
-          segments: segments,
-          bottomMargin: 100, // Smaller bottom margin for capturing page
+  final bool showPhotos = photos.isNotEmpty;
+  final bool showTranscript = segments.isNotEmpty;
+
+  if (showPhotos && showTranscript) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const PhotosGridComponent(),
+        Expanded(
+          child: TranscriptWidget(segments: segments, bottomMargin: 100),
         ),
-    ],
-  );
+      ],
+    );
+  } else if (showPhotos) {
+    return const PhotosGridComponent();
+  } else if (showTranscript) {
+    return TranscriptWidget(segments: segments, bottomMargin: 100);
+  } else {
+    return const SizedBox.shrink();
+  }
 }
 
 getLiteTranscriptWidget(

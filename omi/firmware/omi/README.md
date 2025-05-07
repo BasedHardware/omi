@@ -23,39 +23,46 @@ Note: Open "firmware" folder in your code editor. Don't open the root omi folder
 - Status: DEV
 
 - TODOs:
-  - [x] Testing new modules in the omi device (4/6)
+  - [x] Testing new modules in the omi device (5/6)
     - [x] Mic
     - [x] BLE
     - [x] Buttons
     - [x] LEDs
     - [ ] Wi-Fi, partially
-    - [ ] Motors
-  - [x] Add support for MCUBoot (2/3)
+    - [x] Motors
+    - [ ] Qspi flash
+    - [ ] Sd Card
+  - [x] Add support for MCUBoot
     - [x] Add basic MCUBoot
     - [x] Test with the OMI app (iOS/Android)
-    - [ ] Test with an on-battery device (without charger)
+    - [x] Test with an on-battery device (without charger)
   - [x] Initialize project, basic main loop with tests and devkit firmware as libs
-  - [x] Streaming and transcribing (3/4)
-    - [x] Mic
+  - [x] Streaming and transcribing
+    - [x] Mic (1/2)
+      - [x] Capturing audio bytes
+      - [ ] Activating the 2nd mic
     - [x] BLE
     - [x] Encoding (OPUS) and transmitting
-    - [ ] 💔 Fix the audio byte loss issue - currently about 30% https://github.com/BasedHardware/omi/pull/2217#issuecomment-2815077148 
+    - [x] Fix the audio byte loss issue - currently about 30% https://github.com/BasedHardware/omi/pull/2217#issuecomment-2815077148 
       - [x] android, fixed by increasing the BLE connnection interval (7ms) - but tbh i don't think this is a good solution since our devkit work fine without tunning the connection interval. 100 rps, 50 bytes each is not a big deal! https://github.com/BasedHardware/omi/pull/2248#issuecomment-2820156590 
-      - [ ] iOS, they doesn't allow increasing the connnection interval(CI). the feasible CI on iOS is about 15ms.
+      - [x] iOS, they doesn't allow increasing the connnection interval(CI). the feasible CI on iOS is about 15ms.
   - [x] LEDs (3/4)
     - [x] Charging
     - [x] BLE connected
     - [x] BLE disconnected
     - [ ] Fix the issue: The led during charging + device off ~ green only, does not provide correct feedback. charging still works.
-  - [x] Buttons (2/3)
+  - [x] Buttons
     - [x] Turn the device on/off(entering the deepsleep mode)
     - [x] Long press to chat with omi
-    - [ ] Test the deepsleep mode's battery draining.
+    - [x] Test the deepsleep mode's battery draining.
   - [ ] SD Card
     - [ ] Store files
     - [ ] Transfer via BLE
     - [ ] Transfer via Wi-Fi
-  - [ ] Haptic
+  - [x] Haptic (2/3)
+    - [x] Haptic on turning on/off
+    - [x] Long press to chat with omi
+    - [ ] Recheck the mass production version, since the current motor is not good https://github.com/BasedHardware/omi/pull/2281#issuecomment-2841105447
   - [x] Battery (1/2)
     - [x] Percentage feedbacks via BLE
     - [ ] Fix in-accurated battery level, especially on charging
