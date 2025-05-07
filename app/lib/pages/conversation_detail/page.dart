@@ -181,12 +181,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                             Selector<ConversationDetailProvider, ConversationSource?>(
                               selector: (context, provider) => provider.conversation?.source,
                               builder: (context, source, child) {
-                                return ListView(
-                                  shrinkWrap: true,
-                                  children: source == ConversationSource.openglass
-                                      ? [const PhotosGridComponent(), const SizedBox(height: 32)]
-                                      : [const TranscriptWidgets()],
-                                );
+                                return source == ConversationSource.openglass
+                                    ? ListView(
+                                        shrinkWrap: true, children: const [PhotosGridComponent(), SizedBox(height: 32)])
+                                    : const TranscriptWidgets();
                               },
                             ),
                             const SummaryTab(),
@@ -391,37 +389,34 @@ class TranscriptWidgets extends StatelessWidget {
         }
 
         // Use a Container with fixed height for large lists to enable proper scrolling
-        return Container(
-          height: segments.length > 100 ? MediaQuery.of(context).size.height - 64 : null,
-          child: TranscriptWidget(
-            segments: segments,
-            horizontalMargin: false,
-            topMargin: false,
-            canDisplaySeconds: provider.canDisplaySeconds,
-            isConversationDetail: true,
-            bottomMargin: 200,
-            editSegment: (i, j) {
-              final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-              if (!connectivityProvider.isConnected) {
-                ConnectivityProvider.showNoInternetDialog(context);
-                return;
-              }
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                backgroundColor: Colors.black,
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                builder: (context) {
-                  return NameSpeakerBottomSheet(
-                    speakerId: j,
-                    segmentIdx: i,
-                  );
-                },
-              );
-            },
-          ),
+        return TranscriptWidget(
+          segments: segments,
+          horizontalMargin: false,
+          topMargin: false,
+          canDisplaySeconds: provider.canDisplaySeconds,
+          isConversationDetail: true,
+          bottomMargin: 200,
+          editSegment: (i, j) {
+            final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+            if (!connectivityProvider.isConnected) {
+              ConnectivityProvider.showNoInternetDialog(context);
+              return;
+            }
+            showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.black,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              builder: (context) {
+                return NameSpeakerBottomSheet(
+                  speakerId: j,
+                  segmentIdx: i,
+                );
+              },
+            );
+          },
         );
       },
     );

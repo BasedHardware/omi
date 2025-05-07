@@ -178,7 +178,7 @@ export default function HomePage() {
         .catch(err => {
           console.error('[openChatGPTWithUid] Failed to copy UID to clipboard:', err);
           // Show UID in the error toast for manual copying
-          toast.error(`Couldn't copy UID automatically. Please copy: ${uid}`, {
+          toast.error(`Redirecting to integration partner`, {
              duration: 5000, // Give a bit more time to see/copy
           });
           // Still redirect after a delay, allowing time for manual copy
@@ -911,7 +911,7 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
             if (loadingToastId) toast.dismiss(loadingToastId);
             console.error('[handleIntegrationClick] Failed to copy UID to clipboard:', err);
             // Show UID in the error toast for manual copying
-            toast.error(`Couldn't copy UID automatically. Please copy: ${uid}. Redirecting...`, {
+            toast.error(`Redirecting to an integration partner`, {
                 duration: 5000, // Give more time to see/copy
             });
             // Redirect after a delay, allowing time for manual copy
@@ -961,9 +961,9 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
               target="_blank"
               rel="noopener noreferrer"
               className="text-base text-white hover:text-zinc-300 hover:underline"
-              onClick={() => Mixpanel.track('Add More Tools Clicked', { timestamp: new Date().toISOString() })}
+              onClick={() => Mixpanel.track('Show All Integrations Clicked', { timestamp: new Date().toISOString() })}
             >
-              Add more tools
+              Show all 100+ integrations →
             </a>
           </div>
         )}
@@ -972,7 +972,7 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
         <div className="w-full max-w-5xl mt-12 md:mt-16 px-4">
           <div className="grid md:grid-cols-2 gap-8">
             {/* Before Section */}
-            <div className="bg-zinc-900 p-6 rounded-lg border border-zinc-700">
+            <div className="bg-zinc-900 p-6 rounded-lg order-2 md:order-1">
               <h3 className="text-lg font-semibold mb-4 text-center text-zinc-400">ChatGPT</h3>
               <div className="space-y-3">
                 {/* User Bubble */}
@@ -991,7 +991,7 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
             </div>
 
             {/* After Section */}
-            <div className="bg-zinc-900 p-6 rounded-lg border border-purple-600 shadow-lg shadow-purple-600/20">
+            <div className="bg-zinc-800 p-6 rounded-lg order-1 md:order-2 shadow-lg">
               <h3 className="text-lg font-semibold mb-4 text-center text-white">omiGPT</h3>
               <div className="space-y-3">
                 {/* User Bubble */}

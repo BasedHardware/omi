@@ -48,6 +48,8 @@ You'll need the following components to build your own omiGlass:
 - Wires like [these](https://a.co/d/ah98wY0) and hinges
 - Note: The current design does not include a switch. See contribution section for more details.
 
+[How to assemble guide video](https://youtu.be/Nwb9iOMdTeE)
+
 ### Software Setup
 
 1. Clone the omiglass repository and install the dependencies:

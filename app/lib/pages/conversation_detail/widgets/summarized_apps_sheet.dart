@@ -157,6 +157,7 @@ class _AppsList extends StatelessWidget {
       Navigator.pop(context);
       final provider = context.read<ConversationDetailProvider>();
       provider.setSelectedAppForReprocessing(app);
+      provider.setPreferredSummarizationApp(app.id);
       await provider.reprocessConversation(appId: app.id);
       return;
     }

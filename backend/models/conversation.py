@@ -67,8 +67,14 @@ class AppResult(BaseModel):
 
 class ActionItem(BaseModel):
     description: str = Field(description="The action item to be completed")
-    completed: bool = False  # IGNORE ME from the model parser
+    completed: bool = False
     deleted: bool = False
+
+    @staticmethod
+    def actions_to_string(action_items: List['ActionItem']) -> str:
+        if not action_items:
+            return 'None'
+        return '\n'.join([f"- {item.description} ({'completed' if item.completed else 'pending'})" for item in action_items])
 
 
 class Event(BaseModel):
@@ -82,6 +88,13 @@ class Event(BaseModel):
         event_dict = self.dict()
         event_dict['start'] = event_dict['start'].isoformat()
         return event_dict
+
+    @staticmethod
+    def events_to_string(events: List['Event']) -> str:
+        if not events:
+            return 'None'
+        # Format the datetime for better readability in the prompt
+        return '\n'.join([f"- {event.title} (Starts: {event.start.strftime('%Y-%m-%d %H:%M:%S %Z')}, Duration: {event.duration} mins)" for event in events])
 
 
 class Structured(BaseModel):
@@ -103,14 +116,10 @@ class Structured(BaseModel):
                   f"{str(self.overview).capitalize()}\n")
 
         if self.action_items:
-            result += "Action Items:\n"
-            for item in self.action_items:
-                result += f"- {item.description}\n"
+            result += f"Action Items:\n{ActionItem.actions_to_string(self.action_items)}\n"
 
         if self.events:
-            result += "Events:\n"
-            for event in self.events:
-                result += f"- {event.title} ({event.start} - {event.duration} minutes)\n"
+            result += f"Events:\n{Event.events_to_string(self.events)}\n"
         return result.strip()
 
 

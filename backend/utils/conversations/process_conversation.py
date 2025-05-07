@@ -15,6 +15,7 @@ import database.notifications as notification_db
 import database.tasks as tasks_db
 import database.trends as trends_db
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
+from database.redis_db import get_user_preferred_app
 from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
 from models.memories import MemoryDB, Memory
@@ -30,7 +31,7 @@ from utils.llm import obtain_emotional_message, retrieve_metadata_fields_from_tr
     trends_extractor, get_email_structure, get_post_structure, get_message_structure, \
     retrieve_metadata_from_email, retrieve_metadata_from_post, retrieve_metadata_from_message, \
     retrieve_metadata_from_text, select_best_app_for_conversation, \
-    extract_memories_from_text
+    extract_memories_from_text, get_reprocess_transcript_structure
 from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
 from utils.retrieval.rag import retrieve_rag_conversation_context
@@ -67,7 +68,8 @@ def _get_structured(
         # from Omi
         if force_process:
             # reprocess endpoint
-            return get_transcript_structure(conversation.get_transcript(False), conversation.started_at, language_code, tz), False
+
+            return get_reprocess_transcript_structure(conversation.get_transcript(False), conversation.started_at, language_code, tz, conversation.structured.title), False
 
         discarded = should_discard_conversation(conversation.get_transcript(False))
         if discarded:
@@ -145,7 +147,13 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
 
         # Select the best app for this conversation
         if filtered_apps and len(filtered_apps) > 0:
-            best_app = select_best_app_for_conversation(conversation, filtered_apps)
+            # Check if the user has a preferred app
+            preferred_app_id = get_user_preferred_app(uid)
+            if preferred_app_id is None:
+                best_app = select_best_app_for_conversation(conversation, filtered_apps)
+            else:
+                best_app = next((app for app in filtered_apps if app.id == preferred_app_id), None)
+
             if best_app:
                 print(f"Selected best app for conversation: {best_app.name}")
 
@@ -196,7 +204,7 @@ def _extract_memories(uid: str, conversation: Conversation):
 
     parsed_memories = []
     for fact in new_memories:
-        parsed_memories.append(MemoryDB.from_memory(fact, uid, conversation.id, conversation.structured.category, False))
+        parsed_memories.append(MemoryDB.from_memory(fact, uid, conversation.id, False))
         print('_extract_memories:', fact.category.value.upper(), '|', fact.content)
 
     if len(parsed_memories) == 0:
