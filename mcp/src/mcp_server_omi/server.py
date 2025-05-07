@@ -7,7 +7,7 @@ import logging
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # TODO: can use pydantic Fields on descriptions?
 
@@ -60,10 +60,8 @@ class ConversationCategory(str, Enum):
     other = "other"
 
 
-base_url = "https://backend-208440318997.us-central1.run.app/v1/mcp/"
-# base_url = "http://127.0.0.1:8000/v1/mcp/"
-
-# TODO: get conversation by id (with transcript segments) endpoint
+# base_url = "https://backend-208440318997.us-central1.run.app/v1/mcp/"
+base_url = "http://127.0.0.1:8000/v1/mcp/"
 
 
 class OmiTools(str, Enum):
@@ -72,117 +70,58 @@ class OmiTools(str, Enum):
     DELETE_MEMORY = "delete_memory"
     EDIT_MEMORY = "edit_memory"
     GET_CONVERSATIONS = "get_conversations"
+    GET_CONVERSATION_BY_ID = "get_conversation_by_id"
     CREATE_USER = "create_user"
 
 
 class UserCredentials(BaseModel):
-    """User credentials for signup.
-
-    Args:
-        email (str): User's email address
-        password (str): User's password
-        name (str, optional): User's name. Defaults to None.
-
-    Returns:
-        dict: Status of the signup operation. Including the user's unique identifier. (uid)
-    """
-
-    email: str
-    password: str
-    name: str
+    email: str = Field(description="The user's email address.")
+    password: str = Field(description="The user's password.")
+    name: str = Field(description="The user's name.", default=None)
 
 
 class GetMemories(BaseModel):
-    """Retrieve a list of user memories.
-    Memories are pieces of information about the user's life accross different domains.
-
-    Args:
-        uid (str): The user's unique identifier.
-        categories (List[MemoryCategoryEnum], optional): The categories of memories to filter by. Defaults to no.
-
-    Returns:
-        str: A JSON object containing the list of memories.
-    """
-
-    uid: str
-     # limit: int = 100
-    categories: List[MemoryCategory] = []
+    uid: str = Field(description="The user's unique identifier.")
+    categories: List[MemoryCategory] = Field(
+        description="The categories of memories to filter by.", default=[]
+    )
 
 
 class CreateMemory(BaseModel):
-    """Create a new memory for the user.
-    A memory is a piece of information about the user's life accross different domains.
-
-    Args:
-        uid (str): The user's unique identifier.
-        content (str): The content of the memory.
-        category (MemoryCategory): The category of the memory.
-
-    Returns:
-        dict: The created memory object.
-    """
-
-    uid: str
-    content: str
-    category: MemoryCategory
+    uid: str = Field(description="The user's unique identifier.")
+    content: str = Field(description="The content of the memory.")
+    category: MemoryCategory = Field(
+        description="The category of the memory to create."
+    )
 
 
 class DeleteMemory(BaseModel):
-    """Delete a memory by its ID.
-    A memory is a piece of information about the user's life accross different domains.
-
-    Args:
-        uid (str): The user's unique identifier.
-        memory_id (str): The ID of the memory to delete.
-
-    Returns:
-        dict: Status of the operation.
-    """
-
-    uid: str
-    memory_id: str
+    uid: str = Field(description="The user's unique identifier.")
+    memory_id: str = Field(description="The ID of the memory to delete.")
 
 
 class EditMemory(BaseModel):
-    """Edit the content of an existing memory.
-
-    Args:
-        uid (str): The user's unique identifier.
-        memory_id (str): The ID of the memory to edit.
-        content (str): The new content for the memory.
-
-    Returns:
-        dict: Status of the operation.
-    """
-
-    uid: str
-    memory_id: str
-    content: str
+    uid: str = Field(description="The user's unique identifier.")
+    memory_id: str = Field(description="The ID of the memory to edit.")
+    content: str = Field(description="The new content for the memory.")
 
 
 class GetConversations(BaseModel):
-    """Retrieve a list of user conversations.
-    A conversation is the voice recording transcript of a conversation the user had.
-    The conversation object contains the transcript segments, timestamps, geolocation, and a "structured" field, which summarizes the conversation.
+    uid: str = Field(description="The user's unique identifier.")
+    start_date: Optional[datetime] = Field(
+        description="Filter conversations after this date", default=None
+    )
+    end_date: Optional[datetime] = Field(
+        description="Filter conversations before this date", default=None
+    )
+    categories: List[ConversationCategory] = Field(
+        description="Filter by conversation categories.", default=[]
+    )
 
-    Args:
-        uid (str): The user's unique identifier.
-        start_date (datetime, optional): Filter conversations after this date
-        end_date (datetime, optional): Filter conversations before this date
-        categories (List[str], optional): Filter by categories. Defaults to [].
-        limit (int, optional): The maximum number of conversations to retrieve. Defaults to 25.
-        offset (int, optional): Number of conversations to skip. Defaults to 0.
 
-    Returns:
-        List: A list of conversation objects.
-    """
-
-    uid: str
-    start_date: Optional[datetime] = None
-    end_date: Optional[datetime] = None
-    categories: List[ConversationCategory] = []
-    # limit: int = 25
-    # offset: int = 0
+class GetConversationById(BaseModel):
+    uid: str = Field(description="The user's unique identifier.")
+    conversation_id: str = Field(description="The ID of the conversation to retrieve.")
 
 
 def create_user(email: str, password: str, name: str) -> dict:
@@ -201,12 +140,7 @@ def get_memories(
     params = {"limit": limit}
     if categories:
         params["categories"] = ",".join(categories)
-
-    response = requests.get(
-        f"{base_url}memories",
-        params=params,
-        headers={"uid": uid},
-    )
+    response = requests.get(f"{base_url}memories", params=params, headers={"uid": uid})
     return response.json()
 
 
@@ -239,8 +173,6 @@ def get_conversations(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     categories: List[ConversationCategory] = [],
-    # limit: int = 25,
-    # offset: int = 0,
 ) -> List:
     params = {"limit": 10, "offset": 0, "include_transcript_segments": False}
     if start_date:
@@ -255,6 +187,13 @@ def get_conversations(
         f"{base_url}conversations",
         params=params,
         headers={"uid": uid},
+    )
+    return response.json()
+
+
+def get_conversation_by_id(uid: str, conversation_id: str) -> dict:
+    response = requests.get(
+        f"{base_url}conversations/{conversation_id}", headers={"uid": uid}
     )
     return response.json()
 
@@ -277,7 +216,7 @@ async def serve(uid: str | None) -> None:
             ),
             Tool(
                 name=OmiTools.GET_MEMORIES,
-                description="Retrieve a list of memories",
+                description="Retrieve memories. A memory is a known fact about the user across multiple domains.",
                 inputSchema=GetMemories.model_json_schema(),
             ),
             Tool(
@@ -297,8 +236,13 @@ async def serve(uid: str | None) -> None:
             ),
             Tool(
                 name=OmiTools.GET_CONVERSATIONS,
-                description="Retrieve a list of conversations",
+                description="Retrieve a list of conversations. A conversation is the voice transcript recording of a conversation the user had.",
                 inputSchema=GetConversations.model_json_schema(),
+            ),
+            Tool(
+                name=OmiTools.GET_CONVERSATION_BY_ID,
+                description="Retrieve a conversation by ID including each segment of the transcript.",
+                inputSchema=GetConversationById.model_json_schema(),
             ),
         ]
 
@@ -354,8 +298,12 @@ async def serve(uid: str | None) -> None:
                 start_date=arguments.get("start_date"),
                 end_date=arguments.get("end_date"),
                 categories=arguments.get("categories", []),
-                # limit=arguments.get("limit", 25),
-                # offset=arguments.get("offset", 0),
+            )
+            return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+        elif name == OmiTools.GET_CONVERSATION_BY_ID:
+            result = get_conversation_by_id(
+                _uid, conversation_id=arguments["conversation_id"]
             )
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
