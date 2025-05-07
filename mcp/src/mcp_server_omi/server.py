@@ -9,8 +9,6 @@ from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 from pydantic import BaseModel, Field
 
-# TODO: can use pydantic Fields on descriptions?
-
 
 class MemoryCategory(str, Enum):
     core = "core"
@@ -60,8 +58,8 @@ class ConversationCategory(str, Enum):
     other = "other"
 
 
-# base_url = "https://backend-208440318997.us-central1.run.app/v1/mcp/"
-base_url = "http://127.0.0.1:8000/v1/mcp/"
+base_url = "https://backend-208440318997.us-central1.run.app/v1/mcp/"
+# base_url = "http://127.0.0.1:8000/v1/mcp/"
 
 
 class OmiTools(str, Enum):
