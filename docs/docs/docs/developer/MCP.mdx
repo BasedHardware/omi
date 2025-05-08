@@ -3,47 +3,6 @@ title: "Model Context Protocol"
 description: "A Model Context Protocol server for Omi interaction and automation. This server provides tools to read, search, and manipulate Memories and Conversations."
 ---
 
-
-### Tools
-1. `get_memories`
-   - Retrieve a list of user memories
-   - Inputs:
-     - `uid` (string): The user's unique identifier
-     - `limit` (number, optional): Maximum number of memories to retrieve (default: 100)
-     - `categories` (array of MemoryFilterOptions, optional): Categories of memories to retrieve (default: [])
-   - Returns: JSON object containing list of memories
-
-2. `create_memory`
-   - Create a new memory
-   - Inputs:
-     - `uid` (string): The user's unique identifier
-     - `content` (string): Content of the memory
-     - `category` (MemoryFilterOptions): Category of the memory
-   - Returns: Created memory object
-
-3. `delete_memory`
-   - Delete a memory by ID
-   - Inputs:
-     - `uid` (string): The user's unique identifier
-     - `memory_id` (string): ID of the memory to delete
-   - Returns: Status of the operation
-
-4. `edit_memory`
-   - Edit a memory's content
-   - Inputs:
-     - `uid` (string): The user's unique identifier
-     - `memory_id` (string): ID of the memory to edit
-     - `content` (string): New content for the memory
-   - Returns: Status of the operation
-
-5. `get_conversations`
-   - Retrieve a list of user conversations
-   - Inputs:
-     - `uid` (string): The user's unique identifier
-     - `include_discarded` (boolean, optional): Whether to include discarded conversations (default: false)
-     - `limit` (number, optional): Maximum number of conversations to retrieve (default: 25)
-   - Returns: List of conversation objects containing transcripts, timestamps, geolocation and structured summaries
-
 ## Configuration
 
 ### Usage with Claude Desktop
@@ -105,6 +64,47 @@ Requires python >= 3.11.6.
 ### Examples (langchain, openai Agents, dspy)
 
 https://github.com/BasedHardware/omi/tree/main/mcp/examples
+
+
+### Tools
+1. `get_memories`
+   - Retrieve a list of user memories
+   - Inputs:
+     - `uid` (string): The user's unique identifier
+     - `limit` (number, optional): Maximum number of memories to retrieve (default: 100)
+     - `categories` (array of MemoryFilterOptions, optional): Categories of memories to retrieve (default: [])
+   - Returns: JSON object containing list of memories
+
+2. `create_memory`
+   - Create a new memory
+   - Inputs:
+     - `uid` (string): The user's unique identifier
+     - `content` (string): Content of the memory
+     - `category` (MemoryFilterOptions): Category of the memory
+   - Returns: Created memory object
+
+3. `delete_memory`
+   - Delete a memory by ID
+   - Inputs:
+     - `uid` (string): The user's unique identifier
+     - `memory_id` (string): ID of the memory to delete
+   - Returns: Status of the operation
+
+4. `edit_memory`
+   - Edit a memory's content
+   - Inputs:
+     - `uid` (string): The user's unique identifier
+     - `memory_id` (string): ID of the memory to edit
+     - `content` (string): New content for the memory
+   - Returns: Status of the operation
+
+5. `get_conversations`
+   - Retrieve a list of user conversations
+   - Inputs:
+     - `uid` (string): The user's unique identifier
+     - `include_discarded` (boolean, optional): Whether to include discarded conversations (default: false)
+     - `limit` (number, optional): Maximum number of conversations to retrieve (default: 25)
+   - Returns: List of conversation objects containing transcripts, timestamps, geolocation and structured summaries
 
 ## Debugging
 
