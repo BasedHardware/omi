@@ -1,4 +1,4 @@
-<!-- This file is auto-generated from docs/docs/docs/hardware/omiGlass.mdx. Do not edit manually. -->
+<!-- This file is auto-generated from docs/docs/hardware/omiGlass.mdx. Do not edit manually. -->
 # omiGlass - Open Source Meta Raybans with 6x of their battery
 
 <p align="center">

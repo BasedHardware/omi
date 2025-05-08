@@ -17,13 +17,13 @@
             "class": "logging.FileHandler",
             "level": "DEBUG",
             "formatter": "default",
-            "filename": "debug.log"
+            "filename": "logs/debug.log"
         },
         "error_file": {
             "class": "logging.FileHandler",
             "level": "ERROR",
             "formatter": "default",
-            "filename": "error.log"
+            "filename": "logs/error.log"
         }
     },
     "loggers": {
@@ -57,6 +57,11 @@
             "propagate": false
         },
         "pinecone_plugin_interface": {
+            "handlers": ["console", "file"],
+            "level": "INFO",
+            "propagate": false
+        },
+        "vad": {
             "handlers": ["console", "file"],
             "level": "INFO",
             "propagate": false
