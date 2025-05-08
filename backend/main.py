@@ -12,9 +12,13 @@ from routers import workflow, chat, firmware, plugins, memories_deprecated, tran
 
 from utils.other.timeout import TimeoutMiddleware
 from utils.logging_config import setup_logging
+from utils.stt.vad import initialize_vad
 
 # Set up logging
 logger = setup_logging()
+
+# Initialize VAD after logging is configured
+initialize_vad()
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])

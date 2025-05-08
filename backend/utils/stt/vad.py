@@ -11,13 +11,29 @@ from pydub import AudioSegment
 from database import redis_db
 
 logger = logging.getLogger("vad")
-torch.set_num_threads(1)
-torch.hub.set_dir('pretrained_models')
-logger.info("[VAD] Torch configs set")
-model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
-(get_speech_timestamps, save_audio, read_audio, VADIterator, collect_chunks) = utils
-logger.info("[VAD] Model loaded successfully")
 
+# Global variables to hold model and utilities
+model = None
+utils = None
+get_speech_timestamps = None
+save_audio = None
+read_audio = None
+VADIterator = None
+collect_chunks = None
+
+def initialize_vad():
+    """Initialize VAD model and utilities. Should be called after logging is configured."""
+    global model, utils, get_speech_timestamps, save_audio, read_audio, VADIterator, collect_chunks
+
+    logger.info("[VAD] Initializing VAD module")
+    torch.set_num_threads(1)
+    torch.hub.set_dir('pretrained_models')
+    logger.info("[VAD] Torch configs set")
+
+    model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
+    (get_speech_timestamps, save_audio, read_audio, VADIterator, collect_chunks) = utils
+
+    logger.info("[VAD] Model loaded successfully")
 
 
 class SpeechState(str, Enum):
@@ -26,6 +42,9 @@ class SpeechState(str, Enum):
 
 
 def is_speech_present(data, vad_iterator, window_size_samples=256):
+    if model is None:
+        initialize_vad()
+
     logger.debug("[VAD] Checking if speech is present")
     data_int16 = np.frombuffer(data, dtype=np.int16)
     data_float32 = data_int16.astype(np.float32) / 32768.0
@@ -57,6 +76,9 @@ def is_speech_present(data, vad_iterator, window_size_samples=256):
 
 
 def is_audio_empty(file_path, sample_rate=8000):
+    if model is None:
+        initialize_vad()
+
     logger.debug(f"[VAD] Checking if audio is empty: {file_path}")
     wav = read_audio(file_path)
     timestamps = get_speech_timestamps(wav, model, sampling_rate=sample_rate)
@@ -95,7 +117,7 @@ def vad_is_empty(file_path, return_segments: bool = False, cache: bool = False):
                 return segments
             result = len(segments) == 0
             logger.info(f"[VAD] vad_is_empty result: {result}")
-            return result 
+            return result
     except Exception as e:
         logger.error(f'[VAD] Error in vad_is_empty: {e}')
         if return_segments:
@@ -104,6 +126,7 @@ def vad_is_empty(file_path, return_segments: bool = False, cache: bool = False):
 
 
 def apply_vad_for_speech_profile(file_path: str):
+    # No initialization needed as this calls vad_is_empty which uses hosted API
     logger.info(f'[VAD] Applying VAD for speech profile: {file_path}')
     voice_segments = vad_is_empty(file_path, return_segments=True)
     if len(voice_segments) == 0:  # TODO: front error on post-processing, audio sent is bad.
