@@ -53,7 +53,7 @@ Add this to your `claude_desktop_config.json`:
 <details>
 <summary>Using uvx</summary>
 
-When using [uv](https://docs.astral.sh/uv/) no specific installation is needed. 
+When using [uv](https://docs.astral.sh/uv/) no specific installation is needed.
 
 We will use [uvx](https://docs.astral.sh/uv/guides/tools/) to directly run *mcp-server-omi*.
 

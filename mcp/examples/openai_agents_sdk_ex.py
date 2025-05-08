@@ -14,13 +14,17 @@ uid = os.getenv("OMI_UID")
 
 
 async def run(mcp_server: MCPServer):
+    # for tool in await mcp_server.list_tools():
+    #     print(tool.name)
+    #     print()
+
     agent = Agent(
         name="Omi Agent",
         instructions=f"You are a helpful assistant that answers questions based on the user's OMI data, the user UID is {uid}.",
         mcp_servers=[mcp_server],
         model="o4-mini",
     )
-    
+
     message = "Check my memories, and get an overall idea of who I am, then retrieve my 5 most recent conversations and summarize them."
     print("\n" + "-" * 40)
     print(f"Running: {message}")
