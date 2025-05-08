@@ -143,3 +143,14 @@ copy firmware\firmware\build\docker_build\zephyr.uf2 D:\
 (where D: is the drive letter of the XIAO-SENSE board)
 
 For more detailed flashing instructions, see our [official documentation](https://docs.omi.me/docs/get_started/Flash_device).
+
+# Tips:
+1:
+run ./omi/firmware/devkit/flash.sh to flash. Just simple way with verbose output
+
+2:
+I made scrip with auto-detect and log to file
+omi/firmware/scripts/monitor_device.sh
+
+and you can check output with
+ tail -f logs/device.log
