@@ -14,6 +14,10 @@ from utils.other.timeout import TimeoutMiddleware
 from utils.logging_config import setup_logging
 from utils.stt.vad import initialize_vad
 
+# Ensure logs directory exists
+logs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+os.makedirs(logs_dir, exist_ok=True)
+
 # Set up logging
 logger = setup_logging()
 
