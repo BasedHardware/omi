@@ -1,6 +1,6 @@
 [project]
 name = "omi-sdk"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
     "aiohttp>=3.11.14",
     "bleak>=0.22.3",
