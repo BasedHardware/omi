@@ -3,14 +3,16 @@ title: "Model Context Protocol"
 description: "A Model Context Protocol server for Omi interaction and automation. This server provides tools to read, search, and manipulate Memories and Conversations."
 ---
 
+import { AccordionGroup, Accordion } from 'mintlify-components';
+
 ## Configuration
 
 ### Usage with Claude Desktop
 
 Add this to your `claude_desktop_config.json`:
 
-<details>
-<summary>Using uvx</summary>
+<AccordionGroup>
+<Accordion title="Using uvx">
 
 When using [uv](https://docs.astral.sh/uv/) no specific installation is needed.
 
@@ -27,10 +29,9 @@ We will use [uvx](https://docs.astral.sh/uv/guides/tools/) to directly run *mcp-
 }
 ```
 
-</details>
+</Accordion>
 
-<details>
-<summary>Using docker</summary>
+<Accordion title="Using docker">
 
 Install docker, https://orbstack.dev/ is great.
 
@@ -42,10 +43,9 @@ Install docker, https://orbstack.dev/ is great.
   }
 }
 ```
-</details>
+</Accordion>
 
-<!-- <details>
-<summary>Using pip installation</summary>
+<Accordion title="Using pip installation">
 
 Requires python >= 3.11.6. 
 - Check `python --version`, and `brew list --versions | grep python` (you might have other versions of python installed)
@@ -59,7 +59,8 @@ Requires python >= 3.11.6.
   }
 }
 ```
-</details> -->
+</Accordion>
+</AccordionGroup>
 
 ### Examples (langchain, openai Agents, dspy)
 
