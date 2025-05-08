@@ -51,24 +51,12 @@ Future<bool> uploadProfile(File file) async {
       debugPrint('uploadProfile Response body: ${jsonDecode(response.body)}');
       return true;
     } else {
-      // Parse the error message from the response
-      String errorMessage = 'Failed to upload sample. Status code: ${response.statusCode}';
-
-      try {
-        final responseData = jsonDecode(response.body);
-        if (responseData != null && responseData['detail'] != null) {
-          errorMessage = responseData['detail'];
-        }
-      } catch (e) {
-        // If parsing fails, use the default error message
-      }
-
-      debugPrint('Upload error: $errorMessage');
-      throw Exception(errorMessage);
+      debugPrint('Failed to upload sample. Status code: ${response.statusCode}');
+      throw Exception('Failed to upload sample. Status code: ${response.statusCode}');
     }
   } catch (e) {
     debugPrint('An error occurred uploadSample: $e');
-    throw Exception(e.toString());
+    throw Exception('An error occurred uploadSample: $e');
   }
 }
 

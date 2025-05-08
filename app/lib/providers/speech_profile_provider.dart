@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-// import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/http/api/speech_profile.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
@@ -15,7 +15,6 @@ import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_connection.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
-import 'package:omi/utils/message_notifier_mixin.dart';
 
 class SpeechProfileProvider extends ChangeNotifier
     with MessageNotifierMixin
@@ -172,21 +171,7 @@ class SpeechProfileProvider extends ChangeNotifier
       var data = await audioStorage.createWavFile(filename: 'speaker_profile.wav');
       try {
         await uploadProfile(data.item1);
-      } catch (e) {
-        uploadingProfile = false;
-        notifyListeners();
-
-        String errorMessage = e.toString();
-        if (errorMessage.contains("Audio duration is invalid")) {
-          notifyError('INVALID_AUDIO_DURATION');
-        } else if (errorMessage.contains("Invalid codec")) {
-          notifyError('INVALID_CODEC');
-        } else {
-          // Generic error
-          notifyError('UPLOAD_FAILED');
-        }
-        return;
-      }
+      } catch (e) {}
 
       updateLoadingText('Personalizing your experience...');
       SharedPreferencesUtil().hasSpeakerProfile = true;
