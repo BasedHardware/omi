@@ -260,7 +260,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                       if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
                                         await LanguageSelectionDialog.show(context);
                                       }
-                                      
+
                                       await stopDeviceRecording();
                                       await provider.initialise(finalizedCallback: restartDeviceRecording);
                                       provider.forceCompletionTimer =

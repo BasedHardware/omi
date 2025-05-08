@@ -1,5 +1,6 @@
 import json
 import os
+import logging
 
 import firebase_admin
 from fastapi import FastAPI
@@ -10,6 +11,10 @@ from routers import workflow, chat, firmware, plugins, memories_deprecated, tran
     payment, integration, conversations, memories, mcp
 
 from utils.other.timeout import TimeoutMiddleware
+from utils.logging_config import setup_logging
+
+# Set up logging
+logger = setup_logging()
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])

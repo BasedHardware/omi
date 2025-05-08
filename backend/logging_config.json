@@ -1,0 +1,69 @@
+{
+    "version": 1,
+    "disable_existing_loggers": false,
+    "formatters": {
+        "default": {
+            "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        }
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "level": "INFO",
+            "formatter": "default",
+            "stream": "ext://sys.stdout"
+        },
+        "file": {
+            "class": "logging.FileHandler",
+            "level": "DEBUG",
+            "formatter": "default",
+            "filename": "debug.log"
+        },
+        "error_file": {
+            "class": "logging.FileHandler",
+            "level": "ERROR",
+            "formatter": "default",
+            "filename": "error.log"
+        }
+    },
+    "loggers": {
+        "uvicorn": {
+            "handlers": ["console", "file"],
+            "level": "INFO"
+        },
+        "uvicorn.error": {
+            "handlers": ["console", "file"],
+            "level": "INFO",
+            "propagate": false
+        },
+        "uvicorn.access": {
+            "handlers": ["console", "file"],
+            "level": "INFO",
+            "propagate": false
+        },
+        "google_crc32c": {
+            "handlers": ["error_file"],
+            "level": "ERROR",
+            "propagate": false
+        },
+        "google.auth": {
+            "handlers": ["error_file"],
+            "level": "ERROR",
+            "propagate": false
+        },
+        "grpc": {
+            "handlers": ["error_file"],
+            "level": "ERROR",
+            "propagate": false
+        },
+        "pinecone_plugin_interface": {
+            "handlers": ["console", "file"],
+            "level": "INFO",
+            "propagate": false
+        }
+    },
+    "root": {
+        "level": "INFO",
+        "handlers": ["console", "file"]
+    }
+}

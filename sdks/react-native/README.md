@@ -1,4 +1,4 @@
-<!-- This file is auto-generated from docs/docs/docs/developer/sdk/ReactNative.mdx. Do not edit manually. -->
+<!-- This file is auto-generated from docs/docs/developer/sdk/ReactNative.mdx. Do not edit manually. -->
 # Omi SDK for React Native
 
 A React Native SDK for connecting to and interacting with Omi devices via Bluetooth Low Energy (BLE).
