@@ -32,8 +32,6 @@ class SpeechProfilePage extends StatefulWidget {
 }
 
 class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProviderStateMixin {
-  late StreamSubscription<void> _errorSubscription;
-
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
@@ -47,55 +45,6 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
     });
 
     super.initState();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-
-    // Listen to provider error notifications
-    final provider = Provider.of<SpeechProfileProvider>(context, listen: false);
-
-    // Display error messages from the provider when they occur
-    provider.addListener(() {
-      if (provider.error != null && provider.error!.isNotEmpty && mounted) {
-        // Map error codes to user-friendly messages
-        String errorMessage = '';
-        switch (provider.error) {
-          case 'INVALID_AUDIO_DURATION':
-            errorMessage = 'The audio duration is invalid. Please try recording again.';
-            break;
-          case 'INVALID_CODEC':
-            errorMessage = 'The audio format is not supported. Please try with a different device.';
-            break;
-          case 'UPLOAD_FAILED':
-            errorMessage = 'Failed to upload your speech profile. Please try again.';
-            break;
-          case 'NO_SPEECH':
-            errorMessage = 'No speech detected. Please speak clearly while recording.';
-            break;
-          case 'TOO_SHORT':
-            errorMessage = 'Your recording is too short. Please continue speaking for a bit longer.';
-            break;
-          case 'MULTIPLE_SPEAKERS':
-            errorMessage = 'Multiple speakers detected. Please record with only your voice.';
-            break;
-          case 'WS_ERR':
-            errorMessage = 'Connection error. Please check your internet connection and try again.';
-            break;
-          default:
-            errorMessage = provider.error ?? 'An unknown error occurred';
-        }
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    });
   }
 
   // TODO: use connection directly
