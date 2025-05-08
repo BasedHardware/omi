@@ -172,7 +172,7 @@ def get_conversations(
     end_date: Optional[datetime] = None,
     categories: List[ConversationCategory] = [],
 ) -> List:
-    params = {"limit": 10, "offset": 0, "include_transcript_segments": False}
+    params = {"limit": 10, "offset": 0}
     if start_date:
         params["start_date"] = start_date.isoformat()
     if end_date:
@@ -182,9 +182,7 @@ def get_conversations(
 
     logger.info(f"Getting conversations with params: {params}")
     response = requests.get(
-        f"{base_url}conversations",
-        params=params,
-        headers={"uid": uid},
+        f"{base_url}conversations", params=params, headers={"uid": uid}
     )
     return response.json()
 
