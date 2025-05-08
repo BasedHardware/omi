@@ -248,7 +248,7 @@ async def process_audio_soniox(stream_transcript, sample_rate: int, language: st
     # Soniox supports diarization primarily for English
     api_key = os.getenv('SONIOX_API_KEY')
     if not api_key:
-        raise ValueError("API key is not set. Please set the SONIOX_API_KEY environment variable.")
+        raise ValueError("SonioxAPI key is not set. Please set the SONIOX_API_KEY environment variable.")
 
     uri = 'wss://stt-rt.soniox.com/transcribe-websocket'
 
