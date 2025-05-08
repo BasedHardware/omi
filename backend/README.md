@@ -36,6 +36,7 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
 7. Install `opus` (required for audio processing)
    - Mac: `brew install opus`
    - Windows: You should already have it if you're on Windows 10 version 1903 and above
+   - Linux: `sudo apt-get install libopus0 libopus-dev`
 
 8. Move to the backend directory: `cd backend`
 
@@ -49,6 +50,7 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
     - [Deepgram API Key](https://console.deepgram.com/api-keys)
     - Redis credentials from your [Upstash Console](https://console.upstash.com/)
     - Set `ADMIN_KEY` to a temporary value (e.g., `123`) for local development
+    - **IMPORTANT:** Set `GOOGLE_CLOUD_PROJECT` to your Google Cloud Project ID. This is required for language detection and translation services.
     - **IMPORTANT:** For Pinecone vector database:
       - Make sure to set `PINECONE_INDEX_NAME` to the name of your Pinecone index
       - If you don't have a Pinecone index yet, [create one in the Pinecone Console](https://app.pinecone.io/)
@@ -81,21 +83,37 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
 13. Sign up on [ngrok](https://ngrok.com/) and follow the steps to configure it
     - During onboarding, get your authentication token and run `ngrok config add-authtoken <your-token>`
 
-14. During the onboarding flow, under the `Static Domain` section, Ngrok should provide you with a static domain and a command to point your localhost to that static domain. Replace the port from 80 to 8000 in that command and run it in your terminal:
+14. During the onboarding flow, under the `Static Domain` section, Ngrok should provide you with a static domain and a command to point your localhost to that static domain. Replace the port from 80 to 8000 in that command and run it in a new terminal:
     ```bash
     ngrok http --domain=example.ngrok-free.app 8000
     ```
+    Note: Keep this terminal window open during your development session.
 
-15. Start the backend server:
+15. Start the backend server (in a separate terminal window):
     ```bash
+    # Make sure your virtual environment is activated first (if using one)
+    source venv/bin/activate
+
+    # Start the server
     uvicorn main:app --reload --env-file .env
     ```
 
-16. Troubleshooting: If you get any error mentioning "no internet connection" while downloading models, add the following lines in the `utils/stt/vad.py` file after the import statements:
-    ```python
-    import ssl
-    ssl._create_default_https_context = ssl._create_unverified_context
+    Alternatively, you can use this combined command:
+    ```bash
+    source venv/bin/activate && uvicorn main:app --reload --env-file .env
     ```
+
+16. Troubleshooting:
+    - If you get any error mentioning "no internet connection" while downloading models, add the following lines in the `utils/stt/vad.py` file after the import statements:
+      ```python
+      import ssl
+      ssl._create_default_https_context = ssl._create_unverified_context
+      ```
+    - If you get "Exception: Could not find Opus library. Make sure it is installed", make sure you have properly installed the opus library at the system level (step 7) before installing the Python dependencies.
+    - If you encounter language detection or translation errors like "Invalid 'parent'; Invalid resource name project id", make sure:
+      - `GOOGLE_CLOUD_PROJECT` is set correctly in your `.env` file
+      - The [Cloud Translation API](https://console.cloud.google.com/apis/library/translate.googleapis.com) is enabled in your Google Cloud project
+      - Your service account has permission to use the Translation API
 
 17. Now try running the server again: `uvicorn main:app --reload --env-file .env`
 

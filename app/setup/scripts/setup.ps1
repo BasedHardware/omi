@@ -20,7 +20,7 @@ Write-Host ""
 function SetupFirebase {
     # Create directories if they don't exist
     New-Item -ItemType Directory -Force -Path "android/app/src/dev/", "ios/Config/Dev/", "ios/Runner/"
-    
+
     # Copy files
     Copy-Item "setup/prebuilt/firebase_options.dart" -Destination "lib/firebase_options_dev.dart"
     Copy-Item "setup/prebuilt/google-services.json" -Destination "android/app/src/dev/"
@@ -37,7 +37,7 @@ function SetupFirebase {
 
 function SetupFirebaseWithServiceAccount {
     dart pub global activate flutterfire_cli
-    
+
     # Dev configuration
     flutterfire config `
         --platforms="android,ios,web" `
@@ -71,7 +71,7 @@ function SetupProvisioningProfile {
         Write-Host "Installing fastlane..."
         brew install fastlane
     }
-    
+
     $env:MATCH_PASSWORD = "omi"
     fastlane match development --readonly `
         --app_identifier "com.friend-app-with-wearable.ios12.development" `
@@ -80,7 +80,8 @@ function SetupProvisioningProfile {
 
 
 function SetupAppEnv {
-    $API_BASE_URL = "https://backend-dt5lrfkkoa-uc.a.run.app/"
+    # $API_BASE_URL = "https://backend-dt5lrfkkoa-uc.a.run.app/"
+    $API_BASE_URL = "https://opossum-cuddly-ultimately.ngrok-free.app/"
     # Using Set-Content with UTF8 encoding
     $content = "API_BASE_URL=$API_BASE_URL"
     [System.IO.File]::WriteAllText((Join-Path (Get-Location) ".dev.env"), $content, [System.Text.Encoding]::UTF8)
@@ -113,14 +114,14 @@ function Show-PlatformMenu {
     Write-Host "1. iOS"
     Write-Host "2. Android"
     Write-Host "3. Exit"
-    
+
     $choice = Read-Host "`nEnter your choice (1-3)"
-    
+
     switch ($choice) {
         "1" { return "ios" }
         "2" { return "android" }
         "3" { exit 0 }
-        default { 
+        default {
             Write-Host "Invalid choice. Please try again."
             return Show-PlatformMenu
         }
@@ -154,4 +155,4 @@ switch ($platform.ToLower()) {
         Write-Host "Unexpected platform '$platform'. Please use 'ios' or 'android'"
         exit 1
     }
-} 
+}

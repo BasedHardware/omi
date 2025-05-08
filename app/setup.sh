@@ -9,7 +9,7 @@
 # - Android Studio (for Android)
 # - NDK 26.3.11579264 or above (to build Opus for ARM Devices)
 # - Opus Codec: https://opus-codec.org
-# Usages: 
+# Usages:
 # - $bash setup.sh ios
 # - $bash setup.sh android
 
@@ -30,7 +30,8 @@ echo "- bash setup.sh android"
 echo ""
 
 
-API_BASE_URL=https://backend-dt5lrfkkoa-uc.a.run.app/
+# API_BASE_URL=https://backend-dt5lrfkkoa-uc.a.run.app/
+API_BASE_URL=https://opossum-cuddly-ultimately.ngrok-free.app/
 
 ######################################
 # Setup Firebase with prebuilt configs
@@ -88,7 +89,7 @@ function setup_provisioning_profile() {
         echo "Installing fastlane..."
         brew install fastlane
     fi
-    
+
     MATCH_PASSWORD=omi fastlane match development --readonly \
         --app_identifier com.friend-app-with-wearable.ios12.development \
         --git_url "git@github.com:BasedHardware/omi-community-certs.git"

@@ -58,6 +58,7 @@ google-auth-httplib2==0.2.0
 google-cloud-core==2.4.1
 google-cloud-firestore==2.17.0
 google-cloud-storage==2.18.0
+google-cloud-translate==3.20.2
 google-crc32c==1.5.0
 google-resumable-media==2.7.1
 googleapis-common-protos==1.63.2
@@ -173,7 +174,7 @@ pydub==0.25.1
 Pygments==2.18.0
 PyJWT==2.9.0
 pynndescent==0.5.13
-PyOgg @ git+https://github.com/TeamPyOgg/PyOgg@6871a4f234e8a3a346c4874a12509bfa02c4c63a
+PyOgg
 pyparsing==3.1.2
 python-dateutil==2.9.0.post0
 python-dotenv==1.0.1
@@ -254,4 +255,3 @@ yarl==1.9.4
 stripe==11.3.0
 typesense==0.21.0
 pycountry==24.6.1
-google-cloud-translate==3.20.2
