@@ -91,6 +91,11 @@ def setup_logging():
                 "level": LOG_LEVEL,
                 "propagate": False
             },
+            "vad": {
+                "handlers": ["console", "file"],
+                "level": LOG_LEVEL,
+                "propagate": False
+            },
         }
     }
 
