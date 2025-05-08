@@ -108,6 +108,106 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
     deactivate
     ```
 
+## Running with Logging Enabled
+
+1. Start the backend with logging enabled:
+   Running the server with your virtual environment, add the logging parameters:
+
+   ```bash
+   # Enable logging with debug level
+   source venv/bin/activate && uvicorn main:app --reload --env-file .env --log-config logging_config.json
+   ```
+
+
+2.  Or via Docker:
+
+```bash
+# Build and run with Docker, then follow logs
+docker compose up --build -d && docker compose logs -f
+```
+
+### Tracking and Viewing Logs
+
+1. Log files are created in the backend directory:
+   - `debug.log` - Contains all debug-level and above messages
+   - `error.log` - Contains only error-level messages
+
+2. Monitor logs in real-time using the terminal:
+   ```bash
+   # Follow the debug log in real-time
+   tail -f debug.log
+
+   # Follow only error logs
+   tail -f error.log
+   ```
+
+### Customizing Logging
+
+The `logging_config.json` file controls how logging works:
+- Adjust log levels (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`)
+
+## Running with Docker
+
+The backend can be easily run using Docker. This approach ensures consistency across different development environments and simplifies the setup process.
+
+### Prerequisites
+
+- Docker installed on your system
+- Docker Compose installed on your system
+
+### Running the Backend with Docker
+
+1. Navigate to the backend directory:
+   ```bash
+   cd backend
+   ```
+
+2. Build and start the container in detached mode:
+   ```bash
+   docker compose up --build -d
+   ```
+
+   This command:
+   - Builds the Docker image defined in the Dockerfile
+   - Creates and starts the container in the background
+   - Uses the environment variables from .dev.env
+   - Exposes the backend on port 8000
+
+3. View the logs (optional):
+   ```bash
+   docker compose logs -f
+   ```
+
+   The `-f` flag follows the log output in real-time. Press Ctrl+C to stop following the logs.
+
+4. Your backend API is now available at:
+   ```
+   http://localhost:8000
+   ```
+
+### Managing the Container
+
+- To stop the container:
+  ```bash
+  docker compose down
+  ```
+
+- To restart the container:
+  ```bash
+  docker compose restart
+  ```
+
+- To rebuild and restart (after code changes):
+  ```bash
+  docker compose up --build -d
+  ```
+
+### Notes
+
+- The backend runs on port 8000 by default, matching the behavior of running with uvicorn directly
+- The container uses the same environment variables from .dev.env as the local development setup
+- Any changes to the code will require rebuilding the container
+
 ## Additional Resources
 
 - [Full Backend Setup Documentation](https://docs.omi.me/developer/backend/Backend_Setup)
