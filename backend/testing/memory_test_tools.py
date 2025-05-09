@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 
 import argparse
+import sys
+import os
+
+# Add parent directory to path so Python can find our modules
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import database.memories as memories_db
 
 def list_memories(uid, limit=10, offset=0):

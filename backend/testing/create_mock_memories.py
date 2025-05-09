@@ -2,7 +2,12 @@
 
 import argparse
 import uuid
+import sys
+import os
 from datetime import datetime, timezone
+
+# Add parent directory to path so Python can find our modules
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import required models and database functions
 from models.memories import Memory, MemoryDB, MemoryCategory
