@@ -393,8 +393,8 @@ def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     return app
 
 
-@router.get('/v1/apps/categories', tags=['v1'])
-def get_plugin_categories():
+@router.get('/v1/app-categories', tags=['v1'])
+def get_app_categories():
     return [
         {'title': 'Conversation Analysis', 'id': 'conversation-analysis'},
         {'title': 'Personality Emulation', 'id': 'personality-emulation'},

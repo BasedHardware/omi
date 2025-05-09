@@ -275,7 +275,7 @@ Future<bool> updateAppServer(File? file, Map<String, dynamic> appData) async {
 
 Future<List<Category>> getAppCategories() async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/apps/categories',
+    url: '${Env.apiBaseUrl}/v1/app-categories',
     headers: {},
     body: '',
     method: 'GET',
