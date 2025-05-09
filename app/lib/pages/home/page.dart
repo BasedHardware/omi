@@ -522,22 +522,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               IconButton(
                   padding: const EdgeInsets.all(8.0),
                   icon: SvgPicture.asset(
-                    Assets.images.icPersonaProfile.path,
+                    Assets.images.icSettingPersona.path,
                     width: 28,
                     height: 28,
                   ),
                   onPressed: () {
-                    MixpanelManager().pageOpened('Persona Profile');
-
-                    // Set routing in provider
-                    var personaProvider = Provider.of<PersonaProvider>(context, listen: false);
-                    personaProvider.setRouting(PersonaProfileRouting.home);
-
-                    // Navigate
-                    var homeProvider = Provider.of<HomeProvider>(context, listen: false);
-                    homeProvider.setIndex(3);
-                    if (homeProvider.onSelectedIndexChanged != null) {
-                      homeProvider.onSelectedIndexChanged!(3);
+                    MixpanelManager().pageOpened('Settings');
+                    String language = SharedPreferencesUtil().userPrimaryLanguage;
+                    bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
+                    String transcriptModel = SharedPreferencesUtil().transcriptionModel;
+                    routeToPage(context, const SettingsPage());
+                    if (language != SharedPreferencesUtil().userPrimaryLanguage ||
+                        hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
+                        transcriptModel != SharedPreferencesUtil().transcriptionModel) {
+                      if (context.mounted) {
+                        context.read<CaptureProvider>().onRecordProfileSettingChanged();
+                      }
                     }
                   }),
             ],

@@ -3,15 +3,20 @@ import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
+import 'package:omi/pages/persona/persona_profile.dart';
 import 'package:omi/pages/settings/about.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/profile.dart';
 import 'package:omi/pages/settings/widgets.dart';
+import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/providers/capture_provider.dart';
 
 import 'device_settings.dart';
 
@@ -198,6 +203,30 @@ class _SettingsPageState extends State<SettingsPage> {
                 Navigator.pop(context);
               },
             ),
+            actions: [
+              Consumer<PersonaProvider>(builder: (context, personaProvider, _) {
+                return Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: GestureDetector(
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const PersonaProfilePage(),
+                          settings: const RouteSettings(
+                            arguments: 'from_settings',
+                          ),
+                        ),
+                      );
+                    },
+                    child: SvgPicture.asset(
+                      Assets.images.icPersonaProfile.path,
+                      width: 24,
+                      height: 24,
+                    ),
+                  ),
+                );
+              }),
+            ],
             elevation: 0,
           ),
           body: SingleChildScrollView(
