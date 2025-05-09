@@ -193,6 +193,19 @@ class PureSocket implements IPureSocket {
 
   @override
   void onMessage(dynamic message) {
+    // Special handling for ping messages
+    if (message == "ping") {
+      Logger.debug("🔌 Socket received ping message, responding with pong");
+      try {
+        // Send pong response (RFC 6455 compliant frame)
+        channel.sink.add([0x8A, 0x00]);
+        return;
+      } catch (e, trace) {
+        debugPrint('Failed to send pong response: $e');
+        CrashReporting.reportHandledCrash(e, trace);
+      }
+    }
+
     debugPrint("[Socket] Message $message");
     _listener?.onMessage(message);
   }
