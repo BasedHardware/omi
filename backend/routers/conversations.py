@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime
+from pydantic import BaseModel
 
 import database.conversations as conversations_db
 import database.redis_db as redis_db
@@ -10,11 +11,15 @@ from models.conversation import SearchRequest
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.conversations.search import search_conversations
+from utils.llm import generate_summary_with_prompt
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.plugins import trigger_external_integrations
 
 router = APIRouter()
+
+
+
 
 
 def _get_conversation_by_id(uid: str, conversation_id: str) -> dict:
@@ -370,3 +375,19 @@ def search_conversations_endpoint(search_request: SearchRequest, uid: str = Depe
                                 include_discarded=search_request.include_discarded,
                                 start_date=start_timestamp,
                                 end_date=end_timestamp)
+
+
+
+@router.post("/v1/conversations/{conversation_id}/test-prompt", response_model=dict, tags=['conversations'])
+def test_prompt(conversation_id: str, request: TestPromptRequest, uid: str = Depends(auth.get_current_user_uid)):
+    conversation_data = _get_conversation_by_id(uid, conversation_id)
+    conversation = Conversation(**conversation_data)
+
+    full_transcript = "\n".join([seg.text for seg in conversation.transcript_segments if seg.text])
+
+    if not full_transcript:
+        raise HTTPException(status_code=400, detail="Conversation has no text content to summarize.")
+
+    summary = generate_summary_with_prompt(full_transcript, request.prompt)
+
+    return {"summary": summary}

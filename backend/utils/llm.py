@@ -2649,3 +2649,17 @@ def identify_category_for_memory(memory: str, categories: List) -> str:
     """
     response = llm_mini.invoke(prompt)
     return response.content
+
+
+
+def generate_summary_with_prompt(conversation_text: str, prompt: str) -> str:
+    prompt = f"""
+    Your task is: {prompt}
+
+    The conversation is:
+    {conversation_text}
+
+    You must output only the summary, no other text. Make sure to be concise and clear.
+    """
+    response = llm_mini.invoke(prompt)
+    return response.content
