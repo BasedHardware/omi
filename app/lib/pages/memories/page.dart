@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/widgets/extensions/functions.dart';
 import 'package:provider/provider.dart';
 
@@ -64,20 +65,25 @@ class MemoriesPageState extends State<MemoriesPage> {
     return Consumer<MemoriesProvider>(
       builder: (context, provider, _) {
         return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
           child: SearchBar(
-            hintText: 'Search Omi\'s memory about you',
-            leading: const Icon(Icons.search, color: Colors.white70),
-            backgroundColor: WidgetStateProperty.all(Colors.grey.shade900),
+            hintText: 'Search memories',
+            leading: const Icon(Icons.search, color: Colors.white70, size: 18),
+            backgroundColor: WidgetStateProperty.all(AppStyles.backgroundSecondary),
             elevation: WidgetStateProperty.all(0),
             padding: WidgetStateProperty.all(
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             ),
             controller: _searchController,
             trailing: provider.searchQuery.isNotEmpty
                 ? [
                     IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white70),
+                      icon: const Icon(Icons.close, color: Colors.white70, size: 16),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minHeight: 36,
+                        minWidth: 36,
+                      ),
                       onPressed: () {
                         _searchController.clear();
                         setState(() {});
@@ -87,11 +93,14 @@ class MemoriesPageState extends State<MemoriesPage> {
                   ]
                 : null,
             hintStyle: WidgetStateProperty.all(
-              TextStyle(color: Colors.grey.shade400, fontSize: 14),
+              TextStyle(color: AppStyles.textTertiary, fontSize: 14),
+            ),
+            textStyle: WidgetStateProperty.all(
+              TextStyle(color: AppStyles.textPrimary, fontSize: 14),
             ),
             shape: WidgetStateProperty.all(
               RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
               ),
             ),
             onChanged: (value) => provider.setSearchQuery(value),
@@ -126,46 +135,55 @@ class MemoriesPageState extends State<MemoriesPage> {
                           backgroundColor: Theme.of(context).colorScheme.primary,
                           pinned: true,
                           centerTitle: true,
-                          title: const Text('Memories'),
+                          title: const Text('Memories', style: AppStyles.title),
+                          leading: null,
+                          automaticallyImplyLeading: true,
+                          titleSpacing: 0,
                           actions: [
-                            if (unreviewedCount > 0)
-                              Stack(
+                            IconButton(
+                              icon: Stack(
                                 alignment: Alignment.center,
                                 children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.reviews_outlined),
-                                    onPressed: () {
-                                      _showReviewSheet(provider.unreviewed);
-                                      MixpanelManager().memoriesPageReviewBtn();
-                                    },
-                                    tooltip: 'Review memories',
+                                  Icon(
+                                    Icons.reviews_outlined,
+                                    color: unreviewedCount > 0 ? Colors.white : Colors.grey.shade600,
+                                    size: 22,
                                   ),
-                                  Positioned(
-                                    top: 10,
-                                    right: 10,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(2),
-                                      decoration: BoxDecoration(
-                                        color: Colors.red,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      constraints: const BoxConstraints(
-                                        minWidth: 16,
-                                        minHeight: 16,
-                                      ),
-                                      child: Text(
-                                        '$unreviewedCount',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
+                                  if (unreviewedCount > 0)
+                                    Positioned(
+                                      top: 0,
+                                      right: 0,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.red,
+                                          borderRadius: BorderRadius.circular(8),
                                         ),
-                                        textAlign: TextAlign.center,
+                                        constraints: const BoxConstraints(
+                                          minWidth: 16,
+                                          minHeight: 16,
+                                        ),
+                                        child: Text(
+                                          '$unreviewedCount',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
                                       ),
                                     ),
-                                  ),
                                 ],
                               ),
+                              onPressed: unreviewedCount > 0
+                                ? () {
+                                    _showReviewSheet(provider.unreviewed);
+                                    MixpanelManager().memoriesPageReviewBtn();
+                                  }
+                                : null,
+                              tooltip: unreviewedCount > 0 ? 'Review memories' : 'No memories to review',
+                            ),
                             IconButton(
                               icon: const Icon(Icons.delete_sweep_outlined),
                               onPressed: () {
@@ -200,37 +218,45 @@ class MemoriesPageState extends State<MemoriesPage> {
                                         style: TextStyle(
                                           color: _selectedCategory == null ? Colors.black : Colors.white70,
                                           fontWeight: _selectedCategory == null ? FontWeight.w600 : FontWeight.normal,
+                                          fontSize: 13,
                                         ),
                                       ),
                                       selected: _selectedCategory == null,
                                       onSelected: (_) => _filterByCategory(null),
-                                      backgroundColor: Colors.grey.shade800,
+                                      backgroundColor: AppStyles.backgroundTertiary,
                                       selectedColor: Colors.white,
                                       checkmarkColor: Colors.black,
                                       showCheckmark: false,
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                     ),
                                   ),
                                   ...categoryCounts.entries.map((entry) {
                                     final category = entry.key;
                                     final count = entry.value;
+
+                                    // Format category name to be more concise
+                                    String categoryName = category.toString().split('.').last;
+                                    // Capitalize first letter only
+                                    categoryName = categoryName[0].toUpperCase() + categoryName.substring(1);
+
                                     return Padding(
                                       padding: const EdgeInsets.only(right: 8),
                                       child: FilterChip(
                                         label: Text(
-                                          '${category.toString().split('.').last} ($count)',
+                                          '$categoryName ($count)',
                                           style: TextStyle(
                                             color: _selectedCategory == category ? Colors.black : Colors.white70,
                                             fontWeight: _selectedCategory == category ? FontWeight.w600 : FontWeight.normal,
+                                            fontSize: 13,
                                           ),
                                         ),
                                         selected: _selectedCategory == category,
                                         onSelected: (_) => _filterByCategory(category),
-                                        backgroundColor: Colors.grey.shade800,
+                                        backgroundColor: AppStyles.backgroundTertiary,
                                         selectedColor: Colors.white,
                                         checkmarkColor: Colors.black,
                                         showCheckmark: false,
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                       ),
                                     );
                                   }),
