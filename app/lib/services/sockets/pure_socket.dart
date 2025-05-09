@@ -9,6 +9,7 @@ import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/status.dart' as socket_channel_status;
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/utils/logger.dart';
 
 enum PureSocketStatus { notConnected, connecting, connected, disconnected }
 
@@ -96,6 +97,7 @@ class PureSocket implements IPureSocket {
   String url;
 
   PureSocket(this.url) {
+    Logger.debug('🔌 Socket initializing for URL: $url');
     _internetStatusListener = PureCore().internetConnection.onStatusChange.listen((InternetStatus status) {
       onInternetSatusChanged(status);
     });
@@ -111,75 +113,54 @@ class PureSocket implements IPureSocket {
   }
 
   Future<bool> _connect() async {
-    if (_status == PureSocketStatus.connecting || _status == PureSocketStatus.connected) {
-      return false;
+    if (_status == PureSocketStatus.connected || _status == PureSocketStatus.connecting) {
+      Logger.debug('🔌 Socket already connected or connecting to: $url');
+      return true;
     }
 
-    debugPrint("request wss ${url}");
-    _channel = IOWebSocketChannel.connect(
-      url,
-      headers: {
-        'Authorization': await getAuthHeader(),
-      },
-      pingInterval: const Duration(seconds: 20),
-      connectTimeout: const Duration(seconds: 30),
-    );
-    if (_channel?.ready == null) {
-      return false;
-    }
-
+    Logger.debug('🔌 Socket attempting to connect to: $url');
     _status = PureSocketStatus.connecting;
-    dynamic err;
+
     try {
-      await channel.ready;
-    } on SocketException catch (e) {
-      err = e;
-    } on WebSocketChannelException catch (e) {
-      err = e;
-    }
-    if (err != null) {
-      print("Error: $err");
-      _status = PureSocketStatus.notConnected;
+      Map<String, String> headers = {};
+      String tokenString = await getAuthHeader();
+      headers['Authorization'] = tokenString;
+
+      _channel = IOWebSocketChannel.connect(
+        Uri.parse(url),
+        headers: headers,
+      );
+
+      _channel!.stream.listen(
+        (data) => onMessage(data),
+        onDone: onClosed,
+        onError: onError,
+        cancelOnError: true,
+      );
+
+      _status = PureSocketStatus.connected;
+      onConnected();
+      _retries = 0;
+      Logger.debug('🔌 Socket successfully connected to: $url');
+      return true;
+    } catch (e, trace) {
+      Logger.debug('🔌 Socket connection failed to: $url - error: $e');
+      onError(e, trace);
       return false;
     }
-    _status = PureSocketStatus.connected;
-    _retries = 0;
-    onConnected();
-
-    final that = this;
-
-    _channel?.stream.listen(
-      (message) {
-        if (message == "ping") {
-          debugPrint(message);
-          // Pong frame added manually https://www.rfc-editor.org/rfc/rfc6455#section-5.5.2
-          _channel?.sink.add([0x8A, 0x00]);
-          return;
-        }
-        that.onMessage(message);
-      },
-      onError: (err, trace) {
-        that.onError(err, trace);
-      },
-      onDone: () {
-        debugPrint("onDone");
-        that.onClosed();
-      },
-      cancelOnError: true,
-    );
-
-    return true;
   }
 
   @override
   Future disconnect() async {
-    if (_status == PureSocketStatus.connected) {
-      // Warn: should not use await cause dead end by socket closed.
-      _channel?.sink.close(socket_channel_status.normalClosure);
+    Logger.debug('🔌 Socket disconnecting from: $url');
+    try {
+      await _channel?.sink.close(socket_channel_status.normalClosure);
+      _status = PureSocketStatus.disconnected;
+    } catch (e, trace) {
+      debugPrint('Error closing socket: $e');
+      CrashReporting.reportHandledCrash(e, trace);
     }
-    _status = PureSocketStatus.disconnected;
-    debugPrint("disconnect");
-    onClosed();
+    return;
   }
 
   Future _cleanUp() async {
@@ -222,8 +203,14 @@ class PureSocket implements IPureSocket {
   }
 
   @override
-  void send(message) {
-    _channel?.sink.add(message);
+  void send(dynamic message) {
+    try {
+      Logger.debug('🔌 Socket sending message to: $url');
+      channel.sink.add(message);
+    } catch (e, trace) {
+      debugPrint('Failed to send message: $e');
+      CrashReporting.reportHandledCrash(e, trace);
+    }
   }
 
   void _reconnect() async {
