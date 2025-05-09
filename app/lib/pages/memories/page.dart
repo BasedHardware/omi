@@ -43,6 +43,8 @@ class MemoriesPageState extends State<MemoriesPage> {
   Widget build(BuildContext context) {
     return Consumer<MemoriesProvider>(
       builder: (context, provider, _) {
+        final unreviewedCount = provider.unreviewed.length;
+
         return PopScope(
           canPop: true,
           child: Scaffold(
@@ -59,8 +61,47 @@ class MemoriesPageState extends State<MemoriesPage> {
                         pinned: true,
                         snap: true,
                         floating: true,
-                        title: const Text('My Memory'),
+                        centerTitle: true,
+                        title: const Text('Memories'),
                         actions: [
+                          if (unreviewedCount > 0)
+                            Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.reviews_outlined),
+                                  onPressed: () {
+                                    _showReviewSheet(provider.unreviewed);
+                                    MixpanelManager().memoriesPageReviewBtn();
+                                  },
+                                  tooltip: 'Review memories',
+                                ),
+                                Positioned(
+                                  top: 10,
+                                  right: 10,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    constraints: const BoxConstraints(
+                                      minWidth: 16,
+                                      minHeight: 16,
+                                    ),
+                                    child: Text(
+                                      '$unreviewedCount',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           IconButton(
                             icon: const Icon(Icons.delete_sweep_outlined),
                             onPressed: () {

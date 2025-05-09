@@ -223,7 +223,7 @@ class _ProfilePageState extends State<ProfilePage> {
               },
             ),
             _buildProfileTile(
-              title: 'About You',
+              title: 'Memories',
               subtitle: 'What Omi has learned about you 👀',
               icon: Icons.self_improvement,
               onTap: () {
