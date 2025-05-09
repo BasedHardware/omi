@@ -15,6 +15,8 @@ import 'package:omi/env/dev_env.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/env/prod_env.dart';
 import 'package:omi/flavors.dart';
+import 'package:omi/firebase_options_dev.dart' as dev;
+import 'package:omi/firebase_options_prod.dart' as prod;
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/home/page.dart';
