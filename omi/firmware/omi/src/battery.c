@@ -13,7 +13,8 @@ LOG_MODULE_REGISTER(battery, CONFIG_LOG_DEFAULT_LEVEL);
 #define BATTERY_STATES_COUNT 16
 
 #define ADC_TOTAL_SAMPLES 20
-int16_t sample_buffer[ADC_TOTAL_SAMPLES];
+// +1 for the calibration sample
+int16_t sample_buffer[ADC_TOTAL_SAMPLES + 1];
 
 #define ADC_RESOLUTION 10
 #define ADC_GAIN ADC_GAIN_1_3
@@ -38,22 +39,18 @@ typedef struct {
 } BatteryState;
 
 BatteryState battery_states[BATTERY_STATES_COUNT] = {
-    {4074, 100},
-    {4029, 95},
-    {3983, 90},
-    {3938, 85},
-    {3893, 80},
-    {3847, 70},
-    {3802, 60},
-    {3756, 50},
-    {3665, 40},
-    {3619, 30},
-    {3528, 20},
-    {3437, 10},
-    {3346, 5},
-    {3255, 2},
-    {3164, 1},
-    {3000, 0}  // Below safe level
+    {4200, 100},
+    {4160, 99},
+    {4090, 91},
+    {4030, 78},
+    {3890, 63},
+    {3830, 53},
+    {3680, 36},
+    {3660, 35},
+    {3480, 14},
+    {3420, 11},
+    {3400, 1}, // Threshold for <1%
+    {0000, 0}  // Below safe level
 };
 
 extern bool is_charging;
@@ -68,9 +65,12 @@ static const struct adc_channel_cfg m_1st_channel_cfg = {
 #endif
 };
 
+// Define ADC sequence for this read operation
 const struct adc_sequence_options sequence_opts = {
-    .extra_samplings = ADC_TOTAL_SAMPLES - 1,
-    .interval_us = 500, // Interval between each sample
+    .extra_samplings = ADC_TOTAL_SAMPLES,
+    .interval_us = 0,
+    .callback = NULL,
+    .user_data = NULL,
 };
 
 struct adc_sequence sequence = {
@@ -81,7 +81,6 @@ struct adc_sequence sequence = {
     .resolution = ADC_RESOLUTION,
 };
 
-
 static void battery_charging_callback(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
 {
     if(gpio_pin_get(bat_chg_pin.port, bat_chg_pin.pin) == 0) {
@@ -91,84 +90,87 @@ static void battery_charging_callback(const struct device *dev, struct gpio_call
     }
 }
 
-static int adc_sample(uint16_t *m_buffer)
-{
-    int ret;
-    const struct adc_sequence sequence = {
-        .options = &sequence_opts,
-        .channels = BIT(ADC_1ST_CHANNEL_ID),
-        .buffer = m_buffer,
-        .buffer_size = sizeof(m_buffer),
-        .resolution = ADC_RESOLUTION,
-    };
-
-    ret = adc_read(adc_dev, &sequence);
-    return ret;
-}
-
 int battery_get_millivolt(uint16_t *battery_millivolt)
 {
     int err;
 
-    // Voltage divider circuit (Should tune R1 in software if possible)
-    const uint16_t R1 = 1037; // Originally 1M ohm, calibrated after measuring actual voltage values. Can happen due to resistor tolerances, temperature ect..
+    // Voltage divider circuit
+    const uint16_t R1 = 1037; // Calibrated from 1M ohm
     const uint16_t R2 = 510;  // 510K ohm
-    
+
     k_mutex_lock(&battery_mut, K_FOREVER);
-    
+
     err = gpio_pin_configure_dt(&bat_read_pin, GPIO_OUTPUT | NRF_GPIO_DRIVE_S0H1);
-    if (err < 0)
-    {
+    if (err < 0) {
+        LOG_ERR("Failed to configure bat_read_pin to output: %d", err);
+        k_mutex_unlock(&battery_mut);
         return err;
     }
+    // Set pin low to enable battery voltage measurement path
     gpio_pin_set(bat_read_pin.port, bat_read_pin.pin, 0);
 
-    if (!adc_dev)
-    {
-        return -1;
+    if (!device_is_ready(adc_dev)) {
+        LOG_ERR("ADC device %s is not ready", adc_dev->name);
+        gpio_pin_configure_dt(&bat_read_pin, GPIO_INPUT); // Restore pin state
+        k_mutex_unlock(&battery_mut);
+        return -ENODEV;
     }
 
     err = adc_channel_setup(adc_dev, &m_1st_channel_cfg);
-    if (err)
-    {
+    if (err) {
+        LOG_ERR("ADC channel setup failed (error %d)", err);
+        gpio_pin_configure_dt(&bat_read_pin, GPIO_INPUT); // Restore pin state
+        k_mutex_unlock(&battery_mut);
         return err;
     }
 
-    err |= adc_read(adc_dev, &sequence);
-    if (err)
-    {
+    // Trigger offset calibration. The first sample after this will be affected.
+    NRF_SAADC_S->TASKS_CALIBRATEOFFSET = 1;
+    k_busy_wait(100); // Short delay for calibration, if needed.
+
+    err = adc_read(adc_dev, &sequence);
+    if (err) {
         LOG_WRN("ADC read failed (error %d)", err);
+        gpio_pin_configure_dt(&bat_read_pin, GPIO_INPUT); // Restore pin state
+        k_mutex_unlock(&battery_mut);
+        return err;
     }
 
-    // ADC measure
-    uint16_t adc_vref = adc_ref_internal(adc_dev);
-    int adc_mv = 0;
-
-    // Get average sample value.
-    for (uint8_t sample = 0; sample < ADC_TOTAL_SAMPLES; sample++)
-    {
-        adc_mv += sample_buffer[sample]; // ADC value, not millivolt yet.
+    // Average valid samples, discarding the first one (post-calibration)
+    int32_t sum_adc_raw = 0;
+    for (int i = 0; i < ADC_TOTAL_SAMPLES; i++) {
+        sum_adc_raw += sample_buffer[i + 1];
     }
-    adc_mv /= ADC_TOTAL_SAMPLES;
+    int32_t avg_adc_raw_val = sum_adc_raw / ADC_TOTAL_SAMPLES;
 
-    // Convert ADC value to millivolts
-    err |= adc_raw_to_millivolts(adc_vref, ADC_GAIN, ADC_RESOLUTION, &adc_mv);
+    LOG_DBG("Average ADC raw (after discarding 1st of %d total): %d", ADC_TOTAL_SAMPLES + 1, avg_adc_raw_val);
 
-    // Calculate battery voltage.
-    *battery_millivolt = adc_mv * ((R1 + R2) / R2);
+    // Convert average ADC value to millivolts at the ADC pin
+    uint16_t adc_vref_mv = adc_ref_internal(adc_dev);
+    err = adc_raw_to_millivolts(adc_vref_mv, ADC_GAIN, ADC_RESOLUTION, &avg_adc_raw_val);
+    if (err) {
+        LOG_WRN("ADC raw to millivolts conversion failed (error %d)", err);
+        gpio_pin_configure_dt(&bat_read_pin, GPIO_INPUT); // Restore pin state
+        k_mutex_unlock(&battery_mut);
+        return err;
+    }
+    // avg_adc_raw_val now holds millivolts at the ADC input pin (AIN0)
 
-    // /* Trigger offset calibration
-    //  * As this generates a _DONE and _RESULT event
-    //  * the first result will be incorrect.
-    //  */
-    // NRF_SAADC_S->TASKS_CALIBRATEOFFSET = 1;
+    LOG_DBG("ADC mV at pin (after conversion): %d", avg_adc_raw_val);
 
-    LOG_DBG("ADC raw value: %d ", adc_mv);
-    LOG_DBG("Measured voltage: %f", battery_millivolt);
-    gpio_pin_configure_dt(&bat_read_pin, GPIO_INPUT);
+    // Calculate battery voltage using the voltage divider formula
+    *battery_millivolt = (uint16_t)(avg_adc_raw_val * ((float)(R1 + R2) / R2));
 
-    LOG_DBG("Charging status: %d", is_charging);
-    
+    LOG_DBG("Calculated battery millivolt: %u mV", *battery_millivolt);
+
+    // Restore bat_read_pin to INPUT state to save power/avoid affecting other circuits
+    err = gpio_pin_configure_dt(&bat_read_pin, GPIO_INPUT);
+    if (err < 0) {
+        LOG_ERR("Failed to configure bat_read_pin to input: %d", err);
+        k_mutex_unlock(&battery_mut);
+        return err;
+    }
+
     k_mutex_unlock(&battery_mut);
     return 0;
 }
@@ -180,64 +182,64 @@ int battery_get_percentage(uint8_t *battery_percentage, uint16_t battery_millivo
         *battery_percentage = battery_states[0].percentage;
         return 0;
     }
-    
+
     if (battery_millivolt <= battery_states[BATTERY_STATES_COUNT-1].millivolts) {
         *battery_percentage = battery_states[BATTERY_STATES_COUNT-1].percentage;
         return 0;
     }
-    
+
     // Find the appropriate range in the battery profile
     for (int i = 0; i < BATTERY_STATES_COUNT - 1; i++) {
-        if (battery_millivolt <= battery_states[i].millivolts && 
+        if (battery_millivolt <= battery_states[i].millivolts &&
             battery_millivolt > battery_states[i+1].millivolts) {
-            
+
             // Linear interpolation between the two closest points
             uint16_t voltage_range = battery_states[i].millivolts - battery_states[i+1].millivolts;
             uint8_t percentage_range = battery_states[i].percentage - battery_states[i+1].percentage;
             uint16_t voltage_diff = battery_states[i].millivolts - battery_millivolt;
-            
-            *battery_percentage = battery_states[i].percentage - 
+
+            *battery_percentage = battery_states[i].percentage -
                                  (voltage_diff * percentage_range) / voltage_range;
             break;
         }
     }
-    
+
     return 0;
 }
 
 int battery_charge_start()
 {
-    return 0; // No specific action needed with the new pin layout
+    return 0;
 }
 
 int battery_charge_stop()
 {
-    return 0; // No specific action needed with the new pin layout
+    return 0;
 }
 
 int battery_set_fast_charge()
 {
-    return 0; // No specific action needed with the new pin layout
+    return 0;
 }
 
 int battery_set_slow_charge()
 {
-    return 0; // No specific action needed with the new pin layout
+    return 0;
 }
 
 int battery_init()
 {
     int err;
-    
+
     k_mutex_lock(&battery_mut, K_FOREVER);
-    
+
     err = gpio_pin_configure_dt(&bat_read_pin, GPIO_INPUT);
     if (err < 0)
     {
         LOG_ERR("Failed to configure enable pin (%d)", err);
         return err;
     }
-    
+
     err = gpio_pin_configure_dt(&bat_chg_pin, GPIO_INPUT | GPIO_PULL_UP);
     if (err < 0)
     {

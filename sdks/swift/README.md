@@ -1,4 +1,4 @@
-<!-- This file is auto-generated from docs/docs/docs/developer/sdk/swift.mdx. Do not edit manually. -->
+<!-- This file is auto-generated from docs/docs/developer/sdk/swift.mdx. Do not edit manually. -->
 ### Omi Swift Library
 
 An easy to install package to get started with the omi dev kit 1 in seconds.

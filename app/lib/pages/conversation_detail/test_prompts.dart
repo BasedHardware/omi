@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:omi/backend/http/openai.dart';
 import 'package:omi/backend/schema/conversation.dart';
+
+import '../../backend/http/api/conversations.dart';
 
 class TestPromptsPage extends StatefulWidget {
   final ServerConversation conversation;
@@ -25,7 +26,16 @@ class _TestPromptsPageState extends State<TestPromptsPage> {
         actions: [
           IconButton(
             onPressed: onTap,
-            icon: const Icon(Icons.send),
+            icon: loading
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2.0,
+                    ),
+                  )
+                : const Icon(Icons.send),
           ),
         ],
       ),
@@ -75,14 +85,18 @@ class _TestPromptsPageState extends State<TestPromptsPage> {
 
   onTap() async {
     if (loading) return;
-    loading = true;
-    var response = await triggerTestConversationPrompt(
+    setState(() {
+      loading = true;
+    });
+
+    var response = await testConversationPrompt(
       controller.text,
-      widget.conversation.getTranscript(generate: true),
+      widget.conversation.id,
     );
     print('response: $response');
     result = response.toString();
-    setState(() {});
-    loading = false;
+    setState(() {
+      loading = false;
+    });
   }
 }
