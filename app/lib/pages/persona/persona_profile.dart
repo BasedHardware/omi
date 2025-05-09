@@ -687,6 +687,8 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
     bool isComingSoon = false,
     bool showConnect = false,
   }) {
+    final Color grayedOutColor = Colors.grey[600]!;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
@@ -708,7 +710,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
           Text(
             text,
             style: TextStyle(
-              color: isComingSoon ? Colors.grey[600] : Colors.white,
+              color: isComingSoon ? grayedOutColor : Colors.white,
               fontSize: 16,
             ),
           ),
@@ -720,10 +722,10 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                 color: const Color(0xFF373737),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: const Text(
+              child: Text(
                 'Coming soon',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: grayedOutColor,
                   fontSize: 12,
                 ),
               ),
