@@ -36,7 +36,7 @@ from utils.llm import (
 )
 from utils.other.chat_file import FileChatTool
 from utils.other.endpoints import timeit
-from utils.plugins import get_github_docs_content
+from utils.app_integrations import get_github_docs_content
 
 model = ChatOpenAI(model="gpt-4o-mini")
 llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)

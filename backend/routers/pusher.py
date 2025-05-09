@@ -7,7 +7,7 @@ from fastapi.websockets import WebSocketDisconnect, WebSocket
 from starlette.websockets import WebSocketState
 
 from utils.apps import is_audio_bytes_app_enabled
-from utils.plugins import trigger_realtime_integrations, trigger_realtime_audio_bytes
+from utils.app_integrations import trigger_realtime_integrations, trigger_realtime_audio_bytes
 from utils.webhooks import send_audio_bytes_developer_webhook, realtime_transcript_webhook, \
     get_audio_bytes_webhook_seconds
 
