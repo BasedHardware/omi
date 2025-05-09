@@ -555,7 +555,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 return Expanded(
                   child: Center(
                     child: const Text(
-                      'Home',
+                      '',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 22,

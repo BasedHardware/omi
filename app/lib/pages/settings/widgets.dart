@@ -53,9 +53,9 @@ getItemAddOn2(String title, VoidCallback onTap, {required IconData icon}) {
       MixpanelManager().pageOpened('Settings $title');
       onTap();
     },
-    child: Container(
-      decoration: BoxDecoration(
-        color: const Color.fromARGB(255, 29, 29, 29),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color.fromARGB(255, 29, 29, 29),
         borderRadius: BorderRadius.circular(12.0),
         boxShadow: [
           BoxShadow(
@@ -64,12 +64,12 @@ getItemAddOn2(String title, VoidCallback onTap, {required IconData icon}) {
             offset: const Offset(0, 2),
           ),
         ],
-      ),
-      child: Padding(
+        ),
+        child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
             Expanded(
               child: Row(
                 children: [
@@ -81,23 +81,23 @@ getItemAddOn2(String title, VoidCallback onTap, {required IconData icon}) {
                   const SizedBox(width: 20),
                   Expanded(
                     child: Text(
-                      title,
+                    title,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
-                      ),
+                  ),
                     ),
                   ),
                 ],
               ),
-            ),
+              ),
             const Icon(
               Icons.arrow_forward_ios,
               color: Colors.white,
               size: 18
             ),
-          ],
+            ],
         ),
       ),
     ),
