@@ -3,6 +3,7 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/providers/base_provider.dart';
+import 'package:omi/utils/alerts/app_dialog.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/logger.dart';
@@ -204,7 +205,12 @@ class DeveloperModeProvider extends BaseProvider {
     );
     setIsLoading(false);
     notifyListeners();
-    AppSnackbar.showSnackbar('Settings saved! Please restart the app for the backend URL change to take effect.');
+    AppDialog.show(
+      title: 'Settings Saved',
+      content: 'Your settings have been saved. Please restart the app for the backend URL change to take effect.',
+      singleButton: true,
+      okButtonText: 'OK',
+    );
   }
 
   void setIsLoading(bool value) {
