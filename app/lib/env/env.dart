@@ -1,10 +1,15 @@
 import 'package:omi/env/dev_env.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 abstract class Env {
   static late final EnvFields _instance;
+  static String? _customApiBaseUrl;
+  static const String customApiBaseUrlKey = 'customApiBaseUrl';
 
-  static void init([EnvFields? instance]) {
+  static Future<void> init([EnvFields? instance]) async {
     _instance = instance ?? DevEnv() as EnvFields;
+    final prefs = await SharedPreferences.getInstance();
+    _customApiBaseUrl = prefs.getString(customApiBaseUrlKey);
   }
 
   static String? get openAIAPIKey => _instance.openAIAPIKey;
@@ -13,7 +18,12 @@ abstract class Env {
 
   static String? get mixpanelProjectToken => _instance.mixpanelProjectToken;
 
-  static String? get apiBaseUrl => _instance.apiBaseUrl;
+  static String? get apiBaseUrl {
+    if (_customApiBaseUrl != null && _customApiBaseUrl!.isNotEmpty) {
+      return _customApiBaseUrl;
+    }
+    return _instance.apiBaseUrl;
+  }
 
   // static String? get apiBaseUrl => 'https://backend-dt5lrfkkoa-uc.a.run.app/';
   // // static String? get apiBaseUrl => 'https://camel-lucky-reliably.ngrok-free.app/';
@@ -30,6 +40,12 @@ abstract class Env {
   static String? get intercomAndroidApiKey => _instance.intercomAndroidApiKey;
 
   static String? get posthogApiKey => _instance.posthogApiKey;
+
+  static Future<void> setCustomApiBaseUrl(String url) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(customApiBaseUrlKey, url);
+    _customApiBaseUrl = url;
+  }
 }
 
 abstract class EnvFields {

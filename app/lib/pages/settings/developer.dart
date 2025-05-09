@@ -71,6 +71,38 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
               child: ListView(
                 shrinkWrap: true,
                 children: [
+                  // Custom Backend URL Section
+                  const SizedBox(height: 24.0),
+                  const Text(
+                    'Custom Backend URL',
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 8.0),
+                  TextField(
+                    controller: provider.customApiUrlController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'https://your-backend.com',
+                      hintStyle: TextStyle(color: Colors.grey.shade400),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                        borderSide: const BorderSide(color: Colors.white),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                        borderSide: const BorderSide(color: Colors.white),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                        borderSide: const BorderSide(color: Colors.blueAccent, width: 2.0),
+                      ),
+                    ),
+                    keyboardType: TextInputType.url,
+                  ),
+                  const SizedBox(height: 16.0),
+                  Divider(color: Colors.grey.shade500),
+                  // End Custom Backend URL Section
+
                   //TODO: Model selection commented out because Soniox model is no longer being used
                   // const SizedBox(height: 32),
                   // const Padding(

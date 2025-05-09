@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -14,6 +15,7 @@ class DeveloperModeProvider extends BaseProvider {
   final TextEditingController webhookAudioBytesDelay = TextEditingController();
   final TextEditingController webhookWsAudioBytes = TextEditingController();
   final TextEditingController webhookDaySummary = TextEditingController();
+  final TextEditingController customApiUrlController = TextEditingController();
 
   bool conversationEventsToggled = false;
   bool transcriptsToggled = false;
@@ -103,6 +105,9 @@ class DeveloperModeProvider extends BaseProvider {
     audioBytesToggled = SharedPreferencesUtil().audioBytesToggled;
     daySummaryToggled = SharedPreferencesUtil().daySummaryToggled;
 
+    final prefs = SharedPreferencesUtil();
+    customApiUrlController.text = prefs.getString(Env.customApiBaseUrlKey) ?? '';
+
     await Future.wait([
       getWebhooksStatus(),
       getUserWebhookUrl(type: 'audio_bytes').then((url) {
@@ -130,7 +135,6 @@ class DeveloperModeProvider extends BaseProvider {
         SharedPreferencesUtil().webhookDaySummary = url;
       }),
     ]);
-    // getUserWebhookUrl(type: 'audio_bytes_websocket').then((url) => webhookWsAudioBytes.text = url);
     setIsLoading(false);
     notifyListeners();
   }
@@ -139,6 +143,13 @@ class DeveloperModeProvider extends BaseProvider {
     if (savingSettingsLoading) return;
     setIsLoading(true);
     final prefs = SharedPreferencesUtil();
+
+    final customApiUrl = customApiUrlController.text.trim();
+    if (customApiUrl.isNotEmpty && !isValidUrl(customApiUrl)) {
+      AppSnackbar.showSnackbarError('Invalid Custom Backend URL');
+      setIsLoading(false);
+      return;
+    }
 
     if (webhookAudioBytes.text.isNotEmpty && !isValidUrl(webhookAudioBytes.text)) {
       AppSnackbar.showSnackbarError('Invalid audio bytes webhook URL');
@@ -164,12 +175,6 @@ class DeveloperModeProvider extends BaseProvider {
       return;
     }
 
-    // if (webhookWsAudioBytes.text.isNotEmpty && !isValidWebSocketUrl(webhookWsAudioBytes.text)) {
-    //   AppSnackbar.showSnackbarError('Invalid audio bytes websocket URL');
-    //   savingSettingsLoading = false;
-    //   notifyListeners();
-    //   return;
-    // }
     var w1 = setUserWebhookUrl(
       type: 'audio_bytes',
       url: '${webhookAudioBytes.text.trim()},${webhookAudioBytesDelay.text.trim()}',
@@ -177,7 +182,6 @@ class DeveloperModeProvider extends BaseProvider {
     var w2 = setUserWebhookUrl(type: 'realtime_transcript', url: webhookOnTranscriptReceived.text.trim());
     var w3 = setUserWebhookUrl(type: 'memory_created', url: webhookOnConversationCreated.text.trim());
     var w4 = setUserWebhookUrl(type: 'day_summary', url: webhookDaySummary.text.trim());
-    // var w4 = setUserWebhookUrl(type: 'audio_bytes_websocket', url: webhookWsAudioBytes.text.trim());
     try {
       Future.wait([w1, w2, w3, w4]);
       prefs.webhookAudioBytes = webhookAudioBytes.text;
@@ -185,10 +189,11 @@ class DeveloperModeProvider extends BaseProvider {
       prefs.webhookOnTranscriptReceived = webhookOnTranscriptReceived.text;
       prefs.webhookOnConversationCreated = webhookOnConversationCreated.text;
       prefs.webhookDaySummary = webhookDaySummary.text;
+
+      await Env.setCustomApiBaseUrl(customApiUrl);
     } catch (e) {
       Logger.error('Error occurred while updating endpoints: $e');
     }
-    // Experimental
     prefs.localSyncEnabled = localSyncEnabled;
     prefs.devModeJoanFollowUpEnabled = followUpQuestionEnabled;
     prefs.transcriptionDiagnosticEnabled = transcriptionDiagnosticEnabled;
@@ -199,7 +204,7 @@ class DeveloperModeProvider extends BaseProvider {
     );
     setIsLoading(false);
     notifyListeners();
-    AppSnackbar.showSnackbar('Settings saved!');
+    AppSnackbar.showSnackbar('Settings saved! Please restart the app for the backend URL change to take effect.');
   }
 
   void setIsLoading(bool value) {
