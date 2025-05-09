@@ -214,7 +214,7 @@ class DeveloperModeProvider extends BaseProvider {
     notifyListeners();
 
     try {
-      customApiUrlController.text = url;
+      // Don't update customApiUrlController, only update current URL
       currentCustomApiUrl = url;
       await Env.setCustomApiBaseUrl(url);
     } finally {
