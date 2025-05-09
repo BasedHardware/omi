@@ -71,105 +71,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
               child: ListView(
                 shrinkWrap: true,
                 children: [
-                  // Custom Backend URL Section
+                  // Export section moved up
                   const SizedBox(height: 24.0),
-                  const Text(
-                    'Custom Backend URL',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 8.0),
-                  TextField(
-                    controller: provider.customApiUrlController,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      hintText: 'https://your-backend.com',
-                      hintStyle: TextStyle(color: Colors.grey.shade400),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12.0),
-                        borderSide: const BorderSide(color: Colors.white),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12.0),
-                        borderSide: const BorderSide(color: Colors.white),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12.0),
-                        borderSide: const BorderSide(color: Colors.blueAccent, width: 2.0),
-                      ),
-                    ),
-                    keyboardType: TextInputType.url,
-                  ),
-                  const SizedBox(height: 16.0),
-                  Divider(color: Colors.grey.shade500),
-                  // End Custom Backend URL Section
-
-                  //TODO: Model selection commented out because Soniox model is no longer being used
-                  // const SizedBox(height: 32),
-                  // const Padding(
-                  //   padding: EdgeInsets.symmetric(horizontal: 0),
-                  //   child: Align(
-                  //     alignment: Alignment.centerLeft,
-                  //     child: Text(
-                  //       'Transcription Model',
-                  //       style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                  //     ),
-                  //   ),
-                  // ),
-                  // const SizedBox(height: 14),
-                  // Center(
-                  //   child: Container(
-                  //     height: 60,
-                  //     decoration: BoxDecoration(
-                  //       border: Border.all(color: Colors.white),
-                  //       borderRadius: BorderRadius.circular(14),
-                  //     ),
-                  //     padding: const EdgeInsets.only(left: 16, right: 12, top: 8, bottom: 10),
-                  //     child: DropdownButton<String>(
-                  //       menuMaxHeight: 350,
-                  //       value: SharedPreferencesUtil().transcriptionModel,
-                  //       onChanged: (newValue) {
-                  //         if (newValue == null) return;
-                  //         if (newValue == SharedPreferencesUtil().transcriptionModel) return;
-                  //         setState(() => SharedPreferencesUtil().transcriptionModel = newValue);
-                  //         if (newValue == 'soniox') {
-                  //           showDialog(
-                  //             context: context,
-                  //             barrierDismissible: false,
-                  //             builder: (c) => getDialog(
-                  //               context,
-                  //               () => Navigator.of(context).pop(),
-                  //               () => {},
-                  //               'Model Limitations',
-                  //               'Soniox model is only available for English, and with devices with latest firmware version 1.0.4. '
-                  //                   'If you use a different configuration, it will fallback to deepgram.',
-                  //               singleButton: true,
-                  //             ),
-                  //           );
-                  //         }
-                  //       },
-                  //       dropdownColor: Colors.black,
-                  //       style: const TextStyle(color: Colors.white, fontSize: 16),
-                  //       underline: Container(height: 0, color: Colors.white),
-                  //       isExpanded: true,
-                  //       itemHeight: 48,
-                  //       items: ['deepgram', 'soniox'].map<DropdownMenuItem<String>>((String value) {
-                  //         // 'speechmatics'
-                  //         return DropdownMenuItem<String>(
-                  //           value: value,
-                  //           child: Text(
-                  //             value == 'deepgram'
-                  //                 ? 'Deepgram (faster)'
-                  //                 : value == 'speechmatics'
-                  //                     ? 'Speechmatics (Experimental)'
-                  //                     : 'Soniox (better quality)',
-                  //             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
-                  //           ),
-                  //         );
-                  //       }).toList(),
-                  //     ),
-                  //   ),
-                  // ),
-                  const SizedBox(height: 32.0),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Export Conversations'),
@@ -212,61 +115,11 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             setState(() => provider.loadingExportMemories = false);
                           },
                   ),
-                  // KEEP ME?
-                  // ListTile(
-                  //   title: const Text('Import Memories'),
-                  //   subtitle: const Text('Use with caution. All memories in the JSON file will be imported.'),
-                  //   contentPadding: EdgeInsets.zero,
-                  //   trailing: provider.loadingImportMemories
-                  //       ? const SizedBox(
-                  //           height: 16,
-                  //           width: 16,
-                  //           child: CircularProgressIndicator(
-                  //             color: Colors.white,
-                  //             strokeWidth: 2,
-                  //           ),
-                  //         )
-                  //       : const Icon(Icons.download),
-                  //   onTap: () async {
-                  //     if (provider.loadingImportMemories) return;
-                  //     setState(() => provider.loadingImportMemories = true);
-                  //     // open file picker
-                  //     var file = await FilePicker.platform.pickFiles(
-                  //       type: FileType.custom,
-                  //       allowedExtensions: ['json'],
-                  //     );
-                  //     MixpanelManager().importMemories();
-                  //     if (file == null) {
-                  //       setState(() => provider.loadingImportMemories = false);
-                  //       return;
-                  //     }
-                  //     var xFile = file.files.first.xFile;
-                  //     try {
-                  //       var content = (await xFile.readAsString());
-                  //       var decoded = jsonDecode(content);
-                  //       // Export uses [ServerMemory] structure
-                  //       List<ServerMemory> memories =
-                  //           decoded.map<ServerMemory>((e) => ServerMemory.fromJson(e)).toList();
-                  //       debugPrint('Memories: $memories');
-                  //       var memoriesJson = memories.map((m) => m.toJson()).toList();
-                  //       bool result = await migrateMemoriesToBackend(memoriesJson);
-                  //       if (!result) {
-                  //         SharedPreferencesUtil().scriptMigrateMemoriesToBack = false;
-                  //         _snackBar('Failed to import memories. Make sure the file is a valid JSON file.', seconds: 3);
-                  //       }
-                  //       _snackBar('Memories imported, restart the app to see the changes. 🎉', seconds: 3);
-                  //       MixpanelManager().importedMemories();
-                  //       SharedPreferencesUtil().scriptMigrateMemoriesToBack = true;
-                  //     } catch (e) {
-                  //       debugPrint(e.toString());
-                  //       _snackBar('Make sure the file is a valid JSON file.');
-                  //     }
-                  //     setState(() => provider.loadingImportMemories = false);
-                  //   },
-                  // ),
                   const SizedBox(height: 16),
                   Divider(color: Colors.grey.shade500),
                   const SizedBox(height: 16),
+
+                  // Webhooks section
                   Row(
                     children: [
                       const Text(
@@ -376,23 +229,11 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                     ],
                     onSectionEnabledChanged: provider.onDaySummaryToggled,
                   ),
-
-                  // const Text(
-                  //   'Websocket Real-time audio bytes:',
-                  //   style: TextStyle(color: Colors.white, fontSize: 16),
-                  // ),
-                  // TextField(
-                  //   controller: provider.webhookAudioBytes,
-                  //   obscureText: false,
-                  //   autocorrect: false,
-                  //   enabled: true,
-                  //   enableSuggestions: false,
-                  //   decoration: _getTextFieldDecoration('Endpoint URL'),
-                  //   style: const TextStyle(color: Colors.white),
-                  // ),
                   const SizedBox(height: 16),
                   Divider(color: Colors.grey.shade500),
                   const SizedBox(height: 32),
+
+                  // Experimental section
                   const Text(
                     'Experimental',
                     style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
@@ -426,7 +267,11 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                     value: provider.localSyncEnabled,
                     onChanged: provider.onLocalSyncEnabledChanged,
                   ),
-                  const SizedBox(height: 36),
+                  const SizedBox(height: 16),
+                  Divider(color: Colors.grey.shade500),
+                  const SizedBox(height: 16),
+
+                  // Pilot Features section
                   const Text(
                     'Pilot Features',
                     style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
@@ -446,6 +291,200 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                     value: provider.followUpQuestionEnabled,
                     onChanged: provider.onFollowUpQuestionChanged,
                   ),
+                  const SizedBox(height: 16),
+                  Divider(color: Colors.grey.shade500),
+                  const SizedBox(height: 16),
+
+                  // Backend API Settings - moved to bottom
+                  const Text(
+                    'Backend API Settings',
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 8.0),
+
+                  // Current active URL display
+                  Container(
+                    padding: const EdgeInsets.all(6.0),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade800,
+                      borderRadius: BorderRadius.circular(8.0),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Current Active Server:',
+                          style: TextStyle(color: Colors.grey, fontSize: 12),
+                        ),
+                        const SizedBox(height: 2.0),
+                        Text(
+                          provider.getCurrentActiveUrl(),
+                          style: const TextStyle(color: Colors.green, fontSize: 14, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12.0),
+
+                  // Custom URL Field
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Custom Backend URL',
+                              style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                            ),
+                            const SizedBox(height: 4.0),
+                            SizedBox(
+                              height: 40,
+                              child: TextField(
+                                controller: provider.customApiUrlController,
+                                style: const TextStyle(color: Colors.white, fontSize: 14),
+                                decoration: InputDecoration(
+                                  hintText: 'https://your-backend.com',
+                                  hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8.0),
+                                    borderSide: const BorderSide(color: Colors.white),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8.0),
+                                    borderSide: const BorderSide(color: Colors.white),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8.0),
+                                    borderSide: const BorderSide(color: Colors.blueAccent, width: 1.0),
+                                  ),
+                                ),
+                                keyboardType: TextInputType.url,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 1,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 18), // Added to align with URL field
+                            SizedBox(
+                              height: 40,
+                              child: OutlinedButton(
+                                onPressed: () {
+                                  provider.resetToOriginalUrl();
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(color: Colors.white),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                ),
+                                child: const Text(
+                                  'Reset',
+                                  style: TextStyle(color: Colors.white, fontSize: 12),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // Saved URLs list
+                  const SizedBox(height: 12.0),
+                  if (provider.customApiUrls.isNotEmpty) ...[
+                    const Text(
+                      'Saved Servers',
+                      style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(height: 4.0),
+                    Container(
+                      constraints: const BoxConstraints(maxHeight: 150),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey),
+                        borderRadius: BorderRadius.circular(8.0),
+                      ),
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: provider.customApiUrls.length,
+                        separatorBuilder: (context, index) => const Divider(height: 1, color: Colors.grey),
+                        itemBuilder: (context, index) {
+                          final url = provider.customApiUrls[index];
+                          return ListTile(
+                            dense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                            title: Text(
+                              url,
+                              style: const TextStyle(color: Colors.white, fontSize: 12),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  margin: const EdgeInsets.only(right: 12),
+                                  child: IconButton(
+                                    iconSize: 16,
+                                    constraints: const BoxConstraints(maxWidth: 28, maxHeight: 28),
+                                    padding: EdgeInsets.zero,
+                                    icon: const Icon(Icons.check_circle_outline, color: Colors.green),
+                                    onPressed: () {
+                                      provider.selectCustomApiUrl(url);
+                                      // Show a quick success message
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Server changed to $url'),
+                                          duration: const Duration(seconds: 2),
+                                          backgroundColor: Colors.green,
+                                        ),
+                                      );
+                                    },
+                                    tooltip: 'Select this server',
+                                  ),
+                                ),
+                                IconButton(
+                                  iconSize: 16,
+                                  constraints: const BoxConstraints(maxWidth: 28, maxHeight: 28),
+                                  padding: EdgeInsets.zero,
+                                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                  onPressed: () {
+                                    provider.removeCustomApiUrl(url);
+                                    // Show a quick success message
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Server removed'),
+                                        duration: Duration(seconds: 2),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                  },
+                                  tooltip: 'Remove this server',
+                                ),
+                              ],
+                            ),
+                            onTap: () {
+                              provider.selectCustomApiUrl(url);
+                              // Show a quick success message
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Server changed to $url'),
+                                  duration: const Duration(seconds: 2),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 24.0),
                 ],
               ),
             ),

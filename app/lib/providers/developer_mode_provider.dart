@@ -17,6 +17,7 @@ class DeveloperModeProvider extends BaseProvider {
   final TextEditingController webhookWsAudioBytes = TextEditingController();
   final TextEditingController webhookDaySummary = TextEditingController();
   final TextEditingController customApiUrlController = TextEditingController();
+  final TextEditingController newServerUrlController = TextEditingController();
 
   bool conversationEventsToggled = false;
   bool transcriptsToggled = false;
@@ -31,6 +32,14 @@ class DeveloperModeProvider extends BaseProvider {
   bool localSyncEnabled = false;
   bool followUpQuestionEnabled = false;
   bool transcriptionDiagnosticEnabled = false;
+
+  // Server URL list management
+  List<String> customApiUrls = [];
+  String currentCustomApiUrl = '';
+  String originalApiUrl = '';
+
+  // Get the default API base URL from the Env class
+  String get defaultApiBaseUrl => Env.apiBaseUrl ?? '';
 
   void onConversationEventsToggled(bool value) {
     conversationEventsToggled = value;
@@ -107,7 +116,14 @@ class DeveloperModeProvider extends BaseProvider {
     daySummaryToggled = SharedPreferencesUtil().daySummaryToggled;
 
     final prefs = SharedPreferencesUtil();
-    customApiUrlController.text = prefs.getString(Env.customApiBaseUrlKey) ?? '';
+
+    // Initialize server URL management
+    originalApiUrl = defaultApiBaseUrl;
+    currentCustomApiUrl = prefs.getString(Env.customApiBaseUrlKey) ?? '';
+    customApiUrlController.text = currentCustomApiUrl;
+
+    // Load saved custom API URLs
+    loadCustomApiUrls();
 
     await Future.wait([
       getWebhooksStatus(),
@@ -138,6 +154,67 @@ class DeveloperModeProvider extends BaseProvider {
     ]);
     setIsLoading(false);
     notifyListeners();
+  }
+
+  void loadCustomApiUrls() {
+    final prefs = SharedPreferencesUtil();
+    final savedUrls = prefs.getStringList('custom_api_urls') ?? [];
+    customApiUrls = savedUrls.toSet().toList(); // Remove duplicates
+
+    // Add current URL if it's not in the list and it's not empty
+    if (currentCustomApiUrl.isNotEmpty && !customApiUrls.contains(currentCustomApiUrl)) {
+      customApiUrls.add(currentCustomApiUrl);
+      saveCustomApiUrls();
+    }
+
+    notifyListeners();
+  }
+
+  void saveCustomApiUrls() {
+    final prefs = SharedPreferencesUtil();
+    prefs.saveStringList('custom_api_urls', customApiUrls);
+  }
+
+  void addNewCustomApiUrl(String url) {
+    if (url.isEmpty || !isValidUrl(url)) return;
+
+    if (!customApiUrls.contains(url)) {
+      customApiUrls.add(url);
+      saveCustomApiUrls();
+      notifyListeners();
+    }
+  }
+
+  void removeCustomApiUrl(String url) {
+    customApiUrls.remove(url);
+    saveCustomApiUrls();
+
+    // If current URL was removed, reset to original
+    if (currentCustomApiUrl == url) {
+      currentCustomApiUrl = '';
+      customApiUrlController.text = '';
+      Env.setCustomApiBaseUrl('');
+    }
+
+    notifyListeners();
+  }
+
+  void selectCustomApiUrl(String url) {
+    customApiUrlController.text = url;
+    currentCustomApiUrl = url;
+    Env.setCustomApiBaseUrl(url);
+    notifyListeners();
+  }
+
+  void resetToOriginalUrl() {
+    customApiUrlController.text = '';
+    currentCustomApiUrl = '';
+    Env.setCustomApiBaseUrl('');
+    notifyListeners();
+  }
+
+  String getCurrentActiveUrl() {
+    return currentCustomApiUrl.isNotEmpty ? currentCustomApiUrl : originalApiUrl;
   }
 
   void saveSettings() async {
@@ -191,7 +268,12 @@ class DeveloperModeProvider extends BaseProvider {
       prefs.webhookOnConversationCreated = webhookOnConversationCreated.text;
       prefs.webhookDaySummary = webhookDaySummary.text;
 
+      // Save new custom API URL and add to list if not empty
       await Env.setCustomApiBaseUrl(customApiUrl);
+      currentCustomApiUrl = customApiUrl;
+      if (customApiUrl.isNotEmpty) {
+        addNewCustomApiUrl(customApiUrl);
+      }
     } catch (e) {
       Logger.error('Error occurred while updating endpoints: $e');
     }
