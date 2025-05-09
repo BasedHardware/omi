@@ -25,6 +25,7 @@ class DeveloperModeProvider extends BaseProvider {
   bool daySummaryToggled = false;
 
   bool savingSettingsLoading = false;
+  bool serverOperationLoading = false;
 
   bool loadingExportMemories = false;
   bool loadingImportMemories = false;
@@ -175,42 +176,66 @@ class DeveloperModeProvider extends BaseProvider {
     prefs.saveStringList('custom_api_urls', customApiUrls);
   }
 
-  void addNewCustomApiUrl(String url) {
-    if (url.isEmpty || !isValidUrl(url)) return;
+  Future<bool> addNewCustomApiUrl(String url) async {
+    url = url.trim();
+    if (url.isEmpty || !isValidUrl(url)) return false;
 
     if (!customApiUrls.contains(url)) {
       customApiUrls.add(url);
       saveCustomApiUrls();
       notifyListeners();
+      return true;
+    }
+    return false;
+  }
+
+  Future<void> removeCustomApiUrl(String url) async {
+    serverOperationLoading = true;
+    notifyListeners();
+
+    try {
+      customApiUrls.remove(url);
+      saveCustomApiUrls();
+
+      // If current URL was removed, reset to original
+      if (currentCustomApiUrl == url) {
+        currentCustomApiUrl = '';
+        customApiUrlController.text = '';
+        await Env.setCustomApiBaseUrl('');
+      }
+    } finally {
+      serverOperationLoading = false;
+      notifyListeners();
     }
   }
 
-  void removeCustomApiUrl(String url) {
-    customApiUrls.remove(url);
-    saveCustomApiUrls();
+  Future<void> selectCustomApiUrl(String url) async {
+    serverOperationLoading = true;
+    notifyListeners();
 
-    // If current URL was removed, reset to original
-    if (currentCustomApiUrl == url) {
-      currentCustomApiUrl = '';
+    try {
+      customApiUrlController.text = url;
+      currentCustomApiUrl = url;
+      await Env.setCustomApiBaseUrl(url);
+    } finally {
+      serverOperationLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> resetToOriginalUrl() async {
+    serverOperationLoading = true;
+    notifyListeners();
+
+    try {
       customApiUrlController.text = '';
-      Env.setCustomApiBaseUrl('');
+      currentCustomApiUrl = '';
+      await Env.setCustomApiBaseUrl('');
+      originalApiUrl = defaultApiBaseUrl; // Refresh the original URL
+    } finally {
+      serverOperationLoading = false;
+      notifyListeners();
     }
-
-    notifyListeners();
-  }
-
-  void selectCustomApiUrl(String url) {
-    customApiUrlController.text = url;
-    currentCustomApiUrl = url;
-    Env.setCustomApiBaseUrl(url);
-    notifyListeners();
-  }
-
-  void resetToOriginalUrl() {
-    customApiUrlController.text = '';
-    currentCustomApiUrl = '';
-    Env.setCustomApiBaseUrl('');
-    notifyListeners();
   }
 
   String getCurrentActiveUrl() {
@@ -272,7 +297,7 @@ class DeveloperModeProvider extends BaseProvider {
       await Env.setCustomApiBaseUrl(customApiUrl);
       currentCustomApiUrl = customApiUrl;
       if (customApiUrl.isNotEmpty) {
-        addNewCustomApiUrl(customApiUrl);
+        await addNewCustomApiUrl(customApiUrl);
       }
     } catch (e) {
       Logger.error('Error occurred while updating endpoints: $e');

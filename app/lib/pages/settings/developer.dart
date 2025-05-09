@@ -377,8 +377,18 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             SizedBox(
                               height: 40,
                               child: OutlinedButton(
-                                onPressed: () {
-                                  provider.resetToOriginalUrl();
+                                onPressed: () async {
+                                  await provider.resetToOriginalUrl();
+                                  // Show a quick success message
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Reset to default server'),
+                                      duration: Duration(seconds: 2),
+                                      backgroundColor: Colors.blue,
+                                    ),
+                                  );
+                                  // Force rebuild to update UI
+                                  setState(() {});
                                 },
                                 style: OutlinedButton.styleFrom(
                                   side: const BorderSide(color: Colors.white),
@@ -424,6 +434,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                               style: const TextStyle(color: Colors.white, fontSize: 12),
                               overflow: TextOverflow.ellipsis,
                             ),
+                            tileColor: provider.currentCustomApiUrl == url ? Colors.green.withOpacity(0.2) : null,
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -434,8 +445,10 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                     constraints: const BoxConstraints(maxWidth: 28, maxHeight: 28),
                                     padding: EdgeInsets.zero,
                                     icon: const Icon(Icons.check_circle_outline, color: Colors.green),
-                                    onPressed: () {
-                                      provider.selectCustomApiUrl(url);
+                                    onPressed: () async {
+                                      await provider.selectCustomApiUrl(url);
+                                      // Force rebuild to update UI
+                                      setState(() {});
                                       // Show a quick success message
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         SnackBar(
@@ -453,8 +466,10 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                   constraints: const BoxConstraints(maxWidth: 28, maxHeight: 28),
                                   padding: EdgeInsets.zero,
                                   icon: const Icon(Icons.delete_outline, color: Colors.red),
-                                  onPressed: () {
-                                    provider.removeCustomApiUrl(url);
+                                  onPressed: () async {
+                                    await provider.removeCustomApiUrl(url);
+                                    // Force rebuild to update UI
+                                    setState(() {});
                                     // Show a quick success message
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(
@@ -468,8 +483,10 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 ),
                               ],
                             ),
-                            onTap: () {
-                              provider.selectCustomApiUrl(url);
+                            onTap: () async {
+                              await provider.selectCustomApiUrl(url);
+                              // Force rebuild to update UI
+                              setState(() {});
                               // Show a quick success message
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
