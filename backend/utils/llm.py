@@ -20,7 +20,6 @@ from models.app import App
 from models.chat import Message, MessageSender
 from models.memories import Memory, MemoryCategory
 from models.conversation import Structured, ConversationPhoto, CategoryEnum, Conversation, ActionItem, Event
-from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment
 from models.trend import TrendEnum, ceo_options, company_options, software_product_options, hardware_product_options, \
     ai_product_options, TrendType
@@ -136,7 +135,8 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
     return response
 
 
-def get_reprocess_transcript_structure(transcript: str, started_at: datetime, language_code: str, tz: str, title: str) -> Structured:
+def get_reprocess_transcript_structure(transcript: str, started_at: datetime, language_code: str, tz: str,
+                                       title: str) -> Structured:
     prompt_text = '''You are an expert conversation analyzer. Your task is to analyze the conversation and provide structure and clarity to the recording transcription of a conversation.
     The conversation language is {language_code}. Use the same language {language_code} for your response.
 
@@ -228,7 +228,6 @@ def summarize_open_glass(photos: List[ConversationPhoto]) -> Structured:
 # **************************************************
 # ************* EXTERNAL INTEGRATIONS **************
 # **************************************************
-
 
 
 def get_message_structure(text: str, started_at: datetime, language_code: str, tz: str,
@@ -391,7 +390,6 @@ class IsAnOmiQuestion(BaseModel):
     value: bool = Field(description="If the message is an Omi/Friend related question")
 
 
-
 def retrieve_is_an_omi_question(question: str) -> bool:
     prompt = f'''
     Task: Analyze the question to identify if the user is inquiring about the functionalities or usage of the app, Omi or Friend. Focus on detecting questions related to the app's operations or capabilities.
@@ -455,8 +453,6 @@ def retrieve_is_file_question(question: str) -> bool:
         return False
 
 
-
-
 def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]:
     prompt = f'''
     You MUST determine the appropriate date range in {tz} that provides context for answering the <question> provided.
@@ -476,8 +472,6 @@ def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]
     with_parser = llm_mini.with_structured_output(DatesContext)
     response: DatesContext = with_parser.invoke(prompt)
     return response.dates_range
-
-
 
 
 class SummaryOutput(BaseModel):
@@ -503,15 +497,15 @@ def chunk_extraction(segments: List[TranscriptSegment], topics: List[str]) -> st
     return response.summary
 
 
-def _get_answer_simple_message_prompt(uid: str, messages: List[Message], plugin: Optional[Plugin] = None) -> str:
+def _get_answer_simple_message_prompt(uid: str, messages: List[Message], app: Optional[App] = None) -> str:
     conversation_history = Message.get_messages_as_string(
         messages, use_user_name_if_available=True, use_plugin_name_if_available=True
     )
     user_name, memories_str = get_prompt_memories(uid)
 
     plugin_info = ""
-    if plugin:
-        plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
+    if app:
+        plugin_info = f"Your name is: {app.name}, and your personality/description is '{app.description}'.\nMake sure to reflect your personality in your response.\n"
 
     return f"""
     You are an assistant for engaging personal conversations.
@@ -527,12 +521,12 @@ def _get_answer_simple_message_prompt(uid: str, messages: List[Message], plugin:
     """.replace('    ', '').strip()
 
 
-def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[Plugin] = None) -> str:
+def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[App] = None) -> str:
     prompt = _get_answer_simple_message_prompt(uid, messages, plugin)
     return llm_mini.invoke(prompt).content
 
 
-def answer_simple_message_stream(uid: str, messages: List[Message], plugin: Optional[Plugin] = None,
+def answer_simple_message_stream(uid: str, messages: List[Message], plugin: Optional[App] = None,
                                  callbacks=[]) -> str:
     prompt = _get_answer_simple_message_prompt(uid, messages, plugin)
     return llm_mini_stream.invoke(prompt, {'callbacks': callbacks}).content
@@ -583,7 +577,7 @@ def answer_persona_question_stream(app: App, messages: List[Message], callbacks:
     return llm_call.invoke(chat_messages, {'callbacks': callbacks}).content
 
 
-def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
+def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[App] = None,
                        cited: Optional[bool] = False,
                        messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
     user_name, memories_str = get_prompt_memories(uid)
@@ -666,18 +660,19 @@ def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[P
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
 
 
-def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+def qa_rag(uid: str, question: str, context: str, plugin: Optional[App] = None, cited: Optional[bool] = False,
            messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
     return llm_medium.invoke(prompt).content
 
 
-def qa_rag_stream(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+def qa_rag_stream(uid: str, question: str, context: str, plugin: Optional[App] = None, cited: Optional[bool] = False,
                   messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]) -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
     return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content
+
 
 # **************************************************
 # ************* RETRIEVAL (EMOTIONAL) **************
@@ -1122,7 +1117,6 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     return question
 
 
-
 def retrieve_metadata_fields_from_transcript(
         uid: str, created_at: datetime, transcript_segment: List[dict], tz: str
 ) -> ExtractedInformation:
@@ -1202,7 +1196,6 @@ def retrieve_metadata_fields_from_transcript(
         add_filter_category_item(uid, 'dates', d)
 
     return metadata
-
 
 
 def retrieve_metadata_from_message(uid: str, created_at: datetime, message_text: str, tz: str,
@@ -1657,7 +1650,6 @@ def identify_category_for_memory(memory: str, categories: List) -> str:
     """
     response = llm_mini.invoke(prompt)
     return response.content
-
 
 
 def generate_summary_with_prompt(conversation_text: str, prompt: str) -> str:
