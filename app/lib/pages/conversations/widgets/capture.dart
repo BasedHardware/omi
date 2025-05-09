@@ -32,12 +32,6 @@ class LiteCaptureWidgetState extends State<LiteCaptureWidget> with AutomaticKeep
       if (context.read<DeviceProvider>().connectedDevice != null) {
         context.read<OnboardingProvider>().stopScanDevices();
       }
-      if (mounted) {
-        final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-        if (!connectivityProvider.isConnected) {
-          context.read<CaptureProvider>().cancelConversationCreationTimer();
-        }
-      }
     });
 
     super.initState();

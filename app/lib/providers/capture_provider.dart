@@ -24,7 +24,6 @@ import 'package:omi/services/sockets/transcription_connection.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
-import 'package:omi/utils/logger.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
@@ -199,7 +198,7 @@ class CaptureProvider extends ChangeNotifier
       }
       var value = await _getBleButtonState(deviceId);
       var buttonState = ByteData.view(Uint8List.fromList(value.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
-      debugPrint("watch device button ${buttonState}");
+      debugPrint("watch device button $buttonState");
 
       // Force process
       if (buttonState == 5 && session == _voiceCommandSession) {
@@ -215,9 +214,10 @@ class CaptureProvider extends ChangeNotifier
     debugPrint('streamButton in capture_provider');
     _bleButtonStream?.cancel();
     _bleButtonStream = await _getBleButtonListener(deviceId, onButtonReceived: (List<int> value) {
-      if (value.isEmpty) return;
-      var buttonState = ByteData.view(Uint8List.fromList(value.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
-      debugPrint("device button ${buttonState}");
+      final snapshot = List<int>.from(value);
+      if (snapshot.isEmpty || snapshot.length < 4) return;
+      var buttonState = ByteData.view(Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
+      debugPrint("device button $buttonState");
 
       // start long press
       if (buttonState == 3 && _voiceCommandSession == null) {
@@ -237,18 +237,19 @@ class CaptureProvider extends ChangeNotifier
     });
   }
 
-  Future streamAudioToWs(String id, BleAudioCodec codec) async {
+  Future streamAudioToWs(String deviceId, BleAudioCodec codec) async {
     debugPrint('streamAudioToWs in capture_provider');
     _bleBytesStream?.cancel();
-    _bleBytesStream = await _getBleAudioBytesListener(id, onAudioBytesReceived: (List<int> value) {
-      if (value.isEmpty) return;
+    _bleBytesStream = await _getBleAudioBytesListener(deviceId, onAudioBytesReceived: (List<int> value) {
+      final snapshot = List<int>.from(value);
+      if (snapshot.isEmpty || snapshot.length < 3) return;
 
-      // command button triggered
+      // Command button triggered
       if (_voiceCommandSession != null) {
-        _commandBytes.add(value.sublist(3));
+        _commandBytes.add(snapshot.sublist(3));
       }
 
-      // support: opus codec, 1m from the first device connects
+      // Support: opus codec, 1m from the first device connects
       var deviceFirstConnectedAt = _deviceService.getFirstConnectedAt();
       var checkWalSupported = codec.isOpusSupported() &&
           (deviceFirstConnectedAt != null &&
@@ -258,7 +259,7 @@ class CaptureProvider extends ChangeNotifier
         setIsWalSupported(checkWalSupported);
       }
       if (_isWalSupported) {
-        _wal.getSyncs().phone.onByteStream(value);
+        _wal.getSyncs().phone.onByteStream(snapshot);
       }
 
       // send ws
@@ -277,16 +278,17 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> _resetState() async {
     debugPrint('resetState');
-    _cleanupCurrentState();
+    await _cleanupCurrentState();
     await _ensureDeviceSocketConnection();
     await _initiateDeviceAudioStreaming();
-    await initiateStorageBytesStreaming(); // ??
+    await initiateStorageBytesStreaming();
+
     notifyListeners();
   }
 
-  void _cleanupCurrentState() {
-    closeBleStream();
-    cancelConversationCreationTimer();
+  Future _cleanupCurrentState() async {
+    await _closeBleStream();
+    notifyListeners();
   }
 
   // TODO: use connection directly
@@ -363,18 +365,11 @@ class CaptureProvider extends ChangeNotifier
     if (_recordingDevice == null) {
       return;
     }
-    await _ensureDeviceSocketConnection();
-
-    if (_recordingDevice == null) {
-      Logger.handle(Exception('Device Not Connected'), StackTrace.current,
-          message: 'Device Not Connected. Please make sure the device is turned on and nearby.');
-      notifyListeners();
-      return;
-    }
-    BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
+    final deviceId = _recordingDevice!.id;
+    BleAudioCodec codec = await _getAudioCodec(deviceId);
     await _wal.getSyncs().phone.onAudioCodecChanged(codec);
-    await streamButton(_recordingDevice!.id);
-    await streamAudioToWs(_recordingDevice!.id, codec);
+    await streamButton(deviceId);
+    await streamAudioToWs(deviceId, codec);
 
     notifyListeners();
   }
@@ -385,12 +380,8 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void closeBleStream() {
-    _bleBytesStream?.cancel();
-    notifyListeners();
-  }
-
-  void cancelConversationCreationTimer() {
+  Future _closeBleStream() async {
+    await _bleBytesStream?.cancel();
     notifyListeners();
   }
 
@@ -429,7 +420,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   stopStreamRecording() async {
-    _cleanupCurrentState();
+    await _cleanupCurrentState();
     ServiceManager.instance().mic.stop();
     await _socket?.stop(reason: 'stop stream recording');
   }
@@ -445,7 +436,7 @@ class CaptureProvider extends ChangeNotifier
     if (cleanDevice) {
       _updateRecordingDevice(null);
     }
-    _cleanupCurrentState();
+    await _cleanupCurrentState();
     await _socket?.stop(reason: 'stop stream device recording');
   }
 
