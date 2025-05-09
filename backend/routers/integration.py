@@ -80,7 +80,7 @@ async def create_conversation_via_integration(
 
     api_key = authorization.replace('Bearer ', '')
     if not verify_api_key(app_id, api_key):
-        raise HTTPException(status_code=403, detail="Invalid API key")
+        raise HTTPException(status_code=403, detail="Invalid integration API key")
 
     # Verify if the app exists
     app = apps_db.get_app_by_id_db(app_id)
@@ -147,7 +147,7 @@ async def create_memories_via_integration(
 
     api_key = authorization.replace('Bearer ', '')
     if not verify_api_key(app_id, api_key):
-        raise HTTPException(status_code=403, detail="Invalid API key")
+        raise HTTPException(status_code=403, detail="Invalid integrationAPI key")
 
     # Verify if the app exists
     app = apps_db.get_app_by_id_db(app_id)
@@ -190,7 +190,7 @@ async def create_facts_via_integration(
 
     api_key = authorization.replace('Bearer ', '')
     if not verify_api_key(app_id, api_key):
-        raise HTTPException(status_code=403, detail="Invalid API key")
+        raise HTTPException(status_code=403, detail="Invalid integrationAPI key")
 
     # Verify if the app exists
     app = apps_db.get_app_by_id_db(app_id)
@@ -237,7 +237,7 @@ async def get_memories_via_integration(
 
     api_key = authorization.replace('Bearer ', '')
     if not verify_api_key(app_id, api_key):
-        raise HTTPException(status_code=403, detail="Invalid API key")
+        raise HTTPException(status_code=403, detail="Invalid integrationAPI key")
 
     # Verify if the app exists
     app = apps_db.get_app_by_id_db(app_id)
