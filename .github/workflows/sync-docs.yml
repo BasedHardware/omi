@@ -24,10 +24,10 @@ jobs:
       - name: Convert .mdx files to README.md
         run: |
           declare -A FILE_MAP=(
-            ["docs/docs/docs/developer/sdk/python.mdx"]="sdks/python/README.md"
-            ["docs/docs/docs/developer/sdk/ReactNative.mdx"]="sdks/react-native/README.md"
-            ["docs/docs/docs/developer/sdk/swift.mdx"]="sdks/swift/README.md"
-            ["docs/docs/docs/hardware/omiGlass.mdx"]="omiGlass/README.md"
+            ["docs/docs/developer/sdk/python.mdx"]="sdks/python/README.md"
+            ["docs/docs/developer/sdk/ReactNative.mdx"]="sdks/react-native/README.md"
+            ["docs/docs/developer/sdk/swift.mdx"]="sdks/swift/README.md"
+            ["docs/docs/hardware/omiGlass.mdx"]="omiGlass/README.md"
           )
 
           for MDX_FILE in "${!FILE_MAP[@]}"; do

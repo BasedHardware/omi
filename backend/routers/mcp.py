@@ -19,8 +19,8 @@ from firebase_admin import auth
 router = APIRouter()
 
 
-@router.post("/v1/mcp/memories", tags=["mcp"], response_model=MemoryDB)
-def create_memory(memory: Memory, uid: str = Header(None)):
+@router.post("/v1/mcp/memories", tags=["mcp"], response_model=Memory)
+def create_memory(memory: Memory, uid: str = Header()):
     categories = [category for category in MemoryCategory]
     memory.category = identify_category_for_memory(memory.content, categories)
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
@@ -30,32 +30,38 @@ def create_memory(memory: Memory, uid: str = Header(None)):
 
 
 @router.delete("/v1/mcp/memories/{memory_id}", tags=["mcp"])
-def delete_memory(memory_id: str, uid: str = Header(None)):
+def delete_memory(memory_id: str, uid: str = Header()):
     memories_db.delete_memory(uid, memory_id)
     return {"status": "ok"}
 
 
 @router.patch("/v1/mcp/memories/{memory_id}", tags=["mcp"])
-def edit_memory(memory_id: str, value: str, uid: str = Header(None)):
+def edit_memory(memory_id: str, value: str, uid: str = Header()):
     memories_db.edit_memory(uid, memory_id, value)
     return {"status": "ok"}
 
 
-@router.get("/v1/mcp/memories", tags=["mcp"], response_model=List[MemoryDB])
+class CleanerMemory(BaseModel):
+    id: str
+    content: str
+    category: MemoryCategory
+
+
+@router.get("/v1/mcp/memories", tags=["mcp"], response_model=List[CleanerMemory])
 def get_memories(
+    uid: str = Header(),
     limit: int = 25,
     offset: int = 0,
     categories: Optional[str] = None,
-    uid: str = Header(None),
 ):
     category_list = []
     if categories:
         try:
             category_list = [
-                CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()
+                MemoryCategory(c.strip()) for c in categories.split(",") if c.strip()
             ]
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid category")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
     return memories_db.get_memories(
         uid, limit, offset, [c.value for c in category_list]
     )
@@ -80,8 +86,11 @@ class SimpleConversation(BaseModel):
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
     structured: SimpleStructured
-    transcript_segments: List[SimpleTranscriptSegment] = []
     language: Optional[str] = None
+
+
+class FullConversation(SimpleConversation):
+    transcript_segments: List[SimpleTranscriptSegment] = []
 
 
 # Step 2 do retrieval
@@ -98,19 +107,24 @@ class SimpleConversation(BaseModel):
     "/v1/mcp/conversations", response_model=List[SimpleConversation], tags=["mcp"]
 )
 def get_conversations(
+    include_transcript_segments: bool = False,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     categories: Optional[str] = None,
     limit: int = 25,
     offset: int = 0,
-    uid: str = Header(None),
+    uid: str = Header(),
 ):
     print("get_conversations", uid, limit, offset, start_date, end_date, categories)
-    category_list = (
-        [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()]
-        if categories
-        else []
-    )
+    try:
+        category_list = (
+            [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()]
+            if categories
+            else []
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
+
     conversations = conversations_db.get_conversations(
         uid,
         limit,
@@ -121,34 +135,20 @@ def get_conversations(
         end_date=end_date,
         categories=[c.value for c in category_list],
     )
+    for i in range(len(conversations)):
+        if not include_transcript_segments:
+            conversations[i]["transcript_segments"] = []
     return conversations
 
-    # TODO: further steps, perform retrieval
-    # related_to_people = (
-    #     [p.strip() for p in related_to_people.split(",")] if related_to_people else []
-    # )
-    # related_to_topics = (
-    #     [t.strip() for t in related_to_topics.split(",")] if related_to_topics else []
-    # )
-    # related_to_entities = (
-    #     [e.strip() for e in related_to_entities.split(",")]
-    #     if related_to_entities
-    #     else []
-    # )
 
-    # vector = [0] * 3072  # pass something closer?
-    # memories_id = query_vectors_by_metadata(
-    #     uid,
-    #     vector,
-    #     dates_filter=[start_date, end_date],
-    #     people=related_to_people,
-    #     topics=related_to_topics,
-    #     entities=related_to_entities,
-    #     dates=[],
-    #     limit=200,
-    # )
-
-    # conversations = conversations_db.get_conversations_by_id(uid, memories_id)
+@router.get(
+    "/v1/mcp/conversations/{conversation_id}",
+    response_model=FullConversation,
+    tags=["mcp"],
+)
+def get_conversation_by_id(conversation_id: str, uid: str = Header(None)):
+    print("get_conversation_by_id", uid, conversation_id)
+    return conversations_db.get_conversation(uid, conversation_id)
 
 
 class UserCredentials(BaseModel):

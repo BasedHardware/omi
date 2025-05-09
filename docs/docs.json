@@ -60,6 +60,7 @@
           },
           "docs/developer/Protocol",
           "docs/developer/Contribution",
+          "docs/developer/MCP",
           {
             "group": "Audio & Testing",
             "pages": [

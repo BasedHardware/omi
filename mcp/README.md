@@ -44,14 +44,6 @@ A Model Context Protocol server for Omi interaction and automation. This server 
      - `limit` (number, optional): Maximum number of conversations to retrieve (default: 25)
    - Returns: List of conversation objects containing transcripts, timestamps, geolocation and structured summaries
 
-## Installation
-
-### Using uv
-
-When using [`uv`](https://docs.astral.sh/uv/) no specific installation is needed. We will
-use [`uvx`](https://docs.astral.sh/uv/guides/tools/) to directly run *mcp-server-omi*.
-
-
 ## Configuration
 
 ### Usage with Claude Desktop
@@ -61,6 +53,12 @@ Add this to your `claude_desktop_config.json`:
 <details>
 <summary>Using uvx</summary>
 
+When using [uv](https://docs.astral.sh/uv/) no specific installation is needed.
+
+We will use [uvx](https://docs.astral.sh/uv/guides/tools/) to directly run *mcp-server-omi*.
+
+| If having issues instead of `"command": "uvx"`, put your whole package path (`which uvx`), then `"command": "$path"`.
+
 ```json
 "mcpServers": {
   "omi": {
@@ -69,35 +67,40 @@ Add this to your `claude_desktop_config.json`:
   }
 }
 ```
+
 </details>
 
 <details>
 <summary>Using docker</summary>
 
-* Note: replace '/Users/username' with the a path that you want to be accessible by this tool
+Install docker, https://orbstack.dev/ is great.
 
 ```json
 "mcpServers": {
   "omi": {
     "command": "docker",
-    "args": ["run", "--rm", "-i", "mcp/omi"]
+    "args": ["run", "--rm", "-i", "josancamon19/mcp-server-omi"]
   }
 }
 ```
 </details>
 
-<details>
+<!-- <details>
 <summary>Using pip installation</summary>
+
+Requires python >= 3.11.6. 
+- Check `python --version`, and `brew list --versions | grep python` (you might have other versions of python installed)
+- Get the path of the python version (`which python`) or with brew
 
 ```json
 "mcpServers": {
-  "git": {
-    "command": "python",
+  "omi": {
+    "command": "/opt/homebrew/bin/python3.12",
     "args": ["-m", "mcp_server_omi"]
   }
 }
 ```
-</details>
+</details> -->
 
 ## Debugging
 
@@ -114,7 +117,7 @@ cd path/to/servers/src/omi
 npx @modelcontextprotocol/inspector uv run mcp-server-omi
 ```
 
-Running `tail -n 20 -f ~/Library/Logs/Claude/mcp*.log` will show the logs from the server and may
+Running `tail -n 20 -f ~/Library/Logs/Claude/mcp-server-omi.log` will show the logs from the server and may
 help you debug any issues.
 
 ## License
