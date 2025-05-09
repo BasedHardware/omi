@@ -466,7 +466,7 @@ Future<Map<String, dynamic>> createApiKeyServer(String appId) async {
   );
   try {
     if (response == null || response.statusCode != 200) {
-      throw Exception('Failed to create API key');
+      throw Exception('Failed to create apps API key');
     }
     log('createApiKeyServer: ${response.body}');
     return jsonDecode(response.body);
