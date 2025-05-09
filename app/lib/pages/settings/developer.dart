@@ -317,9 +317,52 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           style: TextStyle(color: Colors.grey, fontSize: 12),
                         ),
                         const SizedBox(height: 2.0),
-                        Text(
-                          provider.getCurrentActiveUrl(),
-                          style: const TextStyle(color: Colors.green, fontSize: 14, fontWeight: FontWeight.bold),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                provider.getCurrentActiveUrl(),
+                                style: const TextStyle(color: Colors.green, fontSize: 14, fontWeight: FontWeight.bold),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            OutlinedButton(
+                              onPressed: provider.serverOperationLoading
+                                  ? null
+                                  : () async {
+                                      await provider.resetToOriginalUrl();
+                                      // Show a quick success message
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Reset to default server'),
+                                          duration: Duration(seconds: 2),
+                                          backgroundColor: Colors.blue,
+                                        ),
+                                      );
+                                      // Force rebuild to update UI
+                                      setState(() {});
+                                    },
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Colors.white),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                                minimumSize: const Size(80, 24),
+                              ),
+                              child: provider.serverOperationLoading
+                                  ? const SizedBox(
+                                      width: 10,
+                                      height: 10,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Text(
+                                      'Reset to Default',
+                                      style: TextStyle(color: Colors.white, fontSize: 10),
+                                    ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -376,28 +419,64 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             const SizedBox(height: 18), // Added to align with URL field
                             SizedBox(
                               height: 40,
-                              child: OutlinedButton(
-                                onPressed: () async {
-                                  await provider.resetToOriginalUrl();
-                                  // Show a quick success message
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Reset to default server'),
-                                      duration: Duration(seconds: 2),
-                                      backgroundColor: Colors.blue,
-                                    ),
-                                  );
-                                  // Force rebuild to update UI
-                                  setState(() {});
-                                },
-                                style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(color: Colors.white),
+                              child: ElevatedButton(
+                                onPressed: provider.serverOperationLoading
+                                    ? null
+                                    : () async {
+                                        if (provider.customApiUrlController.text.trim().isEmpty) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(
+                                              content: Text('Please enter a URL'),
+                                              duration: Duration(seconds: 2),
+                                              backgroundColor: Colors.red,
+                                            ),
+                                          );
+                                          return;
+                                        }
+
+                                        final success = await provider.addNewCustomApiUrl(
+                                          provider.customApiUrlController.text,
+                                        );
+
+                                        if (success) {
+                                          // Show success message
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(
+                                              content: Text('New server added'),
+                                              duration: Duration(seconds: 2),
+                                              backgroundColor: Colors.green,
+                                            ),
+                                          );
+                                          await provider.selectCustomApiUrl(provider.customApiUrlController.text);
+                                          setState(() {});
+                                        } else {
+                                          // Show error message
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(
+                                              content: Text('Invalid URL or already exists'),
+                                              duration: Duration(seconds: 2),
+                                              backgroundColor: Colors.red,
+                                            ),
+                                          );
+                                        }
+                                      },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
                                   padding: const EdgeInsets.symmetric(horizontal: 8),
                                 ),
-                                child: const Text(
-                                  'Reset',
-                                  style: TextStyle(color: Colors.white, fontSize: 12),
-                                ),
+                                child: provider.serverOperationLoading
+                                    ? const SizedBox(
+                                        width: 12,
+                                        height: 12,
+                                        child: CircularProgressIndicator(
+                                          color: Colors.white,
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Text(
+                                        'Add',
+                                        style: TextStyle(color: Colors.white, fontSize: 12),
+                                      ),
                               ),
                             ),
                           ],
@@ -420,85 +499,92 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                         border: Border.all(color: Colors.grey),
                         borderRadius: BorderRadius.circular(8.0),
                       ),
-                      child: ListView.separated(
-                        shrinkWrap: true,
-                        itemCount: provider.customApiUrls.length,
-                        separatorBuilder: (context, index) => const Divider(height: 1, color: Colors.grey),
-                        itemBuilder: (context, index) {
-                          final url = provider.customApiUrls[index];
-                          return ListTile(
-                            dense: true,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                            title: Text(
-                              url,
-                              style: const TextStyle(color: Colors.white, fontSize: 12),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            tileColor: provider.currentCustomApiUrl == url ? Colors.green.withOpacity(0.2) : null,
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  margin: const EdgeInsets.only(right: 12),
-                                  child: IconButton(
-                                    iconSize: 16,
-                                    constraints: const BoxConstraints(maxWidth: 28, maxHeight: 28),
-                                    padding: EdgeInsets.zero,
-                                    icon: const Icon(Icons.check_circle_outline, color: Colors.green),
-                                    onPressed: () async {
-                                      await provider.selectCustomApiUrl(url);
-                                      // Force rebuild to update UI
-                                      setState(() {});
-                                      // Show a quick success message
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text('Server changed to $url'),
-                                          duration: const Duration(seconds: 2),
-                                          backgroundColor: Colors.green,
-                                        ),
-                                      );
-                                    },
-                                    tooltip: 'Select this server',
+                      child: provider.serverOperationLoading
+                          ? const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: CircularProgressIndicator(color: Colors.white),
+                              ),
+                            )
+                          : ListView.separated(
+                              shrinkWrap: true,
+                              itemCount: provider.customApiUrls.length,
+                              separatorBuilder: (context, index) => const Divider(height: 1, color: Colors.grey),
+                              itemBuilder: (context, index) {
+                                final url = provider.customApiUrls[index];
+                                return ListTile(
+                                  dense: true,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                                  title: Text(
+                                    url,
+                                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                ),
-                                IconButton(
-                                  iconSize: 16,
-                                  constraints: const BoxConstraints(maxWidth: 28, maxHeight: 28),
-                                  padding: EdgeInsets.zero,
-                                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                                  onPressed: () async {
-                                    await provider.removeCustomApiUrl(url);
+                                  tileColor: provider.currentCustomApiUrl == url ? Colors.green.withOpacity(0.2) : null,
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        margin: const EdgeInsets.only(right: 12),
+                                        child: IconButton(
+                                          iconSize: 16,
+                                          constraints: const BoxConstraints(maxWidth: 28, maxHeight: 28),
+                                          padding: EdgeInsets.zero,
+                                          icon: const Icon(Icons.check_circle_outline, color: Colors.green),
+                                          onPressed: () async {
+                                            await provider.selectCustomApiUrl(url);
+                                            // Force rebuild to update UI
+                                            setState(() {});
+                                            // Show a quick success message
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text('Server changed to $url'),
+                                                duration: const Duration(seconds: 2),
+                                                backgroundColor: Colors.green,
+                                              ),
+                                            );
+                                          },
+                                          tooltip: 'Select this server',
+                                        ),
+                                      ),
+                                      IconButton(
+                                        iconSize: 16,
+                                        constraints: const BoxConstraints(maxWidth: 28, maxHeight: 28),
+                                        padding: EdgeInsets.zero,
+                                        icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                        onPressed: () async {
+                                          await provider.removeCustomApiUrl(url);
+                                          // Force rebuild to update UI
+                                          setState(() {});
+                                          // Show a quick success message
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(
+                                              content: Text('Server removed'),
+                                              duration: Duration(seconds: 2),
+                                              backgroundColor: Colors.red,
+                                            ),
+                                          );
+                                        },
+                                        tooltip: 'Remove this server',
+                                      ),
+                                    ],
+                                  ),
+                                  onTap: () async {
+                                    await provider.selectCustomApiUrl(url);
                                     // Force rebuild to update UI
                                     setState(() {});
                                     // Show a quick success message
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Server removed'),
-                                        duration: Duration(seconds: 2),
-                                        backgroundColor: Colors.red,
+                                      SnackBar(
+                                        content: Text('Server changed to $url'),
+                                        duration: const Duration(seconds: 2),
+                                        backgroundColor: Colors.green,
                                       ),
                                     );
                                   },
-                                  tooltip: 'Remove this server',
-                                ),
-                              ],
+                                );
+                              },
                             ),
-                            onTap: () async {
-                              await provider.selectCustomApiUrl(url);
-                              // Force rebuild to update UI
-                              setState(() {});
-                              // Show a quick success message
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Server changed to $url'),
-                                  duration: const Duration(seconds: 2),
-                                  backgroundColor: Colors.green,
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      ),
                     ),
                   ],
                   const SizedBox(height: 24.0),
