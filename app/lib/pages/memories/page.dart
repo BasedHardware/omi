@@ -10,6 +10,7 @@ import 'widgets/memory_edit_sheet.dart';
 import 'widgets/memory_item.dart';
 import 'widgets/memory_dialog.dart';
 import 'widgets/memory_review_sheet.dart';
+import 'widgets/memory_management_sheet.dart';
 import 'widgets/category_chip.dart';
 
 class MemoriesPage extends StatefulWidget {
@@ -185,10 +186,11 @@ class MemoriesPageState extends State<MemoriesPage> {
                               tooltip: unreviewedCount > 0 ? 'Review memories' : 'No memories to review',
                             ),
                             IconButton(
-                              icon: const Icon(Icons.delete_sweep_outlined),
+                              icon: const Icon(Icons.settings),
                               onPressed: () {
-                                _showDeleteAllConfirmation(context, provider);
+                                _showMemoryManagementSheet(context, provider);
                               },
+                              tooltip: 'Manage memories',
                             ),
                             IconButton(
                               icon: const Icon(Icons.add),
@@ -407,6 +409,15 @@ class MemoriesPageState extends State<MemoriesPage> {
           ),
         ],
       ),
+    );
+  }
+
+  void _showMemoryManagementSheet(BuildContext context, MemoriesProvider provider) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => MemoryManagementSheet(provider: provider),
     );
   }
 }

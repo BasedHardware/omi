@@ -111,7 +111,7 @@ class MemoriesProvider extends ChangeNotifier {
     _setCategories();
   }
 
-  void updateMemoryVisibility(Memory memory, MemoryVisibility visibility) async {
+  Future<void> updateMemoryVisibility(Memory memory, MemoryVisibility visibility) async {
     await updateMemoryVisibilityServer(memory.id, visibility.name);
 
     final idx = _memories.indexWhere((m) => m.id == memory.id);
@@ -171,5 +171,17 @@ class MemoriesProvider extends ChangeNotifier {
 
       _setCategories();
     }
+  }
+
+  Future<void> updateAllMemoriesVisibility(bool makePrivate) async {
+    final visibility = makePrivate ? MemoryVisibility.private : MemoryVisibility.public;
+
+    for (var memory in _memories) {
+      if (memory.visibility != visibility) {
+        await updateMemoryVisibility(memory, visibility);
+      }
+    }
+
+    notifyListeners();
   }
 }
