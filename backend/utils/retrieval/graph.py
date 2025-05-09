@@ -27,7 +27,6 @@ from utils.llm import (
     requires_context,
     answer_simple_message,
     answer_simple_message_stream,
-    retrieve_context_dates,
     retrieve_context_dates_by_question,
     qa_rag,
     qa_rag_stream,
@@ -35,7 +34,6 @@ from utils.llm import (
     retrieve_is_file_question,
     select_structured_filters,
     extract_question_from_conversation,
-    generate_embedding,
 )
 from utils.other.chat_file import FileChatTool
 from utils.other.endpoints import timeit
