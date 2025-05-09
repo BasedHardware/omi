@@ -111,15 +111,14 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
 ## Running with Logging Enabled
 
 1. Start the backend with logging enabled:
-   Running the server with your virtual environment, add the logging parameters:
+   Running the server with your virtual environment:
 
    ```bash
-   # Enable logging with debug level
-   source venv/bin/activate && uvicorn main:app --reload --env-file .env --log-config logging_config.json
+   # Enable logging
+   source venv/bin/activate && uvicorn main:app --reload --env-file .env
    ```
 
-
-2.  Or via Docker:
+2. Or via Docker:
 
 ```bash
 # Build and run with Docker, then follow logs
@@ -143,8 +142,11 @@ docker compose up --build -d && docker compose logs -f
 
 ### Customizing Logging
 
-The `logging_config.json` file controls how logging works:
-- Adjust log levels (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`)
+Logging is configured in `utils/logging_config.py`:
+- The file handles log rotation automatically
+- Adjust log levels and formats by modifying the Python configuration
+- The default format shows: `[timestamp] [level] [module] message`
+- Default log level is set to `INFO` unless overridden by the `LOG_LEVEL` environment variable
 
 ## Running with Docker
 
