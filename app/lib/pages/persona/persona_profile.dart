@@ -99,6 +99,15 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                   }
                 },
               ),
+              title: const Text(
+                'Persona',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+              centerTitle: true,
               actions: [], // Empty actions - no settings button needed
             ),
             body: persona == null

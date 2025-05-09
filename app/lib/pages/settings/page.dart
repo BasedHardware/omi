@@ -89,7 +89,7 @@ class _SettingsPageState extends State<SettingsPage> {
           },
           icon: Icons.bluetooth_connected_sharp,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 20),
         getItemAddOn2(
           'Guides & Tutorials',
           () async {
@@ -103,7 +103,7 @@ class _SettingsPageState extends State<SettingsPage> {
           () => routeToPage(context, const AboutOmiPage()),
           icon: Icons.workspace_premium_sharp,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 20),
         getItemAddOn2('Developer Mode', () async {
           await routeToPage(context, const DeveloperSettingsPage());
           setState(() {});
@@ -195,8 +195,14 @@ class _SettingsPageState extends State<SettingsPage> {
           appBar: AppBar(
             backgroundColor: Theme.of(context).colorScheme.primary,
             automaticallyImplyLeading: true,
-            title: const Text('Settings'),
-            centerTitle: false,
+            title: const Text(
+              'Settings',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            centerTitle: true,
             leading: IconButton(
               icon: const Icon(Icons.arrow_back_ios_new),
               onPressed: () {
@@ -206,22 +212,28 @@ class _SettingsPageState extends State<SettingsPage> {
             actions: [
               Consumer<PersonaProvider>(builder: (context, personaProvider, _) {
                 return Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: GestureDetector(
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => const PersonaProfilePage(),
-                          settings: const RouteSettings(
-                            arguments: 'from_settings',
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.transparent,
+                    ),
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => const PersonaProfilePage(),
+                            settings: const RouteSettings(
+                              arguments: 'from_settings',
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                    child: SvgPicture.asset(
-                      Assets.images.icPersonaProfile.path,
-                      width: 24,
-                      height: 24,
+                        );
+                      },
+                      child: SvgPicture.asset(
+                        Assets.images.icPersonaProfile.path,
+                        width: 28,
+                        height: 28,
+                      ),
                     ),
                   ),
                 );
