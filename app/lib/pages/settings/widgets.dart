@@ -56,7 +56,7 @@ getItemAddOn2(String title, VoidCallback onTap, {required IconData icon}) {
       child: Container(
         decoration: BoxDecoration(
           color: const Color.fromARGB(255, 29, 29, 29),
-        borderRadius: BorderRadius.circular(12.0),
+        borderRadius: BorderRadius.circular(10.0),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.1),
@@ -66,7 +66,7 @@ getItemAddOn2(String title, VoidCallback onTap, {required IconData icon}) {
         ],
         ),
         child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -76,9 +76,9 @@ getItemAddOn2(String title, VoidCallback onTap, {required IconData icon}) {
                   Icon(
                     icon,
                     color: Colors.white,
-                    size: 26
+                    size: 22
                   ),
-                  const SizedBox(width: 20),
+                  const SizedBox(width: 16),
                   Expanded(
                     child: Text(
                     title,
@@ -95,7 +95,7 @@ getItemAddOn2(String title, VoidCallback onTap, {required IconData icon}) {
             const Icon(
               Icons.arrow_forward_ios,
               color: Colors.white,
-              size: 18
+              size: 16
             ),
             ],
         ),
