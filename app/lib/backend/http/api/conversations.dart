@@ -13,7 +13,7 @@ import 'package:path/path.dart';
 
 Future<CreateConversationResponse?> processInProgressConversation() async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v2/memories',
+    url: '${Env.apiBaseUrl}v1/conversations',
     headers: {},
     method: 'POST',
     body: jsonEncode({}),
