@@ -3,18 +3,18 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/http/api/speech_profile.dart';
-import 'package:friend_private/backend/http/api/users.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/backend/schema/message_event.dart';
-import 'package:friend_private/backend/schema/transcript_segment.dart';
-import 'package:friend_private/providers/device_provider.dart';
-import 'package:friend_private/services/devices.dart';
-import 'package:friend_private/services/services.dart';
-import 'package:friend_private/services/sockets/transcription_connection.dart';
-import 'package:friend_private/utils/audio/wav_bytes.dart';
+import 'package:omi/backend/http/api/speech_profile.dart';
+import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/message_event.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/services/devices.dart';
+import 'package:omi/services/services.dart';
+import 'package:omi/services/sockets/transcription_connection.dart';
+import 'package:omi/utils/audio/wav_bytes.dart';
 
 class SpeechProfileProvider extends ChangeNotifier
     with MessageNotifierMixin
@@ -30,7 +30,7 @@ class SpeechProfileProvider extends ChangeNotifier
   StreamSubscription<OnConnectionStateChangedEvent>? connectionStateListener;
   List<TranscriptSegment> segments = [];
   double? streamStartedAtSecond;
-  WavBytesUtil audioStorage = WavBytesUtil(codec: BleAudioCodec.opus);
+  late WavBytesUtil audioStorage;
   StreamSubscription? _bleBytesStream;
 
   TranscriptSegmentSocketService? _socket;
@@ -87,7 +87,10 @@ class SpeechProfileProvider extends ChangeNotifier
     _finalizedCallback = finalizedCallback;
     setInitialising(true);
     device = deviceProvider?.connectedDevice;
-    await _initiateWebsocket(force: true);
+
+    BleAudioCodec codec = await _getAudioCodec(device!.id);
+    audioStorage = WavBytesUtil(codec: codec, framesPerSecond: codec.getFramesPerSecond());
+    await _initiateWebsocket(codec: codec, force: true);
 
     if (device != null) await initiateFriendAudioStreaming();
     if (_socket?.state != SocketServiceState.connected) {
@@ -116,10 +119,11 @@ class SpeechProfileProvider extends ChangeNotifier
     ServiceManager.instance().device.subscribe(this, this);
   }
 
-  Future<void> _initiateWebsocket({bool force = false}) async {
+  Future<void> _initiateWebsocket({required BleAudioCodec codec, bool force = false}) async {
+    int sampleRate = (codec.isOpusSupported() ? 16000 : 8000);
     _socket = await ServiceManager.instance()
         .socket
-        .speechProfile(codec: BleAudioCodec.opus, sampleRate: 16000, force: force);
+        .speechProfile(codec: codec, sampleRate: sampleRate, language: "auto", force: force);
     if (_socket == null) {
       throw Exception("Can not create new speech profile socket");
     }
@@ -187,6 +191,14 @@ class SpeechProfileProvider extends ChangeNotifier
   }
 
   // TODO: use connection directly
+  Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return BleAudioCodec.pcm8;
+    }
+    return connection.getAudioCodec();
+  }
+
   Future<StreamSubscription?> _getBleAudioBytesListener(
     String deviceId, {
     required void Function(List<int>) onAudioBytesReceived,
@@ -341,9 +353,10 @@ class SpeechProfileProvider extends ChangeNotifier
     }
     streamStartedAtSecond ??= newSegments[0].start;
 
+    var remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
     TranscriptSegment.combineSegments(
       segments,
-      newSegments,
+      remainSegments,
       toRemoveSeconds: streamStartedAtSecond ?? 0,
     );
     updateProgressMessage();

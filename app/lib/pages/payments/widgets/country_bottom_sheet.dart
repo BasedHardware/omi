@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/extensions/string.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
 import '../payment_method_provider.dart';
@@ -19,7 +19,7 @@ class _CountryBottomSheetState extends State<CountryBottomSheet> {
   void initState() {
     super.initState();
     _searchController.addListener(() {
-      context.read<PaymentMethodProvider>().updateSearchQuery(_searchController.text);
+      context.read<PaymentMethodProvider>().updateSearchQuery(_searchController.text.decodeString);
     });
   }
 

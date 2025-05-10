@@ -1,356 +1,191 @@
-import asyncio
-import json
-import uuid
-from datetime import datetime, timedelta
-from typing import List, Tuple, Optional
+from datetime import datetime, timezone
+from typing import List
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
-from google.cloud.firestore_v1.async_client import AsyncClient
 
-import utils.other.hume as hume
-from models.memory import MemoryPhoto, PostProcessingStatus, PostProcessingModel, MemoryStatus
-from models.transcript_segment import TranscriptSegment
 from ._client import db
 
-
-# *****************************
-# ********** CRUD *************
-# *****************************
-
-def upsert_memory(uid: str, memory_data: dict):
-    if 'audio_base64_url' in memory_data:
-        del memory_data['audio_base64_url']
-    if 'photos' in memory_data:
-        del memory_data['photos']
-
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_data['id'])
-    memory_ref.set(memory_data)
+memories_collection = 'memories'
+users_collection = 'users'
 
 
-def get_memory(uid, memory_id):
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_id)
-    return memory_ref.get().to_dict()
-
-
-def get_memories(uid: str, limit: int = 100, offset: int = 0, include_discarded: bool = False,
-                 statuses: List[str] = []):
+def get_memories(uid: str, limit: int = 100, offset: int = 0, categories: List[str] = []):
+    print('get_memories db', uid, limit, offset, categories)
+    memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
+    if categories:
+        memories_ref = memories_ref.where(filter=FieldFilter('category', 'in', categories))
+        
     memories_ref = (
-        db.collection('users').document(uid).collection('memories')
+        memories_ref
+        .where(filter=FieldFilter('deleted', '==', False))
+        .order_by('scoring', direction=firestore.Query.DESCENDING)
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+        .limit(limit)
+        .offset(offset)
+    )
+
+    # TODO: put user review to firestore query
+    memories = [doc.to_dict() for doc in memories_ref.stream()]
+    print("get_memories", len(memories))
+    result = [memory for memory in memories if memory['user_review'] is not False]
+    return result
+
+
+def get_user_public_memories(uid: str, limit: int = 100, offset: int = 0):
+    print('get_public_memories', limit, offset)
+
+    memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
+    memories_ref = (
+        memories_ref.order_by('scoring', direction=firestore.Query.DESCENDING)
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
         .where(filter=FieldFilter('deleted', '==', False))
     )
-    if not include_discarded:
-        memories_ref = memories_ref.where(filter=FieldFilter('discarded', '==', False))
-    if len(statuses) > 0:
-        memories_ref = memories_ref.where(filter=FieldFilter('status', 'in', statuses))
-    memories_ref = memories_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+
+    memories_ref = memories_ref.limit(limit).offset(offset)
+
+    memories = [doc.to_dict() for doc in memories_ref.stream()]
+
+    # Consider visibility as 'public' if it's missing
+    public_memories = [memory for memory in memories if memory.get('visibility', 'public') == 'public']
+
+    return public_memories
+
+
+def get_non_filtered_memories(uid: str, limit: int = 100, offset: int = 0):
+    print('get_non_filtered_memories', uid, limit, offset)
+    memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
+    memories_ref = (
+        memories_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+        .where(filter=FieldFilter('deleted', '==', False))
+    )
     memories_ref = memories_ref.limit(limit).offset(offset)
     return [doc.to_dict() for doc in memories_ref.stream()]
 
 
-def update_memory(uid: str, memory_id: str, memoy_data: dict):
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_id)
-    memory_ref.update(memoy_data)
+def create_memory(uid: str, data: dict):
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(data['id'])
+    memory_ref.set(data)
 
 
-def update_memory_title(uid: str, memory_id: str, title: str):
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_id)
-    memory_ref.update({'structured.title': title})
+def save_memories(uid: str, data: List[dict]):
+    batch = db.batch()
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    for memory in data:
+        memory_ref = memories_ref.document(memory['id'])
+        batch.set(memory_ref, memory)
+    batch.commit()
 
 
-def delete_memory(uid, memory_id):
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_id)
+def delete_memories(uid: str):
+    batch = db.batch()
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    for doc in memories_ref.stream():
+        batch.delete(doc.reference)
+    batch.commit()
+
+
+def get_memory(uid: str, memory_id: str):
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(memory_id)
+    return memory_ref.get().to_dict()
+
+
+def review_memory(uid: str, memory_id: str, value: bool):
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(memory_id)
+    memory_ref.update({'reviewed': True, 'user_review': value})
+
+
+def change_memory_visibility(uid: str, memory_id: str, value: str):
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(memory_id)
+    memory_ref.update({'visibility': value})
+
+
+def edit_memory(uid: str, memory_id: str, value: str):
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(memory_id)
+    memory_ref.update({'content': value, 'edited': True, 'updated_at': datetime.now(timezone.utc)})
+
+
+def delete_memory(uid: str, memory_id: str):
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(memory_id)
     memory_ref.update({'deleted': True})
 
 
-def filter_memories_by_date(uid, start_date, end_date):
-    user_ref = db.collection('users').document(uid)
-    query = (
-        user_ref.collection('memories')
-        .where(filter=FieldFilter('created_at', '>=', start_date))
-        .where(filter=FieldFilter('created_at', '<=', end_date))
-        .where(filter=FieldFilter('deleted', '==', False))
-        .where(filter=FieldFilter('discarded', '==', False))
-        .order_by('created_at', direction=firestore.Query.DESCENDING)
-    )
-    return [doc.to_dict() for doc in query.stream()]
-
-
-def get_memories_by_id(uid, memory_ids):
-    user_ref = db.collection('users').document(uid)
-    memories_ref = user_ref.collection('memories')
-
-    doc_refs = [memories_ref.document(str(memory_id)) for memory_id in memory_ids]
-    docs = db.get_all(doc_refs)
-
-    memories = []
-    for doc in docs:
-        if doc.exists:
-            data = doc.to_dict()
-            if data.get('deleted') or data.get('discarded'):
-                continue
-            memories.append(data)
-    return memories
-
-
-# **************************************
-# ********** STATUS *************
-# **************************************
-
-def get_in_progress_memory(uid: str):
-    user_ref = db.collection('users').document(uid)
-    memories_ref = (
-        user_ref.collection('memories')
-        .where(filter=FieldFilter('status', '==', 'in_progress'))
-    )
-    docs = [doc.to_dict() for doc in memories_ref.stream()]
-    return docs[0] if docs else None
-
-
-def get_processing_memories(uid: str):
-    user_ref = db.collection('users').document(uid)
-    memories_ref = (
-        user_ref.collection('memories')
-        .where(filter=FieldFilter('status', '==', 'processing'))
-    )
-    return [doc.to_dict() for doc in memories_ref.stream()]
-
-
-def update_memory_status(uid: str, memory_id: str, status: str):
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_id)
-    memory_ref.update({'status': status})
-
-
-def set_memory_as_discarded(uid: str, memory_id: str):
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_id)
-    memory_ref.update({'discarded': True})
-
-
-# *********************************
-# ********** CALENDAR *************
-# *********************************
-
-def update_memory_events(uid: str, memory_id: str, events: List[dict]):
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_id)
-    memory_ref.update({'structured.events': events})
-
-
-# *********************************
-# ******** ACTION ITEMS ***********
-# *********************************
-
-def update_memory_action_items(uid: str, memory_id: str, action_items: List[dict]):
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_id)
-    memory_ref.update({'structured.action_items': action_items})
-
-
-# ******************************
-# ********** OTHER *************
-# ******************************
-
-def update_memory_finished_at(uid: str, memory_id: str, finished_at: datetime):
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_id)
-    memory_ref.update({'finished_at': finished_at})
-
-
-def update_memory_segments(uid: str, memory_id: str, segments: List[dict]):
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_id)
-    memory_ref.update({'transcript_segments': segments})
-
-
-# ***********************************
-# ********** VISIBILITY *************
-# ***********************************
-
-def set_memory_visibility(uid: str, memory_id: str, visibility: str):
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_id)
-    memory_ref.update({'visibility': visibility})
-
-
-async def _get_public_memory(db: AsyncClient, uid: str, memory_id: str):
-    memory_ref = db.collection('users').document(uid).collection('memories').document(memory_id)
-    memory_doc = await memory_ref.get()
-    if memory_doc.exists:
-        memory_data = memory_doc.to_dict()
-        if memory_data.get('visibility') in ['public'] and not memory_data.get('deleted'):
-            return memory_data
-    return None
-
-
-async def _get_public_memories(data: List[Tuple[str, str]]):
-    db = AsyncClient()
-    tasks = [_get_public_memory(db, uid, memory_id) for uid, memory_id in data]
-    memories = await asyncio.gather(*tasks)
-    return [memory for memory in memories if memory is not None]
-
-
-def run_get_public_memories(data: List[Tuple[str, str]]):
-    return asyncio.run(_get_public_memories(data))
-
-
-# ****************************************
-# ********** POSTPROCESSING **************
-# ****************************************
-
-def set_postprocessing_status(
-        uid: str, memory_id: str, status: PostProcessingStatus, fail_reason: str = None,
-        model: PostProcessingModel = PostProcessingModel.fal_whisperx
-):
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_id)
-    memory_ref.update({
-        'postprocessing.status': status,
-        'postprocessing.model': model,
-        'postprocessing.fail_reason': fail_reason
-    })
-
-
-def store_model_segments_result(uid: str, memory_id: str, model_name: str, segments: List[TranscriptSegment]):
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_id)
-    segments_ref = memory_ref.collection(model_name)
+def delete_all_memories(uid: str):
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    query = memories_ref.where(filter=FieldFilter('deleted', '==', False))
     batch = db.batch()
-    for i, segment in enumerate(segments):
-        segment_id = str(uuid.uuid4())
-        segment_ref = segments_ref.document(segment_id)
-        batch.set(segment_ref, segment.dict())
-        if i >= 400:
-            batch.commit()
-            batch = db.batch()
+    for doc in query.stream():
+        batch.update(doc.reference, {'deleted': True})
     batch.commit()
 
 
-def store_model_emotion_predictions_result(
-        uid: str, memory_id: str, model_name: str,
-        predictions: List[hume.HumeJobModelPredictionResponseModel]
-):
-    now = datetime.now()
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_id)
-    predictions_ref = memory_ref.collection(model_name)
+def delete_memories_for_conversation(uid: str, memory_id: str):
     batch = db.batch()
-    count = 0
-    for prediction in predictions:
-        prediction_id = str(uuid.uuid4())
-        prediction_ref = predictions_ref.document(prediction_id)
-        batch.set(prediction_ref, {
-            "created_at": now,
-            "start": prediction.time[0],
-            "end": prediction.time[1],
-            "emotions": json.dumps(hume.HumePredictionEmotionResponseModel.to_multi_dict(prediction.emotions)),
-        })
-        count = count + 1
-        if count >= 100:
-            batch.commit()
-            batch = db.batch()
-            count = 0
-    batch.commit()
-
-
-def get_memory_transcripts_by_model(uid: str, memory_id: str):
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_id)
-    deepgram_ref = memory_ref.collection('deepgram_streaming')
-    soniox_ref = memory_ref.collection('soniox_streaming')
-    speechmatics_ref = memory_ref.collection('speechmatics_streaming')
-    whisperx_ref = memory_ref.collection('fal_whisperx')
-
-    return {
-        'deepgram': list(sorted([doc.to_dict() for doc in deepgram_ref.stream()], key=lambda x: x['start'])),
-        'soniox': list(sorted([doc.to_dict() for doc in soniox_ref.stream()], key=lambda x: x['start'])),
-        'speechmatics': list(sorted([doc.to_dict() for doc in speechmatics_ref.stream()], key=lambda x: x['start'])),
-        'whisperx': list(sorted([doc.to_dict() for doc in whisperx_ref.stream()], key=lambda x: x['start'])),
-    }
-
-
-# ***********************************
-# ********** OPENGLASS **************
-# ***********************************
-
-def store_memory_photos(uid: str, memory_id: str, photos: List[MemoryPhoto]):
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_id)
-    photos_ref = memory_ref.collection('photos')
-    batch = db.batch()
-    for photo in photos:
-        photo_id = str(uuid.uuid4())
-        photo_ref = photos_ref.document(str(uuid.uuid4()))
-        data = photo.dict()
-        data['id'] = photo_id
-        batch.set(photo_ref, data)
-    batch.commit()
-
-
-def get_memory_photos(uid: str, memory_id: str):
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_id)
-    photos_ref = memory_ref.collection('photos')
-    return [doc.to_dict() for doc in photos_ref.stream()]
-
-
-# ********************************
-# ********** SYNCING *************
-# ********************************
-
-def get_closest_memory_to_timestamps(
-        uid: str, start_timestamp: int, end_timestamp: int
-) -> Optional[dict]:
-    print('get_closest_memory_to_timestamps', start_timestamp, end_timestamp)
-    start_threshold = datetime.utcfromtimestamp(start_timestamp) - timedelta(minutes=2)
-    end_threshold = datetime.utcfromtimestamp(end_timestamp) + timedelta(minutes=2)
-    print('get_closest_memory_to_timestamps', start_threshold, end_threshold)
-
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
     query = (
-        db.collection('users').document(uid).collection('memories')
-        .where(filter=FieldFilter('finished_at', '>=', start_threshold))
-        .where(filter=FieldFilter('started_at', '<=', end_threshold))
+        memories_ref.where(filter=FieldFilter('memory_id', '==', memory_id))
         .where(filter=FieldFilter('deleted', '==', False))
-        .order_by('created_at', direction=firestore.Query.DESCENDING)
     )
 
-    memories = [doc.to_dict() for doc in query.stream()]
-    print('get_closest_memory_to_timestamps len(memories)', len(memories))
-    if not memories:
-        return None
+    removed_ids = []
+    for doc in query.stream():
+        batch.update(doc.reference, {'deleted': True})
+        removed_ids.append(doc.id)
+    batch.commit()
+    print('delete_memories_for_conversation', memory_id, len(removed_ids))
 
-    print('get_closest_memory_to_timestamps found:')
-    for memory in memories:
-        print('-', memory['id'], memory['started_at'], memory['finished_at'])
 
-    # get the memory that has the closest start timestamp or end timestamp
-    closest_memory = None
-    min_diff = float('inf')
-    for memory in memories:
-        memory_start_timestamp = memory['started_at'].timestamp()
-        memory_end_timestamp = memory['finished_at'].timestamp()
-        diff1 = abs(memory_start_timestamp - start_timestamp)
-        diff2 = abs(memory_end_timestamp - end_timestamp)
-        if diff1 < min_diff or diff2 < min_diff:
-            min_diff = min(diff1, diff2)
-            closest_memory = memory
+def migrate_memories(prev_uid: str, new_uid: str, app_id: str = None):
+    """
+    Migrate memories from one user to another.
+    If app_id is provided, only migrate memories related to that app.
+    """
+    print(f'Migrating memories from {prev_uid} to {new_uid}')
 
-    print('get_closest_memory_to_timestamps closest_memory:', closest_memory['id'])
-    return closest_memory
+    # Get source memories
+    prev_user_ref = db.collection(users_collection).document(prev_uid)
+    prev_memories_ref = prev_user_ref.collection(memories_collection)
 
-def get_last_completed_memory(uid: str) -> Optional[dict]:
-    query = (
-        db.collection('users').document(uid).collection('memories')
-        .where(filter=FieldFilter('deleted', '==', False))
-        .where(filter=FieldFilter('status', '==', MemoryStatus.completed))
-        .order_by('created_at', direction=firestore.Query.DESCENDING)
-        .limit(1)
-    )
-    memories = [doc.to_dict() for doc in query.stream()]
-    return memories[0] if memories else None
+    # Apply app_id filter if provided
+    if app_id:
+        query = prev_memories_ref.where(filter=FieldFilter('app_id', '==', app_id))
+    else:
+        query = prev_memories_ref
+
+    # Get memories to migrate
+    memories_to_migrate = [doc.to_dict() for doc in query.stream()]
+
+    if not memories_to_migrate:
+        print(f'No memories to migrate for user {prev_uid}')
+        return 0
+
+    # Create batch for destination user
+    batch = db.batch()
+    new_user_ref = db.collection(users_collection).document(new_uid)
+    new_memories_ref = new_user_ref.collection('facts')
+
+    # Add memories to batch
+    for memory in memories_to_migrate:
+        memory_ref = new_memories_ref.document(memory['id'])
+        batch.set(memory_ref, memory)
+
+    # Commit batch
+    batch.commit()
+    print(f'Migrated {len(memories_to_migrate)} memories from {prev_uid} to {new_uid}')
+    return len(memories_to_migrate)

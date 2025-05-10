@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_silero_vad/flutter_silero_vad.dart';
-import 'package:friend_private/utils/audio/wav_bytes.dart';
+import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -57,13 +57,11 @@ class AudioProcessorService {
   /// model was trained with 30ms? but if 40ms set, doesn't do shit
   AudioProcessorService({this.sampleRate = 16000, this.frameSize = 40});
 
-
   /// Gets the file path where the VAD model is stored.
   Future<String> get modelPath async => '${(await getApplicationSupportDirectory()).path}/silero_vad.onnx';
 
   /// Opus decoder instance
   late SimpleOpusDecoder opusDecoder;
-  WavBytesUtil wavBytesUtil = WavBytesUtil();
   final validFrames = <int>[];
 
   /// Initializes the VAD model and prepares the service for processing audio data.
@@ -87,7 +85,7 @@ class AudioProcessorService {
     // });
     Timer(const Duration(seconds: 30), () async {
       print('Timer started');
-      Uint8List wavBytes = wavBytesUtil.getUInt8ListBytes(validFrames, sampleRate);
+      Uint8List wavBytes = WavBytesUtil.getUInt8ListBytes(validFrames, sampleRate);
       final file = File('${(await getApplicationDocumentsDirectory()).path}/output.wav');
       await file.writeAsBytes(wavBytes);
     });

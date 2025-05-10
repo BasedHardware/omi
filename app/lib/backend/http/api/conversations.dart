@@ -2,11 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/backend/schema/structured.dart';
-import 'package:friend_private/backend/schema/transcript_segment.dart';
-import 'package:friend_private/env/env.dart';
+import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/env/env.dart';
 import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:path/path.dart';
@@ -43,7 +43,7 @@ Future<List<ServerConversation>> getConversations(
     bool includeDiscarded = true}) async {
   var response = await makeApiCall(
       url:
-          '${Env.apiBaseUrl}v1/memories?include_discarded=$includeDiscarded&limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}',
+          '${Env.apiBaseUrl}v1/conversations?include_discarded=$includeDiscarded&limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}',
       headers: {},
       method: 'GET',
       body: '');
@@ -53,17 +53,17 @@ Future<List<ServerConversation>> getConversations(
     var body = utf8.decode(response.bodyBytes);
     var memories =
         (jsonDecode(body) as List<dynamic>).map((conversation) => ServerConversation.fromJson(conversation)).toList();
-    debugPrint('getMemories length: ${memories.length}');
+    debugPrint('getConversations length: ${memories.length}');
     return memories;
   } else {
-    debugPrint('getMemories error ${response.statusCode}');
+    debugPrint('getConversations error ${response.statusCode}');
   }
   return [];
 }
 
-Future<ServerConversation?> reProcessConversationServer(String conversationId) async {
+Future<ServerConversation?> reProcessConversationServer(String conversationId, {String? appId}) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$conversationId/reprocess',
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/reprocess${appId != null ? '?app_id=$appId' : ''}',
     headers: {},
     method: 'POST',
     body: '',
@@ -78,7 +78,7 @@ Future<ServerConversation?> reProcessConversationServer(String conversationId) a
 
 Future<bool> deleteConversationServer(String conversationId) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$conversationId',
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId',
     headers: {},
     method: 'DELETE',
     body: '',
@@ -90,13 +90,12 @@ Future<bool> deleteConversationServer(String conversationId) async {
 
 Future<ServerConversation?> getConversationById(String conversationId) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$conversationId',
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId',
     headers: {},
     method: 'GET',
     body: '',
   );
   if (response == null) return null;
-  debugPrint('getConversationById: ${response.body}');
   if (response.statusCode == 200) {
     return ServerConversation.fromJson(jsonDecode(response.body));
   }
@@ -105,7 +104,7 @@ Future<ServerConversation?> getConversationById(String conversationId) async {
 
 Future<bool> updateConversationTitle(String conversationId, String title) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$conversationId/title?title=$title',
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/title?title=$title',
     headers: {},
     method: 'PATCH',
     body: '',
@@ -117,7 +116,7 @@ Future<bool> updateConversationTitle(String conversationId, String title) async 
 
 Future<List<ConversationPhoto>> getConversationPhotos(String conversationId) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$conversationId/photos',
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/photos',
     headers: {},
     method: 'GET',
     body: '',
@@ -156,7 +155,7 @@ class TranscriptsResponse {
 
 Future<TranscriptsResponse> getConversationTranscripts(String conversationId) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$conversationId/transcripts',
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/transcripts',
     headers: {},
     method: 'GET',
     body: '',
@@ -172,7 +171,7 @@ Future<TranscriptsResponse> getConversationTranscripts(String conversationId) as
 
 Future<bool> hasConversationRecording(String conversationId) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$conversationId/recording',
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/recording',
     headers: {},
     method: 'GET',
     body: '',
@@ -194,7 +193,7 @@ Future<bool> assignConversationTranscriptSegment(
 }) async {
   String assignType = isUser != null ? 'is_user' : 'person_id';
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$conversationId/segments/$segmentIdx/assign?value=${isUser ?? personId}'
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/segments/$segmentIdx/assign?value=${isUser ?? personId}'
         '&assign_type=$assignType&use_for_speech_training=$useForSpeechTraining',
     headers: {},
     method: 'PATCH',
@@ -214,7 +213,8 @@ Future<bool> assignConversationSpeaker(
 }) async {
   String assignType = isUser ? 'is_user' : 'person_id';
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$conversationId/assign-speaker/$speakerId?value=${isUser ? 'true' : personId}'
+    url:
+        '${Env.apiBaseUrl}v1/conversations/$conversationId/assign-speaker/$speakerId?value=${isUser ? 'true' : personId}'
         '&assign_type=$assignType&use_for_speech_training=$useForSpeechTraining',
     headers: {},
     method: 'PATCH',
@@ -227,7 +227,7 @@ Future<bool> assignConversationSpeaker(
 
 Future<bool> setConversationVisibility(String conversationId, {String visibility = 'shared'}) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$conversationId/visibility?value=$visibility&visibility=$visibility',
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/visibility?value=$visibility&visibility=$visibility',
     headers: {},
     method: 'PATCH',
     body: '',
@@ -247,7 +247,7 @@ Future<bool> setConversationEventsState(
     'values': values,
   }));
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$conversationId/events',
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/events',
     headers: {},
     method: 'PATCH',
     body: jsonEncode({
@@ -270,7 +270,7 @@ Future<bool> setConversationActionItemState(
     'values': values,
   }));
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$conversationId/action-items',
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/action-items',
     headers: {},
     method: 'PATCH',
     body: jsonEncode({
@@ -285,7 +285,7 @@ Future<bool> setConversationActionItemState(
 
 Future<bool> deleteConversationActionItem(String conversationId, ActionItem item) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$conversationId/action-items',
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/action-items',
     headers: {},
     method: 'DELETE',
     body: jsonEncode({
@@ -364,7 +364,7 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
 }) async {
   debugPrint(Env.apiBaseUrl);
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/search',
+    url: '${Env.apiBaseUrl}v1/conversations/search',
     headers: {},
     method: 'POST',
     body:
@@ -379,4 +379,22 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
     return (convos, currentPage, totalPages);
   }
   return (<ServerConversation>[], 0, 0);
+}
+
+
+Future<String> testConversationPrompt(String prompt, String conversationId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/test-prompt',
+    headers: {},
+    method: 'POST',
+    body: jsonEncode({
+      'prompt': prompt,
+    }),
+  );
+  if (response == null) return '';
+  if (response.statusCode == 200){
+    return jsonDecode(response.body)['summary'];
+  }else {
+    return '';
+  }
 }

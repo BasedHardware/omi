@@ -2,18 +2,20 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/pages/home/page.dart';
-import 'package:friend_private/pages/settings/people.dart';
-import 'package:friend_private/pages/speech_profile/user_speech_samples.dart';
-import 'package:friend_private/providers/capture_provider.dart';
-import 'package:friend_private/providers/speech_profile_provider.dart';
-import 'package:friend_private/services/services.dart';
-import 'package:friend_private/utils/analytics/intercom.dart';
-import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/device_widget.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/pages/home/page.dart';
+import 'package:omi/pages/settings/language_selection_dialog.dart';
+import 'package:omi/pages/settings/people.dart';
+import 'package:omi/pages/speech_profile/user_speech_samples.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/speech_profile_provider.dart';
+import 'package:omi/services/services.dart';
+import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/device_widget.dart';
+import 'package:omi/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:provider/provider.dart';
@@ -35,6 +37,11 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
       context.read<SpeechProfileProvider>().close();
       await context.read<SpeechProfileProvider>().updateDevice();
+
+      // Check if user has set primary language
+      if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
+        await LanguageSelectionDialog.show(context);
+      }
     });
 
     super.initState();
@@ -244,8 +251,8 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                 ),
                               ),
                               SizedBox(height: 20),
-                              Text("Note: This only works in English",
-                                  style: TextStyle(color: Colors.white, fontSize: 16)),
+                              //Text("Note: This only works in English",
+                              //    style: TextStyle(color: Colors.white, fontSize: 16)),
                             ],
                           )
                         : provider.text.isEmpty
@@ -314,6 +321,11 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                     )
                                   : MaterialButton(
                                       onPressed: () async {
+                                        // Check if user has set primary language, if not, show dialog
+                                        if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
+                                          await LanguageSelectionDialog.show(context);
+                                        }
+
                                         BleAudioCodec codec;
                                         try {
                                           codec = await _getAudioCodec(provider.device!.id);
@@ -336,7 +348,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                           return;
                                         }
 
-                                        if (codec != BleAudioCodec.opus) {
+                                        if (!codec.isOpusSupported()) {
                                           showDialog(
                                             context: context,
                                             builder: (c) => getDialog(

@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/gen/assets.gen.dart';
-import 'package:friend_private/pages/onboarding/wrapper.dart';
+import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/pages/onboarding/wrapper.dart';
 
-import 'package:friend_private/pages/persona/twitter/social_profile.dart';
-import 'package:friend_private/utils/other/temp.dart';
+import 'package:omi/pages/persona/twitter/social_profile.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
-
 
 class DeviceSelectionPage extends StatefulWidget {
   const DeviceSelectionPage({super.key});
@@ -89,10 +88,7 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                             await Posthog().capture(
                               eventName: 'clicked_get_started',
                             );
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(builder: (context) => const SocialHandleScreen()),
-                            );
+                            routeToPage(context, const OnboardingWrapper());
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white.withOpacity(0.12),
@@ -103,7 +99,7 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                             ),
                           ),
                           child: const Text(
-                            'Get Started',
+                            'Connect omi',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -115,13 +111,16 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                         ),
                         TextButton(
                           onPressed: () async {
-                            routeToPage(context, const OnboardingWrapper());
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(builder: (context) => const SocialHandleScreen()),
+                            );
                           },
                           child: const Text(
-                            'Sign in',
+                            'I don\'t have omi',
                             style: TextStyle(
                               color: Colors.white,
-                              fontWeight: FontWeight.w500,
+                              fontWeight: FontWeight.bold,
                               fontSize: 16,
                             ),
                           ),

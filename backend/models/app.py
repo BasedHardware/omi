@@ -35,6 +35,8 @@ class AuthStep(BaseModel):
 class ActionType(str, Enum):
     CREATE_MEMORY = "create_conversation"
     CREATE_FACTS = "create_facts"
+    READ_MEMORIES = "read_memories"
+    READ_CONVERSATIONS = "read_conversations"
 
 
 class Action(BaseModel):
@@ -106,6 +108,7 @@ class App(BaseModel):
     thumbnails: Optional[List[str]] = []  # List of thumbnail IDs
     thumbnail_urls: Optional[List[str]] = []  # List of thumbnail URLs
     is_influencer: Optional[bool] = False
+    is_popular: Optional[bool] = False
 
     def get_rating_avg(self) -> Optional[str]:
         return f'{self.rating_avg:.1f}' if self.rating_avg is not None else None
@@ -125,7 +128,7 @@ class App(BaseModel):
     def works_externally(self) -> bool:
         return self.has_capability('external_integration')
 
-    def triggers_on_memory_creation(self) -> bool:
+    def triggers_on_conversation_creation(self) -> bool:
         return self.works_externally() and self.external_integration.triggers_on == 'memory_creation'
 
     def triggers_realtime(self) -> bool:
@@ -142,6 +145,60 @@ class App(BaseModel):
     def get_image_url(self) -> str:
         return f'https://raw.githubusercontent.com/BasedHardware/Omi/main{self.image}'
 
+class AppCreate(BaseModel):
+    id: str
+    name: str
+    uid: Optional[str] = None
+    private: bool = False
+    approved: bool = False
+    status: str = 'approved'
+    category: str
+    email: Optional[str] = None
+    author: str
+    description: str
+    image: str
+    capabilities: Set[str]
+    memory_prompt: Optional[str] = None
+    chat_prompt: Optional[str] = None
+    persona_prompt: Optional[str] = None
+    username: Optional[str] = None
+    connected_accounts: List[str] = []
+    twitter: Optional[dict] = None
+    external_integration: Optional[ExternalIntegration] = None
+    deleted: bool = False
+    proactive_notification: Optional[ProactiveNotification] = None
+    created_at: Optional[datetime] = None
+    is_paid: Optional[bool] = False
+    price: Optional[float] = 0.0  # cents/100
+    payment_plan: Optional[str] = None
+    thumbnails: Optional[List[str]] = []  # List of thumbnail IDs
+
+class AppUpdate(BaseModel):
+    id: str
+    name: Optional[str] = None
+    uid: Optional[str] = None
+    private: Optional[bool] = None
+    category: Optional[str] = None
+    email: Optional[str] = None
+    author: Optional[str] = None
+    description: Optional[str] = None
+    image: Optional[str] = None
+    capabilities: Optional[Set[str]] = None
+    memory_prompt: Optional[str] = None
+    chat_prompt: Optional[str] = None
+    persona_prompt: Optional[str] = None
+    username: Optional[str] = None
+    connected_accounts: Optional[List[str]] = None
+    twitter: Optional[dict] = None
+    external_integration: Optional[ExternalIntegration] = None
+    deleted: Optional[bool] = None
+    proactive_notification: Optional[ProactiveNotification] = None
+    created_at: Optional[datetime] = None
+    is_paid: Optional[bool] = None
+    price: Optional[float] = None  # cents/100
+    payment_plan: Optional[str] = None
+    thumbnails: Optional[List[str]] = None  # List of thumbnail IDs
+    updated_at: Optional[datetime] = None
 
 class UsageHistoryType(str, Enum):
     memory_created_external_integration = 'memory_created_external_integration'

@@ -3,10 +3,10 @@ import 'dart:developer';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/env/env.dart';
+import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/env/env.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
 import 'package:http/http.dart' as http;
@@ -15,6 +15,29 @@ import 'package:path/path.dart';
 Future<List<App>> retrieveApps() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/apps',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  if (response != null && response.statusCode == 200 && response.body.isNotEmpty) {
+    try {
+      log('apps: ${response.body}');
+      var apps = App.fromJsonList(jsonDecode(response.body));
+      apps = apps.where((p) => !p.deleted).toList();
+      SharedPreferencesUtil().appsList = apps;
+      return apps;
+    } catch (e, stackTrace) {
+      debugPrint(e.toString());
+      CrashReporting.reportHandledCrash(e, stackTrace);
+      return SharedPreferencesUtil().appsList;
+    }
+  }
+  return SharedPreferencesUtil().appsList;
+}
+
+Future<List<App>> retrievePopularApps() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/apps/popular',
     headers: {},
     body: '',
     method: 'GET',

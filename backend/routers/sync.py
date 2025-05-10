@@ -1,4 +1,5 @@
 import os
+import re
 import struct
 import threading
 import time
@@ -9,10 +10,10 @@ from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from opuslib import Decoder
 from pydub import AudioSegment
 
-from database.memories import get_closest_memory_to_timestamps, update_memory_segments
-from models.memory import CreateMemory
+from database.conversations import get_closest_conversation_to_timestamps, update_conversation_segments
+from models.conversation import CreateConversation
 from models.transcript_segment import TranscriptSegment
-from utils.memories.process_memory import process_memory
+from utils.conversations.process_conversation import process_conversation
 from utils.other import endpoints as auth
 from utils.other.storage import get_syncing_file_temporal_signed_url, delete_syncing_temporal_file
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
@@ -24,7 +25,7 @@ import shutil
 import wave
 
 
-def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, channels=1):
+def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, channels=1, frame_size: int = 160):
     decoder = Decoder(sample_rate, channels)
     with open(opus_file_path, 'rb') as f:
         pcm_data = []
@@ -45,7 +46,7 @@ def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, ch
                 print(f"Unexpected end of file at frame {frame_count}.")
                 break
             try:
-                pcm_frame = decoder.decode(opus_data, frame_size=160)
+                pcm_frame = decoder.decode(opus_data, frame_size=frame_size)
                 pcm_data.append(pcm_frame)
                 frame_count += 1
             except Exception as e:
@@ -101,7 +102,17 @@ def decode_files_to_wav(files_path: List[str]):
     wav_files = []
     for path in files_path:
         wav_path = path.replace('.bin', '.wav')
-        decode_opus_file_to_wav(path, wav_path)
+        filename = os.path.basename(path)
+        frame_size = 160  # Default frame size
+        match = re.search(r'_fs(\d+)', filename)
+        if match:
+            try:
+                frame_size = int(match.group(1))
+                print(f"Found frame size {frame_size} in filename: {filename}")
+            except ValueError:
+                print(f"Invalid frame size format in filename: {filename}, using default {frame_size}")
+
+        decode_opus_file_to_wav(path, wav_path, frame_size=frame_size)
         try:
             aseg = AudioSegment.from_wav(wav_path)
         except Exception as e:
@@ -166,15 +177,15 @@ def process_segment(path: str, uid: str, response: dict):
         return
 
     timestamp = get_timestamp_from_path(path)
-    closest_memory = get_closest_memory_to_timestamps(uid, timestamp, timestamp + transcript_segments[-1].end)
+    closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, timestamp + transcript_segments[-1].end)
 
     if not closest_memory:
-        create_memory = CreateMemory(
+        create_memory = CreateConversation(
             started_at=datetime.fromtimestamp(timestamp),
             finished_at=datetime.fromtimestamp(timestamp + transcript_segments[-1].end),
             transcript_segments=transcript_segments
         )
-        created = process_memory(uid, language, create_memory)
+        created = process_conversation(uid, language, create_memory)
         response['new_memories'].add(created.id)
     else:
         transcript_segments = [s.dict() for s in transcript_segments]
@@ -205,7 +216,7 @@ def process_segment(path: str, uid: str, response: dict):
 
         # save
         response['updated_memories'].add(closest_memory['id'])
-        update_memory_segments(uid, closest_memory['id'], segments)
+        update_conversation_segments(uid, closest_memory['id'], segments)
 
 
 @router.post("/v1/sync-local-files")

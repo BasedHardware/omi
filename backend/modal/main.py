@@ -19,3 +19,7 @@ def vad(file: UploadFile = File):
     print('vad')
     print(vad_endpoint)
     return vad_endpoint(file)
+
+@app.get('/health')
+def health_check():
+    return {"status": "healthy"}

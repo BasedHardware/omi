@@ -5,26 +5,25 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/http/api/conversations.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/backend/schema/message_event.dart';
-import 'package:friend_private/backend/schema/structured.dart';
-import 'package:friend_private/backend/schema/transcript_segment.dart';
-import 'package:friend_private/providers/conversation_provider.dart';
-import 'package:friend_private/providers/message_provider.dart';
-import 'package:friend_private/services/devices.dart';
-import 'package:friend_private/services/notifications.dart';
-import 'package:friend_private/services/services.dart';
-import 'package:friend_private/services/sockets/pure_socket.dart';
-import 'package:friend_private/services/sockets/sdcard_socket.dart';
-import 'package:friend_private/services/sockets/transcription_connection.dart';
-import 'package:friend_private/services/wals.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/enums.dart';
-import 'package:friend_private/utils/logger.dart';
+import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/message.dart';
+import 'package:omi/backend/schema/message_event.dart';
+import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/message_provider.dart';
+import 'package:omi/services/devices.dart';
+import 'package:omi/services/notifications.dart';
+import 'package:omi/services/services.dart';
+import 'package:omi/services/sockets/pure_socket.dart';
+import 'package:omi/services/sockets/sdcard_socket.dart';
+import 'package:omi/services/sockets/transcription_connection.dart';
+import 'package:omi/services/wals.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/enums.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
@@ -133,29 +132,30 @@ class CaptureProvider extends ChangeNotifier
     await _resetState();
   }
 
-  Future<void> changeAudioRecordProfile([
-    BleAudioCodec? audioCodec,
+  Future<void> changeAudioRecordProfile({
+    required BleAudioCodec audioCodec,
     int? sampleRate,
-  ]) async {
+  }) async {
     debugPrint("changeAudioRecordProfile");
     await _resetState();
     await _initiateWebsocket(audioCodec: audioCodec, sampleRate: sampleRate);
   }
 
   Future<void> _initiateWebsocket({
-    BleAudioCodec? audioCodec,
+    required BleAudioCodec audioCodec,
     int? sampleRate,
     bool force = false,
   }) async {
     debugPrint('initiateWebsocket in capture_provider');
 
-    BleAudioCodec codec = audioCodec ?? SharedPreferencesUtil().deviceCodec;
-    sampleRate ??= (codec == BleAudioCodec.opus ? 16000 : 8000);
+    BleAudioCodec codec = audioCodec;
+    sampleRate ??= (codec.isOpusSupported() ? 16000 : 8000);
 
     debugPrint('is ws null: ${_socket == null}');
 
     // Connect to the transcript socket
-    String language = SharedPreferencesUtil().recordingsLanguage;
+    String language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     _socket = await ServiceManager.instance()
         .socket
         .conversation(codec: codec, sampleRate: sampleRate, language: language, force: force);
@@ -178,9 +178,14 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
 
-    await messageProvider?.sendVoiceMessageStreamToServer(data, onFirstChunkRecived: () {
-      _playSpeakerHaptic(deviceId, 2);
-    });
+    BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
+    await messageProvider?.sendVoiceMessageStreamToServer(
+      data,
+      onFirstChunkRecived: () {
+        _playSpeakerHaptic(deviceId, 2);
+      },
+      codec: codec,
+    );
   }
 
   // Just incase the ble connection get loss
@@ -193,7 +198,7 @@ class CaptureProvider extends ChangeNotifier
       }
       var value = await _getBleButtonState(deviceId);
       var buttonState = ByteData.view(Uint8List.fromList(value.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
-      debugPrint("watch device button ${buttonState}");
+      debugPrint("watch device button $buttonState");
 
       // Force process
       if (buttonState == 5 && session == _voiceCommandSession) {
@@ -209,9 +214,10 @@ class CaptureProvider extends ChangeNotifier
     debugPrint('streamButton in capture_provider');
     _bleButtonStream?.cancel();
     _bleButtonStream = await _getBleButtonListener(deviceId, onButtonReceived: (List<int> value) {
-      if (value.isEmpty) return;
-      var buttonState = ByteData.view(Uint8List.fromList(value.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
-      debugPrint("device button ${buttonState}");
+      final snapshot = List<int>.from(value);
+      if (snapshot.isEmpty || snapshot.length < 4) return;
+      var buttonState = ByteData.view(Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
+      debugPrint("device button $buttonState");
 
       // start long press
       if (buttonState == 3 && _voiceCommandSession == null) {
@@ -231,20 +237,21 @@ class CaptureProvider extends ChangeNotifier
     });
   }
 
-  Future streamAudioToWs(String id, BleAudioCodec codec) async {
+  Future streamAudioToWs(String deviceId, BleAudioCodec codec) async {
     debugPrint('streamAudioToWs in capture_provider');
     _bleBytesStream?.cancel();
-    _bleBytesStream = await _getBleAudioBytesListener(id, onAudioBytesReceived: (List<int> value) {
-      if (value.isEmpty) return;
+    _bleBytesStream = await _getBleAudioBytesListener(deviceId, onAudioBytesReceived: (List<int> value) {
+      final snapshot = List<int>.from(value);
+      if (snapshot.isEmpty || snapshot.length < 3) return;
 
-      // command button triggered
+      // Command button triggered
       if (_voiceCommandSession != null) {
-        _commandBytes.add(value.sublist(3));
+        _commandBytes.add(snapshot.sublist(3));
       }
 
-      // support: opus codec, 1m from the first device connectes
+      // Support: opus codec, 1m from the first device connects
       var deviceFirstConnectedAt = _deviceService.getFirstConnectedAt();
-      var checkWalSupported = codec == BleAudioCodec.opus &&
+      var checkWalSupported = codec.isOpusSupported() &&
           (deviceFirstConnectedAt != null &&
               deviceFirstConnectedAt.isBefore(DateTime.now().subtract(const Duration(seconds: 15)))) &&
           SharedPreferencesUtil().localSyncEnabled;
@@ -252,7 +259,7 @@ class CaptureProvider extends ChangeNotifier
         setIsWalSupported(checkWalSupported);
       }
       if (_isWalSupported) {
-        _wal.getSyncs().phone.onByteStream(value);
+        _wal.getSyncs().phone.onByteStream(snapshot);
       }
 
       // send ws
@@ -271,17 +278,17 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> _resetState() async {
     debugPrint('resetState');
-    _cleanupCurrentState();
-    await _recheckCodecChange();
-    await _ensureSocketConnection();
-    await _initiateFriendAudioStreaming();
-    await initiateStorageBytesStreaming(); // ??
+    await _cleanupCurrentState();
+    await _ensureDeviceSocketConnection();
+    await _initiateDeviceAudioStreaming();
+    await initiateStorageBytesStreaming();
+
     notifyListeners();
   }
 
-  void _cleanupCurrentState() {
-    closeBleStream();
-    cancelConversationCreationTimer();
+  Future _cleanupCurrentState() async {
+    await _closeBleStream();
+    notifyListeners();
   }
 
   // TODO: use connection directly
@@ -342,46 +349,27 @@ class CaptureProvider extends ChangeNotifier
     return connection.getBleButtonState();
   }
 
-  Future<bool> _recheckCodecChange() async {
-    if (_recordingDevice != null) {
-      BleAudioCodec newCodec = await _getAudioCodec(_recordingDevice!.id);
-      if (SharedPreferencesUtil().deviceCodec != newCodec) {
-        debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $newCodec');
-        await SharedPreferencesUtil().setDeviceCodec(newCodec);
-        return true;
-      }
+  Future<void> _ensureDeviceSocketConnection() async {
+    if (_recordingDevice == null) {
+      return;
     }
-    return false;
-  }
-
-  Future<void> _ensureSocketConnection() async {
-    var codec = SharedPreferencesUtil().deviceCodec;
-    var language = SharedPreferencesUtil().recordingsLanguage;
+    BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
+    var language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     if (language != _socket?.language || codec != _socket?.codec || _socket?.state != SocketServiceState.connected) {
       await _initiateWebsocket(audioCodec: codec, force: true);
     }
   }
 
-  Future<void> _initiateFriendAudioStreaming() async {
-    if (_recordingDevice == null) return;
-
-    BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
-    if (SharedPreferencesUtil().deviceCodec != codec) {
-      debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $codec');
-      SharedPreferencesUtil().deviceCodec = codec;
-      notifyInfo('FIM_CHANGE');
-      await _ensureSocketConnection();
+  Future<void> _initiateDeviceAudioStreaming() async {
+    if (_recordingDevice == null) {
+      return;
     }
-
-    // Why is the _recordingDevice null at this point?
-    if (_recordingDevice != null) {
-      await streamButton(_recordingDevice!.id);
-      await streamAudioToWs(_recordingDevice!.id, codec);
-    } else {
-      // Is the app in foreground when this happens?
-      Logger.handle(Exception('Device Not Connected'), StackTrace.current,
-          message: 'Device Not Connected. Please make sure the device is turned on and nearby.');
-    }
+    final deviceId = _recordingDevice!.id;
+    BleAudioCodec codec = await _getAudioCodec(deviceId);
+    await _wal.getSyncs().phone.onAudioCodecChanged(codec);
+    await streamButton(deviceId);
+    await streamAudioToWs(deviceId, codec);
 
     notifyListeners();
   }
@@ -392,12 +380,8 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void closeBleStream() {
-    _bleBytesStream?.cancel();
-    notifyListeners();
-  }
-
-  void cancelConversationCreationTimer() {
+  Future _closeBleStream() async {
+    await _bleBytesStream?.cancel();
     notifyListeners();
   }
 
@@ -419,7 +403,7 @@ class CaptureProvider extends ChangeNotifier
     await Permission.microphone.request();
 
     // prepare
-    await changeAudioRecordProfile(BleAudioCodec.pcm16, 16000);
+    await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
 
     // record
     await ServiceManager.instance().mic.start(onByteReceived: (bytes) {
@@ -436,7 +420,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   stopStreamRecording() async {
-    _cleanupCurrentState();
+    await _cleanupCurrentState();
     ServiceManager.instance().mic.stop();
     await _socket?.stop(reason: 'stop stream recording');
   }
@@ -444,6 +428,7 @@ class CaptureProvider extends ChangeNotifier
   Future streamDeviceRecording({BtDevice? device}) async {
     debugPrint("streamDeviceRecording $device");
     if (device != null) _updateRecordingDevice(device);
+
     await _resetState();
   }
 
@@ -451,7 +436,7 @@ class CaptureProvider extends ChangeNotifier
     if (cleanDevice) {
       _updateRecordingDevice(null);
     }
-    _cleanupCurrentState();
+    await _cleanupCurrentState();
     await _socket?.stop(reason: 'stop stream device recording');
   }
 
@@ -482,8 +467,8 @@ class CaptureProvider extends ChangeNotifier
           t.cancel();
           return;
         }
-
-        await _initiateWebsocket();
+        BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
+        await _initiateWebsocket(audioCodec: codec);
       });
     }
   }
@@ -517,7 +502,7 @@ class CaptureProvider extends ChangeNotifier
   void onMessageEventReceived(ServerMessageEvent event) {
     if (event.type == MessageEventType.conversationProcessingStarted) {
       if (event.conversation == null) {
-        debugPrint("Memory data not received in event. Content is: $event");
+        debugPrint("Conversation data not received in event. Content is: $event");
         return;
       }
       conversationProvider!.addProcessingConversation(event.conversation!);
@@ -538,10 +523,19 @@ class CaptureProvider extends ChangeNotifier
 
     if (event.type == MessageEventType.lastConversation) {
       if (event.memoryId == null) {
-        debugPrint("Memory ID not received in last_memory event. Content is: $event");
+        debugPrint("Conversation ID not received in last_memory event. Content is: $event");
         return;
       }
       _handleLastConvoEvent(event.memoryId!);
+      return;
+    }
+
+    if (event.type == MessageEventType.translating) {
+      if (event.segments == null || event.segments?.isEmpty == true) {
+        debugPrint("No segments received in translating event. Content is: $event");
+        return;
+      }
+      _handleTranslationEvent(event.segments!);
       return;
     }
 
@@ -565,14 +559,12 @@ class CaptureProvider extends ChangeNotifier
     );
     processInProgressConversation().then((result) {
       if (result == null || result.conversation == null) {
-        _initiateWebsocket();
         conversationProvider!.removeProcessingConversation('0');
         return;
       }
       conversationProvider!.removeProcessingConversation('0');
       result.conversation!.isNew = true;
       _processConversationCreated(result.conversation, result.messages);
-      _initiateWebsocket();
     });
 
     return;
@@ -599,6 +591,24 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
+  void _handleTranslationEvent(List<TranscriptSegment> translatedSegments) {
+    try {
+      if (translatedSegments.isEmpty) return;
+
+      debugPrint("Received ${translatedSegments.length} translated segments");
+
+      // Update the segments with the translated ones
+      var remainSegments = TranscriptSegment.updateSegments(segments, translatedSegments);
+      if (remainSegments.isNotEmpty) {
+        debugPrint("Adding ${remainSegments.length} new translated segments");
+      }
+
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error handling translation event: $e");
+    }
+  }
+
   @override
   void onSegmentReceived(List<TranscriptSegment> newSegments) {
     if (newSegments.isEmpty) return;
@@ -608,7 +618,9 @@ class CaptureProvider extends ChangeNotifier
       FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
       _loadInProgressConversation();
     }
-    TranscriptSegment.combineSegments(segments, newSegments);
+    var remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
+    TranscriptSegment.combineSegments(segments, remainSegments);
+
     hasTranscripts = true;
     notifyListeners();
   }
@@ -672,7 +684,8 @@ class CaptureProvider extends ChangeNotifier
   Future<void> initiateStorageBytesStreaming() async {
     debugPrint('initiateStorageBytesStreaming');
     if (_recordingDevice == null) return;
-    var storageFiles = await _getStorageList(_recordingDevice!.id);
+    String deviceId = _recordingDevice!.id;
+    var storageFiles = await _getStorageList(deviceId);
     if (storageFiles.isEmpty) {
       return;
     }
@@ -688,180 +701,16 @@ class CaptureProvider extends ChangeNotifier
     }
 
     // 80: frame length, 100: frame per seconds
-    sdCardSecondsTotal = totalBytes / 80 / 100;
-    sdCardSecondsReceived = storageOffset / 80 / 100;
+    BleAudioCodec codec = await _getAudioCodec(deviceId);
+    sdCardSecondsTotal = totalBytes / codec.getFramesLengthInBytes() / codec.getFramesPerSecond();
+    sdCardSecondsReceived = storageOffset / codec.getFramesLengthInBytes() / codec.getFramesPerSecond();
 
     // > 10s
-    if (totalBytes - storageOffset > 10 * 80 * 100) {
+    if (totalBytes - storageOffset > 10 * codec.getFramesLengthInBytes() * codec.getFramesPerSecond()) {
       sdCardReady = true;
     }
 
     notifyListeners();
-
-    /* TODO: Remove
-    if (_recordingDevice == null) return;
-    currentStorageFiles = await _getStorageList(_recordingDevice!.id);
-    if (currentStorageFiles.isEmpty) {
-      debugPrint('No storage files found');
-      SharedPreferencesUtil().deviceIsV2 = false;
-      debugPrint('Device is not V2');
-      return;
-    }
-    SharedPreferencesUtil().deviceIsV2 = true;
-    debugPrint('Device is V2');
-    debugPrint('Device model name: ${_recordingDevice!.name}');
-    debugPrint('Storage files: $currentStorageFiles');
-    totalStorageFileBytes = currentStorageFiles[0];
-    var storageOffset = currentStorageFiles.length < 2 ? 0 : currentStorageFiles[1];
-    debugPrint('storageOffset: $storageOffset');
-    // SharedPreferencesUtil().previousStorageBytes = totalStorageFileBytes;
-    //check if new or old file
-    if (totalStorageFileBytes < SharedPreferencesUtil().previousStorageBytes) {
-      totalBytesReceived = 0;
-      currentTotalBytesReceived = 0;
-      SharedPreferencesUtil().currentStorageBytes = 0;
-    } else {
-      totalBytesReceived = SharedPreferencesUtil().currentStorageBytes;
-    }
-    if (totalBytesReceived > totalStorageFileBytes) {
-      totalBytesReceived = 0;
-      currentTotalBytesReceived = 0;
-    }
-    totalBytesReceived = storageOffset;
-    SharedPreferencesUtil().previousStorageBytes = totalStorageFileBytes;
-    sdCardSecondsTotal =
-        ((totalStorageFileBytes.toDouble() / 80.0) / 100.0) * 2.2; // change 2.2 depending on empirical dl speed
-    sdCardSecondsReceived = ((storageOffset.toDouble() / 80.0) / 100.0) * 2.2;
-    currentSdCardSecondsReceived = 0.0;
-    debugPrint('totalBytesReceived in initiateStorageBytesStreaming: $totalBytesReceived');
-    debugPrint(
-        'previousStorageBytes in initiateStorageBytesStreaming: ${SharedPreferencesUtil().previousStorageBytes}');
-    btConnectedTime = DateTime.now().toUtc().toString();
-
-    if (totalStorageFileBytes > 100) {
-      sdCardReady = true;
-    }
-    notifyListeners();
-		*/
-  }
-
-  @Deprecated("Unsued")
-  Future sendStorage(String id) async {
-    if (_storageStream != null) {
-      _storageStream?.cancel();
-    }
-    if (totalStorageFileBytes == 0) {
-      return;
-    }
-    await sdCardSocket.setupSdCardWebSocket(
-      //replace
-      onMessageReceived: () {
-        debugPrint('onMessageReceived');
-        conversationProvider?.getConversationsFromServer();
-        notifyListeners();
-        _notifySdCardComplete();
-        return;
-      },
-      btConnectedTime: btConnectedTime,
-    );
-    if (sdCardSocket.sdCardConnectionState != WebsocketConnectionStatus.connected) {
-      sdCardSocket.sdCardChannel?.sink.close();
-      await sdCardSocket.setupSdCardWebSocket(
-        onMessageReceived: () {
-          debugPrint('onMessageReceived');
-          conversationProvider?.getMoreConversationsFromServer();
-          _notifySdCardComplete();
-
-          return;
-        },
-        btConnectedTime: btConnectedTime,
-      );
-    }
-    // debugPrint('sd card connection state: ${sdCardSocketService?.sdCardConnectionState}');
-    _storageStream = await _getBleStorageBytesListener(id, onStorageBytesReceived: (List<int> value) async {
-      if (value.isEmpty) return;
-
-      if (value.length == 1) {
-        //result codes i guess
-        debugPrint('returned $value');
-        if (value[0] == 0) {
-          //valid command
-          DateTime storageStartTime = DateTime.now();
-          debugPrint('good to go');
-        } else if (value[0] == 3) {
-          debugPrint('bad file size. finishing...');
-        } else if (value[0] == 4) {
-          //file size is zero.
-          debugPrint('file size is zero. going to next one....');
-          // getFileFromDevice(sdCardFileNum + 1);
-        } else if (value[0] == 100) {
-          //valid end command
-
-          sdCardDownloadDone = true;
-          sdCardIsDownloading = false;
-          debugPrint('done. sending to backend....trying to dl more');
-
-          sdCardSocket.sdCardChannel?.sink.add(value); //replace
-          SharedPreferencesUtil().currentStorageBytes = 0;
-          SharedPreferencesUtil().previousStorageBytes = 0;
-          _clearFileFromDevice(sdCardFileNum);
-        } else {
-          //bad bit
-          debugPrint('Error bit returned');
-        }
-      } else if (value.length >= 80) {
-        //enforce a min packet size, large
-        if (value.length == 83) {
-          totalBytesReceived += 80;
-          currentTotalBytesReceived += 80;
-        } else {
-          totalBytesReceived += value.length;
-          currentTotalBytesReceived += value.length;
-        }
-        if (sdCardSocket.sdCardConnectionState != WebsocketConnectionStatus.connected) {
-          debugPrint('websocket provider state: ${sdCardSocket.sdCardConnectionState}');
-          //means we are disconnected, stop all transmission. attempt reconnection
-          if (!sdCardIsDownloading) {
-            debugPrint('sdCardIsDownloading: $sdCardIsDownloading');
-            return;
-          }
-          sdCardIsDownloading = false;
-          _pauseFileFromDevice(sdCardFileNum);
-          debugPrint('paused file from device');
-          //attempt reconnection
-          sdCardSocket.sdCardChannel?.sink.close();
-          sdCardSocket.attemptReconnection(
-            onMessageReceived: () {
-              debugPrint('onMessageReceived');
-              conversationProvider?.getMoreConversationsFromServer();
-              _notifySdCardComplete();
-              return;
-            },
-            btConnectedTime: btConnectedTime,
-          );
-          sdCardReconnectionTimer?.cancel();
-          sdCardReconnectionTimer = Timer(const Duration(seconds: 10), () {
-            debugPrint('sdCardReconnectionTimer');
-            if (sdCardSocket.sdCardConnectionState == WebsocketConnectionStatus.connected) {
-              sdCardIsDownloading = true;
-              _getFileFromDevice(sdCardFileNum, totalBytesReceived);
-            }
-          });
-
-          //call attempt reconnection
-          return;
-        }
-
-        sdCardSocket.sdCardChannel?.sink.add(value);
-        sdCardSecondsReceived = ((totalBytesReceived.toDouble() / 80.0) / 100.0) * 2.2;
-        currentSdCardSecondsReceived = ((currentTotalBytesReceived.toDouble() / 80.0) / 100.0) * 2.2;
-        SharedPreferencesUtil().currentStorageBytes = totalBytesReceived;
-      }
-      notifyListeners();
-    });
-
-    _getFileFromDevice(sdCardFileNum, totalBytesReceived);
-    //  notifyListeners();
   }
 
   Future _getFileFromDevice(int fileNum, int offset) async {
@@ -905,10 +754,5 @@ class CaptureProvider extends ChangeNotifier
       return [];
     }
     return connection.getStorageList();
-  }
-
-  void _setsdCardReady(bool value) {
-    sdCardReady = value;
-    notifyListeners();
   }
 }

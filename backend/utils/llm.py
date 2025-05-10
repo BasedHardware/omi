@@ -18,20 +18,21 @@ from pydantic import BaseModel, Field, ValidationError
 from database.redis_db import add_filter_category_item
 from models.app import App
 from models.chat import Message, MessageSender
-from models.facts import Fact, FactCategory
-from models.memory import Structured, MemoryPhoto, CategoryEnum, Memory
+from models.memories import Memory, MemoryCategory
+from models.conversation import Structured, ConversationPhoto, CategoryEnum, Conversation, ActionItem, Event
 from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment
 from models.trend import TrendEnum, ceo_options, company_options, software_product_options, hardware_product_options, \
     ai_product_options, TrendType
-from utils.prompts import extract_facts_prompt, extract_learnings_prompt, extract_facts_text_content_prompt
-from utils.llms.fact import get_prompt_facts
+from utils.prompts import extract_memories_prompt, extract_learnings_prompt, extract_memories_text_content_prompt
+from utils.llms.memory import get_prompt_memories
 
 llm_mini = ChatOpenAI(model='gpt-4o-mini')
 llm_mini_stream = ChatOpenAI(model='gpt-4o-mini', streaming=True)
 llm_large = ChatOpenAI(model='o1-preview')
 llm_large_stream = ChatOpenAI(model='o1-preview', streaming=True, temperature=1)
 llm_medium = ChatOpenAI(model='gpt-4o')
+llm_medium_experiment = ChatOpenAI(model='gpt-4.1')
 llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)
 llm_persona_mini_stream = ChatOpenAI(
     temperature=0.8,
@@ -65,22 +66,22 @@ def num_tokens_from_string(string: str) -> int:
 
 
 # **********************************************
-# ************* MEMORY PROCESSING **************
+# ********** CONVERSATION PROCESSING ***********
 # **********************************************
 
-class DiscardMemory(BaseModel):
-    discard: bool = Field(description="If the memory should be discarded or not")
+class DiscardConversation(BaseModel):
+    discard: bool = Field(description="If the conversation should be discarded or not")
 
 
 class SpeakerIdMatch(BaseModel):
     speaker_id: int = Field(description="The speaker id assigned to the segment")
 
 
-def should_discard_memory(transcript: str) -> bool:
+def should_discard_conversation(transcript: str) -> bool:
     if len(transcript.split(' ')) > 100:
         return False
 
-    parser = PydanticOutputParser(pydantic_object=DiscardMemory)
+    parser = PydanticOutputParser(pydantic_object=DiscardConversation)
     prompt = ChatPromptTemplate.from_messages([
         '''
     You will be given a conversation transcript, and your task is to determine if the conversation is worth storing as a memory or not.
@@ -92,7 +93,7 @@ def should_discard_memory(transcript: str) -> bool:
     ])
     chain = prompt | llm_mini | parser
     try:
-        response: DiscardMemory = chain.invoke({
+        response: DiscardConversation = chain.invoke({
             'transcript': transcript.strip(),
             'format_instructions': parser.get_format_instructions(),
         })
@@ -118,7 +119,7 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
     {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | ChatOpenAI(model='gpt-4o') | parser
+    chain = prompt | llm_mini | parser
 
     response = chain.invoke({
         'transcript': transcript.strip(),
@@ -135,12 +136,60 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
     return response
 
 
-def get_plugin_result(transcript: str, plugin: Plugin) -> str:
+def get_reprocess_transcript_structure(transcript: str, started_at: datetime, language_code: str, tz: str, title: str) -> Structured:
+    prompt_text = '''You are an expert conversation analyzer. Your task is to analyze the conversation and provide structure and clarity to the recording transcription of a conversation.
+    The conversation language is {language_code}. Use the same language {language_code} for your response.
+
+    For the title, use ```{title}```, if it is empty, use the main topic of the conversation.
+    For the overview, condense the conversation into a summary with the main topics discussed, make sure to capture the key points and important details from the conversation.
+    For the action items, include a list of commitments, specific tasks or actionable steps from the conversation that the user is planning to do or has to do on that specific day or in future. Remember the speaker is busy so this has to be very efficient and concise, otherwise they might miss some critical tasks. Specify which speaker is responsible for each action item.
+    For the category, classify the conversation into one of the available categories.
+    For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on {started_at}. {tz} is the user's timezone, convert it to UTC and respond in UTC.
+
+    Transcript: ```{transcript}```
+
+    {format_instructions}'''.replace('    ', '').strip()
+
+    prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
+    chain = prompt | llm_mini | parser
+
+    response = chain.invoke({
+        'transcript': transcript.strip(),
+        'title': title,
+        'format_instructions': parser.get_format_instructions(),
+        'language_code': language_code,
+        'started_at': started_at.isoformat(),
+        'tz': tz,
+    })
+
+    for event in (response.events or []):
+        if event.duration > 180:
+            event.duration = 180
+        event.created = False
+    return response
+
+
+def get_app_result(transcript: str, app: App) -> str:
     prompt = f'''
     Your are an AI with the following characteristics:
-    Name: ${plugin.name},
-    Description: ${plugin.description},
-    Task: ${plugin.memory_prompt}
+    Name: {app.name},
+    Description: {app.description},
+    Task: ${app.memory_prompt}
+
+    Conversation: ```{transcript.strip()}```,
+    '''
+
+    response = llm_medium_experiment.invoke(prompt)
+    content = response.content.replace('```json', '').replace('```', '')
+    return content
+
+
+def get_app_result_v1(transcript: str, app: App) -> str:
+    prompt = f'''
+    Your are an AI with the following characteristics:
+    Name: ${app.name},
+    Description: ${app.description},
+    Task: ${app.memory_prompt}
 
     Note: It is possible that the conversation you are given, has nothing to do with your task, \
     in that case, output an empty string. (For example, you are given a business conversation, but your task is medical analysis)
@@ -161,7 +210,7 @@ def get_plugin_result(transcript: str, plugin: Plugin) -> str:
 # ************* OPENGLASS **************
 # **************************************
 
-def summarize_open_glass(photos: List[MemoryPhoto]) -> Structured:
+def summarize_open_glass(photos: List[ConversationPhoto]) -> Structured:
     photos_str = ''
     for i, photo in enumerate(photos):
         photos_str += f'{i + 1}. "{photo.description}"\n'
@@ -197,7 +246,7 @@ def get_email_structure(text: str, started_at: datetime, language_code: str, tz:
     {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | ChatOpenAI(model='gpt-4o') | parser
+    chain = prompt | llm_medium | parser
 
     response = chain.invoke({
         'language_code': language_code,
@@ -213,7 +262,9 @@ def get_email_structure(text: str, started_at: datetime, language_code: str, tz:
         event.created = False
     return response
 
-def get_post_structure(text: str, started_at: datetime, language_code: str, tz: str, text_source_spec: str = None) -> Structured:
+
+def get_post_structure(text: str, started_at: datetime, language_code: str, tz: str,
+                       text_source_spec: str = None) -> Structured:
     prompt_text = '''
     You are an expert social media post analyzer. Your task is to analyze the post content and provide structure and clarity.
     The post language is {language_code}. Use the same language {language_code} for your response.
@@ -230,7 +281,7 @@ def get_post_structure(text: str, started_at: datetime, language_code: str, tz: 
     {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | ChatOpenAI(model='gpt-4o') | parser
+    chain = prompt | llm_mini | parser
 
     response = chain.invoke({
         'language_code': language_code,
@@ -247,7 +298,9 @@ def get_post_structure(text: str, started_at: datetime, language_code: str, tz: 
         event.created = False
     return response
 
-def get_message_structure(text: str, started_at: datetime, language_code: str, tz: str, text_source_spec: str = None) -> Structured:
+
+def get_message_structure(text: str, started_at: datetime, language_code: str, tz: str,
+                          text_source_spec: str = None) -> Structured:
     prompt_text = '''
     You are an expert message analyzer. Your task is to analyze the message content and provide structure and clarity.
     The message language is {language_code}. Use the same language {language_code} for your response.
@@ -264,7 +317,7 @@ def get_message_structure(text: str, started_at: datetime, language_code: str, t
     {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | ChatOpenAI(model='gpt-4o') | parser
+    chain = prompt | llm_mini | parser
 
     response = chain.invoke({
         'language_code': language_code,
@@ -281,6 +334,7 @@ def get_message_structure(text: str, started_at: datetime, language_code: str, t
         event.created = False
     return response
 
+
 def summarize_experience_text(text: str, text_source_spec: str = None) -> Structured:
     source_context = f"Source: {text_source_spec}" if text_source_spec else "their own experiences or thoughts"
     prompt = f'''The user sent a text of {source_context}, and wants to create a memory from it.
@@ -295,14 +349,14 @@ def summarize_experience_text(text: str, text_source_spec: str = None) -> Struct
     return llm_mini.with_structured_output(Structured).invoke(prompt)
 
 
-def get_memory_summary(uid: str, memories: List[Memory]) -> str:
-    user_name, facts_str = get_prompt_facts(uid)
+def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
+    user_name, memories_str = get_prompt_memories(uid)
 
-    conversation_history = Memory.memories_to_string(memories)
+    conversation_history = Conversation.conversations_to_string(memories)
 
     prompt = f"""
     You are an experienced mentor, that helps people achieve their goals and improve their lives.
-    You are advising {user_name} right now, {facts_str}
+    You are advising {user_name} right now, {memories_str}
 
     The following are a list of {user_name}'s conversations from today, with the transcripts and a slight summary of each, that {user_name} had during his day.
     {user_name} wants to get a summary of the key action items {user_name} has to take based on today's conversations.
@@ -327,11 +381,11 @@ def generate_embedding(content: str) -> List[float]:
 # ************* CHAT BASICS **************
 # ****************************************
 def initial_chat_message(uid: str, plugin: Optional[App] = None, prev_messages_str: str = '') -> str:
-    user_name, facts_str = get_prompt_facts(uid)
+    user_name, memories_str = get_prompt_memories(uid)
     if plugin is None:
         prompt = f"""
-You are 'Friend', a friendly and helpful assistant who aims to make {user_name}'s life better 10x.
-You know the following about {user_name}: {facts_str}.
+You are 'Omi', a friendly and helpful assistant who aims to make {user_name}'s life better 10x.
+You know the following about {user_name}: {memories_str}.
 
 {prev_messages_str}
 
@@ -340,7 +394,7 @@ Compose {"an initial" if not prev_messages_str else "a follow-up"} message to {u
     else:
         prompt = f"""
 You are '{plugin.name}', {plugin.chat_prompt}.
-You know the following about {user_name}: {facts_str}.
+You know the following about {user_name}: {memories_str}.
 
 {prev_messages_str}
 
@@ -358,7 +412,8 @@ def initial_persona_chat_message(uid: str, app: Optional[App] = None, messages: 
             chat_messages.append(AIMessage(content=msg.text))
         else:
             chat_messages.append(HumanMessage(content=msg.text))
-    chat_messages.append(HumanMessage(content='lets begin. you write the first message, one short provocative question relevant to your identity. never respond with **. while continuing the convo, always respond w short msgs, lowercase.'))
+    chat_messages.append(HumanMessage(
+        content='lets begin. you write the first message, one short provocative question relevant to your identity. never respond with **. while continuing the convo, always respond w short msgs, lowercase.'))
     llm_call = llm_persona_mini_stream
     if app.is_influencer:
         llm_call = llm_persona_medium_stream
@@ -720,7 +775,7 @@ def _get_answer_simple_message_prompt(uid: str, messages: List[Message], plugin:
     conversation_history = Message.get_messages_as_string(
         messages, use_user_name_if_available=True, use_plugin_name_if_available=True
     )
-    user_name, facts_str = get_prompt_facts(uid)
+    user_name, memories_str = get_prompt_memories(uid)
 
     plugin_info = ""
     if plugin:
@@ -728,7 +783,7 @@ def _get_answer_simple_message_prompt(uid: str, messages: List[Message], plugin:
 
     return f"""
     You are an assistant for engaging personal conversations.
-    You are made for {user_name}, {facts_str}
+    You are made for {user_name}, {memories_str}
 
     Use what you know about {user_name}, to continue the conversation, feel free to ask questions, share stories, or just say hi.
     {plugin_info}
@@ -793,14 +848,14 @@ def answer_persona_question_stream(app: App, messages: List[Message], callbacks:
     llm_call = llm_persona_mini_stream
     if app.is_influencer:
         llm_call = llm_persona_medium_stream
-    return llm_call.invoke(chat_messages, {'callbacks':callbacks}).content
+    return llm_call.invoke(chat_messages, {'callbacks': callbacks}).content
 
 
 def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
                        cited: Optional[bool] = False,
                        messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
-    user_name, facts_str = get_prompt_facts(uid)
-    facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
+    user_name, memories_str = get_prompt_memories(uid)
+    memories_str = '\n'.join(memories_str.split('\n')[1:]).strip()
 
     # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
     context = context.replace('\n\n', '\n').strip()
@@ -864,7 +919,7 @@ def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[P
 
     <user_facts>
     [Use the following User Facts if relevant to the <question>]
-        {facts_str.strip()}
+        {memories_str.strip()}
     </user_facts>
 
     <current_datetime_utc>
@@ -896,8 +951,8 @@ def qa_rag_stream(uid: str, question: str, context: str, plugin: Optional[Plugin
 def _get_qa_rag_prompt_v6(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
                           cited: Optional[bool] = False,
                           messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
-    user_name, facts_str = get_prompt_facts(uid)
-    facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
+    user_name, memories_str = get_prompt_memories(uid)
+    memories_str = '\n'.join(memories_str.split('\n')[1:]).strip()
 
     # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
     context = context.replace('\n\n', '\n').strip()
@@ -952,7 +1007,7 @@ def _get_qa_rag_prompt_v6(uid: str, question: str, context: str, plugin: Optiona
 
     <user_facts>
     [Use the following User Facts if relevant to the <question>]
-        {facts_str.strip()}
+        {memories_str.strip()}
     </user_facts>
 
     <question_timezone>
@@ -970,8 +1025,8 @@ def _get_qa_rag_prompt_v6(uid: str, question: str, context: str, plugin: Optiona
 def _get_qa_rag_prompt_v5(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
                           cited: Optional[bool] = False,
                           messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
-    user_name, facts_str = get_prompt_facts(uid)
-    facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
+    user_name, memories_str = get_prompt_memories(uid)
+    memories_str = '\n'.join(memories_str.split('\n')[1:]).strip()
 
     # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
     context = context.replace('\n\n', '\n').strip()
@@ -1023,7 +1078,7 @@ def _get_qa_rag_prompt_v5(uid: str, question: str, context: str, plugin: Optiona
 
     **User Facts:**
     ---
-    {facts_str.strip()}
+    {memories_str.strip()}
     ---
 
     Question's timezone: {tz}
@@ -1037,8 +1092,8 @@ def _get_qa_rag_prompt_v5(uid: str, question: str, context: str, plugin: Optiona
 def _get_qa_rag_prompt_v4(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
                           cited: Optional[bool] = False,
                           messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
-    user_name, facts_str = get_prompt_facts(uid)
-    facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
+    user_name, memories_str = get_prompt_memories(uid)
+    memories_str = '\n'.join(memories_str.split('\n')[1:]).strip()
 
     # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
     context = context.replace('\n\n', '\n').strip()
@@ -1085,7 +1140,7 @@ def _get_qa_rag_prompt_v4(uid: str, question: str, context: str, plugin: Optiona
 
     **User Facts:**
     ---
-    {facts_str.strip()}
+    {memories_str.strip()}
     ---
 
     Question's timezone: {tz}
@@ -1113,8 +1168,8 @@ def qa_rag_stream_v4(uid: str, question: str, context: str, plugin: Optional[Plu
 
 def qa_rag_v3(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
               messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
-    user_name, facts_str = get_prompt_facts(uid)
-    facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
+    user_name, memories_str = get_prompt_memories(uid)
+    memories_str = '\n'.join(memories_str.split('\n')[1:]).strip()
 
     # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
     context = context.replace('\n\n', '\n').strip()
@@ -1161,7 +1216,7 @@ def qa_rag_v3(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
 
     **User Facts:**
     ---
-    {facts_str.strip()}
+    {memories_str.strip()}
     ---
 
     Question's timezone: {tz}
@@ -1171,13 +1226,13 @@ def qa_rag_v3(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
     Anwser:
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
     # print('qa_rag prompt', prompt)
-    return ChatOpenAI(model='gpt-4o').invoke(prompt).content
+    return llm_medium.invoke(prompt).content
 
 
 def qa_rag_v2(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
               cited: Optional[bool] = False) -> str:
-    user_name, facts_str = get_prompt_facts(uid)
-    facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
+    user_name, memories_str = get_prompt_memories(uid)
+    memories_str = '\n'.join(memories_str.split('\n')[1:]).strip()
 
     # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
     context = context.replace('\n\n', '\n').strip()
@@ -1211,7 +1266,7 @@ def qa_rag_v2(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
 
     **User Facts:**
     ```
-    {facts_str.strip()}
+    {memories_str.strip()}
     ```
 
     **Conversations:**
@@ -1222,12 +1277,12 @@ def qa_rag_v2(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
     Answer:
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
     # print('qa_rag prompt', prompt)
-    return ChatOpenAI(model='gpt-4o').invoke(prompt).content
+    return llm_medium.invoke(prompt).content
 
 
 def qa_rag_v1(uid: str, question: str, context: str, plugin: Optional[Plugin] = None) -> str:
-    user_name, facts_str = get_prompt_facts(uid)
-    facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
+    user_name, memories_str = get_prompt_memories(uid)
+    memories_str = '\n'.join(memories_str.split('\n')[1:]).strip()
 
     # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
     context = context.replace('\n\n', '\n').strip()
@@ -1252,7 +1307,7 @@ def qa_rag_v1(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
     Context:
     ```
     **User Facts:**
-    {facts_str.strip()}
+    {memories_str.strip()}
 
     **Related Conversations:**
     {context}
@@ -1260,14 +1315,14 @@ def qa_rag_v1(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
     Answer:
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
     # print('qa_rag prompt', prompt)
-    return ChatOpenAI(model='gpt-4o').invoke(prompt).content
+    return llm_medium.invoke(prompt).content
 
 
 # **************************************************
 # ************* RETRIEVAL (EMOTIONAL) **************
 # **************************************************
 
-def retrieve_memory_context_params(memory: Memory) -> List[str]:
+def retrieve_memory_context_params(memory: Conversation) -> List[str]:
     transcript = memory.get_transcript(False)
     if len(transcript) == 0:
         return []
@@ -1291,12 +1346,12 @@ def retrieve_memory_context_params(memory: Memory) -> List[str]:
         return []
 
 
-def obtain_emotional_message(uid: str, memory: Memory, context: str, emotion: str) -> str:
-    user_name, facts_str = get_prompt_facts(uid)
+def obtain_emotional_message(uid: str, memory: Conversation, context: str, emotion: str) -> str:
+    user_name, memories_str = get_prompt_memories(uid)
     transcript = memory.get_transcript(False)
     prompt = f"""
     You are a thoughtful and encouraging Friend.
-    Your best friend is {user_name}, {facts_str}
+    Your best friend is {user_name}, {memories_str}
 
     {user_name} just finished a conversation where {user_name} experienced {emotion}.
 
@@ -1319,12 +1374,12 @@ def obtain_emotional_message(uid: str, memory: Memory, context: str, emotion: st
     return llm_mini.invoke(prompt).content
 
 
-# **********************************
-# ************* FACTS **************
-# **********************************
+# *********************************************
+# ************* MEMORIES (FACTS) **************
+# *********************************************
 
-class Facts(BaseModel):
-    facts: List[Fact] = Field(
+class Memories(BaseModel):
+    facts: List[Memory] = Field(
         min_items=0,
         max_items=3,
         description="List of **new** facts. If any",
@@ -1332,12 +1387,19 @@ class Facts(BaseModel):
     )
 
 
-def new_facts_extractor(
-        uid: str, segments: List[TranscriptSegment], user_name: Optional[str] = None, facts_str: Optional[str] = None
-) -> List[Fact]:
-    # print('new_facts_extractor', uid, 'segments', len(segments), user_name, 'len(facts_str)', len(facts_str))
-    if user_name is None or facts_str is None:
-        user_name, facts_str = get_prompt_facts(uid)
+class MemoriesByTexts(BaseModel):
+    facts: List[Memory] = Field(
+        description="List of **new** facts. If any",
+        default=[],
+    )
+
+
+def new_memories_extractor(
+        uid: str, segments: List[TranscriptSegment], user_name: Optional[str] = None, memories_str: Optional[str] = None
+) -> List[Memory]:
+    # print('new_memories_extractor', uid, 'segments', len(segments), user_name, 'len(memories_str)', len(memories_str))
+    if user_name is None or memories_str is None:
+        user_name, memories_str = get_prompt_memories(uid)
 
     content = TranscriptSegment.segments_as_string(segments, user_name=user_name)
     if not content or len(content) < 25:  # less than 5 words, probably nothing
@@ -1347,13 +1409,13 @@ def new_facts_extractor(
     # TODO: make it more strict?
 
     try:
-        parser = PydanticOutputParser(pydantic_object=Facts)
-        chain = extract_facts_prompt | llm_mini | parser
+        parser = PydanticOutputParser(pydantic_object=Memories)
+        chain = extract_memories_prompt | llm_mini | parser
         # with_parser = llm_mini.with_structured_output(Facts)
-        response: Facts = chain.invoke({
+        response: Memories = chain.invoke({
             'user_name': user_name,
             'conversation': content,
-            'facts_str': facts_str,
+            'memories_str': memories_str,
             'format_instructions': parser.get_format_instructions(),
         })
         # for fact in response:
@@ -1364,24 +1426,24 @@ def new_facts_extractor(
         return []
 
 
-def extract_facts_from_text(
-        uid: str, text: str, text_source: str, user_name: Optional[str] = None, facts_str: Optional[str] = None
-) -> List[Fact]:
-    """Extract facts from external integration text sources like email, posts, messages"""
-    if user_name is None or facts_str is None:
-        user_name, facts_str = get_prompt_facts(uid)
+def extract_memories_from_text(
+        uid: str, text: str, text_source: str, user_name: Optional[str] = None, memories_str: Optional[str] = None
+) -> List[Memory]:
+    """Extract memories from external integration text sources like email, posts, messages"""
+    if user_name is None or memories_str is None:
+        user_name, memories_str = get_prompt_memories(uid)
 
-    if not text or len(text) < 25:  # less than 5 words, probably nothing
+    if not text or len(text) == 0:
         return []
 
     try:
-        parser = PydanticOutputParser(pydantic_object=Facts)
-        chain = extract_facts_text_content_prompt | llm_mini | parser
-        response: Facts = chain.invoke({
+        parser = PydanticOutputParser(pydantic_object=MemoriesByTexts)
+        chain = extract_memories_text_content_prompt | llm_mini | parser
+        response: Memories = chain.invoke({
             'user_name': user_name,
             'text_content': text,
             'text_source': text_source,
-            'facts_str': facts_str,
+            'memories_str': memories_str,
             'format_instructions': parser.get_format_instructions(),
         })
         return response.facts
@@ -1402,9 +1464,9 @@ class Learnings(BaseModel):
 def new_learnings_extractor(
         uid: str, segments: List[TranscriptSegment], user_name: Optional[str] = None,
         learnings_str: Optional[str] = None
-) -> List[Fact]:
+) -> List[Memory]:
     if user_name is None or learnings_str is None:
-        user_name, facts_str = get_prompt_facts(uid)
+        user_name, memories_str = get_prompt_memories(uid)
 
     content = TranscriptSegment.segments_as_string(segments, user_name=user_name)
     if not content or len(content) < 100:
@@ -1419,7 +1481,7 @@ def new_learnings_extractor(
             'learnings_str': learnings_str,
             'format_instructions': parser.get_format_instructions(),
         })
-        return list(map(lambda x: Fact(content=x, category=FactCategory.learnings), response.result))
+        return list(map(lambda x: Memory(content=x, category=MemoryCategory.learnings), response.result))
     except Exception as e:
         print(f'Error extracting new facts: {e}')
         return []
@@ -1440,7 +1502,7 @@ class ExpectedOutput(BaseModel):
     items: List[Item] = Field(default=[], description="List of items.")
 
 
-def trends_extractor(memory: Memory) -> List[Item]:
+def trends_extractor(memory: Conversation) -> List[Item]:
     transcript = memory.get_transcript(False)
     if len(transcript) == 0:
         return []
@@ -1547,6 +1609,85 @@ class FiltersToUse(BaseModel):
 
 class OutputQuestion(BaseModel):
     question: str = Field(description='The extracted user question from the conversation.')
+
+
+class BestAppSelection(BaseModel):
+    app_id: str = Field(
+        description='The ID of the best app for processing this conversation, or an empty string if none are suitable.')
+
+
+def select_best_app_for_conversation(conversation: Conversation, apps: List[App]) -> Optional[App]:
+    """
+    Select the best app for the given conversation based on its structured content
+    and the specific task/outcome each app provides.
+    """
+    if not apps:
+        return None
+
+    if not conversation.structured:
+        return None
+
+    structured_data = conversation.structured
+    conversation_details = f"""
+    Title: {structured_data.title or 'N/A'}
+    Category: {structured_data.category.value if structured_data.category else 'N/A'}
+    Overview: {structured_data.overview or 'N/A'}
+    Action Items: {ActionItem.actions_to_string(structured_data.action_items) if structured_data.action_items else 'None'}
+    Events Mentioned: {Event.events_to_string(structured_data.events) if structured_data.events else 'None'}
+    """
+
+    apps_xml = "<apps>\n"
+    for app in apps:
+        apps_xml += f"""  <app>
+    <id>{app.id}</id>
+    <name>{app.name}</name>
+    <description>{app.description}</description>
+  </app>\n"""
+    apps_xml += "</apps>"
+
+    prompt = f"""
+    You are an expert app selector. Your goal is to determine if any available app is genuinely suitable for processing the given conversation details based on the app's specific task and the potential value of its outcome.
+
+    <conversation_details>
+    {conversation_details.strip()}
+    </conversation_details>
+
+    <available_apps>
+    {apps_xml.strip()}
+    </available_apps>
+
+    Task:
+    1. Analyze the conversation's content, themes, action items, and events provided in `<conversation_details>`.
+    2. For each app in `<available_apps>`, evaluate its specific `<task>` and `<description>`.
+    3. Determine if applying an app's `<task>` to this specific conversation would produce a meaningful, relevant, and valuable outcome.
+    4. Select the single best app whose task aligns most strongly with the conversation content and provides the most useful potential outcome.
+
+    Critical Instructions:
+    - Only select an app if its specific task is highly relevant to the conversation's topics and details. A generic match based on description alone is NOT sufficient.
+    - Consider the *potential outcome* of applying the app's task. Would the result be insightful given this conversation?
+    - If no app's task strongly aligns with the conversation content or offers a valuable potential outcome (e.g., a business conversation when all apps are for medical analysis), you MUST return an empty `app_id`.
+    - Do not force a match. It is better to return an empty `app_id` than to select an inappropriate app.
+    - Provide ONLY the `app_id` of the best matching app, or an empty string if no app is suitable.
+    """
+
+    try:
+        with_parser = llm_mini.with_structured_output(BestAppSelection)
+        response: BestAppSelection = with_parser.invoke(prompt)
+        selected_app_id = response.app_id
+
+        if not selected_app_id or selected_app_id.strip() == "":
+            return None
+
+        # Find the app object with the matching ID
+        selected_app = next((app for app in apps if app.id == selected_app_id), None)
+        if selected_app:
+            return selected_app
+        else:
+            return None
+
+    except Exception as e:
+        print(f"Error selecting best app: {e}")
+        return None
 
 
 def extract_question_from_conversation(messages: List[Message]) -> str:
@@ -2023,7 +2164,8 @@ def retrieve_metadata_from_email(uid: str, created_at: datetime, email_text: str
     return _process_extracted_metadata(uid, prompt)
 
 
-def retrieve_metadata_from_post(uid: str, created_at: datetime, post_text: str, tz: str, source_spec: str = None) -> ExtractedInformation:
+def retrieve_metadata_from_post(uid: str, created_at: datetime, post_text: str, tz: str,
+                                source_spec: str = None) -> ExtractedInformation:
     """Extract metadata from social media post content"""
     source_context = f"from {source_spec}" if source_spec else "from a social media platform"
 
@@ -2055,7 +2197,8 @@ def retrieve_metadata_from_post(uid: str, created_at: datetime, post_text: str, 
     return _process_extracted_metadata(uid, prompt)
 
 
-def retrieve_metadata_from_message(uid: str, created_at: datetime, message_text: str, tz: str, source_spec: str = None) -> ExtractedInformation:
+def retrieve_metadata_from_message(uid: str, created_at: datetime, message_text: str, tz: str,
+                                   source_spec: str = None) -> ExtractedInformation:
     """Extract metadata from messaging app content"""
     source_context = f"from {source_spec}" if source_spec else "from a messaging application"
 
@@ -2087,7 +2230,8 @@ def retrieve_metadata_from_message(uid: str, created_at: datetime, message_text:
     return _process_extracted_metadata(uid, prompt)
 
 
-def retrieve_metadata_from_text(uid: str, created_at: datetime, text: str, tz: str, source_spec: str = None) -> ExtractedInformation:
+def retrieve_metadata_from_text(uid: str, created_at: datetime, text: str, tz: str,
+                                source_spec: str = None) -> ExtractedInformation:
     """Extract metadata from generic text content"""
     source_context = f"from {source_spec}" if source_spec else "from a text document"
 
@@ -2206,11 +2350,11 @@ def select_structured_filters(question: str, filters_available: dict) -> dict:
 
 
 def extract_question_from_transcript(uid: str, segments: List[TranscriptSegment]) -> str:
-    user_name, facts_str = get_prompt_facts(uid)
+    user_name, memories_str = get_prompt_memories(uid)
     prompt = f'''
     {user_name} is having a conversation.
 
-    This is what you know about {user_name}: {facts_str}
+    This is what you know about {user_name}: {memories_str}
 
     You will be the transcript of a recent conversation between {user_name} and a few people, \
     your task is to understand the last few exchanges, and identify in order to provide advice to {user_name}, what other things about {user_name} \
@@ -2236,7 +2380,7 @@ class OutputMessage(BaseModel):
 
 
 def provide_advice_message(uid: str, segments: List[TranscriptSegment], context: str) -> str:
-    user_name, facts_str = get_prompt_facts(uid)
+    user_name, memories_str = get_prompt_memories(uid)
     transcript = TranscriptSegment.segments_as_string(segments)
     # TODO: tweak with different type of requests, like this, or roast, or praise or emotional, etc.
 
@@ -2245,7 +2389,7 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
     pulling in pop culture references and inspirational business and life figures from recent history, mixed in with references to recent personal memories,
     to help drive the point across.
 
-    {facts_str}
+    {memories_str}
 
     {user_name} just had a conversation and is asking for advice on what to do next.
 
@@ -2279,7 +2423,7 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
 
 def get_proactive_message(uid: str, plugin_prompt: str, params: [str], context: str,
                           chat_messages: List[Message]) -> str:
-    user_name, facts_str = get_prompt_facts(uid)
+    user_name, memories_str = get_prompt_memories(uid)
 
     prompt = plugin_prompt
     for param in params:
@@ -2287,7 +2431,7 @@ def get_proactive_message(uid: str, plugin_prompt: str, params: [str], context: 
             prompt = prompt.replace("{{user_name}}", user_name)
             continue
         if param == "user_facts":
-            prompt = prompt.replace("{{user_facts}}", facts_str)
+            prompt = prompt.replace("{{user_facts}}", memories_str)
             continue
         if param == "user_context":
             prompt = prompt.replace("{{user_context}}", context if context else "")
@@ -2322,8 +2466,8 @@ def generate_description(app_name: str, description: str) -> str:
 # ******************* PERSONA **********************
 # **************************************************
 
-def condense_facts(facts, name):
-    combined_facts = "\n".join(facts)
+def condense_memories(memories, name):
+    combined_memories = "\n".join(memories)
     prompt = f"""
 You are an AI tasked with condensing a detailed profile of hundreds facts about {name} to accurately replicate their personality, communication style, decision-making patterns, and contextual knowledge for 1:1 cloning.  
 
@@ -2347,19 +2491,19 @@ You are an AI tasked with condensing a detailed profile of hundreds facts about 
 The output must be as concise as possible while retaining all necessary information for 1:1 cloning. Absolutely no introductory or closing statements, explanations, or any unnecessary text. Directly present the condensed facts in the specified format. Begin condensation now.
 
 Facts:
-{combined_facts}
+{combined_memories}
     """
     response = llm_medium.invoke(prompt)
     return response.content
 
 
-def generate_persona_description(facts, name):
+def generate_persona_description(memories, name):
     prompt = f"""Based on these facts about a person, create a concise, engaging description that captures their unique personality and characteristics (max 250 characters).
     
     They chose to be known as {name}.
 
 Facts:
-{facts}
+{memories}
 
 Create a natural, memorable description that captures this person's essence. Focus on the most unique and interesting aspects. Make it conversational and engaging."""
 
@@ -2477,8 +2621,45 @@ Tweets:
 def generate_persona_intro_message(prompt: str, name: str):
     messages = [
         {"role": "system", "content": prompt},
-        {"role": "user", "content": f"Generate a short, funny 5-8 word message that would make someone want to chat with you. Be casual and witty, but don't mention being AI or a clone. Just be {name}. The message should feel natural and make people curious to chat with you."}
+        {"role": "user",
+         "content": f"Generate a short, funny 5-8 word message that would make someone want to chat with you. Be casual and witty, but don't mention being AI or a clone. Just be {name}. The message should feel natural and make people curious to chat with you."}
     ]
 
     response = llm_medium.invoke(messages)
     return response.content.strip('"').strip()
+
+
+# **************************************************
+# ***************** FACT/MEMORY ********************
+# **************************************************
+
+def identify_category_for_memory(memory: str, categories: List) -> str:
+    # TODO: this should be structured output!!
+    categories_str = ', '.join(categories)
+    prompt = f"""
+    You are an AI tasked with identifying the category of a fact from a list of predefined categories. 
+
+    Your task is to determine the most relevant category for the given fact. 
+    
+    Respond only with the category name.
+    
+    The categories are: {categories_str}
+
+    Fact: {memory}
+    """
+    response = llm_mini.invoke(prompt)
+    return response.content
+
+
+
+def generate_summary_with_prompt(conversation_text: str, prompt: str) -> str:
+    prompt = f"""
+    Your task is: {prompt}
+
+    The conversation is:
+    {conversation_text}
+
+    You must output only the summary, no other text. Make sure to be concise and clear.
+    """
+    response = llm_mini.invoke(prompt)
+    return response.content

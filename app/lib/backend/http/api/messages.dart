@@ -2,11 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/env/env.dart';
-import 'package:friend_private/utils/logger.dart';
-import 'package:friend_private/utils/other/string_utils.dart';
+import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/message.dart';
+import 'package:omi/env/env.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/other/string_utils.dart';
 import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:path/path.dart';
@@ -309,5 +309,32 @@ Future reportMessageServer(String messageId) async {
   if (response == null) throw Exception('Failed to report message');
   if (response.statusCode != 200) {
     throw Exception('Failed to report message');
+  }
+}
+
+
+Future<String> transcribeVoiceMessage(File audioFile) async {
+  try {
+    var request = http.MultipartRequest(
+      'POST',
+      Uri.parse('${Env.apiBaseUrl}v1/voice-message/transcribe'),
+    );
+    
+    request.headers.addAll({'Authorization': await getAuthHeader()});
+    request.files.add(await http.MultipartFile.fromPath('files', audioFile.path));
+    
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+    
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['transcript'] ?? '';
+    } else {
+      debugPrint('Failed to transcribe voice message: ${response.statusCode} ${response.body}');
+      throw Exception('Failed to transcribe voice message');
+    }
+  } catch (e) {
+    debugPrint('Error transcribing voice message: $e');
+    throw Exception('Error transcribing voice message: $e');
   }
 }
