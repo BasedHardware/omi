@@ -14,10 +14,19 @@
 #include "config.h"
 #include "utils.h"
 // #include "nfc.h"
+#if defined(CONFIG_OMI_ENABLE_SPEAKER)
 #include "speaker.h"
+#endif
+#if defined(CONFIG_OMI_ENABLE_OFFLINE_STORAGE)
 #include "sdcard.h"
 #include "storage.h"
+#endif
+#if defined(CONFIG_OMI_ENABLE_BUTTON)
 #include "button.h"
+#endif
+#if defined(CONFIG_OMI_ENABLE_ACCELEROMETER)
+#include "accel.h"
+#endif
 #include "mic.h"
 #include "lib/battery/battery.h"
 // #include "friend.h"
@@ -123,22 +132,19 @@ K_WORK_DELAYABLE_DEFINE(accel_work, broadcast_accel);
 
 void broadcast_accel(struct k_work *work_item) {
 
-    sensor_sample_fetch_chan(lsm6dsl_dev, SENSOR_CHAN_ACCEL_XYZ);
-    sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_X, &mega_sensor.a_x);
-    sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Y, &mega_sensor.a_y);
-    sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Z, &mega_sensor.a_z);
-
-    sensor_sample_fetch_chan(lsm6dsl_dev, SENSOR_CHAN_GYRO_XYZ);
-    sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_X, &mega_sensor.g_x);
-    sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_Y, &mega_sensor.g_y);
-    sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_Z, &mega_sensor.g_z);
-
-   //only time mega sensor is changed is through here (hopefully),  so no chance of race condition
-    int err = bt_gatt_notify(current_connection, &accel_service.attrs[1], &mega_sensor, sizeof(mega_sensor));
+    int err = accel_read( &mega_sensor );
     if (err)
     {
        LOG_ERR("Error updating Accelerometer data");
+       // TODO: define more failure behavior here, since nothing will be sent
+       return;
     }
+
+    //only time mega sensor is changed is through here (hopefully),  so no chance of race condition
+    err = bt_gatt_notify(current_connection, &accel_service.attrs[1], &mega_sensor, sizeof(mega_sensor));
+    (void)err;
+    // TODO: define error behavior here
+
     k_work_reschedule(&accel_work, K_MSEC(ACCEL_REFRESH_INTERVAL));
 }
 

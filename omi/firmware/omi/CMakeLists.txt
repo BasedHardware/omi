@@ -13,11 +13,14 @@ file(GLOB app_sources
     src/sd_card.c
     src/spi_flash.c
 )
+
 file(GLOB dk2_sources
+    src/lib/dk2/codec.c
     src/lib/dk2/config.h
     src/lib/dk2/codec.c
     src/lib/dk2/transport.c
     src/lib/dk2/button.c
+    src/lib/dk2/accel.c
 )
 target_sources(app PRIVATE ${dk2_sources} ${app_sources})
 

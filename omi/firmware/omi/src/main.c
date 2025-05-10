@@ -1,6 +1,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/shell/shell.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/drivers/hwinfo.h>
 #include <zephyr/pm/device_runtime.h>
 #include "lib/dk2/mic.h"
 #include "lib/dk2/codec.h"
@@ -9,9 +10,14 @@
 #include "lib/dk2/lib/battery/battery.h"
 #include "lib/dk2/led.h"
 #include "lib/dk2/button.h"
-#include "lib/dk2/haptic.h"
+#ifdef CONFIG_OMI_ENABLE_HAPTIC
+#include "haptic.h"
+#endif
 #include "spi_flash.h"
 #include "sd_card.h"
+#ifdef CONFIG_OMI_ENABLE_ACCELEROMETER
+#include "lib/dk2/accel.h"
+#endif
 
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -133,9 +139,13 @@ int main(void)
 {
     int ret;
 
-    printk("Starting omi ...\n");
+    // Store reset reason code
+    uint32_t reset_reason;
+    ret = hwinfo_get_reset_cause( &reset_reason );
 
-    // Suspend unused modules
+	printk("Starting omi ...\n");
+
+	// Suspend unused modules
     LOG_PRINTK("\n");
     LOG_INF("Suspending unused modules...\n");
     ret = suspend_unused_modules();
@@ -145,35 +155,49 @@ int main(void)
         ret = 0;
     }
 
-    // Initialize LEDs
-    LOG_INF("Initializing LEDs...\n");
+    // Log model, HW, and FW version
+    LOG_INF("Model: %s", CONFIG_BT_DIS_MODEL);
+    LOG_INF("Firmware revision: %s", CONFIG_BT_DIS_FW_REV_STR);
+    LOG_INF("Hardware revision: %s", CONFIG_BT_DIS_HW_REV_STR);
 
-    ret = led_start();
-    if (ret)
+    if( ret >= 0 )
     {
-        LOG_ERR("Failed to initialize LEDs (err %d)", ret);
-        return ret;
+        LOG_DBG("Reset reason: %d\n", reset_reason);
+    } else {
+        LOG_DBG("Err reading reset reason: %d\n", ret);
     }
+    hwinfo_clear_reset_cause();
 
-    // Run the boot LED sequence
-    boot_led_sequence();
+	// Initialize LEDs
+	LOG_PRINTK("\n");
+	LOG_INF("Initializing LEDs...\n");
 
-    // Initialize battery
+	ret = led_start();
+	if (ret)
+	{
+		LOG_ERR("Failed to initialize LEDs (err %d)", ret);
+		return ret;
+	}
+
+	// Run the boot LED sequence
+	boot_led_sequence();
+
+	// Initialize battery
 #ifdef CONFIG_OMI_ENABLE_BATTERY
-    ret = battery_init();
-    if (ret)
-    {
-        LOG_ERR("Battery init failed (err %d)", ret);
-        return ret;
-    }
+	ret = battery_init();
+	if (ret)
+	{
+		LOG_ERR("Battery init failed (err %d)", ret);
+		return ret;
+	}
 
-    ret = battery_charge_start();
-    if (ret)
-    {
-        LOG_ERR("Battery failed to start (err %d)", ret);
-        return ret;
-    }
-    LOG_INF("Battery initialized");
+	ret = battery_charge_start();
+	if (ret)
+	{
+		LOG_ERR("Battery failed to start (err %d)", ret);
+		return ret;
+	}
+	LOG_INF("Battery initialized");
 #endif
 
     // Initialize button
@@ -188,56 +212,156 @@ int main(void)
     activate_button_work();
 #endif
 
-    // Initialize Haptic driver
+    // Enable haptic
 #ifdef CONFIG_OMI_ENABLE_HAPTIC
-    ret = haptic_init();
+    LOG_INF("Initializing haptic...\n");
+
+    ret = init_haptic_pin();
     if (ret)
     {
         LOG_ERR("Failed to initialize Haptic driver (err %d)", ret);
-    } else {
-        LOG_INF("Haptic driver initialized");
-        play_haptic_milli(100);
+        return ret;
+    }
+    LOG_INF("Haptic driver initialized");
+    play_haptic_milli(100);
+#endif
+
+    // Enable accelerometer
+#ifdef CONFIG_OMI_ENABLE_ACCELEROMETER
+    LOG_INF("Initializing IMU...\n");
+    ret = accel_start();
+    if (ret)
+    {
+        LOG_ERR("Accelerometer failed to activate (err %d)", ret);
+        return ret;
+    }
+    LOG_INF("Accelerometer initialized");
+#endif
+
+    // Enable sdcard
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    LOG_PRINTK("\n");
+    LOG_INF("Mount SD card...\n");
+
+    err = mount_sd_card();
+    if (err)
+    {
+        LOG_ERR("Failed to mount SD card (err %d)", err);
+        return err;
+    }
+
+    k_msleep(500);
+
+    LOG_PRINTK("\n");
+    LOG_INF("Initializing storage...\n");
+
+    err = storage_init();
+    if (err)
+    {
+        LOG_ERR("Failed to initialize storage (err %d)", err);
     }
 #endif
 
-    // Indicate transport initialization
+    // Enable usb
+#ifdef CONFIG_OMI_ENABLE_USB
     LOG_PRINTK("\n");
-    LOG_INF("Initializing transport...\n");
+    LOG_INF("Initializing power supply check...\n");
 
-    // Start transport
-    int transportErr;
-    transportErr = transport_start();
-    if (transportErr)
+    err = init_usb();
+    if (err)
+    {
+        LOG_ERR("Failed to initialize power supply (err %d)", err);
+        return err;
+    }
+#endif
+
+	// Indicate transport initialization
+	LOG_PRINTK("\n");
+	LOG_INF("Initializing transport...\n");
+
+    set_led_green(true);
+    set_led_green(false);
+
+	// Start transport
+	int transportErr;
+	transportErr = transport_start();
+	if (transportErr)
     {
         LOG_ERR("Failed to start transport (err %d)", transportErr);
+        // TODO: Detect the current core is app core or net core
+        // Blink green LED to indicate error
+        for (int i = 0; i < 5; i++)
+        {
+            set_led_green(!gpio_pin_get_dt(&led_green));
+            k_msleep(200);
+        }
+        set_led_green(false);
+
         return transportErr;
     }
 
-    // Initialize codec
-    LOG_INF("Initializing codec...\n");
+    /** No speaker on Omi2 - TODO should there still be empty stubs? */
 
-    // Set codec callback
-    set_codec_callback(codec_handler);
-    ret = codec_start();
-    if (ret)
-    {
-        LOG_ERR("Failed to start codec: %d", ret);
+	// Initialize codec
+	LOG_INF("Initializing codec...\n");
+
+	// Set codec callback
+	set_codec_callback(codec_handler);
+	ret = codec_start();
+	if (ret)
+	{
+		LOG_ERR("Failed to start codec: %d", ret);
+        // Blink blue LED to indicate error
+        for (int i = 0; i < 5; i++)
+        {
+            set_led_blue(!gpio_pin_get_dt(&led_blue));
+            k_msleep(200);
+        }
+        set_led_blue(false);
+		return ret;
+	}
+
+#ifdef CONFIG_OMI_ENABLE_HAPTIC
+    play_haptic_milli(500);
+#endif
+    set_led_blue(false);
+
+	// Initialize microphone
+    LOG_PRINTK("\n");
+	LOG_INF("Initializing microphone...\n");
+
+    set_led_red(true);
+    set_led_green(true);
+
+	set_mic_callback(mic_handler);
+	ret = mic_start();
+	if (ret)
+	{
+		LOG_ERR("Failed to start microphone: %d", ret);
+		// Blink red and green LEDs to indicate error
+        for (int i = 0; i < 5; i++)
+        {
+            set_led_red(!gpio_pin_get_dt(&led_red));
+            set_led_green(!gpio_pin_get_dt(&led_green));
+            k_msleep(200);
+        }
+        set_led_red(false);
+        set_led_green(false);
         return ret;
-    }
+	}
 
-    // Initialize microphone
-    LOG_INF("Initializing microphone...\n");
-    set_mic_callback(mic_handler);
-    ret = mic_start();
-    if (ret)
-    {
-        LOG_ERR("Failed to start microphone: %d", ret);
-        return ret;
-    }
+    set_led_red(false);
+    set_led_green(false);
 
-    LOG_INF("Device initialized successfully\n");
+    // Indicate successful initialization
+    LOG_PRINTK("\n");
+	LOG_INF("Device initialized successfully\n");
 
-    while (1) {
+    set_led_blue(true);
+    k_msleep(1000);
+    set_led_blue(false);
+
+	while (1) {
         // Log total mic buffer bytes processed, GATT notify count, broadcast count, and write_to_tx_queue count
         LOG_INF("Total mic buffer bytes: %u, GATT notify count: %u, Broadcast count: %u, TX queue writes: %u",
                 total_mic_buffer_bytes, gatt_notify_count, broadcast_audio_count, write_to_tx_queue_count);
