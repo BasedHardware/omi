@@ -58,7 +58,7 @@ struct bt_gatt_service storage_service = BT_GATT_SERVICE(storage_service_attr);
 
 bool storage_is_on = false;
 
-static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) 
+static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value)
 {
 
     storage_is_on = true;
@@ -77,7 +77,7 @@ static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint
 
 }
 
-static ssize_t storage_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset) 
+static ssize_t storage_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
 {
     k_msleep(10);
     uint32_t amount[2] = {0};
@@ -91,27 +91,27 @@ static ssize_t storage_read_characteristic(struct bt_conn *conn, const struct bt
 uint8_t transport_started = 0;
 
 
-static uint16_t packet_next_index = 0;
+__attribute__((unused)) static uint16_t packet_next_index = 0;
 #define SD_BLE_SIZE 440
 static uint8_t storage_write_buffer[SD_BLE_SIZE];
 
 static uint32_t offset = 0;
-static uint8_t index = 0;
-static uint8_t current_packet_size = 0;
-static uint8_t tx_buffer_size = 0;
+__attribute__((unused)) static uint8_t index = 0;
+__attribute__((unused)) static uint8_t current_packet_size = 0;
+__attribute__((unused)) static uint8_t tx_buffer_size = 0;
 static uint8_t stop_started = 0;
 static uint8_t delete_started = 0;
 static uint8_t current_read_num = 1;
 uint32_t remaining_length = 0;
 
-static int setup_storage_tx() 
+static int setup_storage_tx()
 {
-    transport_started = (uint8_t)0; 
+    transport_started = (uint8_t)0;
     // offset = 0;
     LOG_INF("about to transmit storage\n");
     k_msleep(1000);
     int res = move_read_pointer(current_read_num);
-    if (res) 
+    if (res)
     {
         LOG_INF("bad pointer");
         transport_started = 0;
@@ -121,30 +121,30 @@ static int setup_storage_tx()
     }
 
     LOG_INF("current read ptr %d",current_read_num);
-   
+
     remaining_length = file_num_array[current_read_num-1];
-    if(current_read_num == file_count) 
+    if(current_read_num == file_count)
     {
         remaining_length = get_file_size(file_count);
     }
 
     remaining_length = remaining_length - offset;
-    
+
     // offset=offset_;
     LOG_INF("remaining length: %d",remaining_length);
     LOG_INF("offset: %d",offset);
     LOG_INF("file: %d",current_read_num);
-    
+
     return 0;
 
 }
 uint8_t delete_num = 0;
 uint8_t nuke_started = 0;
 static uint8_t heartbeat_count = 0;
-static uint8_t parse_storage_command(void *buf,uint16_t len) 
+static uint8_t parse_storage_command(const void *buf,uint16_t len)
 {
 
-    if (len != 6 && len != 2) 
+    if (len != 6 && len != 2)
     {
         LOG_INF("invalid command");
         return INVALID_COMMAND;
@@ -152,44 +152,44 @@ static uint8_t parse_storage_command(void *buf,uint16_t len)
     const uint8_t command = ((uint8_t*)buf)[0];
     const uint8_t file_num = ((uint8_t*)buf)[1];
     uint32_t size = 0;
-    if ( len == 6 ) 
+    if ( len == 6 )
     {
         size = ((uint8_t*)buf)[2] <<24 |((uint8_t*)buf)[3] << 16 | ((uint8_t*)buf)[4] << 8 | ((uint8_t*)buf)[5];
     }
     LOG_PRINTK("command successful: command: %d file: %d size: %d \n",command,file_num,size);
 
-    if (file_num == 0) 
+    if (file_num == 0)
     {
         LOG_INF("invalid file count 0");
         return INVALID_FILE_SIZE;
     }
-    if (file_num > file_count)  //invalid file count 
+    if (file_num > file_count)  //invalid file count
     {
         LOG_INF("invalid file count");
         return INVALID_FILE_SIZE;
     //add audio all?
     }
-    if (command == READ_COMMAND) //read 
-    { 
+    if (command == READ_COMMAND) //read
+    {
         uint32_t temp = file_num_array[file_num-1];
-        if ( file_num == ( file_count ) ) 
+        if ( file_num == ( file_count ) )
         {
             LOG_INF("file_count == final file");
             offset = size - (size % SD_BLE_SIZE); //round down to nearest SD_BLE_SIZE
             current_read_num = file_num;
-            transport_started = 1;           
+            transport_started = 1;
         }
-        else if (temp == 0) 
+        else if (temp == 0)
         {
             LOG_INF("file size is 0");
             return ZERO_FILE_SIZE;
         }
-        else if (size > temp) 
+        else if (size > temp)
         {
             LOG_INF("requested size is too large");
             return 5;
         }
-        else 
+        else
         {
             LOG_INF("valid command, setting up ");
             offset = size - (size % SD_BLE_SIZE);
@@ -197,12 +197,12 @@ static uint8_t parse_storage_command(void *buf,uint16_t len)
             transport_started = 1;
         }
     }
-    else if (command == DELETE_COMMAND) 
+    else if (command == DELETE_COMMAND)
     {
         delete_num = file_num;
         delete_started = 1;
     }
-    else if (command == NUKE) 
+    else if (command == NUKE)
     {
         nuke_started = 1;
     }
@@ -215,7 +215,7 @@ static uint8_t parse_storage_command(void *buf,uint16_t len)
     {
         heartbeat_count = 0;
     }
-    else 
+    else
     {
         LOG_INF("invalid command \n");
         return 6;
@@ -224,14 +224,14 @@ static uint8_t parse_storage_command(void *buf,uint16_t len)
 
 }
 
-static ssize_t storage_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags) 
+static ssize_t storage_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
 {
     LOG_INF("about to schedule the storage");
     LOG_INF("was sent %d  ", ((uint8_t*)buf)[0] );
 
     uint8_t result_buffer[1] = {0};
     uint8_t result = parse_storage_command(buf,len);
-    result_buffer[0] = result; 
+    result_buffer[0] = result;
     LOG_INF("length of storage write: %d",len);
     LOG_INF("result: %d ", result);
     bt_gatt_notify(conn, &storage_service.attrs[1], &result_buffer,1);
@@ -239,7 +239,7 @@ static ssize_t storage_write_handler(struct bt_conn *conn, const struct bt_gatt_
     return len;
 }
 
-// static void write_to_gatt(struct bt_conn *conn) 
+// static void write_to_gatt(struct bt_conn *conn)
 // {
 //     uint32_t id = packet_next_index++;
 //     index = 0;
@@ -255,11 +255,11 @@ static ssize_t storage_write_handler(struct bt_conn *conn, const struct bt_gatt_
 //     index++;
 
 //     int err = bt_gatt_notify(conn, &storage_service.attrs[1], &storage_write_buffer,packet_size+FRAME_PREFIX_LENGTH);
-//     if (err) 
+//     if (err)
 //     {
 //         LOG_PRINTK("error writing to gatt: %d\n",err);
 //     }
-//     else 
+//     else
 //     {
 //     remaining_length = remaining_length - OPUS_ENTRY_LENGTH;
 //     }
@@ -270,46 +270,47 @@ static void write_to_gatt(struct bt_conn *conn) { //unsafe. designed for max spe
     uint32_t packet_size = MIN(remaining_length,SD_BLE_SIZE);
 
     int r = read_audio_data(storage_write_buffer,packet_size,offset);
+    (void)r;
     offset = offset + packet_size;
     int err = bt_gatt_notify(conn, &storage_service.attrs[1], &storage_write_buffer,packet_size);
-    if (err) 
+    if (err)
     {
         LOG_PRINTK("error writing to gatt: %d\n",err);
     }
-    else 
+    else
     {
     remaining_length = remaining_length - SD_BLE_SIZE;
     }
     // LOG_PRINTK("wrote to gatt %d\n",err);
 }
 
-void storage_write(void) 
+void storage_write(void)
 {
-  while (1) 
+  while (1)
   {
     struct bt_conn *conn = get_current_connection();
-    
-    if ( transport_started ) 
+
+    if ( transport_started )
     {
         LOG_INF("transpor started in side : %d",transport_started);
         setup_storage_tx();
     }
     //probably prefer to implement using work orders for delete,nuke,etc...
-    if (delete_started) 
-    { 
+    if (delete_started)
+    {
         LOG_INF("delete:%d\n",delete_started);
         int err = clear_audio_file(1);
         offset = 0;
         save_offset(offset);
-        
-        if (err) 
+
+        if (err)
         {
             LOG_PRINTK("error clearing\n");
         }
-        else 
+        else
         {
             uint8_t result_buffer[1] = {200};
-            if (conn) 
+            if (conn)
             {
                 bt_gatt_notify(get_current_connection(), &storage_service.attrs[1], &result_buffer,1);
             }
@@ -317,14 +318,14 @@ void storage_write(void)
         delete_started = 0;
         k_msleep(10);
     }
-    if (nuke_started) 
+    if (nuke_started)
     {
         clear_audio_directory();
         save_offset(0);
         nuke_started = 0;
     }
-    if (stop_started) 
-    { 
+    if (stop_started)
+    {
         remaining_length = 0;
         stop_started = 0;
         save_offset(offset);
@@ -337,9 +338,9 @@ void storage_write(void)
         // continue;
     }
 
-    if(remaining_length > 0 ) 
+    if(remaining_length > 0 )
     {
-        if (conn == NULL)  
+        if (conn == NULL)
         {
             LOG_ERR("invalid connection");
             remaining_length = 0;
@@ -352,9 +353,9 @@ void storage_write(void)
 
         write_to_gatt(conn);
         heartbeat_count = (heartbeat_count + 1) % (MAX_HEARTBEAT_FRAMES + 1);
-        
+
         transport_started = 0;
-        if (remaining_length == 0 ) 
+        if (remaining_length == 0 )
         {
             if(stop_started)
             {
@@ -365,10 +366,11 @@ void storage_write(void)
                 LOG_PRINTK("done. attempting to download more files\n");
                 uint8_t stop_result[1] = {100};
                 int err = bt_gatt_notify(get_current_connection(), &storage_service.attrs[1], &stop_result,1);
+                (void)err;
                 k_sleep(K_MSEC(10));
             }
 
-        }   
+        }
      }
      k_yield();
 
@@ -376,7 +378,7 @@ void storage_write(void)
 
 }
 
-int storage_init() 
+int storage_init()
 {
     k_thread_create(&storage_thread, storage_stack, K_THREAD_STACK_SIZEOF(storage_stack), (k_thread_entry_t)storage_write, NULL, NULL, NULL, K_PRIO_PREEMPT(7), 0, K_NO_WAIT);
     return 0;
