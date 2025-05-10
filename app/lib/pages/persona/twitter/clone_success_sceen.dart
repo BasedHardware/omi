@@ -1,12 +1,12 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:friend_private/gen/assets.gen.dart';
-import 'package:friend_private/pages/chat/clone_chat_page.dart';
-import 'package:friend_private/pages/persona/persona_provider.dart';
-import 'package:friend_private/utils/other/string_utils.dart';
-import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/extensions/string.dart';
+import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/pages/chat/clone_chat_page.dart';
+import 'package:omi/pages/persona/persona_provider.dart';
+import 'package:omi/utils/other/string_utils.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/extensions/string.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 

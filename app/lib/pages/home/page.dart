@@ -4,34 +4,34 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:friend_private/gen/assets.gen.dart';
-import 'package:friend_private/pages/persona/persona_provider.dart';
-import 'package:friend_private/backend/http/api/users.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/backend/schema/geolocation.dart';
-import 'package:friend_private/main.dart';
-import 'package:friend_private/pages/apps/page.dart';
-import 'package:friend_private/pages/chat/page.dart';
-import 'package:friend_private/pages/conversations/conversations_page.dart';
-import 'package:friend_private/pages/facts/page.dart';
-import 'package:friend_private/pages/home/widgets/chat_apps_dropdown_widget.dart';
-import 'package:friend_private/pages/persona/persona_profile.dart';
-import 'package:friend_private/pages/home/widgets/speech_language_sheet.dart';
-import 'package:friend_private/pages/settings/page.dart';
-import 'package:friend_private/providers/app_provider.dart';
-import 'package:friend_private/providers/capture_provider.dart';
-import 'package:friend_private/providers/connectivity_provider.dart';
-import 'package:friend_private/providers/device_provider.dart';
-import 'package:friend_private/providers/home_provider.dart';
-import 'package:friend_private/providers/conversation_provider.dart';
-import 'package:friend_private/providers/message_provider.dart';
-import 'package:friend_private/services/notifications.dart';
-import 'package:friend_private/utils/analytics/analytics_manager.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/audio/foreground.dart';
-import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/upgrade_alert.dart';
+import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/pages/persona/persona_provider.dart';
+import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/backend/schema/geolocation.dart';
+import 'package:omi/main.dart';
+import 'package:omi/pages/apps/page.dart';
+import 'package:omi/pages/chat/page.dart';
+import 'package:omi/pages/conversations/conversations_page.dart';
+import 'package:omi/pages/memories/page.dart';
+import 'package:omi/pages/home/widgets/chat_apps_dropdown_widget.dart';
+import 'package:omi/pages/persona/persona_profile.dart';
+import 'package:omi/pages/home/widgets/speech_language_sheet.dart';
+import 'package:omi/pages/settings/page.dart';
+import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/message_provider.dart';
+import 'package:omi/services/notifications.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/audio/foreground.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -105,6 +105,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   void _initiateApps() {
     context.read<AppProvider>().getApps();
+    context.read<AppProvider>().getPopularApps();
   }
 
   @override
@@ -135,7 +136,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   ///Screens with respect to subpage
   final Map<String, Widget> screensWithRespectToPath = {
     '/settings': const SettingsPage(),
-    '/facts': const FactsPage(),
+    '/facts': const MemoriesPage(),
   };
   bool? previousConnection;
 
@@ -243,7 +244,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         case "facts":
           MyApp.navigatorKey.currentState?.push(
             MaterialPageRoute(
-              builder: (context) => const FactsPage(),
+              builder: (context) => const MemoriesPage(),
             ),
           );
           break;
@@ -510,17 +511,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   child: Row(
                     children: [
                       const Spacer(),
-                      SpeechLanguageSheet(
-                        recordingLanguage: provider.recordingLanguage,
-                        setRecordingLanguage: (language) {
-                          provider.setRecordingLanguage(language);
-                          // Notify capture provider
-                          if (context.mounted) {
-                            context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                          }
-                        },
-                        availableLanguages: provider.availableLanguages,
-                      ),
                     ],
                   ),
                 );

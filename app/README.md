@@ -4,22 +4,6 @@ The Omi App is a Flutter-based mobile application that serves as the companion a
 
 ## 📚 **[View Full App setup instructions in the documentation](https://docs.omi.me/docs/developer/AppSetup)**
 
-## What's in the Documentation?
-
-### 🛠 Development Setup
-- **Firebase Setup**: Complete guide for configuring Firebase authentication and services
-- **Environment Setup**: Step-by-step guide for .env configuration and API keys
-- **Build Configuration**: Instructions for build runner and platform-specific setups
-- **Manual Setup Option**: Alternative to automated setup for custom configurations
-- **Troubleshooting Guide**: Common setup issues and their solutions
-
-### 🚀 Advanced Topics
-- **Backend Integration**: Guide for connecting to custom backend services
-- **Production Setup**: Detailed Firebase configuration for production environment
-- **Authentication**: Complete OAuth setup including SHA key generation
-- **Multi-Environment**: Managing development and production configurations
-- **Platform Specifics**: iOS and Android platform-specific requirements
-
 ### Quick Setup
 
 1. Navigate to the app directory:
@@ -40,6 +24,27 @@ The Omi App is a Flutter-based mobile application that serves as the companion a
    ```bash
    flutter run --flavor dev
    ```
+
+### Building and Deploying to iPhone
+
+To build and deploy the app to an iPhone so it can run independently from your laptop:
+
+1. Build the iOS app with release mode and specific flavor:
+   ```bash
+   flutter build ios --flavor dev --release
+   ```
+   This produces an .app bundle at:
+   ```
+   build/ios/iphoneos/Runner.app
+   ```
+
+2. **Install directly from the .app bundle (recommended for local device install):**
+   ```bash
+   ios-deploy --bundle build/ios/iphoneos/Runner.app --debug
+   ```
+   This will install the app directly to your connected iPhone.
+
+Once installed, the app will run on your iPhone independently from your development machine.
 
 ## Need Help?
 

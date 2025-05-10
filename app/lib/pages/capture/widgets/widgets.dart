@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/backend/schema/transcript_segment.dart';
-import 'package:friend_private/pages/home/firmware_update.dart';
-import 'package:friend_private/pages/speech_profile/page.dart';
-import 'package:friend_private/providers/capture_provider.dart';
-import 'package:friend_private/providers/device_provider.dart';
-import 'package:friend_private/providers/home_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/enums.dart';
-import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/photos_grid.dart';
-import 'package:friend_private/widgets/transcript.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/pages/home/firmware_update.dart';
+import 'package:omi/pages/speech_profile/page.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/photos_grid.dart';
+import 'package:omi/widgets/transcript.dart';
 import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
 
@@ -147,12 +147,26 @@ getTranscriptWidget(
     );
   }
 
-  return Column(
-    children: [
-      if (photos.isNotEmpty) const PhotosGridComponent(),
-      if (segments.isNotEmpty) TranscriptWidget(segments: segments),
-    ],
-  );
+  final bool showPhotos = photos.isNotEmpty;
+  final bool showTranscript = segments.isNotEmpty;
+
+  if (showPhotos && showTranscript) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const PhotosGridComponent(),
+        Expanded(
+          child: TranscriptWidget(segments: segments, bottomMargin: 100),
+        ),
+      ],
+    );
+  } else if (showPhotos) {
+    return const PhotosGridComponent();
+  } else if (showTranscript) {
+    return TranscriptWidget(segments: segments, bottomMargin: 100);
+  } else {
+    return const SizedBox.shrink();
+  }
 }
 
 getLiteTranscriptWidget(

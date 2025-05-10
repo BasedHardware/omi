@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/services/sockets/transcription_connection.dart';
-
-const defaultLanguage = "en";
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/services/sockets/transcription_connection.dart';
 
 abstract class ISocketService {
   void start();
@@ -10,10 +8,10 @@ abstract class ISocketService {
   void stop();
 
   Future<TranscriptSegmentSocketService?> conversation(
-      {required BleAudioCodec codec, required int sampleRate, String language = defaultLanguage, bool force = false});
+      {required BleAudioCodec codec, required int sampleRate, required String language, bool force = false});
 
   Future<TranscriptSegmentSocketService?> speechProfile(
-      {required BleAudioCodec codec, required int sampleRate, String language = defaultLanguage, bool force = false});
+      {required BleAudioCodec codec, required int sampleRate, required String language, bool force = false});
 }
 
 abstract interface class ISocketServiceSubsciption {}
@@ -72,20 +70,14 @@ class SocketServicePool extends ISocketService {
 
   @override
   Future<TranscriptSegmentSocketService?> conversation(
-      {required BleAudioCodec codec,
-      required int sampleRate,
-      String language = defaultLanguage,
-      bool force = false}) async {
+      {required BleAudioCodec codec, required int sampleRate, required String language, bool force = false}) async {
     debugPrint("socket conversation > $codec $sampleRate $force");
     return await socket(codec: codec, sampleRate: sampleRate, language: language, force: force);
   }
 
   @override
   Future<TranscriptSegmentSocketService?> speechProfile(
-      {required BleAudioCodec codec,
-      required int sampleRate,
-      String language = defaultLanguage,
-      bool force = false}) async {
+      {required BleAudioCodec codec, required int sampleRate, required String language, bool force = false}) async {
     debugPrint("socket speech profile > $codec $sampleRate $force");
     return await socket(codec: codec, sampleRate: sampleRate, language: language, force: force);
   }

@@ -1,3 +1,9 @@
+# Memories are now conversations, and the models are now in the models/conversation.py file
+
+# MIGRATE: This file is deprecated and will be removed in the future.
+# Please refer to the models/conversation.py file for the latest models.
+# This file is only used by the current /v1/memories and /v2/memories endpoints, which will be deprecated soon.
+
 from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional, Dict
@@ -119,6 +125,7 @@ class Geolocation(BaseModel):
 
 class MemorySource(str, Enum):
     friend = 'friend'
+    omi = 'omi'
     openglass = 'openglass'
     screenpipe = 'screenpipe'
     workflow = 'workflow'
@@ -163,7 +170,7 @@ class Memory(BaseModel):
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
 
-    source: Optional[MemorySource] = MemorySource.friend  # TODO: once released migrate db to include this field
+    source: Optional[MemorySource] = MemorySource.omi  # TODO: once released migrate db to include this field
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
 
     structured: Structured
@@ -235,7 +242,7 @@ class CreateMemory(BaseModel):
 
     photos: List[MemoryPhoto] = []
 
-    source: MemorySource = MemorySource.friend
+    source: MemorySource = MemorySource.omi
     language: Optional[str] = None
 
     processing_memory_id: Optional[str] = None

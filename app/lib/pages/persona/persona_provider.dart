@@ -1,10 +1,10 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/api/apps.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/utils/alerts/app_snackbar.dart';
+import 'package:omi/backend/http/api/apps.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:image_picker/image_picker.dart';
 
 typedef ShowSuccessDialogCallback = void Function(String url);
@@ -76,6 +76,9 @@ class PersonaProvider extends ChangeNotifier {
     if (res != null) {
       if (res['status'] == 'notfound') {
         AppSnackbar.showSnackbarError('Twitter handle not found');
+        _twitterProfile = {};
+      } else if (res['status'] == 'suspended') {
+        AppSnackbar.showSnackbarError('Twitter handle is suspended');
         _twitterProfile = {};
       } else {
         _twitterProfile = res;

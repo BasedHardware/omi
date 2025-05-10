@@ -1,7 +1,7 @@
 import base64
 import json
 import os
-from typing import List, Union
+from typing import List, Union, Optional
 
 import redis
 
@@ -302,17 +302,17 @@ def get_cached_user_name(uid: str) -> str:
     return name.decode()
 
 
-# TODO: cache facts if speed improves dramatically
-def cache_facts(uid: str, facts: List[dict]):
-    r.set(f'users:{uid}:facts', str(facts))
+# TODO: cache memories if speed improves dramatically
+def cache_memories(uid: str, memories: List[dict]):
+    r.set(f'users:{uid}:facts', str(memories))
     r.expire(f'users:{uid}:facts', 60 * 60)  # 1 hour, most people chat during a few minutes
 
 
-def get_cached_facts(uid: str) -> List[dict]:
-    facts = r.get(f'users:{uid}:facts')
-    if not facts:
+def get_cached_memories(uid: str) -> List[dict]:
+    memories = r.get(f'users:{uid}:facts')
+    if not memories:
         return []
-    return eval(facts)
+    return eval(memories)
 
 
 def cache_signed_url(blob_path: str, signed_url: str, ttl: int = 60 * 60):
@@ -339,66 +339,66 @@ def get_cached_user_geolocation(uid: str):
     return eval(geolocation)
 
 
-# VISIIBILTIY OF MEMORIES
-def store_memory_to_uid(memory_id: str, uid: str):
-    r.set(f'memories-visibility:{memory_id}', uid)
+# VISIIBILTIY OF CONVERSATIONS
+def store_conversation_to_uid(conversation_id: str, uid: str):
+    r.set(f'memories-visibility:{conversation_id}', uid)
 
 
-def remove_memory_to_uid(memory_id: str):
-    r.delete(f'memories-visibility:{memory_id}')
+def remove_conversation_to_uid(conversation_id: str):
+    r.delete(f'memories-visibility:{conversation_id}')
 
 
-def get_memory_uid(memory_id: str) -> str:
-    uid = r.get(f'memories-visibility:{memory_id}')
+def get_conversation_uid(conversation_id: str) -> str:
+    uid = r.get(f'memories-visibility:{conversation_id}')
     if not uid:
         return ''
     return uid.decode()
 
 
-def get_memory_uids(memory_ids: list) -> dict:
-    if not memory_ids:
+def get_conversation_uids(conversation_ids: list) -> dict:
+    if not conversation_ids:
         return {}
 
-    memory_keys = [f'memories-visibility:{memory_id}' for memory_id in memory_ids]
-    uids = r.mget(memory_keys)
+    conversation_keys = [f'memories-visibility:{conversation_id}' for conversation_id in conversation_ids]
+    uids = r.mget(conversation_keys)
     if uids is None:
         return {}
-    memory_uids = {}
-    for memory_id, uid in zip(memory_ids, uids):
+    conversation_uids = {}
+    for conversation_id, uid in zip(conversation_ids, uids):
         if uid:
-            memory_uids[memory_id] = uid.decode()
-    return memory_uids
+            conversation_uids[conversation_id] = uid.decode()
+    return conversation_uids
 
 
-def add_public_memory(memory_id: str):
-    r.sadd('public-memories', memory_id)
+def add_public_conversation(conversation_id: str):
+    r.sadd('public-memories', conversation_id)
 
 
-def remove_public_memory(memory_id: str):
-    r.srem('public-memories', memory_id)
+def remove_public_conversation(conversation_id: str):
+    r.srem('public-memories', conversation_id)
 
 
-def get_public_memories() -> List[str]:
+def get_public_conversations() -> List[str]:
     val = r.smembers('public-memories')
     if not val:
         return []
     return [x.decode() for x in val]
 
 
-def set_in_progress_memory_id(uid: str, memory_id: str, ttl: int = 150):
-    r.set(f'users:{uid}:in_progress_memory_id', memory_id)
+def set_in_progress_conversation_id(uid: str, conversation_id: str, ttl: int = 150):
+    r.set(f'users:{uid}:in_progress_memory_id', conversation_id)
     r.expire(f'users:{uid}:in_progress_memory_id', ttl)
 
 
-def remove_in_progress_memory_id(uid: str):
+def remove_in_progress_conversation_id(uid: str):
     r.delete(f'users:{uid}:in_progress_memory_id')
 
 
-def get_in_progress_memory_id(uid: str) -> str:
-    memory_id = r.get(f'users:{uid}:in_progress_memory_id')
-    if not memory_id:
+def get_in_progress_conversation_id(uid: str) -> str:
+    conversation_id = r.get(f'users:{uid}:in_progress_memory_id')
+    if not conversation_id:
         return ''
-    return memory_id.decode()
+    return conversation_id.decode()
 
 
 def set_user_webhook_db(uid: str, wtype: str, url: str):
@@ -451,13 +451,13 @@ def remove_all_filter_category_items(uid: str, category: str):
     r.delete(f'users:{uid}:filters:{category}')
 
 
-def save_migrated_retrieval_memory_id(memory_id: str):
-    r.sadd('migrated_retrieval_memory_ids', memory_id)
+def save_migrated_retrieval_conversation_id(conversation_id: str):
+    r.sadd('migrated_retrieval_memory_ids', conversation_id)
     r.expire('migrated_retrieval_memory_ids', 60 * 60 * 24 * 7)
 
 
-def has_migrated_retrieval_memory_id(memory_id: str) -> bool:
-    return r.sismember('migrated_retrieval_memory_ids', memory_id)
+def has_migrated_retrieval_conversation_id(conversation_id: str) -> bool:
+    return r.sismember('migrated_retrieval_memory_ids', conversation_id)
 
 
 def set_proactive_noti_sent_at(uid: str, plugin_id: str, ts: int, ttl: int = 30):
@@ -473,3 +473,16 @@ def get_proactive_noti_sent_at(uid: str, plugin_id: str):
 
 def get_proactive_noti_sent_at_ttl(uid: str, plugin_id: str):
     return r.ttl(f'{uid}:{plugin_id}:proactive_noti_sent_at')
+
+
+def set_user_preferred_app(uid: str, app_id: str):
+    """Stores the user's preferred app ID."""
+    key = f'user:{uid}:preferred_app'
+    r.set(key, app_id)
+
+
+def get_user_preferred_app(uid: str) -> Optional[str]:
+    """Retrieves the user's preferred app ID, if set."""
+    key = f'user:{uid}:preferred_app'
+    app_id = r.get(key)
+    return app_id.decode() if app_id else None

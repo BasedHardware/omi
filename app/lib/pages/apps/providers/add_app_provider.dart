@@ -4,12 +4,12 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import 'package:friend_private/backend/http/api/apps.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/providers/app_provider.dart';
-import 'package:friend_private/utils/alerts/app_snackbar.dart';
-import 'package:friend_private/widgets/extensions/string.dart';
+import 'package:omi/backend/http/api/apps.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/providers/app_provider.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/widgets/extensions/string.dart';
 import 'package:image_picker/image_picker.dart';
 
 class AddAppProvider extends ChangeNotifier {
@@ -68,7 +68,7 @@ class AddAppProvider extends ChangeNotifier {
   bool isGenratingDescription = false;
 
   bool allowPaidApps = false;
-  
+
   // API Keys
   List<AppApiKey> apiKeys = [];
   bool isLoadingApiKeys = false;
@@ -434,7 +434,7 @@ class AddAppProvider extends ChangeNotifier {
         }
         if (capability.title == 'memories') {
           if (conversationPromptController.text.isEmpty) {
-            AppSnackbar.showSnackbarError('Please enter a memory prompt for your app');
+            AppSnackbar.showSnackbarError('Please enter a conversation prompt for your app');
             return false;
           }
         }
@@ -782,12 +782,12 @@ class AddAppProvider extends ChangeNotifier {
   void setIsGenratingDescription(bool genrating) {
     isGenratingDescription = genrating;
   }
-  
+
   // API Keys methods
   Future<void> loadApiKeys(String appId) async {
     isLoadingApiKeys = true;
     notifyListeners();
-    
+
     try {
       apiKeys = await listApiKeysServer(appId);
     } catch (e) {
@@ -797,13 +797,13 @@ class AddAppProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
-  
+
   Future<AppApiKey> createApiKey(String appId) async {
     final result = await createApiKeyServer(appId);
     await loadApiKeys(appId);
     return AppApiKey.fromJson(result);
   }
-  
+
   Future<void> deleteApiKey(String appId, String keyId) async {
     await deleteApiKeyServer(appId, keyId);
     await loadApiKeys(appId);

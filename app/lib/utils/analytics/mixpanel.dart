@@ -1,7 +1,7 @@
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/fact.dart';
-import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/env/env.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/memory.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/env/env.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 
 class MixpanelManager {
@@ -34,7 +34,7 @@ class MixpanelManager {
     setUserProperty('Apps Integrations Enabled Count', _preferences.enabledAppsIntegrationsCount);
     setUserProperty('Speaker Profile', _preferences.hasSpeakerProfile);
     setUserProperty('Calendar Enabled', _preferences.calendarEnabled);
-    setUserProperty('Recordings Language', _preferences.recordingsLanguage);
+    setUserProperty('Primary Language', _preferences.userPrimaryLanguage);
     setUserProperty('Authorized Storing Recordings', _preferences.permissionStoreRecordingsEnabled);
   }
 
@@ -148,21 +148,21 @@ class MixpanelManager {
 
   void deviceDisconnected() => track('Device Disconnected');
 
-  void factsPageCategoryOpened(FactCategory category) =>
+  void memoriesPageCategoryOpened(MemoryCategory category) =>
       track('Fact Page Category Opened', properties: {'category': category.toString().split('.').last});
 
-  void factsPageDeletedFact(Fact fact) => track(
+  void memoriesPageDeletedMemory(Memory memory) => track(
         'Fact Page Deleted Fact',
         properties: {
-          'fact_category': fact.category.toString().split('.').last,
+          'fact_category': memory.category.toString().split('.').last,
         },
       );
 
-  void factsPageEditedFact() => track('Fact Page Edited Fact');
+  void memoriesPageEditedMemory() => track('Fact Page Edited Fact');
 
-  void factsPageCreateFactBtn() => track('Fact Page Create Fact Button Pressed');
+  void memoriesPageCreateMemoryBtn() => track('Fact Page Create Fact Button Pressed');
 
-  void factsPageCreatedFact(FactCategory category) =>
+  void memoriesPageCreatedMemory(MemoryCategory category) =>
       track('Fact Page Created Fact', properties: {'fact_category': category.toString().split('.').last});
 
   Map<String, dynamic> _getTranscriptProperties(String transcript) {
@@ -193,7 +193,7 @@ class MixpanelManager {
     var properties = getConversationEventProperties(conversation);
     properties['memory_result'] = conversation.discarded ? 'discarded' : 'saved';
     properties['action_items_count'] = conversation.structured.actionItems.length;
-    properties['transcript_language'] = _preferences.recordingsLanguage;
+    properties['transcript_language'] = _preferences.userPrimaryLanguage;
     track('Memory Created', properties: properties);
   }
 
@@ -224,7 +224,7 @@ class MixpanelManager {
 
   void setUserProperties(String whatDoYouDo, String whereDoYouPlanToUseYourFriend, String ageRange) {
     setUserProperty('What the user does', whatDoYouDo);
-    setUserProperty('Using Friend At', whereDoYouPlanToUseYourFriend);
+    setUserProperty('Using Omi At', whereDoYouPlanToUseYourFriend);
     setUserProperty('Age Range', ageRange);
   }
 

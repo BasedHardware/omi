@@ -1,7 +1,35 @@
-import 'package:friend_private/backend/preferences.dart';
+import 'package:omi/backend/preferences.dart';
+
+class Translation {
+  String lang;
+  String text;
+
+  Translation({
+    required this.lang,
+    required this.text,
+  });
+
+  factory Translation.fromJson(Map<String, dynamic> json) {
+    return Translation(
+      lang: json['lang'] as String,
+      text: json['text'] as String,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'lang': lang,
+      'text': text,
+    };
+  }
+
+  static List<Translation> fromJsonList(List<dynamic> jsonList) {
+    return jsonList.map((e) => Translation.fromJson(e)).toList();
+  }
+}
 
 class TranscriptSegment {
-  int id = 0;
+  String id;
 
   String text;
   String? speaker;
@@ -10,14 +38,17 @@ class TranscriptSegment {
   String? personId;
   double start;
   double end;
+  List<Translation> translations = [];
 
   TranscriptSegment({
+    required this.id,
     required this.text,
     required this.speaker,
     required this.isUser,
     required this.personId,
     required this.start,
     required this.end,
+    required this.translations,
   }) {
     speakerId = speaker != null ? int.parse(speaker!.split('_')[1]) : 0;
   }
@@ -36,12 +67,14 @@ class TranscriptSegment {
   // Factory constructor to create a new Message instance from a map
   factory TranscriptSegment.fromJson(Map<String, dynamic> json) {
     return TranscriptSegment(
+      id: (json['id'] ?? '') as String,
       text: json['text'] as String,
       speaker: (json['speaker'] ?? 'SPEAKER_00') as String,
       isUser: (json['is_user'] ?? false) as bool,
       personId: json['person_id'],
       start: double.tryParse(json['start'].toString()) ?? 0.0,
       end: double.tryParse(json['end'].toString()) ?? 0.0,
+      translations: json['translations'] != null ? Translation.fromJsonList(json['translations'] as List<dynamic>) : [],
     );
   }
 
@@ -54,6 +87,7 @@ class TranscriptSegment {
       'is_user': isUser,
       'start': start,
       'end': end,
+      'translations': translations?.map((t) => t.toJson()).toList(),
     };
   }
 
@@ -61,22 +95,27 @@ class TranscriptSegment {
     return jsonList.map((e) => TranscriptSegment.fromJson(e)).toList();
   }
 
-  static cleanSegments(List<TranscriptSegment> segments) {
-    var hallucinations = ['Thank you.', 'I don\'t know what to do,', 'I\'m', 'It was the worst case.', 'and,'];
-    // TODO: do this with any words that gets repeated twice
-    // - Replicate apparently has much more hallucinations
-    for (var i = 0; i < segments.length; i++) {
-      for (var hallucination in hallucinations) {
-        segments[i].text = segments[i]
-            .text
-            .replaceAll('$hallucination $hallucination $hallucination', '')
-            .replaceAll('$hallucination $hallucination', '')
-            .replaceAll('  ', ' ')
-            .trim();
+  static List<TranscriptSegment> updateSegments(
+      List<TranscriptSegment> segments, List<TranscriptSegment> updateSegments) {
+    if (updateSegments.isEmpty) return [];
+
+    if (segments.isEmpty) return updateSegments;
+
+    // Replace existing segments with the same ID
+    Map<String, TranscriptSegment> updateSegmentMap = {};
+    for (var segment in updateSegments) {
+      updateSegmentMap[segment.id] = segment;
+    }
+    for (int i = 0; i < segments.length; i++) {
+      String segmentId = segments[i].id;
+      if (updateSegmentMap.containsKey(segmentId)) {
+        segments[i] = updateSegmentMap[segmentId]!;
+        updateSegmentMap.remove(segmentId);
       }
     }
-    // remove empty segments
-    segments.removeWhere((element) => element.text.isEmpty);
+
+    // remaining
+    return updateSegments.where((segment) => updateSegmentMap.containsKey(segment.id)).toList();
   }
 
   static combineSegments(
@@ -86,7 +125,6 @@ class TranscriptSegment {
     double toRemoveSeconds = 0,
   }) {
     if (newSegments.isEmpty) return;
-    // print('toAddSeconds: $toAddSeconds toRemoveSeconds: $toRemoveSeconds');
 
     for (var segment in newSegments) {
       segment.start -= toRemoveSeconds;
@@ -125,30 +163,7 @@ class TranscriptSegment {
       joinedSimilarSegments.removeAt(0);
     }
 
-    cleanSegments(segments);
-    cleanSegments(joinedSimilarSegments);
-
     segments.addAll(joinedSimilarSegments);
-
-    //     for i, segment in enumerate(segments):
-    //         segments[i].text = (
-    //             segments[i].text.strip()
-    //             .replace('  ', '')
-    //             .replace(' ,', ',')
-    //             .replace(' .', '.')
-    //             .replace(' ?', '?')
-    //         )
-
-    // Speechmatics specific issue with punctuation
-    for (var i = 0; i < segments.length; i++) {
-      segments[i].text = segments[i]
-          .text
-          .replaceAll('  ', '')
-          .replaceAll(' ,', ',')
-          .replaceAll(' .', '.')
-          .replaceAll(' ?', '?')
-          .trim();
-    }
   }
 
   static String segmentsAsString(

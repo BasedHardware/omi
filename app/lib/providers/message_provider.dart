@@ -4,15 +4,16 @@ import 'package:collection/collection.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/api/messages.dart';
-import 'package:friend_private/backend/http/api/users.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/providers/app_provider.dart';
-import 'package:friend_private/utils/alerts/app_snackbar.dart';
+import 'package:omi/backend/http/api/messages.dart';
+import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/message.dart';
+import 'package:omi/providers/app_provider.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:friend_private/utils/file.dart';
+import 'package:omi/utils/file.dart';
 import 'package:uuid/uuid.dart';
 
 class MessageProvider extends ChangeNotifier {
@@ -268,10 +269,12 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future sendVoiceMessageStreamToServer(List<List<int>> audioBytes, {Function? onFirstChunkRecived}) async {
+  Future sendVoiceMessageStreamToServer(List<List<int>> audioBytes,
+      {Function? onFirstChunkRecived, BleAudioCodec? codec}) async {
     var file = await FileUtils.saveAudioBytesToTempFile(
       audioBytes,
       DateTime.now().millisecondsSinceEpoch ~/ 1000 - (audioBytes.length / 100).ceil(),
+      codec?.getFrameSize() ?? 160,
     );
 
     setShowTypingIndicator(true);

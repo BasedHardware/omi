@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/widgets/dialog.dart';
 
 class SpeechLanguageSheet extends StatelessWidget {
   final String recordingLanguage;
@@ -113,7 +113,7 @@ class SpeechLanguageSheet extends StatelessWidget {
             ),
             const SizedBox(width: 4),
             Text(
-              SharedPreferencesUtil().recordingsLanguage.toUpperCase(),
+              SharedPreferencesUtil().userPrimaryLanguage.toUpperCase(),
               style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
             ),
           ],

@@ -1,7 +1,8 @@
 import os
+import threading
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Any
 import hashlib
 import secrets
 
@@ -11,10 +12,10 @@ from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
     add_tester_db, add_app_access_for_tester_db, remove_app_access_for_tester_db, remove_tester_db, \
     is_tester_db, can_tester_access_app_db, get_apps_for_tester_db, get_app_chat_message_sent_usage_count_db, \
     update_app_in_db, get_audio_apps_count, get_persona_by_uid_db, update_persona_in_db, \
-    get_omi_personas_by_uid_db, get_api_key_by_hash_db
+    get_omi_personas_by_uid_db, get_api_key_by_hash_db, get_popular_apps_db
 from database.auth import get_user_name
-from database.facts import get_facts
-from database.memories import get_memories
+from database.conversations import get_conversations
+from database.memories import get_memories, get_user_public_memories
 from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_generic_cache, \
     set_generic_cache, set_app_usage_history_cache, get_app_usage_history_cache, get_app_money_made_cache, \
     set_app_money_made_cache, get_plugins_installs_count, get_plugins_reviews, get_app_cache_by_id, set_app_cache_by_id, \
@@ -22,10 +23,10 @@ from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_gener
     set_app_usage_count_cache, set_user_paid_app, get_user_paid_app, delete_app_cache_by_id, is_username_taken
 from database.users import get_stripe_connect_account_id
 from models.app import App, UsageHistoryItem, UsageHistoryType
-from models.memory import Memory
+from models.conversation import Conversation
 from utils import stripe
-from utils.llm import condense_conversations, condense_facts, generate_persona_description, condense_tweets
-from utils.social import get_twitter_timeline
+from utils.llm import condense_conversations, condense_memories, generate_persona_description, condense_tweets
+from utils.social import get_twitter_timeline, TwitterProfile, get_twitter_profile
 
 MarketplaceAppReviewUIDs = os.getenv('MARKETPLACE_APP_REVIEWERS').split(',') if os.getenv(
     'MARKETPLACE_APP_REVIEWERS') else []
@@ -69,6 +70,34 @@ def weighted_rating(plugin):
     return (v / (v + m) * R) + (m / (v + m) * C)
 
 
+def get_popular_apps() -> List[App]:
+    popular_apps = []
+    if cached_apps := get_generic_cache('get_popular_apps_data'):
+        print('get_popular_apps from cache')
+        popular_apps = cached_apps
+    else:
+        print('get_popular_apps from db')
+        popular_apps = get_popular_apps_db()
+        set_generic_cache('get_popular_apps_data', popular_apps, 60 * 30)  # 30 minutes cached
+
+    app_ids = [app['id'] for app in popular_apps]
+    plugins_install = get_plugins_installs_count(app_ids)
+    plugins_review = get_plugins_reviews(app_ids)
+
+    apps = []
+    for app in popular_apps:
+        app_dict = app
+        app_dict['installs'] = plugins_install.get(app['id'], 0)
+        reviews = plugins_review.get(app['id'], {})
+        sorted_reviews = reviews.values()
+        rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
+        app_dict['rating_avg'] = rating_avg
+        app_dict['rating_count'] = len(sorted_reviews)
+        apps.append(App(**app_dict))
+    apps = sorted(apps, key=lambda x: x.installs, reverse=True)
+    return apps
+
+
 def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     private_data = []
     public_approved_data = []
@@ -77,14 +106,13 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     all_apps = []
     tester = is_tester(uid)
     if cachedApps := get_generic_cache('get_public_approved_apps_data'):
-        print('get_public_approved_plugins_data from cache----------------------------')
+        print('get_public_approved_plugins_data from cache')
         public_approved_data = cachedApps
-        public_approved_data = get_public_approved_apps_db()
         public_unapproved_data = get_public_unapproved_apps(uid)
         private_data = get_private_apps(uid)
         pass
     else:
-        print('get_public_approved_plugins_data from db----------------------------')
+        print('get_public_approved_plugins_data from db')
         private_data = get_private_apps(uid)
         public_approved_data = get_public_approved_apps_db()
         public_unapproved_data = get_public_unapproved_apps(uid)
@@ -379,28 +407,28 @@ def get_omi_personas_by_uid(uid: str):
 
 
 async def generate_persona_prompt(uid: str, persona: dict):
-    """Generate a persona prompt based on user facts and memories."""
+    """Generate a persona prompt based on user memories and conversations."""
 
     print(f"generate_persona_prompt {uid}")
 
-    # Get latest facts and user info
-    facts = get_facts(uid, limit=250)
+    # Get latest memories and user info
+    memories = get_memories(uid, limit=250)
     user_name = get_user_name(uid)
 
-    # Get and condense recent memories
-    memories = get_memories(uid, limit=100)
-    conversation_history = Memory.memories_to_string(memories)
+    # Get and condense recent conversations
+    conversations = get_conversations(uid, limit=100)
+    conversation_history = Conversation.conversations_to_string(conversations)
     conversation_history = condense_conversations([conversation_history])
 
     tweets = None
     if "twitter" in persona['connected_accounts']:
-        print("twitter in connected accounts---------------------------")
+        print("twitter is in connected accounts")
         # Get latest tweets
-        tweets = await get_twitter_timeline(persona['twitter']['username'])
-        tweets = [{'tweet': tweet['text'], 'posted_at': tweet['created_at']} for tweet in tweets['timeline']]
+        timeline = await get_twitter_timeline(persona['twitter']['username'])
+        tweets = [{'tweet': tweet.text, 'posted_at': tweet.created_at} for tweet in timeline.timeline]
 
-    # Condense facts
-    facts_text = condense_facts([fact['content'] for fact in facts if not fact['deleted']], user_name)
+    # Condense memories
+    memories_text = condense_memories([memory['content'] for memory in memories if not memory['deleted']], user_name)
 
     # Generate updated chat prompt
     persona_prompt = f"""
@@ -447,7 +475,7 @@ async def generate_persona_prompt(uid: str, persona: dict):
     You have all the necessary condensed facts and contextual knowledge. Begin personifying {user_name} now.
 
     Personal Facts and Context:
-    {facts_text}
+    {memories_text}
 
     Recent Conversations:
     {conversation_history}
@@ -460,11 +488,26 @@ async def generate_persona_prompt(uid: str, persona: dict):
 
 
 def generate_persona_desc(uid: str, persona_name: str):
-    """Generate a persona description based on user facts."""
-    facts = get_facts(uid, limit=250)
+    """Generate a persona description based on user memories."""
+    memories = get_memories(uid, limit=250)
 
-    persona_description = generate_persona_description(facts, persona_name)
+    persona_description = generate_persona_description(memories, persona_name)
     return persona_description
+
+
+def update_personas_async(uid: str):
+    print(f"[PERSONAS] Starting persona updates in background thread for uid={uid}")
+    personas = get_omi_personas_by_uid_db(uid)
+    if personas:
+        threads = []
+        for persona in personas:
+            threads.append(threading.Thread(target=sync_update_persona_prompt, args=(persona,)))
+
+        [t.start() for t in threads]
+        [t.join() for t in threads]
+        print(f"[PERSONAS] Finished persona updates in background thread for uid={uid}")
+    else:
+        print(f"[PERSONAS] No personas found for uid={uid}")
 
 
 def sync_update_persona_prompt(persona: dict):
@@ -474,32 +517,34 @@ def sync_update_persona_prompt(persona: dict):
     asyncio.set_event_loop(loop)
     try:
         return loop.run_until_complete(update_persona_prompt(persona))
+    except Exception as e:
+        print(f"Error in update_persona_prompt for persona {persona.get('id', 'unknown')}: {str(e)}")
+        return None
     finally:
         loop.close()
 
 
 async def update_persona_prompt(persona: dict):
-    """Update a persona's chat prompt with latest facts and memories."""
-
-    # Get latest facts and user info
-    facts = get_facts(persona['uid'], limit=250)
+    """Update a persona's chat prompt with latest memories and conversations."""
+    # Get latest memories and user info
+    memories = get_user_public_memories(persona['uid'], limit=250)
     user_name = get_user_name(persona['uid'])
 
-    # Get and condense recent memories
-    memories = get_memories(persona['uid'], limit=100)
-    conversation_history = Memory.memories_to_string(memories)
+    # Get and condense recent conversations
+    conversations = get_conversations(persona['uid'], limit=100)
+    conversation_history = Conversation.conversations_to_string(conversations)
     conversation_history = condense_conversations([conversation_history])
 
     condensed_tweets = None
     # Condense tweets
     if "twitter" in persona['connected_accounts'] and 'twitter' in persona:
         # Get latest tweets
-        tweets = await get_twitter_timeline(persona['twitter']['username'])
-        tweets = [tweet['text'] for tweet in tweets['timeline']]
+        timeline = await get_twitter_timeline(persona['twitter']['username'])
+        tweets = [tweet.text for tweet in timeline.timeline]
         condensed_tweets = condense_tweets(tweets, persona['name'])
 
-    # Condense facts
-    facts_text = condense_facts([fact['content'] for fact in facts if not fact['deleted']], user_name)
+    # Condense memories
+    memories_text = condense_memories([memory['content'] for memory in memories if not memory['deleted']], user_name)
 
     # Generate updated chat prompt
     persona_prompt = f"""
@@ -533,7 +578,7 @@ You have:
 
     # Add a guideline about tweets if they exist
     if condensed_tweets:
-        persona_prompt += "7. Utilize condensed tweets to enhance authenticity, incorporating common expressions, opinions, and phrasing from {user_name}’s social media presence.\n"
+        persona_prompt += "7. Utilize condensed tweets to enhance authenticity, incorporating common expressions, opinions, and phrasing from {user_name}'s social media presence.\n"
 
     persona_prompt += f"""
 **Rules:**
@@ -546,7 +591,7 @@ You have:
 You have all the necessary condensed facts and contextual knowledge. Begin personifying {user_name} now.
 
 Personal Facts and Context:
-{facts_text}
+{memories_text}
 
 Recent Conversations:
 {conversation_history}
@@ -558,6 +603,7 @@ Use these facts, conversations and tweets to shape your personality. Responses s
 
     persona['persona_prompt'] = persona_prompt
     persona['updated_at'] = datetime.now(timezone.utc)
+
     update_persona_in_db(persona)
     delete_app_cache_by_id(persona['id'])
 
@@ -570,6 +616,7 @@ def increment_username(username: str):
         return f"{username}{i}"
     else:
         return username
+
 
 def generate_api_key() -> Tuple[str, str, str]:
     raw_key = secrets.token_hex(16)  # 16 bytes = 32 hex chars
@@ -585,27 +632,38 @@ def verify_api_key(app_id: str, api_key: str) -> bool:
     stored_key = get_api_key_by_hash_db(app_id, hashed_key)
     return stored_key is not None
 
-def app_has_action(app: App, action_name: str) -> bool:
-    """Check if an app has a specific action capability"""
-    if not app:
-        return False
 
-    if not app.get('external_integration') or not app.get('external_integration').get('actions'):
-        return False
-
-    for action in app.get('external_integration').get('actions'):
-        if action.get('action') == action_name:
-            return True
-
-    return False
 def app_has_action(app: dict, action_name: str) -> bool:
     """Check if an app has a specific action capability."""
+    if not app or not isinstance(app, dict):
+        return False
+
     if not app.get('external_integration'):
         return False
-    
+
     actions = app['external_integration'].get('actions', [])
     for action in actions:
         if action.get('action') == action_name:
             return True
-    
+
     return False
+
+
+def app_can_create_memories(app: dict) -> bool:
+    """Check if an app can create memories (facts)."""
+    return app_has_action(app, 'create_memories') or app_has_action(app, 'create_facts')
+
+
+def app_can_read_memories(app: dict) -> bool:
+    """Check if an app can read memories (facts)."""
+    return app_has_action(app, 'read_memories') or app_has_action(app, 'read_facts')
+
+
+def app_can_read_conversations(app: dict) -> bool:
+    """Check if an app can read conversations."""
+    return app_has_action(app, 'read_conversations')
+
+
+def app_can_create_conversation(app: dict) -> bool:
+    """Check if an app can create a conversation."""
+    return app_has_action(app, 'create_conversation')

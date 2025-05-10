@@ -1,12 +1,12 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/auth.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/gen/assets.gen.dart';
-import 'package:friend_private/pages/onboarding/wrapper.dart';
-import 'package:friend_private/pages/persona/persona_provider.dart';
-import 'package:friend_private/pages/persona/twitter/verify_identity_screen.dart';
-import 'package:friend_private/utils/other/temp.dart';
+import 'package:omi/backend/auth.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/pages/onboarding/wrapper.dart';
+import 'package:omi/pages/persona/persona_provider.dart';
+import 'package:omi/pages/persona/twitter/verify_identity_screen.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 
@@ -69,17 +69,9 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         const Spacer(flex: 5),
-                        const Center(
-                          child: Text(
-                            '🤖',
-                            style: TextStyle(
-                              fontSize: 42,
-                            ),
-                          ),
-                        ),
                         const Spacer(flex: 1),
                         Text(
-                          'Let\'s train your clone!\nWhat\'s your X handle?',
+                          'What\'s your X handle?',
                           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white,
@@ -241,7 +233,7 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                                   routeToPage(context, OnboardingWrapper());
                                 },
                                 child: const Text(
-                                  'Clone from omi device',
+                                  'Connect Omi Device',
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,

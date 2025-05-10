@@ -2,16 +2,16 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/http/api/conversations.dart';
-import 'package:friend_private/backend/http/api/users.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/backend/schema/structured.dart';
-import 'package:friend_private/backend/schema/transcript_segment.dart';
-import 'package:friend_private/providers/app_provider.dart';
-import 'package:friend_private/providers/conversation_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:tuple/tuple.dart';
 
@@ -24,17 +24,34 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   int conversationIdx = 0;
   DateTime selectedDate = DateTime.now();
 
-  int selectedTab = 1;
   bool isLoading = false;
   bool loadingReprocessConversation = false;
   String reprocessConversationId = '';
+  App? selectedAppForReprocessing;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
-  List<App> appsList = [];
+  List<App> get appsList => appProvider?.apps ?? [];
 
-  Structured get structured => conversationProvider!.groupedConversations[selectedDate]![conversationIdx].structured;
+  Structured get structured {
+    return conversation.structured;
+  }
 
-  ServerConversation get conversation => conversationProvider!.groupedConversations[selectedDate]![conversationIdx];
+  ServerConversation? _cachedConversation;
+  ServerConversation get conversation {
+    if (conversationProvider == null ||
+        !conversationProvider!.groupedConversations.containsKey(selectedDate) ||
+        conversationProvider!.groupedConversations[selectedDate] == null ||
+        conversationProvider!.groupedConversations[selectedDate]!.length <= conversationIdx) {
+      // Return cached conversation if available, otherwise create an empty one
+      if (_cachedConversation == null) {
+        throw StateError("No conversation available");
+      }
+      return _cachedConversation!;
+    }
+    _cachedConversation = conversationProvider!.groupedConversations[selectedDate]![conversationIdx];
+    return _cachedConversation!;
+  }
+
   List<bool> appResponseExpanded = [];
 
   TextEditingController? titleController;
@@ -97,11 +114,6 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
-  updateSelectedTab(int index) {
-    selectedTab = index;
-    notifyListeners();
-  }
-
   updateLoadingState(bool loading) {
     isLoading = loading;
     notifyListeners();
@@ -109,6 +121,19 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   updateReprocessConversationLoadingState(bool loading) {
     loadingReprocessConversation = loading;
+    if (!loading) {
+      selectedAppForReprocessing = null;
+    }
+    notifyListeners();
+  }
+
+  void setSelectedAppForReprocessing(App app) {
+    selectedAppForReprocessing = app;
+    notifyListeners();
+  }
+
+  void clearSelectedAppForReprocessing() {
+    selectedAppForReprocessing = null;
     notifyListeners();
   }
 
@@ -202,12 +227,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         photos = value;
         await populatePhotosData();
       });
-    } else if (conversation.source == ConversationSource.friend) {
-      // await hasConversationRecording(conversation.id).then((value) {
-      //   hasAudioRecording = value;
-      // });
     }
-    appsList = appProvider!.apps;
     if (!conversation.discarded) {
       getHasConversationSummaryRating(conversation.id).then((value) {
         hasConversationSummaryRatingSet = value;
@@ -226,12 +246,12 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
-  Future<bool> reprocessConversation() async {
-    debugPrint('_reProcessConversation');
+  Future<bool> reprocessConversation({String? appId}) async {
+    debugPrint('_reProcessConversation with appId: $appId');
     updateReprocessConversationLoadingState(true);
     updateReprocessConversationId(conversation.id);
     try {
-      var updatedConversation = await reProcessConversationServer(conversation.id);
+      var updatedConversation = await reProcessConversationServer(conversation.id, appId: appId);
       MixpanelManager().reProcessConversation(conversation);
       updateReprocessConversationLoadingState(false);
       updateReprocessConversationId('');
@@ -239,13 +259,24 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         notifyError('REPROCESS_FAILED');
         notifyListeners();
         return false;
-      } else {
-        conversationProvider!.updateConversation(updatedConversation);
-        SharedPreferencesUtil().modifiedConversationDetails = updatedConversation;
-        notifyInfo('REPROCESS_SUCCESS');
-        notifyListeners();
-        return true;
       }
+
+      // else
+      conversationProvider!.updateConversation(updatedConversation);
+      SharedPreferencesUtil().modifiedConversationDetails = updatedConversation;
+
+      // Check if the summarized app is in the apps list
+      AppResponse? summaryApp = getSummarizedApp();
+      if (summaryApp != null && summaryApp.appId != null && appProvider != null) {
+        String appId = summaryApp.appId!;
+        bool appExists = appProvider!.apps.any((app) => app.id == appId);
+        if (!appExists) {
+          await appProvider!.getApps();
+        }
+      }
+      notifyInfo('REPROCESS_SUCCESS');
+      notifyListeners();
+      return true;
     } catch (err, stacktrace) {
       print(err);
       var conversationReporting = MixpanelManager().getConversationEventProperties(conversation);
@@ -265,6 +296,20 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     conversation.transcriptSegments[segmentIdx].isUser = false;
     conversation.transcriptSegments[segmentIdx].personId = null;
     assignConversationTranscriptSegment(conversationId, segmentIdx);
+    notifyListeners();
+  }
+
+  /// Returns the first app result from the conversation if available
+  /// This is typically the summary of the conversation
+  AppResponse? getSummarizedApp() {
+    if (conversation.appResults.isNotEmpty) {
+      return conversation.appResults[0];
+    }
+    return null;
+  }
+
+  void setPreferredSummarizationApp(String appId) {
+    setPreferredSummarizationAppServer(appId);
     notifyListeners();
   }
 }

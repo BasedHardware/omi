@@ -1,5 +1,5 @@
-import 'package:friend_private/utils/other/string_utils.dart';
-import 'package:friend_private/widgets/extensions/string.dart';
+import 'package:omi/utils/other/string_utils.dart';
+import 'package:omi/widgets/extensions/string.dart';
 
 class AppReview {
   String uid;
@@ -223,6 +223,7 @@ class App {
   List<String> thumbnailIds;
   List<String> thumbnailUrls;
   String? username;
+  bool? isPopular;
 
   App({
     required this.id,
@@ -260,6 +261,7 @@ class App {
     this.username,
     this.connectedAccounts = const [],
     this.twitter,
+    this.isPopular = false,
   });
 
   String getName() {
@@ -318,6 +320,7 @@ class App {
       username: json['username'],
       connectedAccounts: (json['connected_accounts'] as List<dynamic>?)?.cast<String>() ?? [],
       twitter: json['twitter'],
+      isPopular: json['is_popular'] ?? false,
     );
   }
 
@@ -492,11 +495,13 @@ class CapacityAction {
   String title;
   String id;
   String? docUrl;
+  String? description;
 
   CapacityAction({
     required this.title,
     required this.id,
     this.docUrl,
+    this.description,
   });
 
   factory CapacityAction.fromJson(Map<String, dynamic> json) {
@@ -504,6 +509,7 @@ class CapacityAction {
       title: json['title'],
       id: json['id'],
       docUrl: json['doc_url'],
+      description: json['description'],
     );
   }
 
@@ -512,6 +518,7 @@ class CapacityAction {
       'title': title,
       'id': id,
       'doc_url': docUrl,
+      'description': description,
     };
   }
 
