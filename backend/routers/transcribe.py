@@ -60,11 +60,16 @@ async def _listen(
         codec = "opus"
         frame_size = 320
 
-    # Convert 'auto' to 'multi' for consistency
-    language = 'multi' if language == 'auto' else language
+    # Convert 'auto' to 'multi' for consistency and always use 'multi' for Deepgram
+    language = 'multi'
 
     # Determine the best STT service
     stt_service, stt_language, stt_model = get_stt_service_for_language(language)
+    
+    # Override model to nova-3 for Deepgram
+    if stt_service == STTService.deepgram:
+        stt_model = 'nova-3'
+    
     if not stt_service or not stt_language:
         logger.warning(f"Unsupported language: {language} for UID: {uid}")
         await websocket.close(code=1008, reason=f"The language is not supported, {language}")
@@ -339,9 +344,9 @@ async def _listen(
             # DEEPGRAM
             if stt_service == STTService.deepgram:
                 deepgram_socket = await process_audio_dg(
-                    stream_transcript, stt_language, sample_rate, 1, preseconds=speech_profile_duration, model=stt_model,)
+                    stream_transcript, stt_language, sample_rate, 1, preseconds=speech_profile_duration, model='nova-3',)
                 if speech_profile_duration:
-                    deepgram_socket2 = await process_audio_dg(stream_transcript, stt_language, sample_rate, 1, model=stt_model)
+                    deepgram_socket2 = await process_audio_dg(stream_transcript, stt_language, sample_rate, 1, model='nova-3')
 
                     async def deepgram_socket_send(data):
                         return deepgram_socket.send(data)
