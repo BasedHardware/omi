@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
 import 'delete_confirmation.dart';
+import 'category_chip.dart';
 
 class MemoryItem extends StatelessWidget {
   final Memory memory;
@@ -25,24 +27,36 @@ class MemoryItem extends StatelessWidget {
     final Widget memoryWidget = GestureDetector(
       onTap: () => onTap(context, memory, provider),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        decoration: BoxDecoration(
-          color: Colors.grey.shade900,
-          borderRadius: BorderRadius.circular(12),
-        ),
+        margin: const EdgeInsets.only(bottom: AppStyles.spacingM),
+        decoration: AppStyles.cardDecoration,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ListTile(
-              contentPadding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              title: Text(
-                memory.content.decodeString,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                ),
+            Padding(
+              padding: const EdgeInsets.all(AppStyles.spacingL),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: CategoryChip(
+                          category: memory.category,
+                          showIcon: true,
+                        ),
+                      ),
+                      _buildVisibilityButton(context),
+                    ],
+                  ),
+                  const SizedBox(height: AppStyles.spacingM),
+                  Text(
+                    memory.content.decodeString,
+                    style: AppStyles.body,
+                  ),
+                ],
               ),
-              trailing: _buildVisibilityButton(context),
             ),
           ],
         ),
@@ -65,10 +79,10 @@ class MemoryItem extends StatelessWidget {
         MixpanelManager().memoriesPageDeletedMemory(memory);
       },
       background: Container(
-        margin: const EdgeInsets.only(bottom: 8),
+        margin: const EdgeInsets.only(bottom: AppStyles.spacingM),
         decoration: BoxDecoration(
-          color: Colors.red.shade900,
-          borderRadius: BorderRadius.circular(12),
+          color: AppStyles.error,
+          borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
         ),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
@@ -83,19 +97,21 @@ class MemoryItem extends StatelessWidget {
       padding: EdgeInsets.zero,
       position: PopupMenuPosition.under,
       surfaceTintColor: Colors.transparent,
-      color: Colors.grey.shade800,
+      color: AppStyles.backgroundTertiary,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
       ),
       offset: const Offset(0, 4),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        height: 26,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(AppStyles.radiusSmall),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               memory.visibility == MemoryVisibility.private ? Icons.lock_outline : Icons.public,

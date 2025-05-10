@@ -3,15 +3,20 @@ import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
+import 'package:omi/pages/persona/persona_profile.dart';
 import 'package:omi/pages/settings/about.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/profile.dart';
 import 'package:omi/pages/settings/widgets.dart';
+import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/providers/capture_provider.dart';
 
 import 'device_settings.dart';
 
@@ -56,23 +61,19 @@ class _SettingsPageState extends State<SettingsPage> {
   bool loadingExportMemories = false;
 
   Widget _buildOmiModeContent(BuildContext context) {
+    // Group settings by category: Account, Device, Support, Info, Actions
     return Column(
       children: [
-        const SizedBox(height: 32.0),
-        getItemAddOn2(
-          'Need Help? Chat with us',
-          () async {
-            await Intercom.instance.displayMessenger();
-          },
-          icon: Icons.chat,
-        ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 24.0),
+        // Account Settings
         getItemAddOn2(
           'Profile',
           () => routeToPage(context, const ProfilePage()),
           icon: Icons.person,
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 12),
+
+        // Device Settings
         getItemAddOn2(
           'Device Settings',
           () {
@@ -84,7 +85,16 @@ class _SettingsPageState extends State<SettingsPage> {
           },
           icon: Icons.bluetooth_connected_sharp,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
+
+        // Advanced Settings
+        getItemAddOn2('Developer Mode', () async {
+          await routeToPage(context, const DeveloperSettingsPage());
+          setState(() {});
+        }, icon: Icons.code),
+        const SizedBox(height: 12),
+
+        // Help & Support
         getItemAddOn2(
           'Guides & Tutorials',
           () async {
@@ -92,18 +102,25 @@ class _SettingsPageState extends State<SettingsPage> {
           },
           icon: Icons.help_outline_outlined,
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 12),
+        getItemAddOn2(
+          'Need Help? Chat with us',
+          () async {
+            await Intercom.instance.displayMessenger();
+          },
+          icon: Icons.chat,
+        ),
+        const SizedBox(height: 12),
+
+        // Information
         getItemAddOn2(
           'About Omi',
           () => routeToPage(context, const AboutOmiPage()),
-          icon: Icons.workspace_premium_sharp,
+          icon: Icons.info_outline,
         ),
-        const SizedBox(height: 8),
-        getItemAddOn2('Developer Mode', () async {
-          await routeToPage(context, const DeveloperSettingsPage());
-          setState(() {});
-        }, icon: Icons.code),
-        const SizedBox(height: 32),
+        const SizedBox(height: 24),
+
+        // Actions
         getItemAddOn2('Sign Out', () async {
           await showDialog(
             context: context,
@@ -120,18 +137,20 @@ class _SettingsPageState extends State<SettingsPage> {
             },
           );
         }, icon: Icons.logout),
-        const SizedBox(height: 24),
+        const SizedBox(height: 20),
+
+        // Version Info
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0),
           child: Align(
             alignment: Alignment.center,
             child: Text(
               'Version: $version+$buildVersion',
-              style: const TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+              style: const TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 14),
             ),
           ),
         ),
-        const SizedBox(height: 32),
+        const SizedBox(height: 24),
       ],
     );
   }
@@ -139,7 +158,9 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _buildNoDeviceModeContent(BuildContext context) {
     return Column(
       children: [
-        const SizedBox(height: 32.0),
+        const SizedBox(height: 24.0),
+
+        // Help & Support
         getItemAddOn2(
           'Need Help? Chat with us',
           () async {
@@ -147,7 +168,9 @@ class _SettingsPageState extends State<SettingsPage> {
           },
           icon: Icons.chat,
         ),
-        const SizedBox(height: 32),
+        const SizedBox(height: 24),
+
+        // Actions
         getItemAddOn2('Sign Out', () async {
           await showDialog(
             context: context,
@@ -165,18 +188,20 @@ class _SettingsPageState extends State<SettingsPage> {
             },
           );
         }, icon: Icons.logout),
-        const SizedBox(height: 24),
+        const SizedBox(height: 20),
+
+        // Version Info
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0),
           child: Align(
             alignment: Alignment.center,
             child: Text(
               'Version: $version+$buildVersion',
-              style: const TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+              style: const TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 14),
             ),
           ),
         ),
-        const SizedBox(height: 32),
+        const SizedBox(height: 24),
       ],
     );
   }
@@ -190,14 +215,50 @@ class _SettingsPageState extends State<SettingsPage> {
           appBar: AppBar(
             backgroundColor: Theme.of(context).colorScheme.primary,
             automaticallyImplyLeading: true,
-            title: const Text('Settings'),
-            centerTitle: false,
+            title: const Text(
+              'Settings',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            centerTitle: true,
             leading: IconButton(
               icon: const Icon(Icons.arrow_back_ios_new),
               onPressed: () {
                 Navigator.pop(context);
               },
             ),
+            actions: [
+              Consumer<PersonaProvider>(builder: (context, personaProvider, _) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.transparent,
+                    ),
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => const PersonaProfilePage(),
+                            settings: const RouteSettings(
+                              arguments: 'from_settings',
+                            ),
+                          ),
+                        );
+                      },
+                      child: SvgPicture.asset(
+                        Assets.images.icPersonaProfile.path,
+                        width: 28,
+                        height: 28,
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ],
             elevation: 0,
           ),
           body: SingleChildScrollView(
