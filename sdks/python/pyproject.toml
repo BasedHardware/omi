@@ -1,11 +1,11 @@
 [project]
 name = "omi-sdk"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
     "aiohttp>=3.11.14",
     "bleak>=0.22.3",
     "httpx>=0.28.1",
-    "numpy>=2.2.4",
+    "numpy>=1.26",
     "opuslib>=3.0.1",
     "websockets>=14.0.0",
 ]
