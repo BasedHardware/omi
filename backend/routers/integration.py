@@ -24,7 +24,7 @@ from routers.conversations import process_conversation, trigger_external_integra
 from utils.conversations.location import get_google_maps_location
 from utils.conversations.memories import process_external_integration_memory
 from utils.conversations.search import search_conversations
-from utils.plugins import send_plugin_notification
+from utils.app_integrations import send_app_notification
 
 # Rate limit settings - more conservative limits to prevent notification fatigue
 RATE_LIMIT_PERIOD = 3600  # 1 hour in seconds
@@ -491,7 +491,7 @@ async def send_notification_via_integration(
         )
 
     token = notification_db.get_token_only(uid)
-    send_plugin_notification(token, app.name, app.id, message)
+    send_app_notification(token, app.name, app.id, message)
     return JSONResponse(
         status_code=200,
         headers=headers,
