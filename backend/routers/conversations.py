@@ -14,7 +14,7 @@ from utils.conversations.search import search_conversations
 from utils.llm import generate_summary_with_prompt
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
-from utils.plugins import trigger_external_integrations
+from utils.app_integrations import trigger_external_integrations
 
 router = APIRouter()
 

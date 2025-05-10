@@ -7,16 +7,14 @@ import time
 import database.notifications as notification_db
 from database import mem_db
 from database import redis_db
-from database.apps import get_private_apps_db, get_public_apps_db, record_app_usage
+from database.apps import record_app_usage
 from database.chat import add_plugin_message, get_plugin_messages
-from database.redis_db import get_enabled_plugins, get_generic_cache, \
-    set_generic_cache, get_plugins_reviews, get_plugins_installs_count
-from models.app import App
+from database.redis_db import get_generic_cache, set_generic_cache
+from models.app import App, UsageHistoryType
 from models.chat import Message
 from models.conversation import Conversation, ConversationSource
 from models.notification_message import NotificationMessage
-from models.plugin import Plugin, UsageHistoryType
-from utils.apps import get_available_apps, weighted_rating
+from utils.apps import get_available_apps
 from utils.notifications import send_notification
 from utils.llm import (
     generate_embedding,
@@ -68,90 +66,6 @@ def get_github_docs_content(repo="BasedHardware/omi", path="docs/docs"):
     get_contents(path)
     set_generic_cache(f'get_github_docs_content_{repo}_{path}', docs_content, 60 * 24 * 7)
     return docs_content
-
-
-# ***********************************
-# ************* BASICS **************
-# ***********************************
-
-
-def get_plugins_data_from_db(uid: str, include_reviews: bool = False) -> List[Plugin]:
-    private_data = []
-    public_data = []
-    all_plugins = []
-    # if cachedPlugins := get_generic_cache('get_public_plugins_data'):
-    #     print('get_public_plugins_data from cache')
-    #     public_data = cachedPlugins
-    #     private_data = get_private_plugins_db(uid)
-    #     pass
-    # else:
-    private_data = get_private_apps_db(uid)
-    public_data = get_public_apps_db(uid)
-    # set_generic_cache('get_public_plugins_data', public_data, 60 * 10)  # 10 minutes cached
-    user_enabled = set(get_enabled_plugins(uid))
-    all_plugins = private_data + public_data
-
-    plugin_ids = [plugin['id'] for plugin in all_plugins]
-    plugins_install = get_plugins_installs_count(plugin_ids)
-    plugins_review = get_plugins_reviews(plugin_ids) if include_reviews else {}
-
-    plugins = []
-    for plugin in all_plugins:
-        plugin_dict = plugin
-        plugin_dict['enabled'] = plugin['id'] in user_enabled
-        plugin_dict['installs'] = plugins_install.get(plugin['id'], 0)
-        if include_reviews:
-            reviews = plugins_review.get(plugin['id'], {})
-            sorted_reviews = reviews.values()
-            rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
-            plugin_dict['reviews'] = []
-            plugin_dict['user_review'] = reviews.get(uid)
-            plugin_dict['rating_avg'] = rating_avg
-            plugin_dict['rating_count'] = len(sorted_reviews)
-        plugins.append(Plugin(**plugin_dict))
-    if include_reviews:
-        plugins = sorted(plugins, key=weighted_rating, reverse=True)
-    return plugins
-
-
-def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:
-    # print('get_plugins_data', uid, include_reviews)
-    if data := get_generic_cache('get_plugins_data'):
-        print('get_plugins_data from cache')
-        pass
-    else:
-        response = requests.get('https://raw.githubusercontent.com/BasedHardware/Omi/main/community-plugins.json')
-        if response.status_code != 200:
-            return []
-        data = response.json()
-        set_generic_cache('get_plugins_data', data, 60 * 10)  # 10 minutes cached
-
-    user_enabled = set(get_enabled_plugins(uid)) if uid else []
-    # print('get_plugins_data, user_enabled', user_enabled)
-
-    plugin_ids = [plugin['id'] for plugin in data]
-    plugins_install = get_plugins_installs_count(plugin_ids)
-    plugins_review = get_plugins_reviews(plugin_ids) if include_reviews else {}
-
-    plugins = []
-    for plugin in data:
-        plugin_dict = plugin
-        plugin_dict['enabled'] = plugin['id'] in user_enabled
-        plugin_dict['installs'] = plugins_install.get(plugin['id'], 0)
-        if include_reviews:
-            reviews = plugins_review.get(plugin['id'], {})
-            sorted_reviews = reviews.values()
-
-            rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
-            plugin_dict['reviews'] = []
-            plugin_dict['user_review'] = reviews.get(uid)
-            plugin_dict['rating_avg'] = rating_avg
-            plugin_dict['rating_count'] = len(sorted_reviews)
-        plugins.append(Plugin(**plugin_dict))
-    if include_reviews:
-        plugins = sorted(plugins, key=weighted_rating, reverse=True)
-
-    return plugins
 
 
 # **************************************************
@@ -276,10 +190,10 @@ def _hit_proactive_notification_rate_limits(uid: str, plugin: App):
     return time.time() - sent_at < PROACTIVE_NOTI_LIMIT_SECONDS
 
 
-def _set_proactive_noti_sent_at(uid: str, plugin: App):
+def _set_proactive_noti_sent_at(uid: str, app: App):
     ts = time.time()
-    mem_db.set_proactive_noti_sent_at(uid, plugin, int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
-    redis_db.set_proactive_noti_sent_at(uid, plugin.id, int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
+    mem_db.set_proactive_noti_sent_at(uid, app, int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
+    redis_db.set_proactive_noti_sent_at(uid, app.id, int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
 
 
 def _process_proactive_notification(uid: str, token: str, plugin: App, data):
@@ -297,7 +211,7 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
 
     prompt = data.get('prompt', '')
     if len(prompt) > max_prompt_char_limit:
-        send_plugin_notification(token, plugin.name, plugin.id,
+        send_app_notification(token, plugin.name, plugin.id,
                                  f"Prompt too long: {len(prompt)}/{max_prompt_char_limit} characters. Please shorten.")
         print(f"Plugin {plugin.id}, prompt too long, length: {len(prompt)}/{max_prompt_char_limit}", uid)
         return None
@@ -325,7 +239,7 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
         return None
 
     # send notification
-    send_plugin_notification(token, plugin.name, plugin.id, message)
+    send_app_notification(token, plugin.name, plugin.id, message)
 
     # set rate
     _set_proactive_noti_sent_at(uid, plugin)
@@ -406,7 +320,7 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], c
             message = response_data.get('message', '')
             # print('Plugin', plugin.id, 'response message:', message)
             if message and len(message) > 5:
-                send_plugin_notification(token, app.name, app.id, message)
+                send_app_notification(token, app.name, app.id, message)
                 results[app.id] = message
 
             # proactive_notification
@@ -435,7 +349,7 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], c
     return messages
 
 
-def send_plugin_notification(token: str, app_name: str, app_id: str, message: str):
+def send_app_notification(token: str, app_name: str, app_id: str, message: str):
     ai_message = NotificationMessage(
         text=message,
         plugin_id=app_id,

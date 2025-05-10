@@ -12,7 +12,7 @@ from models.conversation import CreateConversation, Geolocation
 from models.processing_conversation import ProcessingConversation, ProcessingConversationStatus, DetailProcessingConversation
 from utils.conversations.location import get_google_maps_location
 from utils.conversations.process_conversation import process_conversation
-from utils.plugins import trigger_external_integrations
+from utils.app_integrations import trigger_external_integrations
 
 
 async def create_conversation_by_processing_conversation(uid: str, processing_conversation_id: str):
