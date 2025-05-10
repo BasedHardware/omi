@@ -19,7 +19,6 @@ import database.notifications as notification_db
 from models.app import App
 from models.chat import ChatSession, Message
 from models.conversation import Conversation
-from models.plugin import Plugin
 from utils.llm import (
     answer_omi_question,
     answer_omi_question_stream,
@@ -37,7 +36,7 @@ from utils.llm import (
 )
 from utils.other.chat_file import FileChatTool
 from utils.other.endpoints import timeit
-from utils.plugins import get_github_docs_content
+from utils.app_integrations import get_github_docs_content
 
 model = ChatOpenAI(model="gpt-4o-mini")
 llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)
@@ -91,7 +90,7 @@ class AsyncStreamingCallback(BaseCallbackHandler):
 class GraphState(TypedDict):
     uid: str
     messages: List[Message]
-    plugin_selected: Optional[Plugin]
+    plugin_selected: Optional[App]
     tz: str
     cited: Optional[bool] = False
 
@@ -124,7 +123,8 @@ def determine_conversation(state: GraphState):
 
 def determine_conversation_type(
         state: GraphState,
-) -> Literal["no_context_conversation", "context_dependent_conversation", "omi_question", "file_chat_question", "persona_question"]:
+) -> Literal[
+    "no_context_conversation", "context_dependent_conversation", "omi_question", "file_chat_question", "persona_question"]:
     # chat with files by attachments on the last message
     print("determine_conversation_type")
     messages = state.get("messages", [])
@@ -148,7 +148,7 @@ def determine_conversation_type(
     if not question or len(question) == 0:
         return "no_context_conversation"
 
-    # determine the follow up question is chatting with files or not
+    # determine the follow-up question is chatting with files or not
     is_file_question = retrieve_is_file_question(question)
     if is_file_question:
         return "file_chat_question"
@@ -161,6 +161,7 @@ def determine_conversation_type(
     if requires:
         return "context_dependent_conversation"
     return "no_context_conversation"
+
 
 def no_context_conversation(state: GraphState):
     print("no_context_conversation node")
@@ -183,6 +184,7 @@ def no_context_conversation(state: GraphState):
     )
     return {"answer": answer, "ask_for_nps": False}
 
+
 def omi_question(state: GraphState):
     print("no_context_omi_question node")
 
@@ -202,6 +204,7 @@ def omi_question(state: GraphState):
     # no streaming
     answer = answer_omi_question(state.get("messages", []), context_str)
     return {'answer': answer, 'ask_for_nps': True}
+
 
 def persona_question(state: GraphState):
     print("persona_question node")
@@ -229,6 +232,7 @@ def context_dependent_conversation_v1(state: GraphState):
 
 def context_dependent_conversation(state: GraphState):
     return state
+
 
 # !! include a question extractor? node?
 
@@ -280,7 +284,7 @@ def query_vectors(state: GraphState):
     vector = ([1] * 3072)
     print("query_vectors vector:", vector[:5])
 
-    # TODO: enable it when the in-accurated topic filter get fixed
+    # TODO: enable it when the in-accurate topic filter get fixed
     is_topic_filter_enabled = date_filters.get("start") is None
     memories_id = query_vectors_by_metadata(
         uid,
@@ -339,6 +343,7 @@ def qa_handler(state: GraphState):
     )
     return {"answer": response, "ask_for_nps": True}
 
+
 def file_chat_question(state: GraphState):
     print("chat_with_file_question node")
 
@@ -367,12 +372,11 @@ def file_chat_question(state: GraphState):
         answer = fc_tool.process_chat_with_file_stream(uid, question, file_ids, callback=state.get('callback'))
         return {'answer': answer, 'ask_for_nps': True}
 
-    answer = fc_tool.process_chat_with_file(uid, question,file_ids)
+    answer = fc_tool.process_chat_with_file(uid, question, file_ids)
     return {'answer': answer, 'ask_for_nps': True}
 
 
 workflow = StateGraph(GraphState)
-
 
 workflow.add_edge(START, "determine_conversation")
 
@@ -412,9 +416,10 @@ graph = workflow.compile(checkpointer=checkpointer)
 
 graph_stream = workflow.compile()
 
+
 @timeit
 def execute_graph_chat(
-        uid: str, messages: List[Message], plugin: Optional[Plugin] = None, cited: Optional[bool] = False
+        uid: str, messages: List[Message], plugin: Optional[App] = None, cited: Optional[bool] = False
 ) -> Tuple[str, bool, List[Conversation]]:
     print('execute_graph_chat plugin    :', plugin.id if plugin else '<none>')
     tz = notification_db.get_user_time_zone(uid)
@@ -424,8 +429,10 @@ def execute_graph_chat(
     )
     return result.get("answer"), result.get('ask_for_nps', False), result.get("memories_found", [])
 
+
 async def execute_graph_chat_stream(
-    uid: str, messages: List[Message], plugin: Optional[App] = None, cited: Optional[bool] = False, callback_data: dict = {}, chat_session: Optional[ChatSession] = None
+        uid: str, messages: List[Message], plugin: Optional[App] = None, cited: Optional[bool] = False,
+        callback_data: dict = {}, chat_session: Optional[ChatSession] = None
 ) -> AsyncGenerator[str, None]:
     print('execute_graph_chat_stream plugin: ', plugin.id if plugin else '<none>')
     tz = notification_db.get_user_time_zone(uid)
@@ -433,7 +440,7 @@ async def execute_graph_chat_stream(
 
     task = asyncio.create_task(graph_stream.ainvoke(
         {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": plugin,
-         "streaming": True, "callback": callback, "chat_session": chat_session,},
+         "streaming": True, "callback": callback, "chat_session": chat_session, },
         {"configurable": {"thread_id": str(uuid.uuid4())}},
     ))
 
@@ -454,6 +461,7 @@ async def execute_graph_chat_stream(
 
     yield None
     return
+
 
 async def execute_persona_chat_stream(
         uid: str, messages: List[Message], app: App, cited: Optional[bool] = False,

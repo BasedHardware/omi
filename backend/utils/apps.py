@@ -409,7 +409,6 @@ def get_omi_personas_by_uid(uid: str):
 async def generate_persona_prompt(uid: str, persona: dict):
     """Generate a persona prompt based on user memories and conversations."""
 
-    print(f"generate_persona_prompt {uid}")
 
     # Get latest memories and user info
     memories = get_memories(uid, limit=250)
