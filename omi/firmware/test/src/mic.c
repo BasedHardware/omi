@@ -11,10 +11,11 @@
 
 #define SAMPLE_RATE_HZ 16000
 #define SAMPLE_BITS 16
-#define TIMEOUT_MS 1000
-#define CAPTURE_MS 500
-#define BLOCK_SIZE ((SAMPLE_BITS / BITS_PER_BYTE) * (SAMPLE_RATE_HZ * CAPTURE_MS) / 1000)
-#define BLOCK_COUNT 8
+#define CHANNEL_COUNT 2
+ #define TIMEOUT_MS 2000
+ #define CAPTURE_MS 1000
+ #define BLOCK_SIZE ((SAMPLE_BITS / BITS_PER_BYTE) * (SAMPLE_RATE_HZ * CAPTURE_MS) / 1000) * CHANNEL_COUNT
+ #define BLOCK_COUNT 2
 
 static const struct device *const dmic = DEVICE_DT_GET(DT_ALIAS(dmic0));
 static const struct gpio_dt_spec mic_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(pdm_en_pin), gpios, {0});
@@ -42,7 +43,7 @@ static struct dmic_cfg cfg = {
 	.channel =
 		{
 			.req_num_streams = 1,
-			.req_num_chan = 2,
+			.req_num_chan = CHANNEL_COUNT,
 		},
 };
 
@@ -63,7 +64,7 @@ static int cmd_mic_capture(const struct shell *sh, size_t argc, char **argv)
 			shell_error(sh, "Invalid time argument");
 			return -EINVAL;
 		}
-		time *= 2;
+		time *= (1000 / CAPTURE_MS);
 	}
 
 	if (!initialized)
