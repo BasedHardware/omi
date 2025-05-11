@@ -26,6 +26,7 @@ class AppProvider extends BaseProvider {
   bool appPublicToggled = false;
 
   bool isLoading = false;
+  bool hasNetworkError = false;
 
   List<Category> categories = [];
   List<AppCapability> capabilities = [];
@@ -236,10 +237,20 @@ class AppProvider extends BaseProvider {
     setIsLoading(false);
   }
 
-  Future getPopularApps() async {
-    setIsLoading(true);
-    popularApps = await retrievePopularApps();
-    setIsLoading(false);
+  Future<void> getPopularApps() async {
+    try {
+      setIsLoading(true);
+      final List<App> result = await retrievePopularApps();
+      popularApps = result;
+      hasNetworkError = false; // Reset error flag on success
+      setIsLoading(false);
+      notifyListeners();
+    } catch (e) {
+      print('Error fetching popular apps: $e');
+      hasNetworkError = true; // Set error flag on failure
+      setIsLoading(false);
+      notifyListeners();
+    }
   }
 
   void updateLocalApp(App app) {
@@ -463,7 +474,7 @@ class AppProvider extends BaseProvider {
       if (isEnabled) {
         success = await enableAppServer(appId);
         if (!success) {
-          errorMessage = 'Error activating the app. If this is an integration app, make sure the setup is completed.';
+          errorMessage = 'Failed to install app. Please check your network connection and try again.';
         } else {
           MixpanelManager().appEnabled(appId);
         }
@@ -475,15 +486,15 @@ class AppProvider extends BaseProvider {
     } catch (e) {
       print('Error toggling app $appId: $e');
       success = false;
-      errorMessage = 'An error occurred while updating the app status.';
+      if (e.toString().contains('SocketException') || e.toString().contains('Connection refused')) {
+        errorMessage = 'Network error. Please check your internet connection and try again.';
+      } else {
+        errorMessage = 'An error occurred: ${e.toString().split('\n').first}';
+      }
     }
 
     if (!success && errorMessage != null) {
-      AppDialog.show(
-        title: 'Error',
-        content: errorMessage,
-        singleButton: true,
-      );
+      AppSnackbar.showSnackbarError(errorMessage);
     }
 
     if (success) {
