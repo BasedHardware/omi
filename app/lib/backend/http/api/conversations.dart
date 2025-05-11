@@ -13,7 +13,7 @@ import 'package:path/path.dart';
 
 Future<CreateConversationResponse?> processInProgressConversation() async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v2/memories',
+    url: '${Env.apiBaseUrl}v1/conversations',
     headers: {},
     method: 'POST',
     body: jsonEncode({}),
@@ -379,4 +379,22 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
     return (convos, currentPage, totalPages);
   }
   return (<ServerConversation>[], 0, 0);
+}
+
+
+Future<String> testConversationPrompt(String prompt, String conversationId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/test-prompt',
+    headers: {},
+    method: 'POST',
+    body: jsonEncode({
+      'prompt': prompt,
+    }),
+  );
+  if (response == null) return '';
+  if (response.statusCode == 200){
+    return jsonDecode(response.body)['summary'];
+  }else {
+    return '';
+  }
 }

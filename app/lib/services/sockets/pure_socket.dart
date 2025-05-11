@@ -113,39 +113,37 @@ class PureSocket implements IPureSocket {
   }
 
   Future<bool> _connect() async {
-    if (_status == PureSocketStatus.connected || _status == PureSocketStatus.connecting) {
-      Logger.debug('🔌 Socket already connected or connecting to: $url');
-      return true;
+    if (_status == PureSocketStatus.connecting || _status == PureSocketStatus.connected) {
+      return false;
     }
 
-    Logger.debug('🔌 Socket attempting to connect to: $url');
+    debugPrint("request wss ${url}");
+    _channel = IOWebSocketChannel.connect(
+      url,
+      headers: {
+        'Authorization': await getAuthHeader(),
+      },
+      pingInterval: const Duration(seconds: 20),
+      connectTimeout: const Duration(seconds: 10),
+    );
+    if (_channel?.ready == null) {
+      return false;
+    }
+
     _status = PureSocketStatus.connecting;
-
+    dynamic err;
     try {
-      Map<String, String> headers = {};
-      String tokenString = await getAuthHeader();
-      headers['Authorization'] = tokenString;
-
-      _channel = IOWebSocketChannel.connect(
-        Uri.parse(url),
-        headers: headers,
-      );
-
-      _channel!.stream.listen(
-        (data) => onMessage(data),
-        onDone: onClosed,
-        onError: onError,
-        cancelOnError: true,
-      );
-
-      _status = PureSocketStatus.connected;
-      onConnected();
-      _retries = 0;
-      Logger.debug('🔌 Socket successfully connected to: $url');
-      return true;
-    } catch (e, trace) {
-      Logger.debug('🔌 Socket connection failed to: $url - error: $e');
-      onError(e, trace);
+      await channel.ready;
+    } on TimeoutException catch (e) {
+      err = e;
+    } on SocketException catch (e) {
+      err = e;
+    } on WebSocketChannelException catch (e) {
+      err = e;
+    }
+    if (err != null) {
+      print("Error: $err");
+      _status = PureSocketStatus.notConnected;
       return false;
     }
   }

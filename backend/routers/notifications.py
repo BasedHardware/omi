@@ -7,7 +7,7 @@ from typing import Tuple, Optional
 
 from database.redis_db import get_enabled_plugins, r as redis_client
 from utils.apps import get_available_app_by_id, verify_api_key
-from utils.plugins import send_plugin_notification
+from utils.app_integrations import send_app_notification
 import database.notifications as notification_db
 from models.other import SaveFcmTokenRequest
 from utils.notifications import send_notification
@@ -130,7 +130,7 @@ def send_app_notification_to_user(
         )
 
     token = notification_db.get_token_only(uid)
-    send_plugin_notification(token, app.name, app.id, data['message'])
+    send_app_notification(token, app.name, app.id, data['message'])
     return JSONResponse(
         status_code=200,
         headers=headers,

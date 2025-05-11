@@ -10,6 +10,15 @@ void logErrorMessage(String message, String deviceId) {
   );
 }
 
+void logCommonErrorMessage(String message) {
+  debugPrint('$message');
+  CrashReporting.reportHandledCrash(
+    Exception(message),
+    StackTrace.current,
+    level: NonFatalExceptionLevel.error,
+  );
+}
+
 void logCrashMessage(String message, String deviceId, Object e, StackTrace stackTrace) {
   logErrorMessage('$message error: $e', deviceId);
   CrashReporting.reportHandledCrash(

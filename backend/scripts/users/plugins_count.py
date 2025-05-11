@@ -5,7 +5,7 @@ from collections import defaultdict
 
 from dotenv import load_dotenv
 
-from models.plugin import UsageHistoryType
+from models.app import UsageHistoryType
 
 load_dotenv('../../.env')
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
@@ -16,7 +16,7 @@ firebase_admin.initialize_app()
 
 # noinspection PyUnresolvedReferences
 from typing import List
-from database.plugins import record_plugin_usage
+from database.apps import record_app_usage
 
 # noinspection PyUnresolvedReferences
 import numpy as np
@@ -73,7 +73,7 @@ def count_memory_prompt_plugins_trigger():
             if triggered:
                 print('memory', memory['id'], 'triggered', len(triggered), 'plugins')
             for trigger in triggered:
-                record_plugin_usage(
+                record_app_usage(
                     uid, trigger['plugin_id'], UsageHistoryType.memory_created_prompt, memory_id=memory['id'],
                     timestamp=created_at
                 )
@@ -82,7 +82,7 @@ def count_memory_prompt_plugins_trigger():
         print('user', uid, 'messages', len(messages))
         for message in messages:
             if pid := message.get('plugin_id'):
-                record_plugin_usage(
+                record_app_usage(
                     uid, pid, UsageHistoryType.chat_message_sent, message_id=message['id'],
                     timestamp=message['created_at']
                 )
