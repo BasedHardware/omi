@@ -18,6 +18,7 @@ class TranscriptWidget extends StatefulWidget {
   final bool isConversationDetail;
   final double bottomMargin;
   final Function(int, int)? editSegment;
+  final bool autoScroll;
 
   const TranscriptWidget({
     super.key,
@@ -29,6 +30,7 @@ class TranscriptWidget extends StatefulWidget {
     this.isConversationDetail = false,
     this.bottomMargin = 200,
     this.editSegment,
+    this.autoScroll = false,
   });
 
   @override
@@ -43,9 +45,48 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   // ScrollController to enable proper scrolling
   final ScrollController _scrollController = ScrollController();
+  int _previousSegmentsCount = 0;
+  bool _userScrolled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _previousSegmentsCount = widget.segments.length;
+    _scrollController.addListener(_scrollListener);
+  }
+
+  void _scrollListener() {
+    if (_scrollController.hasClients) {
+      final isAtBottom = _scrollController.position.pixels >=
+                         (_scrollController.position.maxScrollExtent - 50);
+      _userScrolled = !isAtBottom;
+    }
+  }
+
+  @override
+  void didUpdateWidget(TranscriptWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (widget.segments.length > _previousSegmentsCount) {
+      if (!_userScrolled) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_scrollController.hasClients) {
+            _scrollController.animateTo(
+              _scrollController.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+            );
+          }
+        });
+      }
+    }
+
+    _previousSegmentsCount = widget.segments.length;
+  }
 
   @override
   void dispose() {
+    _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
     super.dispose();
   }
@@ -68,28 +109,56 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   @override
   Widget build(BuildContext context) {
     // Use ListView.builder instead of ListView.separated for better performance
-    return ListView.builder(
-      controller: _scrollController,
-      padding: EdgeInsets.zero,
-      itemCount: widget.segments.length + 2,
-      itemBuilder: (context, idx) {
-        // Handle header and footer items
-        if (idx == 0) return SizedBox(height: widget.topMargin ? 32 : 0);
-        if (idx == widget.segments.length + 1) return SizedBox(height: widget.bottomMargin);
+    return Stack(
+      children: [
+        Scrollbar(
+          controller: _scrollController,
+          thumbVisibility: true,
+          thickness: 6,
+          radius: const Radius.circular(10),
+          child: ListView.builder(
+            controller: _scrollController,
+            padding: EdgeInsets.zero,
+            itemCount: widget.segments.length + 2,
+            itemBuilder: (context, idx) {
+              // Handle header and footer items
+              if (idx == 0) return SizedBox(height: widget.topMargin ? 32 : 0);
+              if (idx == widget.segments.length + 1) return SizedBox(height: widget.bottomMargin);
 
-        // Add separator before the item (except for the first one)
-        if (widget.separator && idx > 1) {
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 16),
-              _buildSegmentItem(idx - 1),
-            ],
-          );
-        }
+              // Add separator before the item (except for the first one)
+              if (widget.separator && idx > 1) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 16),
+                    _buildSegmentItem(idx - 1),
+                  ],
+                );
+              }
 
-        return _buildSegmentItem(idx - 1);
-      },
+              return _buildSegmentItem(idx - 1);
+            },
+          ),
+        ),
+
+        if (_userScrolled && widget.segments.isNotEmpty)
+          Positioned(
+            bottom: 20,
+            right: 20,
+            child: FloatingActionButton.small(
+              backgroundColor: Colors.black.withOpacity(0.7),
+              onPressed: () {
+                _userScrolled = false;
+                _scrollController.animateTo(
+                  _scrollController.position.maxScrollExtent,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOut,
+                );
+              },
+              child: const Icon(Icons.arrow_downward, color: Colors.white),
+            ),
+          ),
+      ],
     );
   }
 
