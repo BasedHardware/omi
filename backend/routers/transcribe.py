@@ -2,6 +2,7 @@ import os
 import uuid
 import asyncio
 import struct
+import logging
 from datetime import datetime, timezone, timedelta, time
 from enum import Enum
 
@@ -36,6 +37,9 @@ from utils.translation_cache import TranscriptSegmentLanguageCache
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists
 
+# Configure logger with a specific name that identifies this module
+logger = logging.getLogger("routers.transcribe.websocket")
+
 router = APIRouter()
 
 async def _listen(
@@ -43,9 +47,10 @@ async def _listen(
         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = None,
         including_combined_segments: bool = False,
 ):
-    print('_listen', uid, language, sample_rate, codec, include_speech_profile, stt_service)
+    logger.info(f"Starting _listen - UID: {uid}, Language: {language}, Sample rate: {sample_rate}, Codec: {codec}, Include speech profile: {include_speech_profile}")
 
     if not uid or len(uid) <= 0:
+        logger.warning(f"Invalid UID: {uid}")
         await websocket.close(code=1008, reason="Bad uid")
         return
 
@@ -61,13 +66,14 @@ async def _listen(
     # Determine the best STT service
     stt_service, stt_language, stt_model = get_stt_service_for_language(language)
     if not stt_service or not stt_language:
+        logger.warning(f"Unsupported language: {language} for UID: {uid}")
         await websocket.close(code=1008, reason=f"The language is not supported, {language}")
         return
 
     try:
         await websocket.accept()
     except RuntimeError as e:
-        print(e, uid)
+        logger.error(f"WebSocket in dirty state for UID: {uid}, Error: {e}")
         await websocket.close(code=1011, reason="Dirty state")
         return
 
@@ -76,17 +82,17 @@ async def _listen(
 
     async def _asend_message_event(msg: MessageEvent):
         nonlocal websocket_active
-        print(f"Message: type ${msg.event_type}", uid)
+        logger.debug(f"Sending message event - Type: {msg.event_type}, UID: {uid}")
         if not websocket_active:
             return False
         try:
             await websocket.send_json(msg.to_json())
             return True
         except WebSocketDisconnect:
-            print("WebSocket disconnected", uid)
+            logger.info(f"WebSocket disconnected for UID: {uid}")
             websocket_active = False
         except RuntimeError as e:
-            print(f"Can not send message event, error: {e}", uid)
+            logger.error(f"Failed to send message event - UID: {uid}, Error: {e}")
 
         return False
 
@@ -101,7 +107,7 @@ async def _listen(
     # Send pong every 10s then handle it in the app \
     # since Starlette is not support pong automatically
     async def send_heartbeat():
-        print("send_heartbeat", uid)
+        logger.debug(f"Starting heartbeat task for UID: {uid}")
         nonlocal websocket_active
         nonlocal websocket_close_code
         nonlocal started_at
@@ -116,7 +122,7 @@ async def _listen(
 
                 # timeout
                 if has_timeout and time.time() - started_at >= timeout_seconds:
-                    print(f"Session timeout is hit by soft timeout {timeout_seconds}", uid)
+                    logger.info(f"Session timeout triggered for UID: {uid} after {timeout_seconds}s")
                     websocket_close_code = 1001
                     websocket_active = False
                     break
@@ -124,9 +130,9 @@ async def _listen(
                 # next
                 await asyncio.sleep(10)
         except WebSocketDisconnect:
-            print("WebSocket disconnected", uid)
+            logger.info(f"WebSocket disconnected during heartbeat for UID: {uid}")
         except Exception as e:
-            print(f'Heartbeat error: {e}', uid)
+            logger.error(f"Heartbeat error for UID: {uid}, Error: {e}")
             websocket_close_code = 1011
         finally:
             websocket_active = False
@@ -138,6 +144,7 @@ async def _listen(
 
     # Validate user
     if not user_db.is_exists_user(uid):
+        logger.warning(f"User not found in database - UID: {uid}")
         websocket_active = False
         await websocket.close(code=1008, reason="Bad user")
         return
@@ -150,7 +157,7 @@ async def _listen(
             # recheck session
             conversation = retrieve_in_progress_conversation(uid)
             if not conversation or conversation['finished_at'] > finished_at:
-                print("_trigger_create_conversation_with_delay not conversation or not last session", uid)
+                logger.debug(f"_trigger_create_conversation_with_delay - No conversation or not last session for UID: {uid}")
                 return
             await _create_current_conversation()
         except asyncio.CancelledError:
@@ -173,7 +180,7 @@ async def _listen(
             conversation = process_conversation(uid, language, conversation)
             messages = trigger_external_integrations(uid, conversation)
         except Exception as e:
-            print(f"Error processing conversation: {e}", uid)
+            logger.error(f"Error processing conversation - UID: {uid}, Conversation ID: {conversation.id}, Error: {e}")
             conversations_db.set_conversation_as_discarded(uid, conversation.id)
             conversation.discarded = True
             messages = []
@@ -183,13 +190,16 @@ async def _listen(
     async def finalize_processing_conversations(processing: List[dict]):
         # handle edge case of conversation was actually processing? maybe later, doesn't hurt really anyway.
         # also fix from getMemories endpoint?
-        print('finalize_processing_conversations len(processing):', len(processing), uid)
+        logger.info(f"Finalizing processing conversations - Count: {len(processing)}, UID: {uid}")
         for conversation in processing:
             await _create_conversation(conversation)
 
     # Process processing conversations
     processing = conversations_db.get_processing_conversations(uid)
     asyncio.create_task(finalize_processing_conversations(processing))
+
+    # Log WebSocket connection with user context
+    logger.info(f"WebSocket connection established - UID: {uid}, Language: {language}, STT Service: {stt_service}, Model: {stt_model}")
 
     # Send last completed conversation to client
     async def send_last_conversation():
@@ -199,7 +209,7 @@ async def _listen(
     asyncio.create_task(send_last_conversation())
 
     async def _create_current_conversation():
-        print("_create_current_conversation", uid)
+        logger.info(f"Creating current conversation for UID: {uid}")
 
         # Reset state variables
         nonlocal seconds_to_trim
@@ -234,11 +244,10 @@ async def _listen(
             finished_at = datetime.fromisoformat(existing_conversation['finished_at'].isoformat())
             seconds_since_last_segment = (datetime.now(timezone.utc) - finished_at).total_seconds()
             if seconds_since_last_segment >= conversation_creation_timeout:
-                print('_websocket_util processing existing_conversation', existing_conversation['id'], seconds_since_last_segment, uid)
+                logger.info(f'_websocket_util processing existing_conversation - ID: {existing_conversation["id"]}, Seconds since last segment: {seconds_since_last_segment}, UID: {uid}')
                 asyncio.create_task(_create_current_conversation())
             else:
-                print('_websocket_util will process', existing_conversation['id'], 'in',
-                      conversation_creation_timeout - seconds_since_last_segment, 'seconds')
+                logger.info(f'_websocket_util will process - ID: {existing_conversation["id"]}, In: {conversation_creation_timeout - seconds_since_last_segment} seconds, UID: {uid}')
                 conversation_creation_task = asyncio.create_task(
                     _trigger_create_conversation_with_delay(conversation_creation_timeout - seconds_since_last_segment, finished_at)
                 )
@@ -269,7 +278,7 @@ async def _listen(
             transcript_segments=segments,
             status=ConversationStatus.in_progress,
         )
-        print('_get_in_progress_conversation new', conversation, uid)
+        logger.info(f'_get_in_progress_conversation new - Conversation: {conversation}, UID: {uid}')
         conversations_db.upsert_conversation(uid, conversation_data=conversation.dict())
         redis_db.set_in_progress_conversation_id(uid, conversation.id)
         return conversation, (0, len(segments))
@@ -282,19 +291,19 @@ async def _listen(
                 try:
                     await conversation_creation_task
                 except asyncio.CancelledError:
-                    print("conversation_creation_task is cancelled now", uid)
+                    logger.info(f"conversation_creation_task is cancelled now - UID: {uid}")
             conversation_creation_task = asyncio.create_task(
                 _trigger_create_conversation_with_delay(conversation_creation_timeout, finished_at))
 
     # STT
     # Validate websocket_active before initiating STT
     if not websocket_active or websocket.client_state != WebSocketState.CONNECTED:
-        print("websocket was closed", uid)
+        logger.warning(f"WebSocket was closed before STT could be initialized - UID: {uid}")
         if websocket.client_state == WebSocketState.CONNECTED:
             try:
                 await websocket.close(code=websocket_close_code)
             except Exception as e:
-                print(f"Error closing WebSocket: {e}", uid)
+                logger.error(f"Error closing WebSocket - UID: {uid}, Error: {e}")
         return
 
     # Process STT
@@ -355,8 +364,7 @@ async def _listen(
                 )
 
                 # Create a second socket for initial speech profile if needed
-                print("speech_profile_duration", speech_profile_duration)
-                print("file_path", file_path)
+                logger.info(f"speech_profile_duration - {speech_profile_duration}, file_path - {file_path}")
                 if speech_profile_duration and file_path:
                     soniox_socket2 = await process_audio_soniox(
                         stream_transcript, sample_rate, stt_language,
@@ -365,7 +373,7 @@ async def _listen(
                     )
 
                     safe_create_task(send_initial_file_path(file_path, soniox_socket.send))
-                    print('speech_profile soniox duration', speech_profile_duration, uid)
+                    logger.info(f'speech_profile soniox duration - {speech_profile_duration}, UID: {uid}')
             # SPEECHMATICS
             elif stt_service == STTService.speechmatics:
                 speechmatics_socket = await process_audio_speechmatics(
@@ -373,10 +381,10 @@ async def _listen(
                 )
                 if speech_profile_duration:
                     safe_create_task(send_initial_file_path(file_path, speechmatics_socket.send))
-                    print('speech_profile speechmatics duration', speech_profile_duration, uid)
+                    logger.info(f'speech_profile speechmatics duration - {speech_profile_duration}, UID: {uid}')
 
         except Exception as e:
-            print(f"Initial processing error: {e}", uid)
+            logger.error(f"Initial processing error - UID: {uid}, Error: {e}")
             websocket_close_code = 1011
             await websocket.close(code=websocket_close_code)
             return
@@ -420,12 +428,12 @@ async def _listen(
                         segment_buffers = []  # reset
                         await transcript_ws.send(data)
                     except websockets.exceptions.ConnectionClosed as e:
-                        print(f"Pusher transcripts Connection closed: {e}", uid)
+                        logger.info(f"Pusher transcripts Connection closed: {e} - UID: {uid}")
                         transcript_ws = None
                         pusher_connected = False
                         await reconnect()
                     except Exception as e:
-                        print(f"Pusher transcripts failed: {e}", uid)
+                        logger.error(f"Pusher transcripts failed: {e} - UID: {uid}")
 
         # Audio bytes
         audio_bytes_ws = None
@@ -452,12 +460,12 @@ async def _listen(
                         audio_buffers = bytearray()  # reset
                         await audio_bytes_ws.send(data)
                     except websockets.exceptions.ConnectionClosed as e:
-                        print(f"Pusher audio_bytes Connection closed: {e}", uid)
+                        logger.info(f"Pusher audio_bytes Connection closed: {e} - UID: {uid}")
                         audio_bytes_ws = None
                         pusher_connected = False
                         await reconnect()
                     except Exception as e:
-                        print(f"Pusher audio_bytes failed: {e}", uid)
+                        logger.error(f"Pusher audio_bytes failed: {e} - UID: {uid}")
 
         async def reconnect():
             nonlocal pusher_connected
@@ -481,7 +489,7 @@ async def _listen(
                 if audio_bytes_enabled:
                     audio_bytes_ws = pusher_ws
             except Exception as e:
-                print(f"Exception in connect: {e}")
+                logger.error(f"Exception in connect: {e}")
 
         async def close(code: int = 1000):
             await pusher_ws.close(code)
@@ -527,7 +535,7 @@ async def _listen(
                         if is_target_language:
                             continue
                     except Exception as e:
-                        print(f"Language detection error: {e}")
+                        logger.error(f"Language detection error: {e}")
                         # Skip translation if couldn't detect the language
                         continue
 
@@ -588,7 +596,7 @@ async def _listen(
                 _send_message_event(translation_event)
 
         except Exception as e:
-            print(f"Translation error: {e}", uid)
+            logger.error(f"Translation error - UID: {uid}, Error: {e}")
 
     async def stream_transcript_process():
         nonlocal websocket_active
@@ -651,7 +659,7 @@ async def _listen(
                     await translate(conversation.transcript_segments[starts:ends], conversation.id)
 
             except Exception as e:
-                print(f'Could not process transcript: error {e}', uid)
+                logger.error(f'Could not process transcript: error {e} - UID: {uid}')
 
     # Audio bytes
     #
@@ -700,7 +708,7 @@ async def _listen(
                         if elapsed_seconds > speech_profile_duration or not soniox_socket2:
                             await soniox_socket.send(data)
                             if soniox_socket2:
-                                print('Killing soniox_socket2', uid)
+                                logger.info(f'Killing soniox_socket2 - UID: {uid}')
                                 await soniox_socket2.close()
                                 soniox_socket2 = None
                         else:
@@ -716,7 +724,7 @@ async def _listen(
                         if elapsed_seconds > speech_profile_duration or not dg_socket2:
                             dg_socket1.send(data)
                             if dg_socket2:
-                                print('Killing deepgram_socket2', uid)
+                                logger.info(f'Killing deepgram_socket2 - UID: {uid}')
                                 dg_socket2.finish()
                                 dg_socket2 = None
                         else:
@@ -727,9 +735,9 @@ async def _listen(
                     audio_bytes_send(data)
 
         except WebSocketDisconnect:
-            print("WebSocket disconnected", uid)
+            logger.info(f"WebSocket disconnected - UID: {uid}")
         except Exception as e:
-            print(f'Could not process audio: error {e}', uid)
+            logger.error(f'Could not process audio: error {e} - UID: {uid}')
             websocket_close_code = 1011
         finally:
             websocket_active = False
@@ -765,19 +773,19 @@ async def _listen(
         await asyncio.gather(*tasks)
 
     except Exception as e:
-        print(f"Error during WebSocket operation: {e}", uid)
+        logger.error(f"Error during WebSocket operation - UID: {uid}, Error: {e}")
     finally:
         websocket_active = False
         if websocket.client_state == WebSocketState.CONNECTED:
             try:
                 await websocket.close(code=websocket_close_code)
             except Exception as e:
-                print(f"Error closing WebSocket: {e}", uid)
+                logger.error(f"Error closing WebSocket - UID: {uid}, Error: {e}")
         if pusher_close is not None:
             try:
                 await pusher_close()
             except Exception as e:
-                print(f"Error closing Pusher: {e}", uid)
+                logger.error(f"Error closing Pusher - UID: {uid}, Error: {e}")
 
 @router.websocket("/v3/listen")
 async def listen_handler_v3(
