@@ -55,6 +55,11 @@ abstract class Env {
   static Future<void> setCustomApiBaseUrl(String url) async {
     final prefs = await SharedPreferences.getInstance();
 
+    // Ensure URL ends with a slash
+    if (url.isNotEmpty && !url.endsWith('/')) {
+      url = '$url/';
+    }
+
     // Log server change
     String oldUrl = _getEffectiveApiBaseUrl();
     Logger.debug('🔄 Changing API server: $oldUrl -> $url');
