@@ -60,14 +60,11 @@ We will use [uvx](https://docs.astral.sh/uv/guides/tools/) to directly run *mcp-
 | If having issues instead of `"command": "uvx"`, put your whole package path (`which uvx`), then `"command": "$path"`.
 
 ```json
-{
-    "mcpServers": {
+"mcpServers": {
   "omi": {
-    "command": "docker",
-    "args": ["run", "--rm", "-i", "josancamon19/mcp-server-omi"]
+    "command": "uvx",
+    "args": ["mcp-server-omi"]
   }
-}
-
 }
 ```
 
