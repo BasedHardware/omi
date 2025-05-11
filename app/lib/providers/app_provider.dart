@@ -463,7 +463,7 @@ class AppProvider extends BaseProvider {
       if (isEnabled) {
         success = await enableAppServer(appId);
         if (!success) {
-          errorMessage = 'Error activating the app. If this is an integration app, make sure the setup is completed.';
+          errorMessage = 'Failed to install app. Please check your network connection and try again.';
         } else {
           MixpanelManager().appEnabled(appId);
         }
@@ -475,15 +475,15 @@ class AppProvider extends BaseProvider {
     } catch (e) {
       print('Error toggling app $appId: $e');
       success = false;
-      errorMessage = 'An error occurred while updating the app status.';
+      if (e.toString().contains('SocketException') || e.toString().contains('Connection refused')) {
+        errorMessage = 'Network error. Please check your internet connection and try again.';
+      } else {
+        errorMessage = 'An error occurred: ${e.toString().split('\n').first}';
+      }
     }
 
     if (!success && errorMessage != null) {
-      AppDialog.show(
-        title: 'Error',
-        content: errorMessage,
-        singleButton: true,
-      );
+      AppSnackbar.showSnackbarError(errorMessage);
     }
 
     if (success) {
