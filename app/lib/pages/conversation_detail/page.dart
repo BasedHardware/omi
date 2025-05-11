@@ -49,10 +49,23 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   void initState() {
     super.initState();
 
-    _controller = TabController(length: 2, vsync: this, initialIndex: 1); // Start with summary tab
+    _controller = TabController(length: 3, vsync: this, initialIndex: 1); // Start with summary tab
     _controller!.addListener(() {
       setState(() {
-        selectedTab = _controller!.index == 0 ? ConversationTab.transcript : ConversationTab.summary;
+        switch (_controller!.index) {
+          case 0:
+            selectedTab = ConversationTab.transcript;
+            break;
+          case 1:
+            selectedTab = ConversationTab.summary;
+            break;
+          case 2:
+            selectedTab = ConversationTab.action_items;
+            break;
+          default:
+            debugPrint('Invalid tab index: ${_controller!.index}');
+            selectedTab = ConversationTab.summary;
+        }
       });
     });
 
@@ -188,6 +201,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               },
                             ),
                             const SummaryTab(),
+                            const ActionItemsTab(),
                           ],
                         );
                       }),
@@ -210,7 +224,21 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                       hasSegments:
                           conversation.transcriptSegments.isNotEmpty || conversation.externalIntegration != null,
                       onTabSelected: (tab) {
-                        int index = tab == ConversationTab.transcript ? 0 : 1;
+                        int index;
+                        switch (tab) {
+                          case ConversationTab.transcript:
+                            index = 0;
+                            break;
+                          case ConversationTab.summary:
+                            index = 1;
+                            break;
+                          case ConversationTab.action_items:
+                            index = 2;
+                            break;
+                          default:
+                            debugPrint('Invalid tab selected: $tab');
+                            index = 1; // Default to summary tab
+                        }
                         _controller!.animateTo(index);
                       },
                       onStopPressed: () {
@@ -554,5 +582,69 @@ class EditSegmentWidget extends StatelessWidget {
         ),
       );
     });
+  }
+}
+
+class ActionItemsTab extends StatelessWidget {
+  const ActionItemsTab({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Consumer<ConversationDetailProvider>(
+        builder: (context, provider, child) {
+          final hasActionItems = provider.conversation.structured.actionItems
+              .where((item) => !item.deleted)
+              .isNotEmpty;
+
+          return ListView(
+            shrinkWrap: true,
+            children: [
+              const SizedBox(height: 24),
+              if (hasActionItems)
+                const ActionItemsListWidget()
+              else
+                _buildEmptyState(context),
+              const SizedBox(height: 150)
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.check_circle_outline,
+              size: 72,
+              color: Colors.grey,
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'No Action Items',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: Colors.white,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'This memory doesn\'t have any action items yet. They\'ll appear here when your conversations include tasks or to-dos.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.grey.shade400,
+                fontSize: 16,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
