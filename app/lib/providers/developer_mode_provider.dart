@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/providers/base_provider.dart';
+import 'package:omi/utils/alerts/app_dialog.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/logger.dart';
@@ -14,6 +16,8 @@ class DeveloperModeProvider extends BaseProvider {
   final TextEditingController webhookAudioBytesDelay = TextEditingController();
   final TextEditingController webhookWsAudioBytes = TextEditingController();
   final TextEditingController webhookDaySummary = TextEditingController();
+  final TextEditingController customApiUrlController = TextEditingController();
+  final TextEditingController newServerUrlController = TextEditingController();
 
   bool conversationEventsToggled = false;
   bool transcriptsToggled = false;
@@ -21,6 +25,7 @@ class DeveloperModeProvider extends BaseProvider {
   bool daySummaryToggled = false;
 
   bool savingSettingsLoading = false;
+  bool serverOperationLoading = false;
 
   bool loadingExportMemories = false;
   bool loadingImportMemories = false;
@@ -28,6 +33,33 @@ class DeveloperModeProvider extends BaseProvider {
   bool localSyncEnabled = false;
   bool followUpQuestionEnabled = false;
   bool transcriptionDiagnosticEnabled = false;
+
+  // Server URL list management
+  List<String> customApiUrls = [];
+  String currentCustomApiUrl = '';
+  String originalApiUrl = '';
+
+  // Get the default API base URL from the Env class
+  String get defaultApiBaseUrl => Env.apiBaseUrl ?? '';
+
+  // Display a friendly name instead of the actual URL for the default server
+  String getDisplayNameForUrl(String url) {
+    if (url == defaultApiBaseUrl) {
+      return "Omi Official Server";
+    }
+    return url;
+  }
+
+  // Ensure URL always ends with a slash
+  String normalizeUrl(String url) {
+    url = url.trim();
+    if (url.isEmpty) return url;
+
+    if (!url.endsWith('/')) {
+      url = '$url/';
+    }
+    return url;
+  }
 
   void onConversationEventsToggled(bool value) {
     conversationEventsToggled = value;
@@ -103,6 +135,16 @@ class DeveloperModeProvider extends BaseProvider {
     audioBytesToggled = SharedPreferencesUtil().audioBytesToggled;
     daySummaryToggled = SharedPreferencesUtil().daySummaryToggled;
 
+    final prefs = SharedPreferencesUtil();
+
+    // Initialize server URL management
+    originalApiUrl = defaultApiBaseUrl;
+    currentCustomApiUrl = prefs.getString(Env.customApiBaseUrlKey) ?? '';
+    customApiUrlController.text = currentCustomApiUrl;
+
+    // Load saved custom API URLs
+    loadCustomApiUrls();
+
     await Future.wait([
       getWebhooksStatus(),
       getUserWebhookUrl(type: 'audio_bytes').then((url) {
@@ -130,15 +172,109 @@ class DeveloperModeProvider extends BaseProvider {
         SharedPreferencesUtil().webhookDaySummary = url;
       }),
     ]);
-    // getUserWebhookUrl(type: 'audio_bytes_websocket').then((url) => webhookWsAudioBytes.text = url);
     setIsLoading(false);
     notifyListeners();
+  }
+
+  void loadCustomApiUrls() {
+    final prefs = SharedPreferencesUtil();
+    final savedUrls = prefs.getStringList('custom_api_urls') ?? [];
+    customApiUrls = savedUrls.toSet().toList(); // Remove duplicates
+
+    // Add current URL if it's not in the list and it's not empty
+    if (currentCustomApiUrl.isNotEmpty && !customApiUrls.contains(currentCustomApiUrl)) {
+      customApiUrls.add(currentCustomApiUrl);
+      saveCustomApiUrls();
+    }
+
+    notifyListeners();
+  }
+
+  void saveCustomApiUrls() {
+    final prefs = SharedPreferencesUtil();
+    prefs.saveStringList('custom_api_urls', customApiUrls);
+  }
+
+  Future<bool> addNewCustomApiUrl(String url) async {
+    url = normalizeUrl(url.trim());
+    if (url.isEmpty || !isValidUrl(url)) return false;
+
+    if (!customApiUrls.contains(url)) {
+      customApiUrls.add(url);
+      saveCustomApiUrls();
+      notifyListeners();
+      return true;
+    }
+    return false;
+  }
+
+  Future<void> removeCustomApiUrl(String url) async {
+    serverOperationLoading = true;
+    notifyListeners();
+
+    try {
+      customApiUrls.remove(url);
+      saveCustomApiUrls();
+
+      // If current URL was removed, reset to original
+      if (currentCustomApiUrl == url) {
+        currentCustomApiUrl = '';
+        customApiUrlController.text = '';
+        await Env.setCustomApiBaseUrl('');
+      }
+    } finally {
+      serverOperationLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> selectCustomApiUrl(String url) async {
+    serverOperationLoading = true;
+    notifyListeners();
+
+    try {
+      // Don't update customApiUrlController, only update current URL
+      currentCustomApiUrl = normalizeUrl(url);
+      await Env.setCustomApiBaseUrl(currentCustomApiUrl);
+    } finally {
+      serverOperationLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> resetToOriginalUrl() async {
+    serverOperationLoading = true;
+    notifyListeners();
+
+    try {
+      customApiUrlController.text = '';
+      currentCustomApiUrl = '';
+      await Env.setCustomApiBaseUrl('');
+      originalApiUrl = defaultApiBaseUrl; // Refresh the original URL
+    } finally {
+      serverOperationLoading = false;
+      notifyListeners();
+    }
+  }
+
+  String getCurrentActiveUrl() {
+    if (currentCustomApiUrl.isNotEmpty) {
+      return currentCustomApiUrl;
+    }
+    return "Omi Official Server";
   }
 
   void saveSettings() async {
     if (savingSettingsLoading) return;
     setIsLoading(true);
     final prefs = SharedPreferencesUtil();
+
+    final customApiUrl = customApiUrlController.text.trim();
+    if (customApiUrl.isNotEmpty && !isValidUrl(customApiUrl)) {
+      AppSnackbar.showSnackbarError('Invalid Custom Backend URL');
+      setIsLoading(false);
+      return;
+    }
 
     if (webhookAudioBytes.text.isNotEmpty && !isValidUrl(webhookAudioBytes.text)) {
       AppSnackbar.showSnackbarError('Invalid audio bytes webhook URL');
@@ -164,12 +300,6 @@ class DeveloperModeProvider extends BaseProvider {
       return;
     }
 
-    // if (webhookWsAudioBytes.text.isNotEmpty && !isValidWebSocketUrl(webhookWsAudioBytes.text)) {
-    //   AppSnackbar.showSnackbarError('Invalid audio bytes websocket URL');
-    //   savingSettingsLoading = false;
-    //   notifyListeners();
-    //   return;
-    // }
     var w1 = setUserWebhookUrl(
       type: 'audio_bytes',
       url: '${webhookAudioBytes.text.trim()},${webhookAudioBytesDelay.text.trim()}',
@@ -177,7 +307,6 @@ class DeveloperModeProvider extends BaseProvider {
     var w2 = setUserWebhookUrl(type: 'realtime_transcript', url: webhookOnTranscriptReceived.text.trim());
     var w3 = setUserWebhookUrl(type: 'memory_created', url: webhookOnConversationCreated.text.trim());
     var w4 = setUserWebhookUrl(type: 'day_summary', url: webhookDaySummary.text.trim());
-    // var w4 = setUserWebhookUrl(type: 'audio_bytes_websocket', url: webhookWsAudioBytes.text.trim());
     try {
       Future.wait([w1, w2, w3, w4]);
       prefs.webhookAudioBytes = webhookAudioBytes.text;
@@ -185,10 +314,16 @@ class DeveloperModeProvider extends BaseProvider {
       prefs.webhookOnTranscriptReceived = webhookOnTranscriptReceived.text;
       prefs.webhookOnConversationCreated = webhookOnConversationCreated.text;
       prefs.webhookDaySummary = webhookDaySummary.text;
+
+      // Save new custom API URL and add to list if not empty
+      await Env.setCustomApiBaseUrl(customApiUrl);
+      currentCustomApiUrl = customApiUrl;
+      if (customApiUrl.isNotEmpty) {
+        await addNewCustomApiUrl(customApiUrl);
+      }
     } catch (e) {
       Logger.error('Error occurred while updating endpoints: $e');
     }
-    // Experimental
     prefs.localSyncEnabled = localSyncEnabled;
     prefs.devModeJoanFollowUpEnabled = followUpQuestionEnabled;
     prefs.transcriptionDiagnosticEnabled = transcriptionDiagnosticEnabled;
@@ -199,7 +334,12 @@ class DeveloperModeProvider extends BaseProvider {
     );
     setIsLoading(false);
     notifyListeners();
-    AppSnackbar.showSnackbar('Settings saved!');
+    AppDialog.show(
+      title: 'Settings Saved',
+      content: 'Your settings have been saved. Please restart the app for the backend URL change to take effect.',
+      singleButton: true,
+      okButtonText: 'OK',
+    );
   }
 
   void setIsLoading(bool value) {

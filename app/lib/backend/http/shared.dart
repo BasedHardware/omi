@@ -37,6 +37,10 @@ Future<http.Response?> makeApiCall({
   required String method,
 }) async {
   try {
+    // Add debug log to track which server the app is connecting to
+    Logger.debug('🔄 API Connection: Making $method request to server: $url');
+    Logger.debug('🌐 Current API Base URL: ${Env.apiBaseUrl}');
+
     if (url.contains(Env.apiBaseUrl!)) {
       headers['Authorization'] = await getAuthHeader();
       // headers['Authorization'] = ''; // set admin key + uid here for testing
@@ -45,6 +49,10 @@ Future<http.Response?> makeApiCall({
     final client = http.Client();
 
     http.Response? response = await _performRequest(client, url, headers, body, method);
+
+    // Log response status code for debugging
+    Logger.debug('📡 Server response from $url: ${response.statusCode}');
+
     if (response.statusCode == 401) {
       Logger.log('Token expired on 1st attempt');
       // Refresh the token
@@ -71,6 +79,7 @@ Future<http.Response?> makeApiCall({
 
     return response;
   } catch (e, stackTrace) {
+    Logger.error('HTTP request failed: $e');
     debugPrint('HTTP request failed: $e, $stackTrace');
     CrashReporting.reportHandledCrash(
       e,
