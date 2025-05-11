@@ -60,16 +60,16 @@ class AppListItem extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 12),
               Expanded(
+                flex: 3,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.start,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        ConstrainedBox(
-                          constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.52),
+                        Flexible(
                           child: Text(
                             app.name.decodeString + (app.private && showPrivateIcon ? " 🔒".decodeString : ''),
                             maxLines: 1,
@@ -131,7 +131,7 @@ class AppListItem extends StatelessWidget {
               SizedBox(width: MediaQuery.sizeOf(context).width * 0.02),
               provider.appLoading.isNotEmpty && index != -1 && provider.appLoading[index]
                   ? const Padding(
-                      padding: EdgeInsets.all(10),
+                      padding: EdgeInsets.symmetric(horizontal: 8),
                       child: SizedBox(
                         height: 24,
                         width: 24,
@@ -140,32 +140,38 @@ class AppListItem extends StatelessWidget {
                         ),
                       ),
                     )
-                  : IconButton(
-                      icon: Icon(
-                        app.enabled ? Icons.check : Icons.arrow_downward_rounded,
-                        color: app.enabled ? Colors.white : Colors.grey,
+                  : SizedBox(
+                      width: 40,
+                      child: IconButton(
+                        icon: Icon(
+                          app.enabled ? Icons.check : Icons.arrow_downward_rounded,
+                          color: app.enabled ? Colors.white : Colors.grey,
+                          size: 22,
+                        ),
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () {
+                          if (app.worksExternally() && !app.enabled) {
+                            showDialog(
+                              context: context,
+                              builder: (c) => getDialog(
+                                context,
+                                () => Navigator.pop(context),
+                                () async {
+                                  Navigator.pop(context);
+                                  await routeToPage(context, AppDetailPage(app: app));
+                                  provider.setApps();
+                                },
+                                'Authorize External App',
+                                'Do you allow this app to access your memories, transcripts, and recordings? Your data will be sent to the app\'s server for processing.',
+                                okButtonText: 'Confirm',
+                              ),
+                            );
+                          } else {
+                            provider.toggleApp(app.id.toString(), !app.enabled, index);
+                          }
+                        },
                       ),
-                      onPressed: () {
-                        if (app.worksExternally() && !app.enabled) {
-                          showDialog(
-                            context: context,
-                            builder: (c) => getDialog(
-                              context,
-                              () => Navigator.pop(context),
-                              () async {
-                                Navigator.pop(context);
-                                await routeToPage(context, AppDetailPage(app: app));
-                                provider.setApps();
-                              },
-                              'Authorize External App',
-                              'Do you allow this app to access your memories, transcripts, and recordings? Your data will be sent to the app\'s server for processing.',
-                              okButtonText: 'Confirm',
-                            ),
-                          );
-                        } else {
-                          provider.toggleApp(app.id.toString(), !app.enabled, index);
-                        }
-                      },
                     ),
             ],
           ),
