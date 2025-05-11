@@ -44,7 +44,11 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
         print("DEBUG: Popular apps count: ${appProvider.popularApps.length}");
         if (appProvider.popularApps.isNotEmpty) {
           print("DEBUG: First popular app: ${appProvider.popularApps.first.name}");
+        } else {
+          print("DEBUG: No popular apps found!");
         }
+      }).catchError((error) {
+        print("ERROR: Failed to load popular apps: $error");
       });
     });
     super.initState();
@@ -60,6 +64,20 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
   Widget build(BuildContext context) {
     super.build(context);
     return Consumer<AppProvider>(builder: (context, provider, child) {
+      // Debug print for error diagnosis
+      debugPrint("ExploreInstallPage build - Apps count: ${provider.apps.length}, Popular apps count: ${provider.popularApps.length}");
+      debugPrint("ExploreInstallPage build - Filter active: ${provider.isFilterActive()}, Search active: ${provider.isSearchActive()}");
+
+      // Clear any previous error messages
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        try {
+          // If there's already an error showing, don't show another one
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        } catch (e) {
+          // Ignore errors trying to hide snackbar
+        }
+      });
+
       return CustomScrollView(
         slivers: [
           const SliverToBoxAdapter(child: SizedBox(height: 18)),
@@ -224,7 +242,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                                 width: 140,
                                 margin: const EdgeInsets.only(right: 12),
                                 decoration: BoxDecoration(
-                                  color: Colors.grey.shade800.withOpacity(0.3),
+                                  color: Colors.black.withOpacity(0.6),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: InkWell(
@@ -363,7 +381,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                                     return Container(
                                       margin: EdgeInsets.only(bottom: index == apps.length - 1 ? 0 : 5),
                                       decoration: BoxDecoration(
-                                        color: Colors.grey.shade800.withOpacity(0.3),
+                                        color: Colors.black.withOpacity(0.6),
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: AppListItem(
@@ -411,7 +429,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                               return Container(
                                 margin: EdgeInsets.only(bottom: index == provider.filteredApps.length - 1 ? 0 : 5),
                                 decoration: BoxDecoration(
-                                  color: Colors.grey.shade800.withOpacity(0.3),
+                                  color: Colors.black.withOpacity(0.6),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: AppListItem(
@@ -427,44 +445,65 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                   },
                 ),
           const SliverToBoxAdapter(child: SizedBox(height: 12)),
-          SliverToBoxAdapter(
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-              decoration: BoxDecoration(
-                color: Colors.red,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        shape: BoxShape.circle,
+          // Error Widget for "Something went wrong"
+          Consumer<AppProvider>(
+            builder: (context, appProvider, _) {
+              // Show error widget only when specific conditions are met
+              bool hasNetworkError = appProvider.hasNetworkError;
+              bool showError = hasNetworkError ||
+                  (appProvider.popularApps.isEmpty &&
+                   !appProvider.isFilterActive() &&
+                   !appProvider.isSearchActive() &&
+                   appProvider.isLoading == false);
+
+              debugPrint("Error widget - Has network error: $hasNetworkError");
+              debugPrint("Error widget - Show error: $showError");
+
+              if (showError) {
+                return SliverToBoxAdapter(
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              shape: BoxShape.circle,
+                            ),
+                            padding: const EdgeInsets.all(8),
+                            child: const Icon(Icons.error_outline, color: Colors.white, size: 24),
+                          ),
+                          const SizedBox(width: 16),
+                          const Expanded(
+                            child: Text(
+                              'Something went wrong!\nPlease try again later.',
+                              style: TextStyle(color: Colors.white, fontSize: 16, height: 1.4),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.share, color: Colors.white),
+                            onPressed: () {
+                              debugPrint("Sharing error details");
+                              // Try to reload data
+                              appProvider.getPopularApps();
+                            },
+                            padding: EdgeInsets.zero,
+                          ),
+                        ],
                       ),
-                      padding: const EdgeInsets.all(8),
-                      child: const Icon(Icons.error_outline, color: Colors.white, size: 24),
                     ),
-                    const SizedBox(width: 16),
-                    const Expanded(
-                      child: Text(
-                        'Something went wrong!\nPlease try again later.',
-                        style: TextStyle(color: Colors.white, fontSize: 16, height: 1.4),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.share, color: Colors.white),
-                      onPressed: () {
-                        // Share error or report issue
-                      },
-                      padding: EdgeInsets.zero,
-                    ),
-                  ],
-                ),
-              ),
-            ),
+                  ),
+                );
+              }
+              return const SliverToBoxAdapter(child: SizedBox.shrink());
+            },
           ),
         ],
       );

@@ -26,6 +26,7 @@ class AppProvider extends BaseProvider {
   bool appPublicToggled = false;
 
   bool isLoading = false;
+  bool hasNetworkError = false;
 
   List<Category> categories = [];
   List<AppCapability> capabilities = [];
@@ -236,10 +237,20 @@ class AppProvider extends BaseProvider {
     setIsLoading(false);
   }
 
-  Future getPopularApps() async {
-    setIsLoading(true);
-    popularApps = await retrievePopularApps();
-    setIsLoading(false);
+  Future<void> getPopularApps() async {
+    try {
+      setIsLoading(true);
+      final List<App> result = await retrievePopularApps();
+      popularApps = result;
+      hasNetworkError = false; // Reset error flag on success
+      setIsLoading(false);
+      notifyListeners();
+    } catch (e) {
+      print('Error fetching popular apps: $e');
+      hasNetworkError = true; // Set error flag on failure
+      setIsLoading(false);
+      notifyListeners();
+    }
   }
 
   void updateLocalApp(App app) {

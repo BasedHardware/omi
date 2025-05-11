@@ -28,7 +28,7 @@ class AppListItem extends StatelessWidget {
         },
         child: Container(
           padding: const EdgeInsets.all(12.0),
-          margin: EdgeInsets.only(bottom: 12, top: index == 0 ? 24 : 0),
+          margin: EdgeInsets.zero,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
