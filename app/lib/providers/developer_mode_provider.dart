@@ -42,6 +42,25 @@ class DeveloperModeProvider extends BaseProvider {
   // Get the default API base URL from the Env class
   String get defaultApiBaseUrl => Env.apiBaseUrl ?? '';
 
+  // Display a friendly name instead of the actual URL for the default server
+  String getDisplayNameForUrl(String url) {
+    if (url == defaultApiBaseUrl) {
+      return "Omi Official Server";
+    }
+    return url;
+  }
+
+  // Ensure URL always ends with a slash
+  String normalizeUrl(String url) {
+    url = url.trim();
+    if (url.isEmpty) return url;
+
+    if (!url.endsWith('/')) {
+      url = '$url/';
+    }
+    return url;
+  }
+
   void onConversationEventsToggled(bool value) {
     conversationEventsToggled = value;
     if (!value) {
@@ -177,7 +196,7 @@ class DeveloperModeProvider extends BaseProvider {
   }
 
   Future<bool> addNewCustomApiUrl(String url) async {
-    url = url.trim();
+    url = normalizeUrl(url.trim());
     if (url.isEmpty || !isValidUrl(url)) return false;
 
     if (!customApiUrls.contains(url)) {
@@ -215,8 +234,8 @@ class DeveloperModeProvider extends BaseProvider {
 
     try {
       // Don't update customApiUrlController, only update current URL
-      currentCustomApiUrl = url;
-      await Env.setCustomApiBaseUrl(url);
+      currentCustomApiUrl = normalizeUrl(url);
+      await Env.setCustomApiBaseUrl(currentCustomApiUrl);
     } finally {
       serverOperationLoading = false;
       notifyListeners();
@@ -239,7 +258,10 @@ class DeveloperModeProvider extends BaseProvider {
   }
 
   String getCurrentActiveUrl() {
-    return currentCustomApiUrl.isNotEmpty ? currentCustomApiUrl : originalApiUrl;
+    if (currentCustomApiUrl.isNotEmpty) {
+      return currentCustomApiUrl;
+    }
+    return "Omi Official Server";
   }
 
   void saveSettings() async {
