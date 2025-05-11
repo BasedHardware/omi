@@ -24,7 +24,7 @@ from routers.conversations import process_conversation, trigger_external_integra
 from utils.conversations.location import get_google_maps_location
 from utils.conversations.memories import process_external_integration_memory
 from utils.conversations.search import search_conversations
-from utils.plugins import send_plugin_notification
+from utils.app_integrations import send_app_notification
 
 # Rate limit settings - more conservative limits to prevent notification fatigue
 RATE_LIMIT_PERIOD = 3600  # 1 hour in seconds
@@ -80,7 +80,7 @@ async def create_conversation_via_integration(
 
     api_key = authorization.replace('Bearer ', '')
     if not verify_api_key(app_id, api_key):
-        raise HTTPException(status_code=403, detail="Invalid API key")
+        raise HTTPException(status_code=403, detail="Invalid integration API key")
 
     # Verify if the app exists
     app = apps_db.get_app_by_id_db(app_id)
@@ -147,7 +147,7 @@ async def create_memories_via_integration(
 
     api_key = authorization.replace('Bearer ', '')
     if not verify_api_key(app_id, api_key):
-        raise HTTPException(status_code=403, detail="Invalid API key")
+        raise HTTPException(status_code=403, detail="Invalid integrationAPI key")
 
     # Verify if the app exists
     app = apps_db.get_app_by_id_db(app_id)
@@ -190,7 +190,7 @@ async def create_facts_via_integration(
 
     api_key = authorization.replace('Bearer ', '')
     if not verify_api_key(app_id, api_key):
-        raise HTTPException(status_code=403, detail="Invalid API key")
+        raise HTTPException(status_code=403, detail="Invalid integrationAPI key")
 
     # Verify if the app exists
     app = apps_db.get_app_by_id_db(app_id)
@@ -237,7 +237,7 @@ async def get_memories_via_integration(
 
     api_key = authorization.replace('Bearer ', '')
     if not verify_api_key(app_id, api_key):
-        raise HTTPException(status_code=403, detail="Invalid API key")
+        raise HTTPException(status_code=403, detail="Invalid integrationAPI key")
 
     # Verify if the app exists
     app = apps_db.get_app_by_id_db(app_id)
@@ -491,7 +491,7 @@ async def send_notification_via_integration(
         )
 
     token = notification_db.get_token_only(uid)
-    send_plugin_notification(token, app.name, app.id, message)
+    send_app_notification(token, app.name, app.id, message)
     return JSONResponse(
         status_code=200,
         headers=headers,

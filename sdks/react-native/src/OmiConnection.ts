@@ -1,5 +1,5 @@
-import { BleManager, Device, Subscription } from 'react-native-ble-plx';
-import { DeviceConnectionState, OmiDevice, BleAudioCodec } from './types';
+import { BleManager, Device, Subscription, ConnectionPriority } from 'react-native-ble-plx';
+import { DeviceConnectionState, OmiDevice, BleAudioCodec} from './types';
 import { Platform } from 'react-native';
 
 // Service and characteristic UUIDs
@@ -424,4 +424,31 @@ export class OmiConnection {
     }
   }
 
+  /**
+   * Request a specific connection priority (Android only).
+   * @param priority Connection priority level from ConnectionPriority enum
+   * @returns Promise that resolves when the request is attempted.
+   */
+  async requestConnectionPriority(priority: ConnectionPriority): Promise<void> {
+    if (!this.device) {
+      console.warn('Cannot request connection priority: Device not connected.');
+      return Promise.reject(new Error('Device not connected'));
+    }
+
+    if (Platform.OS === 'android') {
+      try {
+        // Pass the numeric value of the enum to the native function
+        await this.device.requestConnectionPriority(priority as number);
+        console.log(`Requested connection priority: ${priority}`);
+      } catch (error) {
+        console.error('Failed to request connection priority:', error);
+        // Optionally re-throw or let the caller decide how to handle
+        return Promise.reject(error);
+      }
+    } else {
+      console.log('Connection priority request is an Android-specific feature and was not attempted on this platform.');
+      // Resolve promise for non-Android platforms as it's a no-op
+      return Promise.resolve();
+    }
+  }
 }

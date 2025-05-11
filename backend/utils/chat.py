@@ -11,7 +11,7 @@ from database.apps import record_app_usage
 from models.chat import Message, ResponseMessage, MessageConversation
 from models.conversation import Conversation
 from models.notification_message import NotificationMessage
-from models.plugin import UsageHistoryType
+from models.app import UsageHistoryType
 from models.transcript_segment import TranscriptSegment
 from utils.notifications import send_notification
 from utils.other.storage import get_syncing_file_temporal_signed_url, delete_syncing_temporal_file
