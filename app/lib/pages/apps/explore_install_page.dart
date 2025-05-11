@@ -192,7 +192,12 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text('Popular Apps', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                              const Text('Popular Apps',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold
+                                )
+                              ),
                               TextButton.icon(
                                 onPressed: () {
                                   // Could add a "see all popular" action here
@@ -219,7 +224,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                                 width: 140,
                                 margin: const EdgeInsets.only(right: 12),
                                 decoration: BoxDecoration(
-                                  color: Colors.grey.shade800,
+                                  color: Colors.grey.shade800.withOpacity(0.5),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: InkWell(
@@ -253,7 +258,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                                         padding: const EdgeInsets.symmetric(horizontal: 8.0),
                                         child: Text(
                                           app.name,
-                                          style: const TextStyle(fontWeight: FontWeight.bold),
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           textAlign: TextAlign.center,
@@ -261,7 +266,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                                       ),
                                       Text(
                                         app.getCategoryName(),
-                                        style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                                        style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
@@ -283,7 +288,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
               margin: const EdgeInsets.symmetric(horizontal: 12.0),
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               decoration: BoxDecoration(
-                color: Colors.grey.shade900.withOpacity(0.25),
+                color: Colors.grey.shade900.withOpacity(0.3),
                 borderRadius: BorderRadius.only(
                   topLeft: Radius.circular(16),
                   topRight: Radius.circular(16),
@@ -293,7 +298,12 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  const Text('All Apps', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Text('All Apps',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold
+                    )
+                  ),
                   TextButton.icon(
                     onPressed: () {
                       showModalBottomSheet(
@@ -327,7 +337,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                       sliver: SliverToBoxAdapter(
                         child: Container(
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade900.withOpacity(0.25),
+                            color: Colors.grey.shade900.withOpacity(0.3),
                             borderRadius: const BorderRadius.only(
                               bottomLeft: Radius.circular(16),
                               bottomRight: Radius.circular(16),
@@ -377,7 +387,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                       sliver: SliverToBoxAdapter(
                         child: Container(
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade900.withOpacity(0.25),
+                            color: Colors.grey.shade900.withOpacity(0.3),
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: ListView.builder(

@@ -27,39 +27,36 @@ class AppListItem extends StatelessWidget {
           provider.setApps();
         },
         child: Container(
-          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+          padding: const EdgeInsets.all(12.0),
           margin: EdgeInsets.only(bottom: 12, top: index == 0 ? 24 : 0),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              CachedNetworkImage(
-                imageUrl: app.getImageUrl(),
-                httpHeaders: const {
-                  "User-Agent":
-                      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-                },
-                imageBuilder: (context, imageProvider) => Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.rectangle,
-                    borderRadius: BorderRadius.circular(8),
-                    image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8.0),
+                child: CachedNetworkImage(
+                  height: 56,
+                  width: 56,
+                  fit: BoxFit.cover,
+                  imageUrl: app.getImageUrl(),
+                  httpHeaders: const {
+                    "User-Agent":
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                  },
+                  placeholder: (context, url) => const SizedBox(
+                    width: 56,
+                    height: 56,
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
                   ),
-                ),
-                placeholder: (context, url) => const SizedBox(
-                  width: 48,
-                  height: 48,
-                  child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                ),
-                errorWidget: (context, url, error) => const SizedBox(
-                  width: 48,
-                  height: 48,
-                  child: Icon(
-                    Icons.error,
-                    color: Colors.white,
+                  errorWidget: (context, url, error) => const SizedBox(
+                    width: 56,
+                    height: 56,
+                    child: Icon(
+                      Icons.error,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ),
@@ -72,10 +69,10 @@ class AppListItem extends StatelessWidget {
                     Row(
                       children: [
                         ConstrainedBox(
-                          constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.62),
+                          constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.52),
                           child: Text(
                             app.name.decodeString + (app.private && showPrivateIcon ? " 🔒".decodeString : ''),
-                            maxLines: 2,
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.white, fontSize: 16),
                           ),
