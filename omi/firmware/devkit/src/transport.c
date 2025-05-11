@@ -370,6 +370,11 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     }
     current_connection = bt_conn_ref(conn);
     current_mtu = info.le.data_len->tx_max_len;
+
+    /* Ask central for 7.5 ms interval, no latency, 400 ms supervision-timeout */
+    int rc = bt_conn_le_param_update(conn, BT_LE_CONN_PARAM(6, 6, 0, 400));
+    LOG_INF("Connection parameter update requested (result: %d)", rc);
+
     LOG_INF("Transport connected");
     LOG_DBG("Interval: %d, latency: %d, timeout: %d", info.le.interval, info.le.latency, info.le.timeout);
     LOG_DBG("TX PHY %s, RX PHY %s", phy2str(info.le.phy->tx_phy), phy2str(info.le.phy->rx_phy));
