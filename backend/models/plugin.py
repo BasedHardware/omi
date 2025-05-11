@@ -34,8 +34,10 @@ class ExternalIntegration(BaseModel):
     auth_steps: Optional[List[AuthStep]] = []
     # setup_instructions_markdown: str = ''
 
+
 class ProactiveNotification(BaseModel):
     scopes: Set[str]
+
 
 class Plugin(BaseModel):
     id: str

@@ -28,9 +28,8 @@ from utils.apps import get_available_apps, update_personas_async, sync_update_pe
 from utils.llm import obtain_emotional_message, retrieve_metadata_fields_from_transcript, \
     summarize_open_glass, get_transcript_structure, generate_embedding, \
     get_app_result, should_discard_conversation, summarize_experience_text, new_memories_extractor, \
-    trends_extractor, get_email_structure, get_post_structure, get_message_structure, \
-    retrieve_metadata_from_email, retrieve_metadata_from_post, retrieve_metadata_from_message, \
-    retrieve_metadata_from_text, select_best_app_for_conversation, \
+    trends_extractor, get_message_structure, \
+    retrieve_metadata_from_message, retrieve_metadata_from_text, select_best_app_for_conversation, \
     extract_memories_from_text, get_reprocess_transcript_structure
 from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel

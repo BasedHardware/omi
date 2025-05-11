@@ -791,7 +791,7 @@ class AddAppProvider extends ChangeNotifier {
     try {
       apiKeys = await listApiKeysServer(appId);
     } catch (e) {
-      print('Error loading API keys: $e');
+      print('Error loading provider API keys: $e');
     } finally {
       isLoadingApiKeys = false;
       notifyListeners();

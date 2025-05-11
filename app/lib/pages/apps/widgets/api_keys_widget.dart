@@ -62,7 +62,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
         _showNewKeyDialog();
       }
     } catch (e) {
-      AppSnackbar.showSnackbarError('Failed to create API key: ${e.toString()}');
+      AppSnackbar.showSnackbarError('Failed to create provider API key: ${e.toString()}');
     } finally {
       setState(() {
         _isCreatingKey = false;
@@ -161,7 +161,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
                           context: context,
                           builder: (context) => AlertDialog(
                             backgroundColor: Colors.grey.shade900,
-                            title: const Text('API Keys'),
+                            title: const Text('Omi API Keys'),
                             content: const Text(
                               'API Keys are used for authentication when your app communicates with the OMI server. They allow your application to create memories and access other OMI services securely.',
                             ),
@@ -180,7 +180,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
                           ),
                         );
                       },
-                      tooltip: 'About API Keys',
+                      tooltip: 'About Omi API Keys',
                     ),
                   ],
                 ),

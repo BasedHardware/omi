@@ -19,7 +19,7 @@ router = APIRouter()
 def create_memory(request: Request, uid: str, api_key: Annotated[str | None, Header()],
                   create_memory: conversation_models.ExternalIntegrationCreateConversation):
     if api_key != os.getenv('WORKFLOW_API_KEY'):
-        raise HTTPException(status_code=401, detail="Invalid API Key")
+        raise HTTPException(status_code=401, detail="Invalid workflow API Key")
 
     # Time
     started_at = create_memory.started_at if create_memory.started_at is not None else datetime.now(timezone.utc)
