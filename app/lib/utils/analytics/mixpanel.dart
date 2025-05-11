@@ -162,6 +162,8 @@ class MixpanelManager {
 
   void memoriesPageCreateMemoryBtn() => track('Fact Page Create Fact Button Pressed');
 
+  void memoriesPageReviewBtn() => track('Memories Page Review Button Pressed');
+
   void memoriesPageCreatedMemory(MemoryCategory category) =>
       track('Fact Page Created Fact', properties: {'fact_category': category.toString().split('.').last});
 
