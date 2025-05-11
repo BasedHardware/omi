@@ -53,31 +53,51 @@ getItemAddOn2(String title, VoidCallback onTap, {required IconData icon}) {
       MixpanelManager().pageOpened('Settings $title');
       onTap();
     },
-    child: Padding(
-      padding: const EdgeInsets.fromLTRB(0, 0, 0, 0),
       child: Container(
         decoration: BoxDecoration(
           color: const Color.fromARGB(255, 29, 29, 29),
-          borderRadius: BorderRadius.circular(10.0),
+        borderRadius: BorderRadius.circular(10.0),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
+            Expanded(
+              child: Row(
                 children: [
-                  Text(
-                    title,
-                    style: const TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                  Icon(
+                    icon,
+                    color: Colors.white,
+                    size: 22
                   ),
                   const SizedBox(width: 16),
-                  Icon(icon, color: Colors.white, size: 18),
+                  Expanded(
+                    child: Text(
+                    title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                  ),
+                    ),
+                  ),
                 ],
               ),
-              const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+              ),
+            const Icon(
+              Icons.arrow_forward_ios,
+              color: Colors.white,
+              size: 16
+            ),
             ],
-          ),
         ),
       ),
     ),
