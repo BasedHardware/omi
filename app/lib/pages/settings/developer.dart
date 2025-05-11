@@ -401,7 +401,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 controller: provider.customApiUrlController,
                                 style: const TextStyle(color: Colors.white, fontSize: 13),
                                 decoration: InputDecoration(
-                                  hintText: 'https://your-backend.com',
+                                  hintText: 'https://your-backend.com/',
                                   hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 12),
                                   contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                   border: OutlineInputBorder(
