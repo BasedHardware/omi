@@ -592,13 +592,58 @@ class ActionItemsTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
-      child: ListView(
-        shrinkWrap: true,
-        children: [
-          const SizedBox(height: 24),
-          const ActionItemsListWidget(),
-          const SizedBox(height: 150)
-        ],
+      child: Consumer<ConversationDetailProvider>(
+        builder: (context, provider, child) {
+          final hasActionItems = provider.conversation.structured.actionItems
+              .where((item) => !item.deleted)
+              .isNotEmpty;
+
+          return ListView(
+            shrinkWrap: true,
+            children: [
+              const SizedBox(height: 24),
+              if (hasActionItems)
+                const ActionItemsListWidget()
+              else
+                _buildEmptyState(context),
+              const SizedBox(height: 150)
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.check_circle_outline,
+              size: 72,
+              color: Colors.grey,
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'No Action Items',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: Colors.white,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'This memory doesn\'t have any action items yet. They\'ll appear here when your conversations include tasks or to-dos.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.grey.shade400,
+                fontSize: 16,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
