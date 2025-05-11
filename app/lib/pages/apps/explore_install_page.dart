@@ -177,94 +177,21 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
           ),
           const SliverToBoxAdapter(
               child: SizedBox(
-            height: 20,
+            height: 8,
           )),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('All Apps', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      showModalBottomSheet(
-                        context: context,
-                        builder: (context) => const CreateOptionsSheet(),
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Create'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.9),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      minimumSize: const Size(0, 36),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      elevation: 2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SliverToBoxAdapter(
-              child: SizedBox(
-            height: 16,
-          )),
-          !provider.isFilterActive() && !provider.isSearchActive()
-              ? const SliverToBoxAdapter(child: SizedBox.shrink())
-              : Consumer<AppProvider>(
-                  builder: (context, provider, child) {
-                    if (provider.filteredApps.isEmpty) {
-                      return SliverToBoxAdapter(
-                        child: Padding(
-                          padding: EdgeInsets.only(top: MediaQuery.sizeOf(context).height * 0.28),
-                          child: const Text(
-                            'No apps found',
-                            style: TextStyle(fontSize: 18),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      );
-                    }
-                    return SliverPadding(
-                      padding: const EdgeInsets.only(bottom: 64),
-                      sliver: SliverList.separated(
-                        itemCount: provider.filteredApps.length,
-                        itemBuilder: (context, index) {
-                          final originalIndex =
-                              provider.apps.indexWhere((app) => app.id == provider.filteredApps[index].id);
-                          return AppListItem(
-                            app: provider.filteredApps[index],
-                            index: originalIndex,
-                          );
-                        },
-                        separatorBuilder: (context, index) {
-                          return const SizedBox(height: 8);
-                        },
-                      ),
-                    );
-                  },
-                ),
           !provider.isFilterActive() && !provider.isSearchActive() && provider.popularApps.isNotEmpty
               ? SliverToBoxAdapter(
                   child: Container(
                     margin: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade900.withOpacity(0.5),
+                      color: Colors.grey.shade900.withOpacity(0.3),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
@@ -284,11 +211,11 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                           ),
                         ),
                         SizedBox(
-                          height: 140,
+                          height: 130,
                           child: ListView.builder(
                             scrollDirection: Axis.horizontal,
                             itemCount: provider.popularApps.length,
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                             itemBuilder: (context, index) {
                               final app = provider.popularApps[index];
                               return Container(
@@ -312,10 +239,17 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      CircleAvatar(
-                                        radius: 30,
-                                        backgroundImage: NetworkImage(app.getImageUrl()),
-                                        backgroundColor: Colors.grey.shade700,
+                                      Container(
+                                        width: 60,
+                                        height: 60,
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(8),
+                                          image: DecorationImage(
+                                            image: NetworkImage(app.getImageUrl()),
+                                            fit: BoxFit.cover,
+                                          ),
+                                          color: Colors.grey.shade700,
+                                        ),
                                       ),
                                       const SizedBox(height: 8),
                                       Padding(
@@ -346,24 +280,135 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                   ),
                 )
               : const SliverToBoxAdapter(child: SizedBox.shrink()),
+          const SliverToBoxAdapter(child: SizedBox(height: 4)),
+          SliverToBoxAdapter(
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 0.0),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade900.withOpacity(0.3),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const Text('All Apps', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  TextButton.icon(
+                    onPressed: () {
+                      showModalBottomSheet(
+                        context: context,
+                        builder: (context) => const CreateOptionsSheet(),
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.add, size: 16, color: Colors.white),
+                    label: const Text('Create your own', style: TextStyle(color: Colors.white)),
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.deepPurple,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
           !provider.isFilterActive() && !provider.isSearchActive()
               ? Selector<AppProvider, List<App>>(
                   selector: (context, provider) => provider.apps,
                   builder: (context, apps, child) {
-                    return SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          return AppListItem(
-                            app: apps[index],
-                            index: index,
-                          );
-                        },
-                        childCount: apps.length,
+                    return SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                      sliver: SliverToBoxAdapter(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade900.withOpacity(0.3),
+                            borderRadius: const BorderRadius.only(
+                              bottomLeft: Radius.circular(16),
+                              bottomRight: Radius.circular(16),
+                            ),
+                          ),
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: apps.length,
+                            padding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
+                            itemBuilder: (context, index) {
+                              final app = apps[index];
+                              return Container(
+                                margin: EdgeInsets.fromLTRB(8, index == 0 ? 0 : 4, 8, index == apps.length - 1 ? 0 : 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade800.withOpacity(0.5),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: AppListItem(
+                                  app: app,
+                                  index: index,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
                       ),
                     );
                   },
                 )
-              : const SliverToBoxAdapter(child: SizedBox.shrink()),
+              : Consumer<AppProvider>(
+                  builder: (context, provider, child) {
+                    if (provider.filteredApps.isEmpty) {
+                      return SliverToBoxAdapter(
+                        child: Padding(
+                          padding: EdgeInsets.only(top: MediaQuery.sizeOf(context).height * 0.28),
+                          child: const Text(
+                            'No apps found',
+                            style: TextStyle(fontSize: 18),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      );
+                    }
+                    return SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                      sliver: SliverToBoxAdapter(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade900.withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: provider.filteredApps.length,
+                            padding: const EdgeInsets.fromLTRB(0, 8, 0, 12),
+                            itemBuilder: (context, index) {
+                              final app = provider.filteredApps[index];
+                              final originalIndex = provider.apps.indexWhere((a) => a.id == app.id);
+                              return Container(
+                                margin: EdgeInsets.fromLTRB(8, index == 0 ? 0 : 4, 8, index == provider.filteredApps.length - 1 ? 0 : 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade800.withOpacity(0.5),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: AppListItem(
+                                  app: app,
+                                  index: originalIndex,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
         ],
       );
     });
