@@ -218,7 +218,6 @@ class PureSocket implements IPureSocket {
   @override
   void send(dynamic message) {
     try {
-      Logger.debug('🔌 Socket sending message to: $url');
       channel.sink.add(message);
     } catch (e, trace) {
       debugPrint('Failed to send message: $e');
