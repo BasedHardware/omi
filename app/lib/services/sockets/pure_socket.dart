@@ -146,6 +146,9 @@ class PureSocket implements IPureSocket {
       _status = PureSocketStatus.notConnected;
       return false;
     }
+
+    _status = PureSocketStatus.connected;
+    return true;
   }
 
   @override
