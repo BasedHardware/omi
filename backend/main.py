@@ -1,5 +1,6 @@
 import json
 import os
+import logging
 
 import firebase_admin
 from fastapi import FastAPI
@@ -10,6 +11,18 @@ from routers import workflow, chat, firmware, plugins, transcribe, notifications
     payment, integration, conversations, memories, mcp
 
 from utils.other.timeout import TimeoutMiddleware
+from utils.logging_config import setup_logging
+from utils.stt.vad import initialize_vad
+
+# Ensure logs directory exists
+logs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+os.makedirs(logs_dir, exist_ok=True)
+
+# Set up logging
+logger = setup_logging()
+
+# Initialize VAD after logging is configured
+initialize_vad()
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
