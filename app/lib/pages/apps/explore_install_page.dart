@@ -4,6 +4,7 @@ import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/apps/widgets/app_section_card.dart';
 import 'package:omi/pages/apps/widgets/filter_sheet.dart';
 import 'package:omi/pages/apps/list_item.dart';
+import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/other/debouncer.dart';
@@ -38,6 +39,13 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
     searchController = TextEditingController();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AddAppProvider>().init();
+      final appProvider = context.read<AppProvider>();
+      appProvider.getPopularApps().then((_) {
+        print("DEBUG: Popular apps count: ${appProvider.popularApps.length}");
+        if (appProvider.popularApps.isNotEmpty) {
+          print("DEBUG: First popular app: ${appProvider.popularApps.first.name}");
+        }
+      });
     });
     super.initState();
   }
@@ -244,35 +252,97 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                     );
                   },
                 ),
-          !provider.isFilterActive() && !provider.isSearchActive() && context.read<AppProvider>().popularApps.isNotEmpty
+          !provider.isFilterActive() && !provider.isSearchActive() && provider.popularApps.isNotEmpty
               ? SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade900.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Popular Apps', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                        TextButton.icon(
-                          onPressed: () {
-                            // Could add a "see all popular" action here
-                          },
-                          icon: const Icon(Icons.arrow_forward, size: 16),
-                          label: const Text('See all'),
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            minimumSize: const Size(0, 36),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Popular Apps', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                              TextButton.icon(
+                                onPressed: () {
+                                  // Could add a "see all popular" action here
+                                },
+                                icon: const Icon(Icons.arrow_forward, size: 16),
+                                label: const Text('See all'),
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  minimumSize: const Size(0, 36),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        SizedBox(
+                          height: 140,
+                          child: ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: provider.popularApps.length,
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            itemBuilder: (context, index) {
+                              final app = provider.popularApps[index];
+                              return Container(
+                                width: 140,
+                                margin: const EdgeInsets.only(right: 12),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade800,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: InkWell(
+                                  onTap: () {
+                                    // Navigate to app details
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => AppDetailPage(app: app),
+                                      ),
+                                    );
+                                  },
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 30,
+                                        backgroundImage: NetworkImage(app.getImageUrl()),
+                                        backgroundColor: Colors.grey.shade700,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                        child: Text(
+                                          app.name,
+                                          style: const TextStyle(fontWeight: FontWeight.bold),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                      Text(
+                                        app.getCategoryName(),
+                                        style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ),
                       ],
                     ),
-                  ),
-                )
-              : const SliverToBoxAdapter(child: SizedBox.shrink()),
-          !provider.isFilterActive() && !provider.isSearchActive() && context.read<AppProvider>().popularApps.isNotEmpty
-              ? SliverToBoxAdapter(
-                  child: AppSectionCard(
-                    title: '',  // Removed title as we have it in the row above
-                    apps: context.read<AppProvider>().popularApps,
                   ),
                 )
               : const SliverToBoxAdapter(child: SizedBox.shrink()),
