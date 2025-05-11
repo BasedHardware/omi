@@ -21,15 +21,15 @@ abstract class IPureSocketListener {
 
   void onInternetConnectionFailed() {}
 
-  void onMaxRetriesReach() {}
+  void onMaxRetriesReached() {}
 }
 
 abstract class IPureSocket {
   Future<bool> connect();
-  Future disconnect();
+  Future<void> disconnect();
   void send(dynamic message);
 
-  void onInternetSatusChanged(InternetStatus status);
+  void onInternetStatusChanged(InternetStatus status);
 
   void onMessage(dynamic message);
   void onConnected();
@@ -50,24 +50,25 @@ class PureCore {
   static final _instance = PureCore.createInstance();
 
   PureCore.createInstance() {
+    const timeout = Duration(seconds: 12);
     internetConnection = InternetConnection.createInstance(
       useDefaultOptions: false,
       customCheckOptions: [
         InternetCheckOption(
           uri: Uri.parse('https://one.one.one.one'),
-          timeout: const Duration(seconds: 12),
+          timeout: timeout,
         ),
         InternetCheckOption(
           uri: Uri.parse('https://icanhazip.com/'),
-          timeout: const Duration(seconds: 12),
+          timeout: timeout,
         ),
         InternetCheckOption(
           uri: Uri.parse('https://jsonplaceholder.typicode.com/todos/1'),
-          timeout: const Duration(seconds: 12),
+          timeout: timeout,
         ),
         InternetCheckOption(
           uri: Uri.parse('https://reqres.in/api/users/1'),
-          timeout: const Duration(seconds: 12),
+          timeout: timeout,
         ),
       ],
     );
@@ -94,13 +95,11 @@ class PureSocket implements IPureSocket {
 
   int _retries = 0;
 
-  String url;
+  final String url;
 
   PureSocket(this.url) {
     Logger.debug('🔌 Socket initializing for URL: $url');
-    _internetStatusListener = PureCore().internetConnection.onStatusChange.listen((InternetStatus status) {
-      onInternetSatusChanged(status);
-    });
+    _internetStatusListener = PureCore().internetConnection.onStatusChange.listen(onInternetStatusChanged);
   }
 
   void setListener(IPureSocketListener listener) {
@@ -109,7 +108,7 @@ class PureSocket implements IPureSocket {
 
   @override
   Future<bool> connect() async {
-    return await _connect();
+    return _connect();
   }
 
   Future<bool> _connect() async {
@@ -117,7 +116,7 @@ class PureSocket implements IPureSocket {
       return false;
     }
 
-    debugPrint("request wss ${url}");
+    debugPrint('request wss $url');
     _channel = IOWebSocketChannel.connect(
       url,
       headers: {
@@ -131,28 +130,19 @@ class PureSocket implements IPureSocket {
     }
 
     _status = PureSocketStatus.connecting;
-    dynamic err;
     try {
       await channel.ready;
-    } on TimeoutException catch (e) {
-      err = e;
-    } on SocketException catch (e) {
-      err = e;
-    } on WebSocketChannelException catch (e) {
-      err = e;
-    }
-    if (err != null) {
-      print("Error: $err");
+      _status = PureSocketStatus.connected;
+      return true;
+    } catch (e) {
+      debugPrint('Error: $e');
       _status = PureSocketStatus.notConnected;
       return false;
     }
-
-    _status = PureSocketStatus.connected;
-    return true;
   }
 
   @override
-  Future disconnect() async {
+  Future<void> disconnect() async {
     Logger.debug('🔌 Socket disconnecting from: $url');
     try {
       await _channel?.sink.close(socket_channel_status.normalClosure);
@@ -161,15 +151,14 @@ class PureSocket implements IPureSocket {
       debugPrint('Error closing socket: $e');
       CrashReporting.reportHandledCrash(e, trace);
     }
-    return;
   }
 
-  Future _cleanUp() async {
+  Future<void> _cleanUp() async {
     _internetLostDelayTimer?.cancel();
     _internetStatusListener?.cancel();
   }
 
-  Future stop() async {
+  Future<void> stop() async {
     await disconnect();
     await _cleanUp();
   }
@@ -177,14 +166,14 @@ class PureSocket implements IPureSocket {
   @override
   void onClosed() {
     _status = PureSocketStatus.disconnected;
-    debugPrint("Socket closed");
+    debugPrint('Socket closed');
     _listener?.onClosed();
   }
 
   @override
   void onError(Object err, StackTrace trace) {
     _status = PureSocketStatus.disconnected;
-    print("Error: ${err}");
+    debugPrint('Error: $err');
     debugPrintStack(stackTrace: trace);
 
     _listener?.onError(err, trace);
@@ -195,8 +184,8 @@ class PureSocket implements IPureSocket {
   @override
   void onMessage(dynamic message) {
     // Special handling for ping messages
-    if (message == "ping") {
-      Logger.debug("🔌 Socket received ping message, responding with pong");
+    if (message == 'ping') {
+      Logger.debug('🔌 Socket received ping message, responding with pong');
       try {
         // Send pong response (RFC 6455 compliant frame)
         channel.sink.add([0x8A, 0x00]);
@@ -207,7 +196,7 @@ class PureSocket implements IPureSocket {
       }
     }
 
-    debugPrint("[Socket] Message $message");
+    debugPrint('[Socket] Message $message');
     _listener?.onMessage(message);
   }
 
@@ -227,38 +216,38 @@ class PureSocket implements IPureSocket {
   }
 
   void _reconnect() async {
-    debugPrint("[Socket] reconnect...${_retries + 1}...");
+    debugPrint('[Socket] reconnect...${_retries + 1}...');
     const int initialBackoffTimeMs = 1000; // 1 second
     const double multiplier = 1.5;
     const int maxRetries = 8;
 
     if (_status == PureSocketStatus.connecting || _status == PureSocketStatus.connected) {
-      debugPrint("[Socket] Can not reconnect, because socket is $_status");
+      debugPrint('[Socket] Cannot reconnect, because socket is $_status');
       return;
     }
 
     await _cleanUp();
 
-    var ok = await _connect();
+    final ok = await _connect();
     if (ok) {
       return;
     }
 
     // retry
-    int waitInMilliseconds = pow(multiplier, _retries).toInt() * initialBackoffTimeMs;
+    final waitInMilliseconds = pow(multiplier, _retries).toInt() * initialBackoffTimeMs;
     await Future.delayed(Duration(milliseconds: waitInMilliseconds));
     _retries++;
     if (_retries > maxRetries) {
-      debugPrint("[Socket] Reach max retries $maxRetries");
-      _listener?.onMaxRetriesReach();
+      debugPrint('[Socket] Reached max retries $maxRetries');
+      _listener?.onMaxRetriesReached();
       return;
     }
     _reconnect();
   }
 
   @override
-  void onInternetSatusChanged(InternetStatus status) {
-    debugPrint("[Socket] Internet connection changed $status socket $_status");
+  void onInternetStatusChanged(InternetStatus status) {
+    debugPrint('[Socket] Internet connection changed $status socket $_status');
     _internetStatus = status;
     switch (status) {
       case InternetStatus.connected:
@@ -268,14 +257,13 @@ class PureSocket implements IPureSocket {
         _reconnect();
         break;
       case InternetStatus.disconnected:
-        var that = this;
         _internetLostDelayTimer?.cancel();
         _internetLostDelayTimer = Timer(const Duration(seconds: 60), () async {
           if (_internetStatus != InternetStatus.disconnected) {
             return;
           }
 
-          await that.disconnect();
+          await disconnect();
           _listener?.onInternetConnectionFailed();
         });
 

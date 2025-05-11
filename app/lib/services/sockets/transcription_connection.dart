@@ -167,8 +167,8 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   }
 
   @override
-  void onMaxRetriesReach() {
-    debugPrint("onMaxRetriesReach");
+  void onMaxRetriesReached() {
+    debugPrint("onMaxRetriesReached");
 
     // Send notification
     NotificationService.instance.clearNotification(2);
