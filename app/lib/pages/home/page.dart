@@ -392,7 +392,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 margin: const EdgeInsets.fromLTRB(20, 16, 20, 42),
                                 decoration: const BoxDecoration(
                                   color: Colors.black,
-                                  borderRadius: BorderRadius.all(Radius.circular(16)),
+                                  borderRadius: BorderRadius.all(Radius.circular(18)),
                                   border: GradientBoxBorder(
                                     gradient: LinearGradient(colors: [
                                       Color.fromARGB(127, 208, 208, 208),
@@ -405,7 +405,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   shape: BoxShape.rectangle,
                                 ),
                                 child: TabBar(
-                                  labelPadding: const EdgeInsets.only(top: 4, bottom: 4),
+                                  labelPadding: const EdgeInsets.symmetric(vertical: 8),
                                   indicatorPadding: EdgeInsets.zero,
                                   onTap: (index) {
                                     MixpanelManager()
@@ -421,30 +421,66 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   indicatorColor: Colors.transparent,
                                   tabs: [
                                     Tab(
-                                      child: Text(
-                                        'Home',
-                                        style: TextStyle(
-                                          color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
-                                          fontSize: MediaQuery.sizeOf(context).width < 410 ? 13 : 15,
-                                        ),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.home,
+                                            color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
+                                            size: 22,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'Home',
+                                            style: TextStyle(
+                                              color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
+                                              fontSize: MediaQuery.sizeOf(context).width < 410 ? 14 : 16,
+                                              fontWeight: home.selectedIndex == 0 ? FontWeight.w600 : FontWeight.normal,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                     Tab(
-                                      child: Text(
-                                        'Chat',
-                                        style: TextStyle(
-                                          color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
-                                          fontSize: MediaQuery.sizeOf(context).width < 410 ? 13 : 15,
-                                        ),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.chat_bubble_outline,
+                                            color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
+                                            size: 22,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'Chat',
+                                            style: TextStyle(
+                                              color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
+                                              fontSize: MediaQuery.sizeOf(context).width < 410 ? 14 : 16,
+                                              fontWeight: home.selectedIndex == 1 ? FontWeight.w600 : FontWeight.normal,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                     Tab(
-                                      child: Text(
-                                        'Explore',
-                                        style: TextStyle(
-                                          color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
-                                          fontSize: MediaQuery.sizeOf(context).width < 410 ? 13 : 15,
-                                        ),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.explore_outlined,
+                                            color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
+                                            size: 22,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'Explore',
+                                            style: TextStyle(
+                                              color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
+                                              fontSize: MediaQuery.sizeOf(context).width < 410 ? 14 : 16,
+                                              fontWeight: home.selectedIndex == 2 ? FontWeight.w600 : FontWeight.normal,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ],
@@ -484,7 +520,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     },
                     child: Container(
                       padding: const EdgeInsets.only(left: 12),
-                      child: const Icon(Icons.download, color: Colors.white, size: 24),
+                      child: const Icon(Icons.download, color: Colors.white, size: 28),
                     ),
                   );
                 } else {
@@ -502,16 +538,30 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   controller: _controller!,
                 );
               } else if (provider.selectedIndex == 2) {
-                return Padding(
-                  padding: EdgeInsets.only(right: MediaQuery.sizeOf(context).width * 0.16),
-                  child: const Text('Explore', style: TextStyle(color: Colors.white, fontSize: 18)),
+                return Center(
+                  child: Padding(
+                    padding: EdgeInsets.only(right: MediaQuery.sizeOf(context).width * 0.10),
+                    child: const Text(
+                      'Explore',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w600,
+                      )
+                    ),
+                  ),
                 );
               } else {
                 return Expanded(
-                  child: Row(
-                    children: [
-                      const Spacer(),
-                    ],
+                  child: Center(
+                    child: const Text(
+                      '',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 );
               }
@@ -519,27 +569,37 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           ),
           Row(
             children: [
-              IconButton(
-                  padding: const EdgeInsets.all(8.0),
-                  icon: SvgPicture.asset(
-                    Assets.images.icPersonaProfile.path,
-                    width: 28,
-                    height: 28,
+              Padding(
+                padding: const EdgeInsets.only(right: 8.0),
+                child: Container(
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.transparent,
                   ),
-                  onPressed: () {
-                    MixpanelManager().pageOpened('Persona Profile');
-
-                    // Set routing in provider
-                    var personaProvider = Provider.of<PersonaProvider>(context, listen: false);
-                    personaProvider.setRouting(PersonaProfileRouting.home);
-
-                    // Navigate
-                    var homeProvider = Provider.of<HomeProvider>(context, listen: false);
-                    homeProvider.setIndex(3);
-                    if (homeProvider.onSelectedIndexChanged != null) {
-                      homeProvider.onSelectedIndexChanged!(3);
-                    }
-                  }),
+                  child: IconButton(
+                    padding: const EdgeInsets.all(8.0),
+                    icon: SvgPicture.asset(
+                      Assets.images.icSettingPersona.path,
+                      width: 36,
+                      height: 36,
+                    ),
+                    onPressed: () {
+                      MixpanelManager().pageOpened('Settings');
+                      String language = SharedPreferencesUtil().userPrimaryLanguage;
+                      bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
+                      String transcriptModel = SharedPreferencesUtil().transcriptionModel;
+                      routeToPage(context, const SettingsPage());
+                      if (language != SharedPreferencesUtil().userPrimaryLanguage ||
+                          hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
+                          transcriptModel != SharedPreferencesUtil().transcriptionModel) {
+                        if (context.mounted) {
+                          context.read<CaptureProvider>().onRecordProfileSettingChanged();
+                        }
+                      }
+                    },
+                  ),
+                ),
+              ),
             ],
           ),
         ],
