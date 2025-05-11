@@ -438,7 +438,7 @@ export class OmiConnection {
     if (Platform.OS === 'android') {
       try {
         // Pass the numeric value of the enum to the native function
-        await this.device.requestConnectionPriority(priority as number);
+        await this.device.requestConnectionPriority(priority);
         console.log(`Requested connection priority: ${priority}`);
       } catch (error) {
         console.error('Failed to request connection priority:', error);
