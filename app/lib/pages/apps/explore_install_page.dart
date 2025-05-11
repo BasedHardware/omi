@@ -175,14 +175,11 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
               ),
             ),
           ),
-          const SliverToBoxAdapter(
-              child: SizedBox(
-            height: 8,
-          )),
+          const SliverToBoxAdapter(child: SizedBox(height: 8)),
           !provider.isFilterActive() && !provider.isSearchActive() && provider.popularApps.isNotEmpty
               ? SliverToBoxAdapter(
                   child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                    margin: const EdgeInsets.symmetric(horizontal: 12.0),
                     decoration: BoxDecoration(
                       color: Colors.grey.shade900.withOpacity(0.3),
                       borderRadius: BorderRadius.circular(16),
@@ -280,13 +277,13 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                   ),
                 )
               : const SliverToBoxAdapter(child: SizedBox.shrink()),
-          const SliverToBoxAdapter(child: SizedBox(height: 4)),
+          const SliverToBoxAdapter(child: SizedBox(height: 12)),
           SliverToBoxAdapter(
             child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 0.0),
+              margin: const EdgeInsets.symmetric(horizontal: 12.0),
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               decoration: BoxDecoration(
-                color: Colors.grey.shade900.withOpacity(0.3),
+                color: Colors.grey.shade900.withOpacity(0.25),
                 borderRadius: BorderRadius.only(
                   topLeft: Radius.circular(16),
                   topRight: Radius.circular(16),
@@ -330,7 +327,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                       sliver: SliverToBoxAdapter(
                         child: Container(
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade900.withOpacity(0.3),
+                            color: Colors.grey.shade900.withOpacity(0.25),
                             borderRadius: const BorderRadius.only(
                               bottomLeft: Radius.circular(16),
                               bottomRight: Radius.circular(16),
@@ -340,11 +337,11 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
                             itemCount: apps.length,
-                            padding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
+                            padding: const EdgeInsets.all(8),
                             itemBuilder: (context, index) {
                               final app = apps[index];
                               return Container(
-                                margin: EdgeInsets.fromLTRB(8, index == 0 ? 0 : 4, 8, index == apps.length - 1 ? 0 : 4),
+                                margin: EdgeInsets.only(bottom: index == apps.length - 1 ? 0 : 8),
                                 decoration: BoxDecoration(
                                   color: Colors.grey.shade800.withOpacity(0.5),
                                   borderRadius: BorderRadius.circular(12),
@@ -366,7 +363,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                     if (provider.filteredApps.isEmpty) {
                       return SliverToBoxAdapter(
                         child: Padding(
-                          padding: EdgeInsets.only(top: MediaQuery.sizeOf(context).height * 0.28),
+                          padding: EdgeInsets.only(top: MediaQuery.sizeOf(context).height * 0.15),
                           child: const Text(
                             'No apps found',
                             style: TextStyle(fontSize: 18),
@@ -380,19 +377,19 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                       sliver: SliverToBoxAdapter(
                         child: Container(
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade900.withOpacity(0.3),
+                            color: Colors.grey.shade900.withOpacity(0.25),
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: ListView.builder(
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
                             itemCount: provider.filteredApps.length,
-                            padding: const EdgeInsets.fromLTRB(0, 8, 0, 12),
+                            padding: const EdgeInsets.all(8),
                             itemBuilder: (context, index) {
                               final app = provider.filteredApps[index];
                               final originalIndex = provider.apps.indexWhere((a) => a.id == app.id);
                               return Container(
-                                margin: EdgeInsets.fromLTRB(8, index == 0 ? 0 : 4, 8, index == provider.filteredApps.length - 1 ? 0 : 4),
+                                margin: EdgeInsets.only(bottom: index == provider.filteredApps.length - 1 ? 0 : 8),
                                 decoration: BoxDecoration(
                                   color: Colors.grey.shade800.withOpacity(0.5),
                                   borderRadius: BorderRadius.circular(12),
@@ -409,6 +406,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                     );
                   },
                 ),
+          const SliverToBoxAdapter(child: SizedBox(height: 16)),
         ],
       );
     });
