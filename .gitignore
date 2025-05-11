@@ -25,8 +25,10 @@ build/
 dist/
 .build/
 .swiftpm/
+# VS Code - exclude everything except specific files
 .vscode/*
 !.vscode/launch.json
+!.vscode/extensions.json
 
 # Android specific
 **/android/**/build/
@@ -109,11 +111,6 @@ src/recordings
 **/classic_triangle/misc/
 **/step-versions/
 
-# vscode configuration
-/.vscode/
-!app/.vscode/launch.json
-!.vscode/extensions.json
-
 # test output
 test/recordings
 
@@ -163,9 +160,7 @@ app/lib/env/prod_env.g.dart
 /backend/scripts/stt/pretrained_models
 /backend/scripts/stt/results
 /backend/scripts/stt/diarization.json
-
 /backend/syncing/*
-
 /docs/.docusaurus
 
 
