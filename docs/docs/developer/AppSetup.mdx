@@ -84,7 +84,8 @@ flutter upgrade
 From within `app` directory, install flutter packages:
 
 ```
-cd app flutter pub get
+cd app 
+flutter pub get
 ```
 
 ### 3. Install iOS Pods[​](#3-install-ios-pods)
@@ -92,7 +93,9 @@ cd app flutter pub get
 Navigate to the iOS directory and install the CocoaPods dependencies:
 
 ```
-cd iospod installpod repo update
+cd ios
+pod install 
+pod repo update
 ```
 
 ### 4. Environment Configuration[​](#4-environment-configuration)
@@ -100,7 +103,8 @@ cd iospod installpod repo update
 Create `.env` using template `.env.template`
 
 ```
-cd ..cat .env.template > .dev.env
+cd ..
+cat .env.template > .dev.env
 ```
 
 ### 5. API Keys[​](#5-api-keys)
@@ -108,6 +112,8 @@ cd ..cat .env.template > .dev.env
 Add your API keys to the `.env` file. (Sentry is not needed)
 
 - `API_BASE_URL` is your backend url. You can use our dev backend URL https://backend-dt5lrfkkoa-uc.a.run.app/ or Follow this guide to [install backend](https://docs.omi.me/docs/developer/backend/Backend_Setup)
+- Be sure to include the trailing '/' or you'll get malformed URL's
+- If you want to update this later on, you will need to delete the builds folder, and recreate the runner using dart.
 
 ### 6. Run Build Runner[​](#6-run-build-runner)
 
@@ -120,10 +126,11 @@ dart run build_runner build
 ### 7. Setup Firebase[​](#7-setup-firebase)
 
 - Follow official [Firebase Docs](https://firebase.google.com/docs/flutter/setup) till Step 1
+- If you want to use Apple login, first go and [create an identifier on the apple developer website](https://developer.apple.com/account/resources/identifiers/list)
 - Run the following command to register the prod flavor of the app. The command will prompt you to select `configuration type`; under it, select `Target` and then `Runner`
-
+  - substitute your apple identifier with the IOS_BUNDLE_ID in the command below 
   ```
-  flutterfire config --out=lib/firebase_options_prod.dart --ios-bundle-id=com.friend-app-with-wearable.ios12 --android-app-id=com.friend.ios --android-out=android/app/src/prod/  --ios-out=ios/Config/Prod/
+  flutterfire config --out=lib/firebase_options_prod.dart --ios-bundle-id=IOS_BUNDLE_ID --android-app-id=com.friend.ios --android-out=android/app/src/prod/  --ios-out=ios/Config/Prod/
   ```
 - Similarly for dev environment
 
