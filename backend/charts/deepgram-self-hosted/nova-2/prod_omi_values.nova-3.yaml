@@ -41,7 +41,7 @@ scaling:
     api:
       metrics:
         # -- Scale the API deployment to this Engine-to-Api pod ratio
-        engineToApiRatio: 2
+        engineToApiRatio: 8
 
     engine:
       # -- Minimum number of Engine replicas.
