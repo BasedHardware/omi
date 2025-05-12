@@ -92,6 +92,7 @@ class CaptureProvider extends ChangeNotifier
 
   bool get transcriptServiceReady => _transcriptServiceReady && _internetStatus == InternetStatus.connected;
 
+  // having a connected device or using the phone's mic for recording
   bool get recordingDeviceServiceReady => _recordingDevice != null || recordingState == RecordingState.record;
 
   bool get havingRecordingDevice => _recordingDevice != null;
@@ -458,19 +459,23 @@ class CaptureProvider extends ChangeNotifier
   }
 
   void _startKeepAliveServices() {
-    if (_recordingDevice != null && _socket?.state != SocketServiceState.connected) {
-      _keepAliveTimer?.cancel();
-      _keepAliveTimer = Timer.periodic(const Duration(seconds: 15), (t) async {
-        debugPrint("[Provider] keep alive...");
-
-        if (_recordingDevice == null || _socket?.state == SocketServiceState.connected) {
-          t.cancel();
-          return;
-        }
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = Timer.periodic(const Duration(seconds: 15), (t) async {
+      debugPrint("[Provider] keep alive...");
+      if (!recordingDeviceServiceReady || _socket?.state == SocketServiceState.connected) {
+        t.cancel();
+        return;
+      }
+      if (_recordingDevice != null) {
         BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
         await _initiateWebsocket(audioCodec: codec);
-      });
-    }
+        return;
+      }
+      if (recordingState == RecordingState.record) {
+        await _initiateWebsocket(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
+        return;
+      }
+    });
   }
 
   @override
