@@ -458,14 +458,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                               title: 'Data Access Notice',
                                               description:
                                                   'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app',
-                                              checkboxText: "Don't show it again",
-                                              checkboxValue: !showInstallAppConfirmation,
-                                              onCheckboxChanged: (value) {
-                                                setState(() {
-                                                  showInstallAppConfirmation = !value;
-                                                  SharedPreferencesUtil().showInstallAppConfirmation = !value;
-                                                });
-                                              },
+                                              
                                               onConfirm: () {
                                                 _toggleApp(app.id, true);
                                                 Navigator.pop(context);
