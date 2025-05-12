@@ -55,7 +55,10 @@ class AppProvider extends BaseProvider {
   Future<App?> getAppDetails(String id) async {
     var app = await getAppDetailsServer(id);
     if (app != null) {
-      var oldApp = apps.where((element) => element.id == id).first;
+      var oldApp = apps.where((element) => element.id == id).firstOrNull;
+      if (oldApp == null){
+        return null;
+      }
       var idx = apps.indexOf(oldApp);
       apps[idx] = App.fromJson(app);
       notifyListeners();
