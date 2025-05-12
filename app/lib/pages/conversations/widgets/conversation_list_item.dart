@@ -10,6 +10,7 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
@@ -229,16 +230,47 @@ class _ConversationListItemState extends State<ConversationListItem> {
                     alignment: Alignment.centerRight,
                     child: ConversationNewStatusIndicator(text: "New 🚀"),
                   )
-                : Text(
-                    dateTimeFormat('MMM d, h:mm a', widget.conversation.startedAt ?? widget.conversation.createdAt),
-                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                    maxLines: 1,
-                    textAlign: TextAlign.end,
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(
+                        dateTimeFormat('MMM d, h:mm a', widget.conversation.startedAt ?? widget.conversation.createdAt),
+                        style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                        maxLines: 1,
+                      ),
+                      if (widget.conversation.transcriptSegments.isNotEmpty && _getConversationDuration().isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8.0),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade800,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              _getConversationDuration(),
+                              style: TextStyle(color: Colors.grey.shade300, fontSize: 11),
+                              maxLines: 1,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
           )
         ],
       ),
     );
+  }
+
+  String _getConversationDuration() {
+    if (widget.conversation.transcriptSegments.isEmpty) return '';
+
+    // Get the total duration in seconds
+    int durationSeconds = widget.conversation.getDurationInSeconds();
+    if (durationSeconds <= 0) return '';
+
+    return secondsToCompactDuration(durationSeconds);
   }
 }
 

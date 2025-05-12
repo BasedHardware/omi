@@ -21,6 +21,7 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
@@ -40,6 +41,15 @@ class GetSummaryWidgets extends StatelessWidget {
 
   String setTimeSDCard(DateTime? startedAt, DateTime createdAt) {
     return startedAt == null ? dateTimeFormat('h:mm a', createdAt) : dateTimeFormat('h:mm a', startedAt);
+  }
+
+  String _getDuration(ServerConversation conversation) {
+    if (conversation.transcriptSegments.isEmpty) return '';
+
+    int durationSeconds = conversation.getDurationInSeconds();
+    if (durationSeconds <= 0) return '';
+
+    return secondsToHumanReadable(durationSeconds);
   }
 
   @override
@@ -72,6 +82,20 @@ class GetSummaryWidgets extends StatelessWidget {
                   : '${dateTimeFormat('MMM d,  yyyy', conversation.createdAt)} ${conversation.startedAt == null ? 'at' : 'from'} ${setTime(conversation.startedAt, conversation.createdAt, conversation.finishedAt)}',
               style: const TextStyle(color: Colors.grey, fontSize: 16),
             ),
+            if (conversation.transcriptSegments.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4.0),
+                child: Row(
+                  children: [
+                    const Icon(Icons.access_time, color: Colors.grey, size: 14),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Duration: ${_getDuration(conversation)}',
+                      style: const TextStyle(color: Colors.grey, fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 16),
             conversation.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
           ],
@@ -878,7 +902,7 @@ class _GetShareOptionsState extends State<GetShareOptions> {
                   changeLoadingShareTranscript(true);
                   String content = '''
               ${widget.conversation.structured.title}
-              
+
               ${widget.conversation.getTranscript(generate: true)}
               '''
                       .replaceAll('  ', '')
