@@ -9,6 +9,7 @@ import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import 'widgets/create_options_sheet.dart';
 
@@ -40,6 +41,14 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AddAppProvider>().init();
       final appProvider = context.read<AppProvider>();
+
+      // Load both all apps and popular apps
+      appProvider.getApps().then((_) {
+        print("DEBUG: All apps count: ${appProvider.apps.length}");
+      }).catchError((error) {
+        print("ERROR: Failed to load all apps: $error");
+      });
+
       appProvider.getPopularApps().then((_) {
         print("DEBUG: Popular apps count: ${appProvider.popularApps.length}");
         if (appProvider.popularApps.isNotEmpty) {
@@ -64,9 +73,17 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
   Widget build(BuildContext context) {
     super.build(context);
     return Consumer<AppProvider>(builder: (context, provider, child) {
-      // Debug print for error diagnosis
+      // Enhanced debug print for error diagnosis
       debugPrint("ExploreInstallPage build - Apps count: ${provider.apps.length}, Popular apps count: ${provider.popularApps.length}");
       debugPrint("ExploreInstallPage build - Filter active: ${provider.isFilterActive()}, Search active: ${provider.isSearchActive()}");
+
+      // Debug: log app IDs for both lists to help diagnose consistency issues
+      if (provider.apps.isNotEmpty) {
+        debugPrint("First 3 regular app IDs: ${provider.apps.take(3).map((a) => a.id).join(', ')}");
+      }
+      if (provider.popularApps.isNotEmpty) {
+        debugPrint("First 3 popular app IDs: ${provider.popularApps.take(3).map((a) => a.id).join(', ')}");
+      }
 
       // Clear any previous error messages
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -194,6 +211,8 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
             ),
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 8)),
+
+          // Popular Apps section - moved back to top
           !provider.isFilterActive() && !provider.isSearchActive() && provider.popularApps.isNotEmpty
               ? SliverToBoxAdapter(
                   child: Container(
@@ -264,11 +283,28 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                                         height: 56,
                                         decoration: BoxDecoration(
                                           borderRadius: BorderRadius.circular(8),
-                                          image: DecorationImage(
-                                            image: NetworkImage(app.getImageUrl()),
-                                            fit: BoxFit.cover,
-                                          ),
                                           color: Colors.grey.shade700,
+                                        ),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: CachedNetworkImage(
+                                            imageUrl: app.getImageUrl(),
+                                            fit: BoxFit.cover,
+                                            placeholder: (context, url) => Center(
+                                              child: SizedBox(
+                                                width: 24,
+                                                height: 24,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  color: Colors.white.withOpacity(0.7),
+                                                ),
+                                              ),
+                                            ),
+                                            errorWidget: (context, url, error) => const Icon(
+                                              Icons.apps_rounded,
+                                              color: Colors.white70,
+                                            ),
+                                          ),
                                         ),
                                       ),
                                       const SizedBox(height: 6),
@@ -300,7 +336,9 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                   ),
                 )
               : const SliverToBoxAdapter(child: SizedBox.shrink()),
+
           const SliverToBoxAdapter(child: SizedBox(height: 8)),
+          // "All Apps" section
           SliverToBoxAdapter(
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 12.0),
@@ -448,16 +486,23 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
           // Error Widget for "Something went wrong"
           Consumer<AppProvider>(
             builder: (context, appProvider, _) {
-              // Show error widget only when specific conditions are met
+              // Show error widget only when there is a network error,
+              // not when popular apps are missing but all apps are available
               bool hasNetworkError = appProvider.hasNetworkError;
+
+              // Modified logic: only show error if there's a network error
+              // OR if both app lists are empty (total failure)
               bool showError = hasNetworkError ||
                   (appProvider.popularApps.isEmpty &&
+                   appProvider.apps.isEmpty &&
                    !appProvider.isFilterActive() &&
                    !appProvider.isSearchActive() &&
                    appProvider.isLoading == false);
 
+              // Enhanced debugging
               debugPrint("Error widget - Has network error: $hasNetworkError");
               debugPrint("Error widget - Show error: $showError");
+              debugPrint("Error widget - App counts: popular=${appProvider.popularApps.length}, all=${appProvider.apps.length}");
 
               if (showError) {
                 return SliverToBoxAdapter(
@@ -488,10 +533,11 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.share, color: Colors.white),
+                            icon: const Icon(Icons.refresh, color: Colors.white),
                             onPressed: () {
-                              debugPrint("Sharing error details");
+                              debugPrint("Refreshing app data");
                               // Try to reload data
+                              appProvider.getApps();
                               appProvider.getPopularApps();
                             },
                             padding: EdgeInsets.zero,

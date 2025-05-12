@@ -47,7 +47,6 @@ Future<List<App>> retrievePopularApps() async {
       log('apps: ${response.body}');
       var apps = App.fromJsonList(jsonDecode(response.body));
       apps = apps.where((p) => !p.deleted).toList();
-      SharedPreferencesUtil().appsList = apps;
       return apps;
     } catch (e, stackTrace) {
       debugPrint(e.toString());

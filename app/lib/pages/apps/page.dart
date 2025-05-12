@@ -17,7 +17,13 @@ class _AppsPageState extends State<AppsPage> {
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AddAppProvider>().getCategories();
+      // Initialize both add app provider and load apps
+      final addAppProvider = context.read<AddAppProvider>();
+      final appProvider = context.read<AppProvider>();
+
+      // Initialize categories and get apps data
+      addAppProvider.getCategories();
+      appProvider.getApps();
     });
     super.initState();
   }

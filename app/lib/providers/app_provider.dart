@@ -242,12 +242,25 @@ class AppProvider extends BaseProvider {
       setIsLoading(true);
       final List<App> result = await retrievePopularApps();
       popularApps = result;
-      hasNetworkError = false; // Reset error flag on success
+
+      // Only set network error flag if we actually had a network error
+      hasNetworkError = false;
+
       setIsLoading(false);
       notifyListeners();
     } catch (e) {
       print('Error fetching popular apps: $e');
-      hasNetworkError = true; // Set error flag on failure
+
+      // Only set error flag if it's a network error
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection refused') ||
+          e.toString().contains('Network is unreachable')) {
+        hasNetworkError = true;
+      } else {
+        // For other errors, don't set error flag to avoid showing the error banner
+        hasNetworkError = false;
+      }
+
       setIsLoading(false);
       notifyListeners();
     }
