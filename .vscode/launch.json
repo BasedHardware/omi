@@ -1,0 +1,72 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Uvicorn (backend)",
+            "type": "python",
+            "request": "launch",
+            "module": "uvicorn",
+            "cwd": "${workspaceFolder}/backend",
+            "args": [
+                "main:app",
+                "--reload",
+                "--env-file", ".dev.env",
+                // "--host", "0.0.0.0",
+                "--port", "8000",
+                // "--log-level", "debug",
+                // "--log-config", "logging_config.json"
+            ],
+            "jinja": true,
+            "python": "${workspaceFolder}/backend/venv/bin/python",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backend",
+                "LD_LIBRARY_PATH": "/usr/local/lib:/opt/homebrew/lib:${env:LD_LIBRARY_PATH}",
+                "DYLD_LIBRARY_PATH": "/opt/homebrew/lib:${env:DYLD_LIBRARY_PATH}",
+                "LIBRARY_PATH": "/opt/homebrew/lib:${env:LIBRARY_PATH}",
+                "PKG_CONFIG_PATH": "/opt/homebrew/lib/pkgconfig:${env:PKG_CONFIG_PATH}"
+            }
+        },
+        {
+            "name": "Flutter (dev)",
+            "type": "dart",
+            "request": "launch",
+            "program": "${workspaceFolder}/app/lib/main.dart",
+            "cwd": "${workspaceFolder}/app",
+            "flutterMode": "debug",
+            "args": [
+                "--flavor",
+                "dev"
+            ]
+        },
+        {
+            "name": "Flutter (dev) - iOS Specific Device",
+            "type": "dart",
+            "request": "launch",
+            "program": "${workspaceFolder}/app/lib/main.dart",
+            "cwd": "${workspaceFolder}/app",
+            "flutterMode": "debug",
+            "args": [
+                "--flavor",
+                "dev",
+                "-d",
+                "00008130-000C5196386B8D3A"
+            ]
+        },
+        {
+            "name": "Flutter Run (Terminal)",
+            "type": "node",
+            "request": "launch",
+            "runtimeExecutable": "flutter",
+            "cwd": "${workspaceFolder}/app",
+            "args": [
+                "run",
+                "--flavor",
+                "dev",
+                "-d",
+                "00008130-000C5196386B8D3A"
+            ],
+            "console": "integratedTerminal"
+        }
+    ]
+}

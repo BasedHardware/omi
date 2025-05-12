@@ -200,7 +200,7 @@ Before you start, make sure you have the following:
       ```
 
 4. **Connect the App to the Backend: 🔗**
-    - In your Omi app's environment variables, set the `API_BASE_URL` to the public URL provided by Ngrok (e.g., `https://example.ngrok-free.app`)
+    - In your Omi app's environment variables, set the `API_BASE_URL` to the public URL provided by Ngrok (e.g., `https://example.ngrok-free.app/`) (don't forget the trailing / )
 
 Now, your Omi app should be successfully connected to the locally running backend.
 
@@ -218,6 +218,7 @@ Here's a detailed explanation of each environment variable you need to define in
 
 - **`HUGGINGFACE_TOKEN`:** Your [Hugging Face Hub API token](https://huggingface.co/settings/tokens), used to download models for speech processing (like voice activity detection)
 - **`BUCKET_SPEECH_PROFILES`:**  The name of the Google Cloud Storage bucket where user speech profiles are stored
+- **`BUCKET_PLUGIN_LOGOS`:** The name of the Google Cloud Storage bucket where to put logos for uploaded apps
 - **`BUCKET_BACKUPS`:** The name of the Google Cloud Storage bucket used for backups (if applicable)
 - **`GOOGLE_APPLICATION_CREDENTIALS`:**  The path to your [Google Cloud service account credentials file](https://console.cloud.google.com/iam-admin/serviceaccounts) (`google-credentials.json`). This is generated in step 3 of **I. Setting Up Google Cloud & Firebase**
   - By default, the backend expects to find a file named `google-credentials.json` in the same directory where the application is running
@@ -227,12 +228,15 @@ Here's a detailed explanation of each environment variable you need to define in
 - **`PINECONE_INDEX_NAME`:** The name of your Pinecone index where memory embeddings are stored
 - **`REDIS_DB_HOST`:** The host address of your Redis instance
 - **`REDIS_DB_PORT`:** The port number of your Redis instance
-- **`REDIS_DB_PASSWORD`:** The password for your Redis instance
+- **`REDIS_DB_PASSWORD`:** The password for your Redis instance (blank by default)
 - **`DEEPGRAM_API_KEY`:** Your [Deepgram API key](https://console.deepgram.com/api-keys), used for real-time and pre-recorded audio transcription
 - **`ADMIN_KEY`:** A temporary key used for authentication during local development (replace with a more secure method in production)
 - **`OPENAI_API_KEY`:** Your [OpenAI API key](https://platform.openai.com/settings/organization/api-keys), used for accessing OpenAI's language models for chat, memory processing, and more
 - **`GITHUB_TOKEN`:** Your [GitHub personal access token](https://github.com/settings/tokens), used to access GitHub's API for retrieving the latest firmware version
 - **`WORKFLOW_API_KEY`:** Your custom API key for securing communication with external workflows or integrations
+- **`HOSTED_PUSHER_API_URL`:** URL of your omi-pusher service if you're using one. Example: http://omi-push:8081
+- **`TYPESENSE_HOST`:** URL of your typesense server. 
+- **`TYPESENSE_API_KEY`:** Typesense API key
 
 Make sure to replace the placeholders (`<api-key>`, `<bucket-name>`, etc.) with your actual values.
 

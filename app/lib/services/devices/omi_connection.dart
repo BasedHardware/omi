@@ -328,10 +328,16 @@ class OmiDeviceConnection extends DeviceConnection {
       logCharacteristicNotFoundError('Storage List', deviceId);
       return Future.value(<int>[]);
     }
-    var storageValue = await storageListCharacteristic.read();
+
+    List<int> storageValue;
+    try {
+      storageValue = await storageListCharacteristic.read();
+    } catch (e, stackTrace) {
+      logCrashMessage('Storage value', deviceId, e, stackTrace);
+      return Future.value(<int>[]);
+    }
     List<int> storageLengths = [];
     if (storageValue.isNotEmpty) {
-      //parse the list
       int totalEntries = (storageValue.length / 4).toInt();
       debugPrint('Storage list: ${totalEntries} items');
 
