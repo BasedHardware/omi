@@ -13,7 +13,7 @@ enum ConversationBottomBarMode {
   detail // For viewing completed conversations
 }
 
-enum ConversationTab { transcript, summary, action_items }
+enum ConversationTab { transcript, summary, actionItems }
 
 class ConversationBottomBar extends StatelessWidget {
   final ConversationBottomBarMode mode;
@@ -73,9 +73,9 @@ class ConversationBottomBar extends StatelessWidget {
             ...switch (mode) {
               ConversationBottomBarMode.recording => [_buildStopButton()],
               ConversationBottomBarMode.detail => [
-                _buildSummaryTab(context),
-                _buildActionItemsTab(),
-              ],
+                  _buildSummaryTab(context),
+                  _buildActionItemsTab(),
+                ],
               _ => [_buildSummaryTab(context)],
             },
           ],
@@ -175,8 +175,8 @@ class ConversationBottomBar extends StatelessWidget {
   Widget _buildActionItemsTab() {
     return TabButton(
       icon: Icons.check_circle_outline,
-      isSelected: selectedTab == ConversationTab.action_items,
-      onTap: () => onTabSelected(ConversationTab.action_items),
+      isSelected: selectedTab == ConversationTab.actionItems,
+      onTap: () => onTabSelected(ConversationTab.actionItems),
     );
   }
 }

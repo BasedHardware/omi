@@ -10,7 +10,6 @@ import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/settings/people.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
@@ -60,7 +59,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
             selectedTab = ConversationTab.summary;
             break;
           case 2:
-            selectedTab = ConversationTab.action_items;
+            selectedTab = ConversationTab.actionItems;
             break;
           default:
             debugPrint('Invalid tab index: ${_controller!.index}');
@@ -232,7 +231,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                           case ConversationTab.summary:
                             index = 1;
                             break;
-                          case ConversationTab.action_items:
+                          case ConversationTab.actionItems:
                             index = 2;
                             break;
                           default:
@@ -594,18 +593,13 @@ class ActionItemsTab extends StatelessWidget {
       onTap: () => FocusScope.of(context).unfocus(),
       child: Consumer<ConversationDetailProvider>(
         builder: (context, provider, child) {
-          final hasActionItems = provider.conversation.structured.actionItems
-              .where((item) => !item.deleted)
-              .isNotEmpty;
+          final hasActionItems = provider.conversation.structured.actionItems.where((item) => !item.deleted).isNotEmpty;
 
           return ListView(
             shrinkWrap: true,
             children: [
               const SizedBox(height: 24),
-              if (hasActionItems)
-                const ActionItemsListWidget()
-              else
-                _buildEmptyState(context),
+              if (hasActionItems) const ActionItemsListWidget() else _buildEmptyState(context),
               const SizedBox(height: 150)
             ],
           );
