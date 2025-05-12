@@ -230,18 +230,18 @@ class _ConversationListItemState extends State<ConversationListItem> {
                     alignment: Alignment.centerRight,
                     child: ConversationNewStatusIndicator(text: "New 🚀"),
                   )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Text(
                         dateTimeFormat('MMM d, h:mm a', widget.conversation.startedAt ?? widget.conversation.createdAt),
                         style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                         maxLines: 1,
-                        textAlign: TextAlign.end,
                       ),
-                      if (widget.conversation.transcriptSegments.isNotEmpty)
+                      if (widget.conversation.transcriptSegments.isNotEmpty && _getConversationDuration().isNotEmpty)
                         Padding(
-                          padding: const EdgeInsets.only(top: 2.0),
+                          padding: const EdgeInsets.only(left: 8.0),
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
@@ -252,7 +252,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
                               _getConversationDuration(),
                               style: TextStyle(color: Colors.grey.shade300, fontSize: 11),
                               maxLines: 1,
-                              textAlign: TextAlign.end,
                             ),
                           ),
                         ),
