@@ -26,15 +26,15 @@ class MemoriesProvider extends ChangeNotifier {
   List<Memory> get filteredMemories {
     return _memories.where((memory) {
       // Apply search filter
-      final matchesSearch = _searchQuery.isEmpty ||
-        memory.content.decodeString.toLowerCase().contains(_searchQuery.toLowerCase());
+      final matchesSearch =
+          _searchQuery.isEmpty || memory.content.decodeString.toLowerCase().contains(_searchQuery.toLowerCase());
 
       // Apply category filter
-      final matchesCategory = _categoryFilter == null ||
-        memory.category == _categoryFilter;
+      final matchesCategory = _categoryFilter == null || memory.category == _categoryFilter;
 
       return matchesSearch && matchesCategory;
-    }).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   void setCategory(MemoryCategory? category) {
@@ -70,8 +70,9 @@ class MemoriesProvider extends ChangeNotifier {
 
     _memories = await getMemories();
     _unreviewed = _memories
-      .where((memory) => !memory.reviewed && memory.createdAt.isAfter(DateTime.now().subtract(const Duration(days: 1))))
-      .toList();
+        .where(
+            (memory) => !memory.reviewed && memory.createdAt.isAfter(DateTime.now().subtract(const Duration(days: 1))))
+        .toList();
 
     _loading = false;
     _setCategories();
@@ -91,7 +92,8 @@ class MemoriesProvider extends ChangeNotifier {
     _setCategories();
   }
 
-  void createMemory(String content, [MemoryVisibility visibility = MemoryVisibility.public, MemoryCategory category = MemoryCategory.core]) async {
+  void createMemory(String content,
+      [MemoryVisibility visibility = MemoryVisibility.public, MemoryCategory category = MemoryCategory.core]) async {
     final newMemory = Memory(
       id: const Uuid().v4(),
       uid: SharedPreferencesUtil().uid,
@@ -107,7 +109,6 @@ class MemoriesProvider extends ChangeNotifier {
 
     await createMemoryServer(content, visibility.name);
     _memories.add(newMemory);
-    _unreviewed.add(newMemory);
     _setCategories();
   }
 
