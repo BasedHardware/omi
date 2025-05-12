@@ -125,5 +125,13 @@
 	<false/>
 	<key>com.posthog.posthog.AUTO_INIT</key>
 	<false/>
-</dict>
+	<key>CFBundleIcons</key>
+		<dict>
+		<key>CFBundlePrimaryIcon</key>
+		<dict>
+				<key>CFBundleIconName</key>
+				<string>devAppIcon</string>
+			</dict>
+		</dict>
+	</dict>
 </plist>
