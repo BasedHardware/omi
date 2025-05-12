@@ -8,7 +8,6 @@ import 'package:omi/pages/settings/about.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/profile.dart';
 import 'package:omi/pages/settings/widgets.dart';
-import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
@@ -16,7 +15,6 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:omi/gen/assets.gen.dart';
-import 'package:omi/providers/capture_provider.dart';
 
 import 'device_settings.dart';
 
@@ -69,7 +67,27 @@ class _SettingsPageState extends State<SettingsPage> {
         getItemAddOn2(
           'Profile',
           () => routeToPage(context, const ProfilePage()),
-          icon: Icons.person,
+          icon: const Icon(Icons.person, color: Colors.white, size: 22),
+        ),
+        const SizedBox(height: 12),
+
+        getItemAddOn2(
+          'Persona',
+          () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => const PersonaProfilePage(),
+                settings: const RouteSettings(
+                  arguments: 'from_settings',
+                ),
+              ),
+            );
+          },
+          icon: SvgPicture.asset(
+            Assets.images.icPersonaProfile.path,
+            width: 24,
+            height: 24,
+          ),
         ),
         const SizedBox(height: 12),
 
@@ -83,15 +101,19 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             );
           },
-          icon: Icons.bluetooth_connected_sharp,
+          icon: const Icon(Icons.bluetooth_connected_sharp, color: Colors.white, size: 22),
         ),
         const SizedBox(height: 12),
 
         // Advanced Settings
-        getItemAddOn2('Developer Mode', () async {
-          await routeToPage(context, const DeveloperSettingsPage());
-          setState(() {});
-        }, icon: Icons.code),
+        getItemAddOn2(
+          'Developer Mode',
+          () async {
+            await routeToPage(context, const DeveloperSettingsPage());
+            setState(() {});
+          },
+          icon: const Icon(Icons.code, color: Colors.white, size: 22),
+        ),
         const SizedBox(height: 12),
 
         // Help & Support
@@ -100,7 +122,7 @@ class _SettingsPageState extends State<SettingsPage> {
           () async {
             await Intercom.instance.displayHelpCenter();
           },
-          icon: Icons.help_outline_outlined,
+          icon: const Icon(Icons.help_outline_outlined, color: Colors.white, size: 22),
         ),
         const SizedBox(height: 12),
         getItemAddOn2(
@@ -108,7 +130,7 @@ class _SettingsPageState extends State<SettingsPage> {
           () async {
             await Intercom.instance.displayMessenger();
           },
-          icon: Icons.chat,
+          icon: const Icon(Icons.chat, color: Colors.white, size: 22),
         ),
         const SizedBox(height: 12),
 
@@ -116,27 +138,31 @@ class _SettingsPageState extends State<SettingsPage> {
         getItemAddOn2(
           'About Omi',
           () => routeToPage(context, const AboutOmiPage()),
-          icon: Icons.info_outline,
+          icon: const Icon(Icons.info_outline, color: Colors.white, size: 22),
         ),
         const SizedBox(height: 24),
 
         // Actions
-        getItemAddOn2('Sign Out', () async {
-          await showDialog(
-            context: context,
-            builder: (ctx) {
-              return getDialog(context, () {
-                Navigator.of(context).pop();
-              }, () async {
-                await SharedPreferencesUtil().clearUserPreferences();
-                Provider.of<PersonaProvider>(context, listen: false).setRouting(PersonaProfileRouting.no_device);
-                await signOut();
-                Navigator.of(context).pop();
-                routeToPage(context, const DeciderWidget(), replace: true);
-              }, "Sign Out?", "Are you sure you want to sign out?");
-            },
-          );
-        }, icon: Icons.logout),
+        getItemAddOn2(
+          'Sign Out',
+          () async {
+            await showDialog(
+              context: context,
+              builder: (ctx) {
+                return getDialog(context, () {
+                  Navigator.of(context).pop();
+                }, () async {
+                  await SharedPreferencesUtil().clearUserPreferences();
+                  Provider.of<PersonaProvider>(context, listen: false).setRouting(PersonaProfileRouting.no_device);
+                  await signOut();
+                  Navigator.of(context).pop();
+                  routeToPage(context, const DeciderWidget(), replace: true);
+                }, "Sign Out?", "Are you sure you want to sign out?");
+              },
+            );
+          },
+          icon: const Icon(Icons.logout, color: Colors.white, size: 22),
+        ),
         const SizedBox(height: 20),
 
         // Version Info
@@ -166,7 +192,7 @@ class _SettingsPageState extends State<SettingsPage> {
           () async {
             await Intercom.instance.displayMessenger();
           },
-          icon: Icons.chat,
+          icon: const Icon(Icons.chat, color: Colors.white, size: 22),
         ),
         const SizedBox(height: 24),
 
@@ -187,7 +213,7 @@ class _SettingsPageState extends State<SettingsPage> {
               }, "Sign Out?", "Are you sure you want to sign out?");
             },
           );
-        }, icon: Icons.logout),
+        }, icon: const Icon(Icons.logout, color: Colors.white, size: 22)),
         const SizedBox(height: 20),
 
         // Version Info
@@ -229,36 +255,6 @@ class _SettingsPageState extends State<SettingsPage> {
                 Navigator.pop(context);
               },
             ),
-            actions: [
-              Consumer<PersonaProvider>(builder: (context, personaProvider, _) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                  child: Container(
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.transparent,
-                    ),
-                    child: GestureDetector(
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) => const PersonaProfilePage(),
-                            settings: const RouteSettings(
-                              arguments: 'from_settings',
-                            ),
-                          ),
-                        );
-                      },
-                      child: SvgPicture.asset(
-                        Assets.images.icPersonaProfile.path,
-                        width: 28,
-                        height: 28,
-                      ),
-                    ),
-                  ),
-                );
-              }),
-            ],
             elevation: 0,
           ),
           body: SingleChildScrollView(
