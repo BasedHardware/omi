@@ -82,28 +82,39 @@ class _AppDetailPageState extends State<AppDetailPage> {
       }
       // Load details
       setIsLoading(true);
-      var res = await context.read<AppProvider>().getAppDetails(app.id);
-      if (mounted) {
-        setState(() {
-          if (res != null) {
-            app = res;
-          }
-        });
+      try {
+        var res = await context.read<AppProvider>().getAppDetails(app.id);
+        if (mounted) {
+          setState(() {
+            if (res != null) {
+              app = res;
+            }
+          });
+        }
+      } catch (e) {
+        debugPrint("Error loading app details: $e");
+        // Don't show error to user, just continue with app we already have
+      } finally {
+        setIsLoading(false);
+        if (mounted) {
+          context.read<AppProvider>().checkIsAppOwner(app.uid);
+          context.read<AppProvider>().setIsAppPublicToggled(!app.private);
+        }
       }
-
-      setIsLoading(false);
-      context.read<AppProvider>().checkIsAppOwner(app.uid);
-      context.read<AppProvider>().setIsAppPublicToggled(!app.private);
     });
     if (app.worksExternally()) {
       if (app.externalIntegration!.setupInstructionsFilePath?.isNotEmpty == true) {
         if (app.externalIntegration!.setupInstructionsFilePath?.contains('raw.githubusercontent.com') == true) {
           getAppMarkdown(app.externalIntegration!.setupInstructionsFilePath ?? '').then((value) {
-            value = value.replaceAll(
-              '](assets/',
-              '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${app.id}/assets/',
-            );
-            setState(() => instructionsMarkdown = value);
+            if (mounted) {
+              value = value.replaceAll(
+                '](assets/',
+                '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${app.id}/assets/',
+              );
+              setState(() => instructionsMarkdown = value);
+            }
+          }).catchError((e) {
+            debugPrint("Error loading app markdown: $e");
           });
         }
       }
@@ -277,8 +288,38 @@ class _AppDetailPageState extends State<AppDetailPage> {
                         image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
                       ),
                     ),
-                    placeholder: (context, url) => const CircularProgressIndicator(),
-                    errorWidget: (context, url, error) => const Icon(Icons.error),
+                    placeholder: (context, url) => Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade700,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Center(
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
+                          ),
+                        ),
+                      ),
+                    ),
+                    errorWidget: (context, url, error) => Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade700,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          Icons.apps_rounded,
+                          color: Colors.white70,
+                        ),
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 20),
                   Column(
