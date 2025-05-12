@@ -756,34 +756,44 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
             height: 24,
           ),
           const SizedBox(width: 12),
-          Text(
-            text,
-            style: TextStyle(
-              color: isComingSoon ? Colors.grey[600] : Colors.white,
-              fontSize: 16,
+          Expanded(
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Text(
+                  text,
+                  style: TextStyle(
+                    color: isComingSoon ? Colors.grey[600] : Colors.white,
+                    fontSize: 16,
+                  ),
+                ),
+                if (isComingSoon)
+                  Positioned(
+                    right: -8,
+                    top: -8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF373737),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Text(
+                        'Coming soon',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
-          const Spacer(),
-          if (isComingSoon)
+          if (showConnect)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: const Color(0xFF373737),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Text(
-                'Coming soon',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                ),
-              ),
-            )
-          else if (showConnect)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFF373737),
+                color: const Color(0xFF0073DE),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: const Text(
@@ -798,7 +808,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: const Color(0xFF373737),
+                color: const Color(0xFF00914D),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: const Text(
