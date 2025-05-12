@@ -321,7 +321,7 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> {
                                         child: Container(
                                           padding: const EdgeInsets.symmetric(vertical: 8),
                                           decoration: BoxDecoration(
-                                            color: Colors.blue.shade700,
+                                            color: Colors.purple.shade700,
                                             borderRadius: BorderRadius.circular(8),
                                           ),
                                           child: const Row(
@@ -410,7 +410,7 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> {
                               child: Container(
                                 padding: const EdgeInsets.symmetric(vertical: 12),
                                 decoration: BoxDecoration(
-                                  color: Colors.blue.shade700,
+                                  color: Colors.purple.shade700,
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 alignment: Alignment.center,
