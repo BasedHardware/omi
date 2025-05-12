@@ -98,6 +98,46 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> {
     }
   }
 
+  void _processSingleMemory(Memory memory, bool approve) async {
+    if (_isProcessing) return;
+
+    setState(() => _isProcessing = true);
+
+    // Process the single memory
+    context.read<MemoriesProvider>().reviewMemory(memory, approve);
+
+    setState(() {
+      remainingMemories.remove(memory);
+      displayedMemories = selectedCategory == null
+          ? List.from(remainingMemories)
+          : remainingMemories.where((f) => f.category == selectedCategory).toList();
+      _isProcessing = false;
+    });
+
+    // Show feedback
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          approve ? 'Memory saved' : 'Memory discarded',
+          style: const TextStyle(color: Colors.white),
+        ),
+        backgroundColor: Colors.grey.shade800,
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      ),
+    );
+
+    if (remainingMemories.isEmpty) {
+      Navigator.pop(context);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<MemoriesProvider>(builder: (context, provider, child) {
@@ -110,9 +150,9 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> {
             children: [
               const Text('Review Memories'),
               Text(
-                '${displayedMemories.length} ${selectedCategory != null ? "in ${selectedCategory.toString().split('.').last}" : "total"}',
+                _getFilterSubtitle(),
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 13,
                   color: Colors.grey.shade400,
                   fontWeight: FontWeight.normal,
                 ),
@@ -123,8 +163,8 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> {
         body: Column(
           children: [
             Container(
-              height: 50,
-              margin: const EdgeInsets.symmetric(vertical: 8),
+              height: 46,
+              margin: const EdgeInsets.only(top: 4, bottom: 8),
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -137,6 +177,7 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> {
                         style: TextStyle(
                           color: selectedCategory == null ? Colors.black : Colors.white70,
                           fontWeight: selectedCategory == null ? FontWeight.w600 : FontWeight.normal,
+                          fontSize: 13,
                         ),
                       ),
                       selected: selectedCategory == null,
@@ -145,20 +186,27 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> {
                       selectedColor: Colors.white,
                       checkmarkColor: Colors.black,
                       showCheckmark: false,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     ),
                   ),
                   ...categoryCounts.entries.map((entry) {
                     final category = entry.key;
                     final count = entry.value;
+
+                    // Format category name to be more concise
+                    String categoryName = category.toString().split('.').last;
+                    // Capitalize first letter only
+                    categoryName = categoryName[0].toUpperCase() + categoryName.substring(1);
+
                     return Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: FilterChip(
                         label: Text(
-                          '${category.toString().split('.').last} ($count)',
+                          '$categoryName ($count)',
                           style: TextStyle(
                             color: selectedCategory == category ? Colors.black : Colors.white70,
                             fontWeight: selectedCategory == category ? FontWeight.w600 : FontWeight.normal,
+                            fontSize: 13,
                           ),
                         ),
                         selected: selectedCategory == category,
@@ -167,7 +215,7 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> {
                         selectedColor: Colors.white,
                         checkmarkColor: Colors.black,
                         showCheckmark: false,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       ),
                     );
                   }),
@@ -185,10 +233,10 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> {
                           Text(
                             selectedCategory == null
                                 ? 'All memories have been reviewed'
-                                : 'No memories to review in this category',
+                                : 'No memories in this category',
                             style: TextStyle(
                               color: Colors.grey.shade400,
-                              fontSize: 18,
+                              fontSize: 16,
                             ),
                           ),
                         ],
@@ -200,16 +248,16 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> {
                       itemBuilder: (context, index) {
                         final memory = displayedMemories[index];
                         return Container(
-                          margin: const EdgeInsets.only(bottom: 12),
+                          margin: const EdgeInsets.only(bottom: 10),
                           decoration: BoxDecoration(
                             color: Colors.grey.shade900,
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(12),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Padding(
-                                padding: const EdgeInsets.all(16),
+                                padding: const EdgeInsets.all(14),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -217,108 +265,85 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> {
                                       category: memory.category,
                                       showIcon: true,
                                     ),
-                                    const SizedBox(height: 12),
+                                    const SizedBox(height: 10),
                                     Text(
                                       memory.content.decodeString,
                                       style: const TextStyle(
                                         color: Colors.white,
-                                        fontSize: 16,
+                                        fontSize: 15,
                                         height: 1.4,
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: TextButton(
-                                      style: TextButton.styleFrom(
-                                        backgroundColor: Colors.transparent,
-                                        shape: const RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.only(
-                                            bottomLeft: Radius.circular(16),
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade800,
+                                  borderRadius: const BorderRadius.vertical(
+                                    bottom: Radius.circular(12),
+                                  ),
+                                ),
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: GestureDetector(
+                                        onTap: () => _processSingleMemory(memory, false),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(vertical: 8),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white.withOpacity(0.1),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: const Row(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Icon(Icons.delete_outline, size: 16, color: Colors.white70),
+                                              SizedBox(width: 6),
+                                              Text(
+                                                'Discard',
+                                                style: TextStyle(
+                                                  color: Colors.white70,
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       ),
-                                      onPressed: _isProcessing
-                                          ? null
-                                          : () {
-                                              provider.reviewMemory(memory, false);
-                                              setState(() {
-                                                remainingMemories.remove(memory);
-                                                displayedMemories.remove(memory);
-                                              });
-                                              if (remainingMemories.isEmpty) {
-                                                Navigator.pop(context);
-                                              }
-                                            },
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(vertical: 12),
-                                        child: Row(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Icon(Icons.delete_outline, size: 18, color: Colors.red.shade400),
-                                            const SizedBox(width: 8),
-                                            Text(
-                                              'Discard',
-                                              style: TextStyle(
-                                                color: Colors.red.shade400,
-                                                fontSize: 15,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
                                     ),
-                                  ),
-                                  Container(
-                                    width: 1,
-                                    height: 45,
-                                    color: Colors.white.withOpacity(0.1),
-                                  ),
-                                  Expanded(
-                                    child: TextButton(
-                                      style: TextButton.styleFrom(
-                                        backgroundColor: Colors.transparent,
-                                        shape: const RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.only(
-                                            bottomRight: Radius.circular(16),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: GestureDetector(
+                                        onTap: () => _processSingleMemory(memory, true),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(vertical: 8),
+                                          decoration: BoxDecoration(
+                                            color: Colors.purple.shade700,
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: const Row(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Icon(Icons.check, size: 16, color: Colors.white),
+                                              SizedBox(width: 6),
+                                              Text(
+                                                'Save',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       ),
-                                      onPressed: _isProcessing
-                                          ? null
-                                          : () {
-                                              provider.reviewMemory(memory, true);
-                                              setState(() {
-                                                remainingMemories.remove(memory);
-                                                displayedMemories.remove(memory);
-                                              });
-                                              if (remainingMemories.isEmpty) {
-                                                Navigator.pop(context);
-                                              }
-                                            },
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(vertical: 12),
-                                        child: Row(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            const Icon(Icons.check, size: 18, color: Colors.white),
-                                            const SizedBox(width: 8),
-                                            Text(
-                                              'Save',
-                                              style: TextStyle(
-                                                color: Colors.grey.shade100,
-                                                fontSize: 15,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ],
                           ),
@@ -351,56 +376,59 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> {
                     : Row(
                         children: [
                           Expanded(
-                            child: TextButton(
-                              style: TextButton.styleFrom(
-                                backgroundColor: Colors.red.shade900.withOpacity(0.3),
+                            child: GestureDetector(
+                              onTap: () => _processBatchAction(false),
+                              child: Container(
                                 padding: const EdgeInsets.symmetric(vertical: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(10),
                                 ),
-                              ),
-                              onPressed: () => _processBatchAction(false),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.delete_outline, size: 18, color: Colors.red.shade400),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Discard all',
-                                    style: TextStyle(
-                                      color: Colors.red.shade400,
-                                      fontSize: 15,
+                                alignment: Alignment.center,
+                                child: const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.delete_outline, size: 18, color: Colors.white70),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'Discard All',
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: TextButton(
-                              style: TextButton.styleFrom(
-                                backgroundColor: Colors.white,
+                            child: GestureDetector(
+                              onTap: () => _processBatchAction(true),
+                              child: Container(
                                 padding: const EdgeInsets.symmetric(vertical: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.purple.shade700,
+                                  borderRadius: BorderRadius.circular(10),
                                 ),
-                              ),
-                              onPressed: () => _processBatchAction(true),
-                              child: const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.check, size: 18, color: Colors.black),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    'Save all',
-                                    style: TextStyle(
-                                      color: Colors.black,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600,
+                                alignment: Alignment.center,
+                                child: const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.check, size: 18, color: Colors.white),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'Save All',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -411,5 +439,16 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> {
         ),
       );
     });
+  }
+
+  String _getFilterSubtitle() {
+    if (selectedCategory == null) {
+      return '${displayedMemories.length} memories to review';
+    }
+
+    String categoryName = selectedCategory.toString().split('.').last;
+    categoryName = categoryName[0].toUpperCase() + categoryName.substring(1);
+
+    return '${displayedMemories.length} ${categoryName} memories';
   }
 }
