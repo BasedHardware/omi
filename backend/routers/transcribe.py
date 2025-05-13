@@ -298,7 +298,6 @@ async def _listen(
         return
 
     # Process STT
-    _send_message_event(MessageServiceStatusEvent(status="stt_initiating", status_text="STT Service Starting"))
     soniox_socket = None
     soniox_socket2 = None
     speechmatics_socket = None
@@ -380,8 +379,6 @@ async def _listen(
             websocket_close_code = 1011
             await websocket.close(code=websocket_close_code)
             return
-
-    await _process_stt()
 
     # Pusher
     #
@@ -495,9 +492,8 @@ async def _listen(
     transcript_consume = None
     audio_bytes_send = None
     audio_bytes_consume = None
-    pusher_connect, pusher_close, \
-        transcript_send, transcript_consume, \
-        audio_bytes_send, audio_bytes_consume = create_pusher_task_handler()
+    pusher_close = None
+    pusher_connect = None
 
     # Transcripts
     #
@@ -733,26 +729,26 @@ async def _listen(
             websocket_close_code = 1011
         finally:
             websocket_active = False
-            if dg_socket1:
-                dg_socket1.finish()
-            if dg_socket2:
-                dg_socket2.finish()
-            if soniox_socket:
-                await soniox_socket.close()
-            if soniox_socket2:
-                await soniox_socket2.close()
-            if speechmatics_socket:
-                await speechmatics_socket.close()
 
     # Start
     #
     try:
+        # Init STT
+        _send_message_event(MessageServiceStatusEvent(status="stt_initiating", status_text="STT Service Starting"))
+        await _process_stt()
+
+        # Init pusher
+        pusher_connect, pusher_close, \
+            transcript_send, transcript_consume, \
+            audio_bytes_send, audio_bytes_consume = create_pusher_task_handler()
+
+        # Tasks
         audio_process_task = asyncio.create_task(
             receive_audio(deepgram_socket, deepgram_socket2, soniox_socket, soniox_socket2, speechmatics_socket)
         )
         stream_transcript_task = asyncio.create_task(stream_transcript_process())
 
-        # Pusher
+        # Pusher tasks
         pusher_tasks = [asyncio.create_task(pusher_connect())]
         if transcript_consume is not None:
             pusher_tasks.append(asyncio.create_task(transcript_consume()))
@@ -768,16 +764,36 @@ async def _listen(
         print(f"Error during WebSocket operation: {e}", uid)
     finally:
         websocket_active = False
+
+        # STT sockets
+        try:
+            if deepgram_socket:
+                deepgram_socket.finish()
+            if deepgram_socket2:
+                deepgram_socket2.finish()
+            if soniox_socket:
+                await soniox_socket.close()
+            if soniox_socket2:
+                await soniox_socket2.close()
+            if speechmatics_socket:
+                await speechmatics_socket.close()
+        except Exception as e:
+            print(f"Error closing STT sockets: {e}", uid)
+
+        # Client sockets
         if websocket.client_state == WebSocketState.CONNECTED:
             try:
                 await websocket.close(code=websocket_close_code)
             except Exception as e:
-                print(f"Error closing WebSocket: {e}", uid)
+                print(f"Error closing Client WebSocket: {e}", uid)
+
+        # Pusher sockets
         if pusher_close is not None:
             try:
                 await pusher_close()
             except Exception as e:
                 print(f"Error closing Pusher: {e}", uid)
+    print("_listen ended", uid)
 
 @router.websocket("/v3/listen")
 async def listen_handler_v3(
