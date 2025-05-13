@@ -83,8 +83,26 @@ def should_discard_conversation(transcript: str) -> bool:
     parser = PydanticOutputParser(pydantic_object=DiscardConversation)
     prompt = ChatPromptTemplate.from_messages([
         '''
-    You will be given a conversation transcript, and your task is to determine if the conversation is worth storing as a memory or not.
-    It is not worth storing if there are no interesting topics, facts, or information, in that case, output discard = True.
+    You will receive a transcript snippet. Length is never a reason to discard.
+
+        Task
+        Decide if the snippet should be saved as a memory.
+
+        KEEP  → output:  discard = False
+        DISCARD → output: discard = True
+
+        KEEP (discard = False) if it contains any of the following:
+        • a task, request, or action item
+        • a decision, commitment, or plan
+        • a question that requires follow-up
+        • personal facts, preferences, or details likely useful later
+        • an insight, summary, or key takeaway
+
+        If none of these are present, DISCARD (discard = True).
+
+        Return exactly one line:
+        discard = <True|False>
+
 
     Transcript: ```{transcript}```
 
