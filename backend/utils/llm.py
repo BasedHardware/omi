@@ -109,6 +109,7 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
 
     For the title, use the main topic of the conversation.
     For the overview, condense the conversation into a summary with the main topics discussed, make sure to capture the key points and important details from the conversation.
+    For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the conversation. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
     For the action items, include a list of commitments, specific tasks or actionable steps from the conversation that the user is planning to do or has to do on that specific day or in future. Remember the speaker is busy so this has to be very efficient and concise, otherwise they might miss some critical tasks. Specify which speaker is responsible for each action item.
     For the category, classify the conversation into one of the available categories.
     For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on {started_at}. {tz} is the user's timezone, convert it to UTC and respond in UTC.
@@ -142,6 +143,7 @@ def get_reprocess_transcript_structure(transcript: str, started_at: datetime, la
 
     For the title, use ```{title}```, if it is empty, use the main topic of the conversation.
     For the overview, condense the conversation into a summary with the main topics discussed, make sure to capture the key points and important details from the conversation.
+    For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the conversation. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
     For the action items, include a list of commitments, specific tasks or actionable steps from the conversation that the user is planning to do or has to do on that specific day or in future. Remember the speaker is busy so this has to be very efficient and concise, otherwise they might miss some critical tasks. Specify which speaker is responsible for each action item.
     For the category, classify the conversation into one of the available categories.
     For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on {started_at}. {tz} is the user's timezone, convert it to UTC and respond in UTC.
