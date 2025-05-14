@@ -206,8 +206,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
       if (mounted) {
-        await Provider.of<CaptureProvider>(context, listen: false)
-            .streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
+        await Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
       }
 
       // Navigate
@@ -375,15 +374,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                             ConversationsPage(),
                             ChatPage(isPivotBottom: false),
                             AppsPage(),
-                            PersonaProfilePage(bottomMargin: 120),
                           ],
                         ),
                       ),
                       Consumer<HomeProvider>(
                         builder: (context, home, child) {
-                          if (home.chatFieldFocusNode.hasFocus ||
-                              home.convoSearchFieldFocusNode.hasFocus ||
-                              home.appsSearchFieldFocusNode.hasFocus) {
+                          if (home.chatFieldFocusNode.hasFocus || home.convoSearchFieldFocusNode.hasFocus || home.appsSearchFieldFocusNode.hasFocus) {
                             return const SizedBox.shrink();
                           } else {
                             return Align(
@@ -394,12 +390,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   color: Colors.black,
                                   borderRadius: BorderRadius.all(Radius.circular(18)),
                                   border: GradientBoxBorder(
-                                    gradient: LinearGradient(colors: [
-                                      Color.fromARGB(127, 208, 208, 208),
-                                      Color.fromARGB(127, 188, 99, 121),
-                                      Color.fromARGB(127, 86, 101, 182),
-                                      Color.fromARGB(127, 126, 190, 236)
-                                    ]),
+                                    gradient: LinearGradient(colors: [Color.fromARGB(127, 208, 208, 208), Color.fromARGB(127, 188, 99, 121), Color.fromARGB(127, 86, 101, 182), Color.fromARGB(127, 126, 190, 236)]),
                                     width: 2,
                                   ),
                                   shape: BoxShape.rectangle,
@@ -408,15 +399,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   labelPadding: const EdgeInsets.symmetric(vertical: 8),
                                   indicatorPadding: EdgeInsets.zero,
                                   onTap: (index) {
-                                    MixpanelManager()
-                                        .bottomNavigationTabClicked(['Memories', 'Chat', 'Explore'][index]);
+                                    MixpanelManager().bottomNavigationTabClicked(['Memories', 'Chat', 'Explore'][index]);
                                     primaryFocus?.unfocus();
                                     if (home.selectedIndex == index) {
                                       return;
                                     }
                                     home.setIndex(index);
-                                    _controller?.animateToPage(index,
-                                        duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
+                                    _controller?.animateToPage(index, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                   },
                                   indicatorColor: Colors.transparent,
                                   tabs: [
@@ -424,12 +413,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                       child: Row(
                                         mainAxisAlignment: MainAxisAlignment.center,
                                         children: [
-                                          Icon(
-                                            Icons.home,
-                                            color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
-                                            size: 22,
-                                          ),
-                                          const SizedBox(width: 8),
                                           Text(
                                             'Home',
                                             style: TextStyle(
@@ -445,12 +428,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                       child: Row(
                                         mainAxisAlignment: MainAxisAlignment.center,
                                         children: [
-                                          Icon(
-                                            Icons.chat_bubble_outline,
-                                            color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
-                                            size: 22,
-                                          ),
-                                          const SizedBox(width: 8),
                                           Text(
                                             'Chat',
                                             style: TextStyle(
@@ -466,12 +443,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                       child: Row(
                                         mainAxisAlignment: MainAxisAlignment.center,
                                         children: [
-                                          Icon(
-                                            Icons.explore_outlined,
-                                            color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
-                                            size: 22,
-                                          ),
-                                          const SizedBox(width: 8),
                                           Text(
                                             'Explore',
                                             style: TextStyle(
@@ -541,14 +512,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 return Center(
                   child: Padding(
                     padding: EdgeInsets.only(right: MediaQuery.sizeOf(context).width * 0.10),
-                    child: const Text(
-                      'Explore',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w600,
-                      )
-                    ),
+                    child: const Text('Explore',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w600,
+                        )),
                   ),
                 );
               } else {
@@ -589,9 +558,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
                       String transcriptModel = SharedPreferencesUtil().transcriptionModel;
                       routeToPage(context, const SettingsPage());
-                      if (language != SharedPreferencesUtil().userPrimaryLanguage ||
-                          hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
-                          transcriptModel != SharedPreferencesUtil().transcriptionModel) {
+                      if (language != SharedPreferencesUtil().userPrimaryLanguage || hasSpeech != SharedPreferencesUtil().hasSpeakerProfile || transcriptModel != SharedPreferencesUtil().transcriptionModel) {
                         if (context.mounted) {
                           context.read<CaptureProvider>().onRecordProfileSettingChanged();
                         }
