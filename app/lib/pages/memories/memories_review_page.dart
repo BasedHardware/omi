@@ -63,7 +63,7 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> {
     // Process memories with a small delay to allow UI to update
     for (var memory in memoriesToProcess) {
       await Future.delayed(const Duration(milliseconds: 20));
-      context.read<MemoriesProvider>().reviewMemory(memory, approve);
+      context.read<MemoriesProvider>().reviewMemory(memory, approve, 'review_page_batch');
     }
 
     setState(() {
@@ -104,7 +104,7 @@ class _MemoriesReviewPageState extends State<MemoriesReviewPage> {
     setState(() => _isProcessing = true);
 
     // Process the single memory
-    context.read<MemoriesProvider>().reviewMemory(memory, approve);
+    context.read<MemoriesProvider>().reviewMemory(memory, approve, 'review_page_single');
 
     setState(() {
       remainingMemories.remove(memory);
