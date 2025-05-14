@@ -24,6 +24,12 @@ class SummarizedAppsBottomSheet extends StatelessWidget {
           builder: (context, provider, _) {
             final summarizedApp = provider.getSummarizedApp();
             final currentAppId = summarizedApp?.appId;
+            final conversationId = provider.conversation.id;
+
+            MixpanelManager().summarizedAppSheetViewed(
+              conversationId: conversationId,
+              currentSummarizedAppId: currentAppId,
+            );
 
             return _SheetContainer(
               scrollController: scrollController,
@@ -146,6 +152,15 @@ class _AppsList extends StatelessWidget {
   void _handleAutoAppTap(BuildContext context) async {
     Navigator.pop(context);
     final provider = context.read<ConversationDetailProvider>();
+    final previousAppId = provider.getSummarizedApp()?.appId;
+    final conversationId = provider.conversation.id;
+
+    MixpanelManager().summarizedAppSelected(
+      conversationId: conversationId,
+      selectedAppId: 'auto',
+      previousAppId: previousAppId,
+    );
+
     provider.clearSelectedAppForReprocessing();
     await provider.reprocessConversation();
     return;
@@ -153,9 +168,18 @@ class _AppsList extends StatelessWidget {
 
   void _handleAppTap(BuildContext context, App app) async {
     // If this is a different app than currently selected, reprocess with this app
+    final provider = context.read<ConversationDetailProvider>();
+    final previousAppId = provider.getSummarizedApp()?.appId;
+    final conversationId = provider.conversation.id;
+
     if (app.id != currentAppId) {
+      MixpanelManager().summarizedAppSelected(
+        conversationId: conversationId,
+        selectedAppId: app.id,
+        previousAppId: previousAppId,
+      );
+
       Navigator.pop(context);
-      final provider = context.read<ConversationDetailProvider>();
       provider.setSelectedAppForReprocessing(app);
       provider.setPreferredSummarizationApp(app.id);
       await provider.reprocessConversation(appId: app.id);
@@ -277,6 +301,10 @@ class _EnableAppsListItem extends StatelessWidget {
       trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
       onTap: () {
         Navigator.pop(context);
+        final conversationId = context.read<ConversationDetailProvider>().conversation?.id;
+        if (conversationId != null) {
+          MixpanelManager().summarizedAppEnableAppsClicked(conversationId: conversationId);
+        }
         routeToPage(context, const AppsPage(showAppBar: true));
         MixpanelManager().pageOpened('Detail Apps');
       },

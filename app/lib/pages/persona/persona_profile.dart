@@ -6,16 +6,11 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/main.dart';
-import 'package:omi/pages/chat/clone_chat_page.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
-import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/pages/persona/twitter/social_profile.dart';
-import 'package:omi/pages/settings/page.dart';
-import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/providers/message_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
@@ -46,6 +41,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final provider = Provider.of<PersonaProvider>(context, listen: false);
+      String source = 'unknown'; // Default source
 
       // Check if we came from settings
       final isFromSettings = ModalRoute.of(context)?.settings.arguments == 'from_settings';
@@ -55,8 +51,10 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
 
       if (provider.routing == PersonaProfileRouting.apps_updates && provider.userPersona != null) {
         provider.prepareUpdatePersona(provider.userPersona!);
+        MixpanelManager().personaProfileViewed(personaId: provider.userPersona!.id, source: source);
       } else {
         await provider.getVerifiedUserPersona();
+        MixpanelManager().personaProfileViewed(personaId: provider.userPersona?.id, source: source);
       }
     });
     super.initState();
@@ -269,6 +267,8 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                   await Posthog().capture(eventName: 'share_persona_clicked', properties: {
                                     'persona_username': persona.username ?? '',
                                   });
+                                  MixpanelManager()
+                                      .personaShared(personaId: persona.id, personaUsername: persona.username);
                                   Share.share(
                                     'https://personas.omi.me/u/${persona.username}',
                                     subject: '${persona.getName()} Persona',
