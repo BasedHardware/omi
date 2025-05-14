@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -62,55 +63,6 @@ class MemoriesPageState extends State<MemoriesPage> {
     return counts;
   }
 
-  Widget _buildSearchBar() {
-    return Consumer<MemoriesProvider>(
-      builder: (context, provider, _) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-          child: SearchBar(
-            hintText: 'Search memories',
-            leading: const Icon(Icons.search, color: Colors.white70, size: 18),
-            backgroundColor: WidgetStateProperty.all(AppStyles.backgroundSecondary),
-            elevation: WidgetStateProperty.all(0),
-            padding: WidgetStateProperty.all(
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            ),
-            controller: _searchController,
-            trailing: provider.searchQuery.isNotEmpty
-                ? [
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white70, size: 16),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
-                        minHeight: 36,
-                        minWidth: 36,
-                      ),
-                      onPressed: () {
-                        _searchController.clear();
-                        setState(() {});
-                        provider.setSearchQuery('');
-                      },
-                    )
-                  ]
-                : null,
-            hintStyle: WidgetStateProperty.all(
-              TextStyle(color: AppStyles.textTertiary, fontSize: 14),
-            ),
-            textStyle: WidgetStateProperty.all(
-              TextStyle(color: AppStyles.textPrimary, fontSize: 14),
-            ),
-            shape: WidgetStateProperty.all(
-              RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
-              ),
-            ),
-            onChanged: (value) => provider.setSearchQuery(value),
-          ),
-        );
-      }
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Consumer<MemoriesProvider>(
@@ -131,153 +83,117 @@ class MemoriesPageState extends State<MemoriesPage> {
                     controller: _scrollController,
                     headerSliverBuilder: (context, innerBoxIsScrolled) {
                       return [
-                        // AppBar with the title and action buttons
-                        SliverAppBar(
-                          backgroundColor: Theme.of(context).colorScheme.primary,
-                          pinned: true,
-                          centerTitle: true,
-                          title: const Text('Memories', style: AppStyles.title),
-                          leading: null,
-                          automaticallyImplyLeading: true,
-                          titleSpacing: 0,
-                          actions: [
-                            IconButton(
-                              icon: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.reviews_outlined,
-                                    color: unreviewedCount > 0 ? Colors.white : Colors.grey.shade600,
-                                    size: 22,
-                                  ),
-                                  if (unreviewedCount > 0)
-                                    Positioned(
-                                      top: 0,
-                                      right: 0,
-                                      child: Container(
-                                        padding: const EdgeInsets.all(2),
-                                        decoration: BoxDecoration(
-                                          color: Colors.red,
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                        constraints: const BoxConstraints(
-                                          minWidth: 16,
-                                          minHeight: 16,
-                                        ),
-                                        child: Text(
-                                          '$unreviewedCount',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                          textAlign: TextAlign.center,
+                        // Top row with search bar and action buttons
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+                            child: Row(
+                              children: [
+                                // Search bar taking most of the space
+                                Expanded(
+                                  child: SizedBox(
+                                    height: 44, // Match button height
+                                    child: SearchBar(
+                                      hintText: 'Search memories',
+                                      leading: const Padding(
+                                        padding: EdgeInsets.only(left: 6.0),
+                                        child: Icon(FontAwesomeIcons.magnifyingGlass, color: Colors.white70, size: 14),
+                                      ),
+                                      backgroundColor: WidgetStateProperty.all(AppStyles.backgroundSecondary),
+                                      elevation: WidgetStateProperty.all(0),
+                                      padding: WidgetStateProperty.all(
+                                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4), // Reduce vertical padding
+                                      ),
+                                      controller: _searchController,
+                                      trailing: provider.searchQuery.isNotEmpty
+                                          ? [
+                                              IconButton(
+                                                icon: const Icon(Icons.close, color: Colors.white70, size: 16),
+                                                padding: EdgeInsets.zero,
+                                                constraints: const BoxConstraints(
+                                                  minHeight: 36,
+                                                  minWidth: 36,
+                                                ),
+                                                onPressed: () {
+                                                  _searchController.clear();
+                                                  setState(() {});
+                                                  provider.setSearchQuery('');
+                                                },
+                                              )
+                                            ]
+                                          : null,
+                                      hintStyle: WidgetStateProperty.all(
+                                        TextStyle(color: AppStyles.textTertiary, fontSize: 14),
+                                      ),
+                                      textStyle: WidgetStateProperty.all(
+                                        TextStyle(color: AppStyles.textPrimary, fontSize: 14),
+                                      ),
+                                      shape: WidgetStateProperty.all(
+                                        RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
                                         ),
                                       ),
-                                    ),
-                                ],
-                              ),
-                              onPressed: unreviewedCount > 0
-                                ? () {
-                                    _showReviewSheet(provider.unreviewed);
-                                    MixpanelManager().memoriesPageReviewBtn();
-                                  }
-                                : null,
-                              tooltip: unreviewedCount > 0 ? 'Review memories' : 'No memories to review',
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.settings),
-                              onPressed: () {
-                                _showMemoryManagementSheet(context, provider);
-                              },
-                              tooltip: 'Manage memories',
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.add),
-                              onPressed: () {
-                                showMemoryDialog(context, provider);
-                                MixpanelManager().memoriesPageCreateMemoryBtn();
-                              },
-                            ),
-                          ],
-                        ),
-
-                        // Category filter
-                        if (categoryCounts.isNotEmpty)
-                          SliverToBoxAdapter(
-                            child: Container(
-                              height: 50,
-                              margin: const EdgeInsets.fromLTRB(0, 0, 0, 8),
-                              child: ListView(
-                                scrollDirection: Axis.horizontal,
-                                padding: const EdgeInsets.symmetric(horizontal: 16),
-                                children: [
-                                  Padding(
-                                    padding: const EdgeInsets.only(right: 8),
-                                    child: FilterChip(
-                                      label: Text(
-                                        'All (${provider.memories.length})',
-                                        style: TextStyle(
-                                          color: _selectedCategory == null ? Colors.black : Colors.white70,
-                                          fontWeight: _selectedCategory == null ? FontWeight.w600 : FontWeight.normal,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                      selected: _selectedCategory == null,
-                                      onSelected: (_) => _filterByCategory(null),
-                                      backgroundColor: AppStyles.backgroundTertiary,
-                                      selectedColor: Colors.white,
-                                      checkmarkColor: Colors.black,
-                                      showCheckmark: false,
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      onChanged: (value) => provider.setSearchQuery(value),
                                     ),
                                   ),
-                                  ...categoryCounts.entries.map((entry) {
-                                    final category = entry.key;
-                                    final count = entry.value;
+                                ),
 
-                                    // Format category name to be more concise
-                                    String categoryName = category.toString().split('.').last;
-                                    // Capitalize first letter only
-                                    categoryName = categoryName[0].toUpperCase() + categoryName.substring(1);
-
-                                    return Padding(
-                                      padding: const EdgeInsets.only(right: 8),
-                                      child: FilterChip(
-                                        label: Text(
-                                          '$categoryName ($count)',
-                                          style: TextStyle(
-                                            color: _selectedCategory == category ? Colors.black : Colors.white70,
-                                            fontWeight: _selectedCategory == category ? FontWeight.w600 : FontWeight.normal,
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                        selected: _selectedCategory == category,
-                                        onSelected: (_) => _filterByCategory(category),
-                                        backgroundColor: AppStyles.backgroundTertiary,
-                                        selectedColor: Colors.white,
-                                        checkmarkColor: Colors.black,
-                                        showCheckmark: false,
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                const SizedBox(width: 8),
+                                // Settings button
+                                SizedBox(
+                                  width: 44,
+                                  height: 44,
+                                  child: ElevatedButton(
+                                    onPressed: () {
+                                      _showMemoryManagementSheet(context, provider);
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppStyles.backgroundSecondary,
+                                      foregroundColor: Colors.white,
+                                      padding: EdgeInsets.zero,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
                                       ),
-                                    );
-                                  }),
-                                ],
-                              ),
+                                    ),
+                                    child: Icon(FontAwesomeIcons.gear, size: 16),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                // Create button
+                                SizedBox(
+                                  width: 44,
+                                  height: 44,
+                                  child: ElevatedButton(
+                                    onPressed: () {
+                                      showMemoryDialog(context, provider);
+                                      MixpanelManager().memoriesPageCreateMemoryBtn();
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppStyles.backgroundSecondary,
+                                      foregroundColor: Colors.white,
+                                      padding: EdgeInsets.zero,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                    child: Icon(FontAwesomeIcons.plus, size: 18),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
+                        ),
 
-                        // Search bar that appears when scrolling
+                        // Remove category filter section
+
+                        // Empty persistent header with zero height
                         SliverPersistentHeader(
                           pinned: true,
                           floating: true,
                           delegate: _SliverSearchBarDelegate(
                             minHeight: 0,
-                            maxHeight: 60,
-                            child: Container(
-                              color: Theme.of(context).colorScheme.primary,
-                              child: _buildSearchBar(),
-                            ),
+                            maxHeight: 0,
+                            child: Container(),
                           ),
                         ),
                       ];
@@ -311,7 +227,7 @@ class MemoriesPageState extends State<MemoriesPage> {
                             ),
                           )
                         : ListView.builder(
-                            padding: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.only(top: 8, left: 16, right: 16, bottom: 16), // Reduce top padding
                             itemCount: provider.filteredMemories.length,
                             itemBuilder: (context, index) {
                               final memory = provider.filteredMemories[index];
@@ -446,8 +362,6 @@ class _SliverSearchBarDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(_SliverSearchBarDelegate oldDelegate) {
-    return maxHeight != oldDelegate.maxHeight ||
-        minHeight != oldDelegate.minHeight ||
-        child != oldDelegate.child;
+    return maxHeight != oldDelegate.maxHeight || minHeight != oldDelegate.minHeight || child != oldDelegate.child;
   }
 }

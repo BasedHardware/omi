@@ -222,15 +222,6 @@ class _ProfilePageState extends State<ProfilePage> {
                 routeToPage(context, const UserPeoplePage());
               },
             ),
-            _buildProfileTile(
-              title: 'Memories',
-              subtitle: 'What Omi has learned about you 👀',
-              icon: Icons.self_improvement,
-              onTap: () {
-                routeToPage(context, const MemoriesPage());
-                MixpanelManager().pageOpened('Profile Facts');
-              },
-            ),
 
             // PAYMENT SECTION
             _buildSectionHeader('PAYMENT'),
@@ -268,8 +259,7 @@ class _ProfilePageState extends State<ProfilePage> {
               icon: Icons.copy_rounded,
               onTap: () {
                 Clipboard.setData(ClipboardData(text: SharedPreferencesUtil().uid));
-                ScaffoldMessenger.of(context)
-                    .showSnackBar(const SnackBar(content: Text('User ID copied to clipboard')));
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User ID copied to clipboard')));
               },
             ),
             _buildProfileTile(
