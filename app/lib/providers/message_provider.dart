@@ -14,6 +14,7 @@ import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:omi/utils/file.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:uuid/uuid.dart';
 
 class MessageProvider extends ChangeNotifier {
@@ -333,18 +334,30 @@ class MessageProvider extends ChangeNotifier {
 
   Future sendMessageStreamToServer(String text) async {
     setShowTypingIndicator(true);
-    var appId = appProvider?.selectedChatAppId;
-    if (appId == 'no_selected') {
-      appId = null;
+    var currentAppId = appProvider?.selectedChatAppId;
+    if (currentAppId == 'no_selected') {
+      currentAppId = null;
     }
-    var message = ServerMessage.empty(appId: appId);
+
+    String chatTargetId = currentAppId ?? 'omi';
+    App? targetApp = currentAppId != null ? appProvider?.apps.firstWhereOrNull((app) => app.id == currentAppId) : null;
+    bool isPersonaChat = targetApp != null ? !targetApp.isNotPersona() : false;
+
+    MixpanelManager().chatMessageSent(
+        message: text,
+        includesFiles: uploadedFiles.isNotEmpty,
+        numberOfFiles: uploadedFiles.length,
+        chatTargetId: chatTargetId,
+        isPersonaChat: isPersonaChat);
+
+    var message = ServerMessage.empty(appId: currentAppId);
     messages.insert(0, message);
     notifyListeners();
     List<String> fileIds = uploadedFiles.map((e) => e.id).toList();
     clearSelectedFiles();
     clearUploadedFiles();
     try {
-      await for (var chunk in sendMessageStreamServer(text, appId: appProvider?.selectedChatAppId, filesId: fileIds)) {
+      await for (var chunk in sendMessageStreamServer(text, appId: currentAppId, filesId: fileIds)) {
         if (chunk.type == MessageChunkType.think) {
           message.thinkings.add(chunk.text);
           notifyListeners();

@@ -208,12 +208,20 @@ class MixpanelManager {
   void conversationDeleted(ServerConversation conversation) =>
       track('Memory Deleted', properties: getConversationEventProperties(conversation));
 
-  void chatMessageSent(String message, bool includesFiles, int numberOfFiles) =>
+  void chatMessageSent({
+    required String message,
+    required bool includesFiles,
+    required int numberOfFiles,
+    required String chatTargetId,
+    required bool isPersonaChat,
+  }) =>
       track('Chat Message Sent', properties: {
         'message_length': message.length,
         'message_word_count': message.split(' ').length,
         'includes_files': includesFiles,
         'number_of_files': numberOfFiles,
+        'chat_target_id': chatTargetId,
+        'is_persona_chat': isPersonaChat,
       });
 
   void speechProfileCapturePageClicked() => track('Speech Profile Capture Page Clicked');
@@ -330,4 +338,136 @@ class MixpanelManager {
   }
 
   void appsClearFilters() => track('Apps Clear Filters');
+
+  // Persona Events
+  void personaProfileViewed({String? personaId, required String source}) {
+    track('Persona Profile Viewed', properties: {
+      if (personaId != null) 'persona_id': personaId,
+      'source': source,
+    });
+  }
+
+  void personaCreateStarted() => track('Persona Create Started');
+
+  void personaCreateImagePicked() => track('Persona Create Image Picked');
+
+  void personaCreated({
+    required String personaId,
+    required bool isPublic,
+    List<String>? connectedAccounts,
+    bool? hasOmiConnection,
+    bool? hasTwitterConnection,
+  }) {
+    track('Persona Created', properties: {
+      'persona_id': personaId,
+      'is_public': isPublic,
+      if (connectedAccounts != null) 'connected_accounts': connectedAccounts,
+      if (hasOmiConnection != null) 'has_omi_connection': hasOmiConnection,
+      if (hasTwitterConnection != null) 'has_twitter_connection': hasTwitterConnection,
+    });
+  }
+
+  void personaCreateFailed({String? errorMessage}) {
+    track('Persona Create Failed', properties: {
+      if (errorMessage != null) 'error_message': errorMessage,
+    });
+  }
+
+  void personaUpdateStarted({required String personaId}) {
+    track('Persona Update Started', properties: {'persona_id': personaId});
+  }
+
+  void personaUpdateImagePicked({required String personaId}) {
+    track('Persona Update Image Picked', properties: {'persona_id': personaId});
+  }
+
+  void personaUpdated({
+    required String personaId,
+    List<String>? updatedFields,
+    required bool isPublic,
+    List<String>? connectedAccounts,
+    bool? hasOmiConnection,
+    bool? hasTwitterConnection,
+  }) {
+    track('Persona Updated', properties: {
+      'persona_id': personaId,
+      if (updatedFields != null && updatedFields.isNotEmpty) 'updated_fields': updatedFields,
+      'is_public': isPublic,
+      if (connectedAccounts != null) 'connected_accounts': connectedAccounts,
+      if (hasOmiConnection != null) 'has_omi_connection': hasOmiConnection,
+      if (hasTwitterConnection != null) 'has_twitter_connection': hasTwitterConnection,
+    });
+  }
+
+  void personaUpdateFailed({required String personaId, String? errorMessage}) {
+    track('Persona Update Failed', properties: {
+      'persona_id': personaId,
+      if (errorMessage != null) 'error_message': errorMessage,
+    });
+  }
+
+  void personaPublicToggled({required String personaId, required bool isPublic}) {
+    track('Persona Public Toggled', properties: {
+      'persona_id': personaId,
+      'is_public': isPublic,
+    });
+  }
+
+  void personaOmiConnectionToggled({required String personaId, required bool omiConnected}) {
+    track('Persona OMI Connection Toggled', properties: {
+      'persona_id': personaId,
+      'omi_connected': omiConnected,
+    });
+  }
+
+  void personaTwitterConnectionToggled({required String personaId, required bool twitterConnected}) {
+    track('Persona Twitter Connection Toggled', properties: {
+      'persona_id': personaId,
+      'twitter_connected': twitterConnected,
+    });
+  }
+
+  void personaTwitterProfileFetched({required String twitterHandle, required bool fetchSuccessful}) {
+    track('Persona Twitter Profile Fetched', properties: {
+      'twitter_handle': twitterHandle,
+      'fetch_successful': fetchSuccessful,
+    });
+  }
+
+  void personaTwitterOwnershipVerified({
+    String? personaId,
+    required String twitterHandle,
+    required bool verificationSuccessful,
+  }) {
+    track('Persona Twitter Ownership Verified', properties: {
+      if (personaId != null) 'persona_id': personaId,
+      'twitter_handle': twitterHandle,
+      'verification_successful': verificationSuccessful,
+    });
+  }
+
+  void personaShared({required String? personaId, required String? personaUsername}) {
+    track('Persona Shared', properties: {
+      if (personaId != null) 'persona_id': personaId,
+      if (personaUsername != null) 'persona_username': personaUsername,
+    });
+  }
+
+  void personaUsernameCheck({required String username, required bool isTaken}) {
+    track('Persona Username Check', properties: {
+      'username': username,
+      'is_taken': isTaken,
+    });
+  }
+
+  void personaEnabled({required String personaId}) {
+    track('Persona Enabled', properties: {'persona_id': personaId});
+  }
+
+  void personaEnableFailed({required String personaId, String? errorMessage}) {
+    track('Persona Enable Failed', properties: {
+      'persona_id': personaId,
+      if (errorMessage != null) 'error_message': errorMessage,
+    });
+  }
 }
