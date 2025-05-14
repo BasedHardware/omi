@@ -329,12 +329,12 @@ class PersonaProvider extends ChangeNotifier {
             _userPersona!.connectedAccounts.where((element) => element != 'twitter').toList();
       }
 
-      // Determine updated fields (example, more robust checking needed)
       List<String> updatedFields = [];
       if (personaData['name'] != _userPersona!.name) updatedFields.add('name');
       if (personaData['username'] != _userPersona!.username) updatedFields.add('username');
-      if (personaData['private'] == _userPersona!.private)
-        updatedFields.add('privacy'); // private is !makePersonaPublic
+      if (personaData['private'] == _userPersona!.private) {
+        updatedFields.add('privacy');
+      }
       if (selectedImage != null) updatedFields.add('image');
 
       bool success = await updatePersonaApp(selectedImage, personaData);
