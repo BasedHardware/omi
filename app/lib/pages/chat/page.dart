@@ -600,7 +600,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   _sendMessageUtil(String text) {
     var provider = context.read<MessageProvider>();
-    MixpanelManager().chatMessageSent(text, provider.uploadedFiles.isNotEmpty, provider.uploadedFiles.length);
     provider.setSendingMessage(true);
     provider.addMessageLocally(text);
     scrollToBottom();

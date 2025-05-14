@@ -6,6 +6,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 
 typedef ShowSuccessDialogCallback = void Function(String url);
 
@@ -77,12 +78,17 @@ class PersonaProvider extends ChangeNotifier {
       if (res['status'] == 'notfound') {
         AppSnackbar.showSnackbarError('Twitter handle not found');
         _twitterProfile = {};
+        MixpanelManager().personaTwitterProfileFetched(twitterHandle: handle, fetchSuccessful: false);
       } else if (res['status'] == 'suspended') {
         AppSnackbar.showSnackbarError('Twitter handle is suspended');
         _twitterProfile = {};
+        MixpanelManager().personaTwitterProfileFetched(twitterHandle: handle, fetchSuccessful: false);
       } else {
         _twitterProfile = res;
+        MixpanelManager().personaTwitterProfileFetched(twitterHandle: handle, fetchSuccessful: true);
       }
+    } else {
+      MixpanelManager().personaTwitterProfileFetched(twitterHandle: handle, fetchSuccessful: false);
     }
     setIsLoading(false);
     notifyListeners();
@@ -93,6 +99,10 @@ class PersonaProvider extends ChangeNotifier {
     if (!verified) {
       AppSnackbar.showSnackbarError('Failed to verify Twitter handle');
     }
+    MixpanelManager().personaTwitterOwnershipVerified(
+        personaId: verifiedPersonaId ?? personaId,
+        twitterHandle: _twitterProfile['profile'],
+        verificationSuccessful: verified);
     SharedPreferencesUtil().hasPersonaCreated = true;
     SharedPreferencesUtil().verifiedPersonaId = verifiedPersonaId;
     toggleTwitterConnection(true);
@@ -158,6 +168,9 @@ class PersonaProvider extends ChangeNotifier {
 
     // Update
     debugPrint("setPersonaPublic");
+    if (_userPersona != null) {
+      MixpanelManager().personaPublicToggled(personaId: _userPersona!.id, isPublic: makePersonaPublic);
+    }
     updatePersona();
   }
 
@@ -180,6 +193,7 @@ class PersonaProvider extends ChangeNotifier {
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
       selectedImage = File(image.path);
+      MixpanelManager().personaCreateImagePicked();
       validateForm();
     }
     notifyListeners();
@@ -190,6 +204,11 @@ class PersonaProvider extends ChangeNotifier {
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
       selectedImage = File(image.path);
+      if (_userPersona != null) {
+        MixpanelManager().personaUpdateImagePicked(personaId: _userPersona!.id);
+      } else {
+        MixpanelManager().personaCreateImagePicked();
+      }
       validateForm();
 
       // Update
@@ -224,6 +243,9 @@ class PersonaProvider extends ChangeNotifier {
 
   void toggleOmiConnection(bool value) {
     hasOmiConnection = value;
+    if (_userPersona != null) {
+      MixpanelManager().personaOmiConnectionToggled(personaId: _userPersona!.id, omiConnected: value);
+    }
     notifyListeners();
   }
 
@@ -231,6 +253,9 @@ class PersonaProvider extends ChangeNotifier {
     hasTwitterConnection = value;
     if (!value) {
       _twitterProfile = {};
+    }
+    if (_userPersona != null) {
+      MixpanelManager().personaTwitterConnectionToggled(personaId: _userPersona!.id, twitterConnected: value);
     }
     notifyListeners();
   }
@@ -242,6 +267,9 @@ class PersonaProvider extends ChangeNotifier {
     debugPrint("disconnectTwitter");
     if (_isEditablePersona()) {
       updatePersona();
+      if (_userPersona != null) {
+        MixpanelManager().personaTwitterConnectionToggled(personaId: _userPersona!.id, twitterConnected: false);
+      }
     }
     notifyListeners();
   }
@@ -251,6 +279,9 @@ class PersonaProvider extends ChangeNotifier {
     debugPrint("disconnectOmi");
     if (_isEditablePersona()) {
       updatePersona();
+      if (_userPersona != null) {
+        MixpanelManager().personaOmiConnectionToggled(personaId: _userPersona!.id, omiConnected: false);
+      }
     }
     notifyListeners();
   }
@@ -265,6 +296,7 @@ class PersonaProvider extends ChangeNotifier {
       return;
     }
 
+    MixpanelManager().personaUpdateStarted(personaId: _userPersona!.id);
     setIsLoading(true);
     try {
       Map<String, dynamic> personaData = {
@@ -297,23 +329,42 @@ class PersonaProvider extends ChangeNotifier {
             _userPersona!.connectedAccounts.where((element) => element != 'twitter').toList();
       }
 
+      // Determine updated fields (example, more robust checking needed)
+      List<String> updatedFields = [];
+      if (personaData['name'] != _userPersona!.name) updatedFields.add('name');
+      if (personaData['username'] != _userPersona!.username) updatedFields.add('username');
+      if (personaData['private'] == _userPersona!.private)
+        updatedFields.add('privacy'); // private is !makePersonaPublic
+      if (selectedImage != null) updatedFields.add('image');
+
       bool success = await updatePersonaApp(selectedImage, personaData);
       if (success) {
         AppSnackbar.showSnackbarSuccess('Persona updated successfully');
+        MixpanelManager().personaUpdated(
+            personaId: _userPersona!.id,
+            isPublic: !(personaData['private'] as bool? ?? true),
+            updatedFields: updatedFields,
+            connectedAccounts: personaData['connected_accounts'] as List<String>?,
+            hasOmiConnection: (personaData['connected_accounts'] as List<String>?)?.contains('omi'),
+            hasTwitterConnection: (personaData['connected_accounts'] as List<String>?)?.contains('twitter'));
         await getVerifiedUserPersona();
         notifyListeners();
       } else {
         AppSnackbar.showSnackbarError('Failed to update persona');
+        MixpanelManager()
+            .personaUpdateFailed(personaId: _userPersona!.id, errorMessage: 'Failed to update persona API call');
       }
     } catch (e) {
       print('Error updating persona: $e');
       AppSnackbar.showSnackbarError('Failed to update persona');
+      MixpanelManager().personaUpdateFailed(personaId: _userPersona!.id, errorMessage: e.toString());
     } finally {
       setIsLoading(false);
     }
   }
 
   Future<void> createPersona() async {
+    MixpanelManager().personaCreateStarted();
     if (!formKey.currentState!.validate() || selectedImage == null) {
       if (selectedImage == null) {
         AppSnackbar.showSnackbarError('Please select an image');
@@ -353,14 +404,23 @@ class PersonaProvider extends ChangeNotifier {
       if (res.isNotEmpty) {
         String personaUrl = 'personas.omi.me/u/${res['username']}';
         debugPrint('Persona URL: $personaUrl');
+        MixpanelManager().personaCreated(
+            personaId: res['id'],
+            isPublic: !(personaData['private'] as bool? ?? true),
+            connectedAccounts: personaData['connected_accounts'] as List<String>?,
+            hasOmiConnection: (personaData['connected_accounts'] as List<String>?)?.contains('omi'),
+            hasTwitterConnection: (personaData['connected_accounts'] as List<String>?)?.contains('twitter'));
         if (onShowSuccessDialog != null) {
           onShowSuccessDialog!(personaUrl);
         }
       } else {
         AppSnackbar.showSnackbarError('Failed to create your persona. Please try again later.');
+        MixpanelManager().personaCreateFailed(errorMessage: 'API response empty or no ID');
       }
     } catch (e) {
       AppSnackbar.showSnackbarError('Failed to create persona: $e');
+      MixpanelManager().personaCreateFailed(errorMessage: e.toString());
+      setIsLoading(false);
     } finally {
       setIsLoading(false);
     }
@@ -369,6 +429,7 @@ class PersonaProvider extends ChangeNotifier {
   Future checkIsUsernameTaken(String username) async {
     setIsCheckingUsername(true);
     isUsernameTaken = await checkPersonaUsername(username);
+    MixpanelManager().personaUsernameCheck(username: username, isTaken: isUsernameTaken);
     setIsCheckingUsername(false);
   }
 
@@ -390,13 +451,18 @@ class PersonaProvider extends ChangeNotifier {
     try {
       var enabled = await enableAppServer(_userPersona!.id);
       if (enabled) {
+        MixpanelManager().personaEnabled(personaId: _userPersona!.id);
         return true;
       } else {
         AppSnackbar.showSnackbarError('Failed to enable persona');
+        MixpanelManager().personaEnableFailed(personaId: _userPersona!.id, errorMessage: 'API returned false');
         return false;
       }
     } catch (e) {
       AppSnackbar.showSnackbarError('Error enabling persona: $e');
+      if (_userPersona != null) {
+        MixpanelManager().personaEnableFailed(personaId: _userPersona!.id, errorMessage: e.toString());
+      }
       return false;
     } finally {
       setIsLoading(false);
