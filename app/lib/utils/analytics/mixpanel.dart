@@ -470,4 +470,33 @@ class MixpanelManager {
       if (errorMessage != null) 'error_message': errorMessage,
     });
   }
+
+  // Summarized Apps Sheet Events
+  void summarizedAppSheetViewed({
+    required String conversationId,
+    String? currentSummarizedAppId,
+  }) {
+    track('Summarized App Sheet Viewed', properties: {
+      'conversation_id': conversationId,
+      'current_summarized_app_id': currentSummarizedAppId ?? 'auto',
+    });
+  }
+
+  void summarizedAppSelected({
+    required String conversationId,
+    required String selectedAppId,
+    String? previousAppId,
+  }) {
+    track('Summarized App Selected', properties: {
+      'conversation_id': conversationId,
+      'selected_app_id': selectedAppId,
+      'previous_app_id': previousAppId ?? 'auto',
+    });
+  }
+
+  void summarizedAppEnableAppsClicked({required String conversationId}) {
+    track('Summarized App Enable Apps Clicked', properties: {
+      'conversation_id': conversationId,
+    });
+  }
 }
