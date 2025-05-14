@@ -145,6 +145,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                                   onPressed: () {
                                                     _searchController.clear();
                                                     provider.setSearchQuery('');
+                                                    MixpanelManager().memorySearchCleared(provider.memories.length);
                                                   },
                                                 )
                                               ]
@@ -161,6 +162,11 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                           ),
                                         ),
                                         onChanged: (value) => provider.setSearchQuery(value),
+                                        onSubmitted: (value) {
+                                          if (value.isNotEmpty) {
+                                            MixpanelManager().memorySearched(value, provider.filteredMemories.length);
+                                          }
+                                        },
                                       ),
                                     ),
                                   );
@@ -303,7 +309,10 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                               return MemoryItem(
                                 memory: memory,
                                 provider: provider,
-                                onTap: _showQuickEditSheet,
+                                onTap: (BuildContext context, Memory tappedMemory, MemoriesProvider tappedProvider) {
+                                  MixpanelManager().memoryListItemClicked(tappedMemory);
+                                  _showQuickEditSheet(context, tappedMemory, tappedProvider);
+                                },
                               );
                             },
                           ),
@@ -400,6 +409,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   }
 
   void _showMemoryManagementSheet(BuildContext context, MemoriesProvider provider) {
+    MixpanelManager().memoriesManagementSheetOpened();
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
