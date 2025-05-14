@@ -78,7 +78,7 @@ class CategoryChip extends StatelessWidget {
         displayName = "Life";
         break;
       case MemoryCategory.interests:
-        displayName = "Int";
+        displayName = "Interest";
         break;
       case MemoryCategory.work:
         displayName = "Work";
@@ -109,13 +109,9 @@ class CategoryChip extends StatelessWidget {
       height: 26,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
       decoration: BoxDecoration(
-        color: isSelected
-          ? (onTap != null ? categoryColor : categoryColor.withOpacity(0.15))
-          : Colors.grey.shade800.withOpacity(0.6),
+        color: isSelected ? (onTap != null ? categoryColor : categoryColor.withOpacity(0.15)) : Colors.grey.shade800.withOpacity(0.6),
         borderRadius: BorderRadius.circular(13),
-        border: isSelected && onTap == null
-          ? Border.all(color: categoryColor, width: 1)
-          : null,
+        border: isSelected && onTap == null ? Border.all(color: categoryColor, width: 1) : null,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -135,9 +131,7 @@ class CategoryChip extends StatelessWidget {
           Text(
             displayName + countText,
             style: TextStyle(
-              color: isSelected
-                ? (onTap != null ? Colors.white : categoryColor)
-                : Colors.white70,
+              color: isSelected ? (onTap != null ? Colors.white : categoryColor) : Colors.white70,
               fontSize: 12,
               fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
             ),
