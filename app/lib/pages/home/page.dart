@@ -210,7 +210,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
       if (mounted) {
-        await Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
+        await Provider.of<CaptureProvider>(context, listen: false)
+            .streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
       }
 
       // Navigate
@@ -384,7 +385,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       ),
                       Consumer<HomeProvider>(
                         builder: (context, home, child) {
-                          if (home.chatFieldFocusNode.hasFocus || home.convoSearchFieldFocusNode.hasFocus || home.appsSearchFieldFocusNode.hasFocus) {
+                          if (home.isChatFieldFocused ||
+                              home.isConvoSearchFieldFocused ||
+                              home.isAppsSearchFieldFocused ||
+                              home.isMemoriesSearchFieldFocused) {
                             return const SizedBox.shrink();
                           } else {
                             return Align(
@@ -396,7 +400,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   color: Colors.black,
                                   borderRadius: BorderRadius.all(Radius.circular(18)),
                                   border: GradientBoxBorder(
-                                    gradient: LinearGradient(colors: [Color.fromARGB(127, 208, 208, 208), Color.fromARGB(127, 188, 99, 121), Color.fromARGB(127, 86, 101, 182), Color.fromARGB(127, 126, 190, 236)]),
+                                    gradient: LinearGradient(colors: [
+                                      Color.fromARGB(127, 208, 208, 208),
+                                      Color.fromARGB(127, 188, 99, 121),
+                                      Color.fromARGB(127, 86, 101, 182),
+                                      Color.fromARGB(127, 126, 190, 236)
+                                    ]),
                                     width: 2,
                                   ),
                                   shape: BoxShape.rectangle,
@@ -405,13 +414,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   labelPadding: const EdgeInsets.symmetric(vertical: 10),
                                   indicatorPadding: EdgeInsets.zero,
                                   onTap: (index) {
-                                    MixpanelManager().bottomNavigationTabClicked(['Memories', 'Chat', 'Explore', 'Memories'][index]);
+                                    MixpanelManager()
+                                        .bottomNavigationTabClicked(['Memories', 'Chat', 'Explore', 'Facts'][index]);
                                     primaryFocus?.unfocus();
                                     if (home.selectedIndex == index) {
                                       return;
                                     }
                                     home.setIndex(index);
-                                    _controller?.animateToPage(index, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
+                                    _controller?.animateToPage(index,
+                                        duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                   },
                                   indicatorColor: Colors.transparent,
                                   tabs: [
@@ -609,7 +620,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
                     String transcriptModel = SharedPreferencesUtil().transcriptionModel;
                     routeToPage(context, const SettingsPage());
-                    if (language != SharedPreferencesUtil().userPrimaryLanguage || hasSpeech != SharedPreferencesUtil().hasSpeakerProfile || transcriptModel != SharedPreferencesUtil().transcriptionModel) {
+                    if (language != SharedPreferencesUtil().userPrimaryLanguage ||
+                        hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
+                        transcriptModel != SharedPreferencesUtil().transcriptionModel) {
                       if (context.mounted) {
                         context.read<CaptureProvider>().onRecordProfileSettingChanged();
                       }
