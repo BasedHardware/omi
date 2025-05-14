@@ -45,9 +45,11 @@ class _AppHomeWebPageState extends State<AppHomeWebPage> with SingleTickerProvid
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageFinished: (String url) {
-            setState(() {
-              _isLoading = false;
-            });
+            if (mounted) {
+              setState(() {
+                _isLoading = false;
+              });
+            }
           },
           onWebResourceError: (WebResourceError error) {
             setState(() {
