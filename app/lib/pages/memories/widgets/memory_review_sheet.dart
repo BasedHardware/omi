@@ -110,6 +110,7 @@ class MemoriesReviewSheet extends StatelessWidget {
                     ),
                   ],
                 ),
+                const SizedBox(height: 10),
               ],
             ),
           ),
