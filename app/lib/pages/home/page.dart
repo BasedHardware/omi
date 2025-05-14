@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/backend/http/api/users.dart';
@@ -185,6 +186,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         case "apps":
           homePageIdx = 2;
           break;
+        case "memoriesPage":
+          homePageIdx = 3;
+          break;
       }
     }
 
@@ -206,7 +210,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
       if (mounted) {
-        await Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
+        await Provider.of<CaptureProvider>(context, listen: false)
+            .streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
       }
 
       // Navigate
@@ -354,9 +359,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           builder: (context, homeProvider, _) {
             return Scaffold(
               backgroundColor: Theme.of(context).colorScheme.primary,
-              appBar: homeProvider.selectedIndex == 3 ? null : _buildAppBar(context),
+              appBar: homeProvider.selectedIndex == 4 ? null : _buildAppBar(context),
               body: DefaultTabController(
-                length: 3,
+                length: 4,
                 initialIndex: _controller?.initialPage ?? 0,
                 child: GestureDetector(
                   onTap: () {
@@ -374,81 +379,128 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                             ConversationsPage(),
                             ChatPage(isPivotBottom: false),
                             AppsPage(),
+                            MemoriesPage(),
                           ],
                         ),
                       ),
                       Consumer<HomeProvider>(
                         builder: (context, home, child) {
-                          if (home.chatFieldFocusNode.hasFocus || home.convoSearchFieldFocusNode.hasFocus || home.appsSearchFieldFocusNode.hasFocus) {
+                          if (home.isChatFieldFocused ||
+                              home.isConvoSearchFieldFocused ||
+                              home.isAppsSearchFieldFocused ||
+                              home.isMemoriesSearchFieldFocused) {
                             return const SizedBox.shrink();
                           } else {
                             return Align(
                               alignment: Alignment.bottomCenter,
                               child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10),
                                 margin: const EdgeInsets.fromLTRB(20, 16, 20, 42),
                                 decoration: const BoxDecoration(
                                   color: Colors.black,
                                   borderRadius: BorderRadius.all(Radius.circular(18)),
                                   border: GradientBoxBorder(
-                                    gradient: LinearGradient(colors: [Color.fromARGB(127, 208, 208, 208), Color.fromARGB(127, 188, 99, 121), Color.fromARGB(127, 86, 101, 182), Color.fromARGB(127, 126, 190, 236)]),
+                                    gradient: LinearGradient(colors: [
+                                      Color.fromARGB(127, 208, 208, 208),
+                                      Color.fromARGB(127, 188, 99, 121),
+                                      Color.fromARGB(127, 86, 101, 182),
+                                      Color.fromARGB(127, 126, 190, 236)
+                                    ]),
                                     width: 2,
                                   ),
                                   shape: BoxShape.rectangle,
                                 ),
                                 child: TabBar(
-                                  labelPadding: const EdgeInsets.symmetric(vertical: 8),
+                                  labelPadding: const EdgeInsets.symmetric(vertical: 10),
                                   indicatorPadding: EdgeInsets.zero,
                                   onTap: (index) {
-                                    MixpanelManager().bottomNavigationTabClicked(['Memories', 'Chat', 'Explore'][index]);
+                                    MixpanelManager()
+                                        .bottomNavigationTabClicked(['Memories', 'Chat', 'Explore', 'Facts'][index]);
                                     primaryFocus?.unfocus();
                                     if (home.selectedIndex == index) {
                                       return;
                                     }
                                     home.setIndex(index);
-                                    _controller?.animateToPage(index, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
+                                    _controller?.animateToPage(index,
+                                        duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                   },
                                   indicatorColor: Colors.transparent,
                                   tabs: [
                                     Tab(
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
                                         children: [
+                                          Icon(
+                                            FontAwesomeIcons.house,
+                                            color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
+                                            size: 18,
+                                          ),
+                                          const SizedBox(height: 6),
                                           Text(
                                             'Home',
                                             style: TextStyle(
                                               color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
-                                              fontSize: MediaQuery.sizeOf(context).width < 410 ? 14 : 16,
-                                              fontWeight: home.selectedIndex == 0 ? FontWeight.w600 : FontWeight.normal,
+                                              fontSize: 12,
                                             ),
                                           ),
                                         ],
                                       ),
                                     ),
                                     Tab(
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
                                         children: [
+                                          Icon(
+                                            FontAwesomeIcons.solidMessage,
+                                            color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
+                                            size: 18,
+                                          ),
+                                          const SizedBox(height: 6),
                                           Text(
                                             'Chat',
                                             style: TextStyle(
                                               color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
-                                              fontSize: MediaQuery.sizeOf(context).width < 410 ? 14 : 16,
-                                              fontWeight: home.selectedIndex == 1 ? FontWeight.w600 : FontWeight.normal,
+                                              fontSize: 12,
                                             ),
                                           ),
                                         ],
                                       ),
                                     ),
                                     Tab(
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
                                         children: [
+                                          Icon(
+                                            FontAwesomeIcons.search,
+                                            color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
+                                            size: 18,
+                                          ),
+                                          const SizedBox(height: 6),
                                           Text(
                                             'Explore',
                                             style: TextStyle(
                                               color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
-                                              fontSize: MediaQuery.sizeOf(context).width < 410 ? 14 : 16,
-                                              fontWeight: home.selectedIndex == 2 ? FontWeight.w600 : FontWeight.normal,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Tab(
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            FontAwesomeIcons.brain,
+                                            color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
+                                            size: 18,
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            'Memories',
+                                            style: TextStyle(
+                                              color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
+                                              fontSize: 12,
                                             ),
                                           ),
                                         ],
@@ -520,6 +572,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         )),
                   ),
                 );
+              } else if (provider.selectedIndex == 3) {
+                return Center(
+                  child: Padding(
+                    padding: EdgeInsets.only(right: MediaQuery.sizeOf(context).width * 0.10),
+                    child: const Text('Memories',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w600,
+                        )),
+                  ),
+                );
               } else {
                 return Expanded(
                   child: Center(
@@ -538,33 +602,32 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           ),
           Row(
             children: [
-              Padding(
-                padding: const EdgeInsets.only(right: 8.0),
-                child: Container(
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.transparent,
+              Container(
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.transparent,
+                ),
+                child: IconButton(
+                  padding: const EdgeInsets.fromLTRB(2.0, 2.0, 0, 2.0),
+                  icon: SvgPicture.asset(
+                    Assets.images.icSettingPersona.path,
+                    width: 36,
+                    height: 36,
                   ),
-                  child: IconButton(
-                    padding: const EdgeInsets.all(8.0),
-                    icon: SvgPicture.asset(
-                      Assets.images.icSettingPersona.path,
-                      width: 36,
-                      height: 36,
-                    ),
-                    onPressed: () {
-                      MixpanelManager().pageOpened('Settings');
-                      String language = SharedPreferencesUtil().userPrimaryLanguage;
-                      bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
-                      String transcriptModel = SharedPreferencesUtil().transcriptionModel;
-                      routeToPage(context, const SettingsPage());
-                      if (language != SharedPreferencesUtil().userPrimaryLanguage || hasSpeech != SharedPreferencesUtil().hasSpeakerProfile || transcriptModel != SharedPreferencesUtil().transcriptionModel) {
-                        if (context.mounted) {
-                          context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                        }
+                  onPressed: () {
+                    MixpanelManager().pageOpened('Settings');
+                    String language = SharedPreferencesUtil().userPrimaryLanguage;
+                    bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
+                    String transcriptModel = SharedPreferencesUtil().transcriptionModel;
+                    routeToPage(context, const SettingsPage());
+                    if (language != SharedPreferencesUtil().userPrimaryLanguage ||
+                        hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
+                        transcriptModel != SharedPreferencesUtil().transcriptionModel) {
+                      if (context.mounted) {
+                        context.read<CaptureProvider>().onRecordProfileSettingChanged();
                       }
-                    },
-                  ),
+                    }
+                  },
                 ),
               ),
             ],
