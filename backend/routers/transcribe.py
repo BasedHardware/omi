@@ -97,6 +97,8 @@ async def _listen(
     started_at = time.time()
     timeout_seconds = 420  # 7m # Soft timeout, should < MODAL_TIME_OUT - 3m
     has_timeout = os.getenv('NO_SOCKET_TIMEOUT') is None
+    inactivity_timeout_seconds = 30
+    last_audio_received_time = None
 
     # Send pong every 10s then handle it in the app \
     # since Starlette is not support pong automatically
@@ -105,6 +107,7 @@ async def _listen(
         nonlocal websocket_active
         nonlocal websocket_close_code
         nonlocal started_at
+        nonlocal last_audio_received_time
 
         try:
             while websocket_active:
@@ -117,6 +120,13 @@ async def _listen(
                 # timeout
                 if has_timeout and time.time() - started_at >= timeout_seconds:
                     print(f"Session timeout is hit by soft timeout {timeout_seconds}", uid)
+                    websocket_close_code = 1001
+                    websocket_active = False
+                    break
+
+                # Inactivity timeout
+                if last_audio_received_time and time.time() - last_audio_received_time > inactivity_timeout_seconds:
+                    print(f"Session timeout due to inactivity ({inactivity_timeout_seconds}s)", uid)
                     websocket_close_code = 1001
                     websocket_active = False
                     break
@@ -180,16 +190,21 @@ async def _listen(
 
         _send_message_event(ConversationEvent(event_type="memory_created", memory=conversation, messages=messages))
 
-    async def finalize_processing_conversations(processing: List[dict]):
+    async def finalize_processing_conversations():
         # handle edge case of conversation was actually processing? maybe later, doesn't hurt really anyway.
         # also fix from getMemories endpoint?
+        processing = conversations_db.get_processing_conversations(uid)
         print('finalize_processing_conversations len(processing):', len(processing), uid)
+        if not processing or len(processing) == 0:
+            return
+
+        # sleep for 1 second to yeld the network for ws accepted.
+        await asyncio.sleep(1)
         for conversation in processing:
             await _create_conversation(conversation)
 
     # Process processing conversations
-    processing = conversations_db.get_processing_conversations(uid)
-    asyncio.create_task(finalize_processing_conversations(processing))
+    asyncio.create_task(finalize_processing_conversations())
 
     # Send last completed conversation to client
     async def send_last_conversation():
@@ -674,11 +689,14 @@ async def _listen(
     async def receive_audio(dg_socket1, dg_socket2, soniox_socket, soniox_socket2, speechmatics_socket1):
         nonlocal websocket_active
         nonlocal websocket_close_code
+        nonlocal last_audio_received_time
 
         timer_start = time.time()
+        last_audio_received_time = timer_start
         try:
             while websocket_active:
                 data = await websocket.receive_bytes()
+                last_audio_received_time = time.time()
                 if codec == 'opus' and sample_rate == 16000:
                     data = decoder.decode(bytes(data), frame_size=frame_size)
                     # audio_data.extend(data)
