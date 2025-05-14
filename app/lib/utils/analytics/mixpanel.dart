@@ -305,4 +305,29 @@ class MixpanelManager {
   void deleteAccountCancelled() => track('Delete Account Cancelled');
 
   void deleteUser() => _mixpanel?.getPeople().deleteUser();
+
+  // Apps Filter
+  void appsFilterOpened() => track('Apps Filter Opened');
+  void appsFilterApplied() => track('Apps Filter Applied');
+  void appsCategoryFilter(String category, bool isSelected) {
+    track('Apps Category Filter', properties: {'category': category, 'selected': isSelected});
+  }
+
+  void appsTypeFilter(String type, bool isSelected) {
+    track('Apps Type Filter', properties: {'type': type, 'selected': isSelected});
+  }
+
+  void appsSortFilter(String sortBy, bool isSelected) {
+    track('Apps Sort Filter', properties: {'sort_by': sortBy, 'selected': isSelected});
+  }
+
+  void appsRatingFilter(String rating, bool isSelected) {
+    track('Apps Rating Filter', properties: {'rating': rating, 'selected': isSelected});
+  }
+
+  void appsCapabilityFilter(String capability, bool isSelected) {
+    track('Apps Capability Filter', properties: {'capability': capability, 'selected': isSelected});
+  }
+
+  void appsClearFilters() => track('Apps Clear Filters');
 }

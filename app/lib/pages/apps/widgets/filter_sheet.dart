@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:provider/provider.dart';
 
 class FilterBottomSheet extends StatelessWidget {
@@ -50,6 +51,8 @@ class FilterBottomSheet extends StatelessWidget {
                             label: 'Installed Apps',
                             onTap: () {
                               provider.addOrRemoveFilter('Installed Apps', 'Apps');
+                              MixpanelManager().appsTypeFilter(
+                                  'Installed Apps', provider.isFilterSelected('Installed Apps', 'Apps'));
                             },
                             isSelected: provider.isFilterSelected('Installed Apps', 'Apps'),
                           ),
@@ -57,6 +60,7 @@ class FilterBottomSheet extends StatelessWidget {
                             label: 'My Apps',
                             onTap: () {
                               provider.addOrRemoveFilter('My Apps', 'Apps');
+                              MixpanelManager().appsTypeFilter('My Apps', provider.isFilterSelected('My Apps', 'Apps'));
                             },
                             isSelected: provider.isFilterSelected('My Apps', 'Apps'),
                           ),
@@ -71,6 +75,7 @@ class FilterBottomSheet extends StatelessWidget {
                             label: 'A-Z',
                             onTap: () {
                               provider.addOrRemoveFilter('A-Z', 'Sort');
+                              MixpanelManager().appsSortFilter('A-Z', provider.isFilterSelected('A-Z', 'Sort'));
                             },
                             isSelected: provider.isFilterSelected('A-Z', 'Sort'),
                           ),
@@ -78,6 +83,7 @@ class FilterBottomSheet extends StatelessWidget {
                             label: 'Z-A',
                             onTap: () {
                               provider.addOrRemoveFilter('Z-A', 'Sort');
+                              MixpanelManager().appsSortFilter('Z-A', provider.isFilterSelected('Z-A', 'Sort'));
                             },
                             isSelected: provider.isFilterSelected('Z-A', 'Sort'),
                           ),
@@ -85,6 +91,8 @@ class FilterBottomSheet extends StatelessWidget {
                             label: 'Highest Rating',
                             onTap: () {
                               provider.addOrRemoveFilter('Highest Rating', 'Sort');
+                              MixpanelManager().appsSortFilter(
+                                  'Highest Rating', provider.isFilterSelected('Highest Rating', 'Sort'));
                             },
                             isSelected: provider.isFilterSelected('Highest Rating', 'Sort'),
                           ),
@@ -92,6 +100,8 @@ class FilterBottomSheet extends StatelessWidget {
                             label: 'Lowest Rating',
                             onTap: () {
                               provider.addOrRemoveFilter('Lowest Rating', 'Sort');
+                              MixpanelManager()
+                                  .appsSortFilter('Lowest Rating', provider.isFilterSelected('Lowest Rating', 'Sort'));
                             },
                             isSelected: provider.isFilterSelected('Lowest Rating', 'Sort'),
                           ),
@@ -106,6 +116,8 @@ class FilterBottomSheet extends StatelessWidget {
                                   label: category.title,
                                   onTap: () {
                                     provider.addOrRemoveCategoryFilter(category);
+                                    MixpanelManager().appsCategoryFilter(
+                                        category.title, provider.isCategoryFilterSelected(category));
                                   },
                                   isSelected: provider.isCategoryFilterSelected(category),
                                 ))
@@ -120,24 +132,32 @@ class FilterBottomSheet extends StatelessWidget {
                               label: '1+ Stars',
                               onTap: () {
                                 provider.addOrRemoveFilter('1+ Stars', 'Rating');
+                                MixpanelManager()
+                                    .appsRatingFilter('1+ Stars', provider.isFilterSelected('1+ Stars', 'Rating'));
                               },
                               isSelected: provider.isFilterSelected('1+ Stars', 'Rating')),
                           FilterOption(
                               label: '2+ Stars',
                               onTap: () {
                                 provider.addOrRemoveFilter('2+ Stars', 'Rating');
+                                MixpanelManager()
+                                    .appsRatingFilter('2+ Stars', provider.isFilterSelected('2+ Stars', 'Rating'));
                               },
                               isSelected: provider.isFilterSelected('2+ Stars', 'Rating')),
                           FilterOption(
                               label: '3+ Stars',
                               onTap: () {
                                 provider.addOrRemoveFilter('3+ Stars', 'Rating');
+                                MixpanelManager()
+                                    .appsRatingFilter('3+ Stars', provider.isFilterSelected('3+ Stars', 'Rating'));
                               },
                               isSelected: provider.isFilterSelected('3+ Stars', 'Rating')),
                           FilterOption(
                               label: '4+ Stars',
                               onTap: () {
                                 provider.addOrRemoveFilter('4+ Stars', 'Rating');
+                                MixpanelManager()
+                                    .appsRatingFilter('4+ Stars', provider.isFilterSelected('4+ Stars', 'Rating'));
                               },
                               isSelected: provider.isFilterSelected('4+ Stars', 'Rating')),
                         ],
@@ -151,6 +171,8 @@ class FilterBottomSheet extends StatelessWidget {
                                   label: capability.title,
                                   onTap: () {
                                     provider.addOrRemoveCapabilityFilter(capability);
+                                    MixpanelManager().appsCapabilityFilter(
+                                        capability.title, provider.isCapabilityFilterSelected(capability));
                                   },
                                   isSelected: provider.isCapabilityFilterSelected(capability),
                                 ))
@@ -167,6 +189,7 @@ class FilterBottomSheet extends StatelessWidget {
               child: ElevatedButton(
                 onPressed: () {
                   provider.clearFilters();
+                  MixpanelManager().appsClearFilters();
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.grey[300],
