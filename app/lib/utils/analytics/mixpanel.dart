@@ -214,6 +214,7 @@ class MixpanelManager {
     required int numberOfFiles,
     required String chatTargetId,
     required bool isPersonaChat,
+    required bool isVoiceInput,
   }) =>
       track('Chat Message Sent', properties: {
         'message_length': message.length,
@@ -222,7 +223,15 @@ class MixpanelManager {
         'number_of_files': numberOfFiles,
         'chat_target_id': chatTargetId,
         'is_persona_chat': isPersonaChat,
+        'is_voice_input': isVoiceInput,
       });
+
+  void chatVoiceInputUsed({required String chatTargetId, required bool isPersonaChat}) {
+    track('Chat Voice Input Used', properties: {
+      'chat_target_id': chatTargetId,
+      'is_persona_chat': isPersonaChat,
+    });
+  }
 
   void speechProfileCapturePageClicked() => track('Speech Profile Capture Page Clicked');
 

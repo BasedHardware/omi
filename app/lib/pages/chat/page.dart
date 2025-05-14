@@ -499,6 +499,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                             setState(() {
                                               textController.text = transcript;
                                               _showVoiceRecorder = false;
+                                              context.read<MessageProvider>().setNextMessageOriginIsVoice(true);
                                             });
                                           },
                                           onClose: () {
