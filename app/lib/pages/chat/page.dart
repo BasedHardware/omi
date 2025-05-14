@@ -518,12 +518,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                             focusNode: home.chatFieldFocusNode,
                                             textAlign: TextAlign.start,
                                             textAlignVertical: TextAlignVertical.top,
-                                            decoration: InputDecoration(
+                                            decoration: const InputDecoration(
                                               hintText: 'Message',
-                                              hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
+                                              hintStyle: TextStyle(fontSize: 14.0, color: Colors.grey),
                                               focusedBorder: InputBorder.none,
                                               enabledBorder: InputBorder.none,
-                                              contentPadding: const EdgeInsets.only(top: 8, bottom: 10),
+                                              contentPadding: EdgeInsets.only(top: 8, bottom: 10),
                                             ),
                                             maxLines: null,
                                             keyboardType: TextInputType.multiline,
@@ -600,7 +600,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   _sendMessageUtil(String text) {
     var provider = context.read<MessageProvider>();
-    MixpanelManager().chatMessageSent(text);
+    MixpanelManager().chatMessageSent(text, provider.uploadedFiles.isNotEmpty, provider.uploadedFiles.length);
     provider.setSendingMessage(true);
     provider.addMessageLocally(text);
     scrollToBottom();

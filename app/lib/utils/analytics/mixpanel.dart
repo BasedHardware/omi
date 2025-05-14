@@ -208,8 +208,13 @@ class MixpanelManager {
   void conversationDeleted(ServerConversation conversation) =>
       track('Memory Deleted', properties: getConversationEventProperties(conversation));
 
-  void chatMessageSent(String message) => track('Chat Message Sent',
-      properties: {'message_length': message.length, 'message_word_count': message.split(' ').length});
+  void chatMessageSent(String message, bool includesFiles, int numberOfFiles) =>
+      track('Chat Message Sent', properties: {
+        'message_length': message.length,
+        'message_word_count': message.split(' ').length,
+        'includes_files': includesFiles,
+        'number_of_files': numberOfFiles,
+      });
 
   void speechProfileCapturePageClicked() => track('Speech Profile Capture Page Clicked');
 
