@@ -17,7 +17,8 @@ import database.users as user_db
 from database import redis_db
 from database.redis_db import get_cached_user_geolocation
 from models.conversation import Conversation, TranscriptSegment, ConversationStatus, Structured, Geolocation
-from models.message_event import ConversationEvent, MessageEvent, MessageServiceStatusEvent, LastConversationEvent, TranslationEvent
+from models.message_event import ConversationEvent, MessageEvent, MessageServiceStatusEvent, LastConversationEvent, \
+    TranslationEvent
 from models.transcript_segment import Translation
 from utils.apps import is_audio_bytes_app_enabled
 from utils.conversations.location import get_google_maps_location
@@ -26,17 +27,18 @@ from utils.other.task import safe_create_task
 from utils.app_integrations import trigger_external_integrations
 from utils.stt.streaming import *
 from utils.stt.streaming import get_stt_service_for_language, STTService
-from utils.stt.streaming import process_audio_soniox, process_audio_dg, process_audio_speechmatics, send_initial_file_path
+from utils.stt.streaming import process_audio_soniox, process_audio_dg, process_audio_speechmatics, \
+    send_initial_file_path
 from utils.webhooks import get_audio_bytes_webhook_seconds
 from utils.pusher import connect_to_trigger_pusher
 from utils.translation import translate_text, detect_language
 from utils.translation_cache import TranscriptSegmentLanguageCache
 
-
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists
 
 router = APIRouter()
+
 
 async def _listen(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
@@ -144,7 +146,8 @@ async def _listen(
     # Start heart beat
     heartbeat_task = asyncio.create_task(send_heartbeat())
 
-    _send_message_event(MessageServiceStatusEvent(event_type="service_status", status="initiating", status_text="Service Starting"))
+    _send_message_event(
+        MessageServiceStatusEvent(event_type="service_status", status="initiating", status_text="Service Starting"))
 
     # Validate user
     if not user_db.is_exists_user(uid):
@@ -211,6 +214,7 @@ async def _listen(
         last_conversation = conversations_db.get_last_completed_conversation(uid)
         if last_conversation:
             await _send_message_event(LastConversationEvent(memory_id=last_conversation['id']))
+
     asyncio.create_task(send_last_conversation())
 
     async def _create_current_conversation():
@@ -249,24 +253,29 @@ async def _listen(
             finished_at = datetime.fromisoformat(existing_conversation['finished_at'].isoformat())
             seconds_since_last_segment = (datetime.now(timezone.utc) - finished_at).total_seconds()
             if seconds_since_last_segment >= conversation_creation_timeout:
-                print('_websocket_util processing existing_conversation', existing_conversation['id'], seconds_since_last_segment, uid)
+                print('_websocket_util processing existing_conversation', existing_conversation['id'],
+                      seconds_since_last_segment, uid)
                 asyncio.create_task(_create_current_conversation())
             else:
                 print('_websocket_util will process', existing_conversation['id'], 'in',
                       conversation_creation_timeout - seconds_since_last_segment, 'seconds')
                 conversation_creation_task = asyncio.create_task(
-                    _trigger_create_conversation_with_delay(conversation_creation_timeout - seconds_since_last_segment, finished_at)
+                    _trigger_create_conversation_with_delay(conversation_creation_timeout - seconds_since_last_segment,
+                                                            finished_at)
                 )
 
-    _send_message_event(MessageServiceStatusEvent(status="in_progress_memories_processing", status_text="Processing Memories"))
+    _send_message_event(
+        MessageServiceStatusEvent(status="in_progress_memories_processing", status_text="Processing Memories"))
     _process_in_progess_memories()
 
     def _upsert_in_progress_conversation(segments: List[TranscriptSegment], finished_at: datetime):
         if existing := retrieve_in_progress_conversation(uid):
             conversation = Conversation(**existing)
-            conversation.transcript_segments, (starts, ends) = TranscriptSegment.combine_segments(conversation.transcript_segments, segments)
+            conversation.transcript_segments, (starts, ends) = TranscriptSegment.combine_segments(
+                conversation.transcript_segments, segments)
             conversations_db.update_conversation_segments(uid, conversation.id,
-                                                          [segment.dict() for segment in conversation.transcript_segments])
+                                                          [segment.dict() for segment in
+                                                           conversation.transcript_segments])
             conversations_db.update_conversation_finished_at(uid, conversation.id, finished_at)
             redis_db.set_in_progress_conversation_id(uid, conversation.id)
             return conversation, (starts, ends)
@@ -337,16 +346,19 @@ async def _listen(
         try:
             file_path, speech_profile_duration = None, 0
             # Thougts: how bee does for recognizing other languages speech profile?
-            if (language == 'en' or language == 'auto') and (codec == 'opus' or codec == 'pcm16') and include_speech_profile:
+            if (language == 'en' or language == 'auto') and (
+                    codec == 'opus' or codec == 'pcm16') and include_speech_profile:
                 file_path = get_profile_audio_if_exists(uid)
                 speech_profile_duration = AudioSegment.from_wav(file_path).duration_seconds + 5 if file_path else 0
 
             # DEEPGRAM
             if stt_service == STTService.deepgram:
                 deepgram_socket = await process_audio_dg(
-                    stream_transcript, stt_language, sample_rate, 1, preseconds=speech_profile_duration, model=stt_model,)
+                    stream_transcript, stt_language, sample_rate, 1, preseconds=speech_profile_duration,
+                    model=stt_model, )
                 if speech_profile_duration:
-                    deepgram_socket2 = await process_audio_dg(stream_transcript, stt_language, sample_rate, 1, model=stt_model)
+                    deepgram_socket2 = await process_audio_dg(stream_transcript, stt_language, sample_rate, 1,
+                                                              model=stt_model)
 
                     async def deepgram_socket_send(data):
                         return deepgram_socket.send(data)
@@ -428,7 +440,9 @@ async def _listen(
                         # 102|data
                         data = bytearray()
                         data.extend(struct.pack("I", 102))
-                        data.extend(bytes(json.dumps({"segments":segment_buffers,"memory_id":in_progress_conversation_id}), "utf-8"))
+                        data.extend(
+                            bytes(json.dumps({"segments": segment_buffers, "memory_id": in_progress_conversation_id}),
+                                  "utf-8"))
                         segment_buffers = []  # reset
                         await transcript_ws.send(data)
                     except websockets.exceptions.ConnectionClosed as e:
@@ -524,7 +538,8 @@ async def _listen(
                 if not segment_text or len(segment_text) <= 0:
                     continue
                 # Check cache for language detection result
-                is_previously_target_language, diff_text = language_cache.get_language_result(segment.id, segment_text, language)
+                is_previously_target_language, diff_text = language_cache.get_language_result(segment.id, segment_text,
+                                                                                              language)
                 if (is_previously_target_language is None or is_previously_target_language is True) \
                         and diff_text:
                     try:
@@ -639,7 +654,9 @@ async def _listen(
                         segment["end"] -= seconds_to_trim
                         segments[i] = segment
 
-                transcript_segments, _ = TranscriptSegment.combine_segments([], [TranscriptSegment(**segment) for segment in segments])
+                transcript_segments, _ = TranscriptSegment.combine_segments([],
+                                                                            [TranscriptSegment(**segment) for segment in
+                                                                             segments])
 
                 # can trigger race condition? increase soniox utterance?
                 conversation, (starts, ends) = _upsert_in_progress_conversation(transcript_segments, finished_at)
@@ -813,16 +830,12 @@ async def _listen(
                 print(f"Error closing Pusher: {e}", uid)
     print("_listen ended", uid)
 
-@router.websocket("/v3/listen")
-async def listen_handler_v3(
-        websocket: WebSocket, uid: str = Depends(auth.get_current_user_uid), language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
-        channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = None
-):
-    await _listen(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, None)
 
 @router.websocket("/v4/listen")
 async def listen_handler(
-        websocket: WebSocket, uid: str = Depends(auth.get_current_user_uid), language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
+        websocket: WebSocket, uid: str = Depends(auth.get_current_user_uid), language: str = 'en',
+        sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = None
 ):
-    await _listen(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, None, including_combined_segments=True)
+    await _listen(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, None,
+                  including_combined_segments=True)

@@ -53,32 +53,6 @@ Future<List<ServerMessage>> clearChatServer({String? pluginId}) async {
   }
 }
 
-Future<ServerMessage> sendMessageServer(String text, {String? appId, List<String>? fileIds}) {
-  var url = '${Env.apiBaseUrl}v1/messages?plugin_id=$appId';
-  if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
-    url = '${Env.apiBaseUrl}v1/messages';
-  }
-  return makeApiCall(
-    url: url,
-    headers: {},
-    method: 'POST',
-    body: jsonEncode({'text': text, 'file_ids': fileIds}),
-  ).then((response) {
-    if (response == null) throw Exception('Failed to send message');
-    if (response.statusCode == 200) {
-      return ServerMessage.fromJson(jsonDecode(response.body));
-    } else {
-      Logger.error('Failed to send message ${response.body}');
-      CrashReporting.reportHandledCrash(
-        Exception('Failed to send message ${response.body}'),
-        StackTrace.current,
-        level: NonFatalExceptionLevel.error,
-      );
-      return ServerMessage.failedMessage();
-    }
-  });
-}
-
 ServerMessageChunk? parseMessageChunk(String line, String messageId) {
   if (line.startsWith('think: ')) {
     return ServerMessageChunk(messageId, line.substring(7).replaceAll("__CRLF__", "\n"), MessageChunkType.think);
@@ -235,32 +209,6 @@ Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files) async*
   }
 }
 
-Future<List<ServerMessage>> sendVoiceMessageServer(List<File> files) async {
-  var request = http.MultipartRequest(
-    'POST',
-    Uri.parse('${Env.apiBaseUrl}v1/voice-messages'),
-  );
-  for (var file in files) {
-    request.files.add(await http.MultipartFile.fromPath('files', file.path, filename: basename(file.path)));
-  }
-  request.headers.addAll({'Authorization': await getAuthHeader()});
-
-  try {
-    var streamedResponse = await request.send();
-    var response = await http.Response.fromStream(streamedResponse);
-    if (response.statusCode == 200) {
-      debugPrint('sendVoiceMessageServer response body: ${jsonDecode(response.body)}');
-      return ((jsonDecode(response.body) ?? []) as List<dynamic>).map((m) => ServerMessage.fromJson(m)).toList();
-    } else {
-      debugPrint('Failed to upload sample. Status code: ${response.statusCode} ${response.body}');
-      throw Exception('Failed to upload sample. Status code: ${response.statusCode}');
-    }
-  } catch (e) {
-    debugPrint('An error occurred uploadSample: $e');
-    throw Exception('An error occurred uploadSample: $e');
-  }
-}
-
 Future<List<MessageFile>?> uploadFilesServer(List<File> files, {String? appId}) async {
   var url = '${Env.apiBaseUrl}v1/files?plugin_id=$appId';
   if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
@@ -312,20 +260,19 @@ Future reportMessageServer(String messageId) async {
   }
 }
 
-
 Future<String> transcribeVoiceMessage(File audioFile) async {
   try {
     var request = http.MultipartRequest(
       'POST',
       Uri.parse('${Env.apiBaseUrl}v1/voice-message/transcribe'),
     );
-    
+
     request.headers.addAll({'Authorization': await getAuthHeader()});
     request.files.add(await http.MultipartFile.fromPath('files', audioFile.path));
-    
+
     var streamedResponse = await request.send();
     var response = await http.Response.fromStream(streamedResponse);
-    
+
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       return data['transcript'] ?? '';
