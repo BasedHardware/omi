@@ -58,8 +58,8 @@ class ConversationCategory(str, Enum):
     other = "other"
 
 
-base_url = "https://backend-208440318997.us-central1.run.app/v1/mcp/"
-# base_url = "http://127.0.0.1:8000/v1/mcp/"
+# base_url = "https://backend-208440318997.us-central1.run.app/v1/mcp/"
+base_url = "http://127.0.0.1:8000/v1/mcp/"
 
 
 class OmiTools(str, Enum):
@@ -83,6 +83,8 @@ class GetMemories(BaseModel):
     categories: List[MemoryCategory] = Field(
         description="The categories of memories to filter by.", default=[]
     )
+    limit: int = Field(description="The number of memories to retrieve.", default=100)
+    offset: int = Field(description="The offset of the memories to retrieve.", default=0)
 
 
 class CreateMemory(BaseModel):
@@ -106,15 +108,17 @@ class EditMemory(BaseModel):
 
 class GetConversations(BaseModel):
     uid: str = Field(description="The user's unique identifier.")
-    start_date: Optional[datetime] = Field(
-        description="Filter conversations after this date", default=None
+    start_date: Optional[str] = Field(
+        description="Filter conversations after this date (yyyy-mm-dd)", default=None
     )
-    end_date: Optional[datetime] = Field(
-        description="Filter conversations before this date", default=None
+    end_date: Optional[str] = Field(
+        description="Filter conversations before this date (yyyy-mm-dd)", default=None
     )
     categories: List[ConversationCategory] = Field(
         description="Filter by conversation categories.", default=[]
     )
+    limit: int = Field(description="The number of conversations to retrieve.", default=20)
+    offset: int = Field(description="The offset of the conversations to retrieve.", default=0)
 
 
 class GetConversationById(BaseModel):
@@ -131,15 +135,24 @@ def create_user(email: str, password: str, name: str) -> dict:
 
 
 def get_memories(
+    logger: logging.Logger,
     uid: str,
+    offset: int = 0,
     limit: int = 100,
     categories: List[MemoryCategory] = [],
 ) -> List:
-    params = {"limit": limit}
+    logger.info(f"Getting memories with params: {offset}, {limit}, {categories}")
+    params = {"offset": offset, "limit": limit}
     if categories:
-        params["categories"] = ",".join(categories)
-    response = requests.get(f"{base_url}memories", params=params, headers={"uid": uid})
-    return response.json()
+        params["categories"] = ",".join([c.value for c in categories])
+    logger.info(f"get_memories params: {params}")
+    try:
+        response = requests.get(f"{base_url}memories", params=params, headers={"uid": uid})
+        logger.info(f"get_memories response: {response.json()}")
+        return response.json()
+    except Exception as e:
+        logger.error(f"Error getting memories: {e}")
+        raise e
 
 
 def create_memory(uid: str, content: str, category: MemoryCategory) -> dict:
@@ -168,15 +181,23 @@ def edit_memory(uid: str, memory_id: str, content: str) -> dict:
 def get_conversations(
     logger: logging.Logger,
     uid: str,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     categories: List[ConversationCategory] = [],
+    limit: int = 20,
+    offset: int = 0,
 ) -> List:
-    params = {"limit": 10, "offset": 0}
+    params = {"limit": limit, "offset": offset}
     if start_date:
-        params["start_date"] = start_date.isoformat()
+        try:
+            params["start_date"] = datetime.strptime(start_date, "%Y-%m-%d").isoformat()
+        except ValueError:
+            logger.warning(f"Could not parse start date: {start_date}")
     if end_date:
-        params["end_date"] = end_date.isoformat()
+        try:
+            params["end_date"] = datetime.strptime(end_date, "%Y-%m-%d").isoformat()
+        except ValueError:
+            logger.warning(f"Could not parse end date: {end_date}")
     if categories:
         params["categories"] = ",".join(categories)
 
@@ -212,22 +233,22 @@ async def serve(uid: str | None) -> None:
             ),
             Tool(
                 name=OmiTools.GET_MEMORIES,
-                description="Retrieve memories. A memory is a known fact about the user across multiple domains.",
+                description="Retrieve a list of memories. A memory is a known fact about the user across multiple domains.",
                 inputSchema=GetMemories.model_json_schema(),
             ),
             Tool(
                 name=OmiTools.CREATE_MEMORY,
-                description="Create a new memory",
+                description="Create a new memory. A memory is a known fact about the user across multiple domains.",
                 inputSchema=CreateMemory.model_json_schema(),
             ),
             Tool(
                 name=OmiTools.DELETE_MEMORY,
-                description="Delete a memory by ID",
+                description="Delete a memory by ID. A memory is a known fact about the user across multiple domains.",
                 inputSchema=DeleteMemory.model_json_schema(),
             ),
             Tool(
                 name=OmiTools.EDIT_MEMORY,
-                description="Edit a memory's content",
+                description="Edit a memory's content. A memory is a known fact about the user across multiple domains.",
                 inputSchema=EditMemory.model_json_schema(),
             ),
             Tool(
@@ -259,10 +280,23 @@ async def serve(uid: str | None) -> None:
         #     raise ValueError(f"uid is required {arguments}")
         _uid = arguments["uid"]
         if name == OmiTools.GET_MEMORIES:
+            # return [TextContent(type="text", text=json.dumps(arguments, indent=2))]
+            categories: List[str] = arguments.get("categories", [])
+            if not isinstance(categories, list):
+                raise ValueError(f"categories must be a list, got {type(categories)}")
+            categories_enum = []
+            for category in categories:
+                try:
+                    categories_enum.append(MemoryCategory(category))
+                except ValueError:
+                    logger.warning(f"Could not parse category: {category}")
+            
             result = get_memories(
+                logger,
                 _uid,
+                offset=arguments.get("offset", 0),
                 limit=arguments.get("limit", 100),
-                categories=arguments.get("categories", []),
+                categories=categories_enum,
             )
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
@@ -294,6 +328,8 @@ async def serve(uid: str | None) -> None:
                 start_date=arguments.get("start_date"),
                 end_date=arguments.get("end_date"),
                 categories=arguments.get("categories", []),
+                limit=arguments.get("limit", 20),
+                offset=arguments.get("offset", 0),
             )
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
@@ -308,3 +344,7 @@ async def serve(uid: str | None) -> None:
     options = server.create_initialization_options()
     async with stdio_server() as (read_stream, write_stream):
         await server.run(read_stream, write_stream, options, raise_exceptions=True)
+
+
+# TODO:
+# - add get conversations by semantic search + reranking
