@@ -1,10 +1,10 @@
 import os
-from agents import Agent, Runner
+from agents import Agent, ModelSettings, Runner, trace
 from dotenv import load_dotenv
 import asyncio
 import shutil
+from openai.types.shared import Reasoning
 
-from agents import Agent, Runner, trace
 from agents.mcp import MCPServer, MCPServerStdio
 
 
@@ -23,6 +23,12 @@ async def run(mcp_server: MCPServer):
         instructions=f"You are a helpful assistant that answers questions based on the user's OMI data, the user UID is {uid}.",
         mcp_servers=[mcp_server],
         model="o4-mini",
+        model_settings=ModelSettings(
+            reasoning=Reasoning(
+                effort="high",
+                generate_summary="auto",
+            )
+        ),
     )
 
     message = "Check my memories, and get an overall idea of who I am, then retrieve my 5 most recent conversations and summarize them."
