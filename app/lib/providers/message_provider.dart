@@ -412,18 +412,6 @@ class MessageProvider extends ChangeNotifier {
     setShowTypingIndicator(false);
   }
 
-  Future sendMessageToServer(String text, String? appId) async {
-    setShowTypingIndicator(true);
-    messages.insert(0, ServerMessage.empty(appId: appId));
-    List<String> fileIds = uploadedFiles.map((e) => e.id).toList();
-    var mes = await sendMessageServer(text, appId: appId, fileIds: fileIds);
-    if (messages[0].id == '0000') {
-      messages[0] = mes;
-    }
-    setShowTypingIndicator(false);
-    notifyListeners();
-  }
-
   Future sendInitialAppMessage(App? app) async {
     setSendingMessage(true);
     ServerMessage message = await getInitialAppMessage(app?.id);
