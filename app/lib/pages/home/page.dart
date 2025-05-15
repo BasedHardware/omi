@@ -183,16 +183,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           break;
         case "chat":
           homePageIdx = 1;
-        case "apps":
+        case "memoriesPage":
           homePageIdx = 2;
           break;
-        case "memoriesPage":
+        case "apps":
           homePageIdx = 3;
           break;
       }
     }
 
-    // Home controler
+    // Home controller
     _controller = PageController(initialPage: homePageIdx);
     context.read<HomeProvider>().selectedIndex = homePageIdx;
     context.read<HomeProvider>().onSelectedIndexChanged = (index) {
@@ -378,8 +378,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           children: const [
                             ConversationsPage(),
                             ChatPage(isPivotBottom: false),
-                            AppsPage(),
                             MemoriesPage(),
+                            AppsPage(),
                           ],
                         ),
                       ),
@@ -415,7 +415,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   indicatorPadding: EdgeInsets.zero,
                                   onTap: (index) {
                                     MixpanelManager()
-                                        .bottomNavigationTabClicked(['Memories', 'Chat', 'Explore', 'Facts'][index]);
+                                        .bottomNavigationTabClicked(['Memories', 'Chat', 'Facts', 'Explore'][index]);
                                     primaryFocus?.unfocus();
                                     if (home.selectedIndex == index) {
                                       return;
@@ -471,13 +471,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           Icon(
-                                            FontAwesomeIcons.search,
+                                            FontAwesomeIcons.brain,
                                             color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
                                             size: 18,
                                           ),
                                           const SizedBox(height: 6),
                                           Text(
-                                            'Explore',
+                                            'Memories',
                                             style: TextStyle(
                                               color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
                                               fontSize: 12,
@@ -491,13 +491,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           Icon(
-                                            FontAwesomeIcons.brain,
+                                            FontAwesomeIcons.search,
                                             color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
                                             size: 18,
                                           ),
                                           const SizedBox(height: 6),
                                           Text(
-                                            'Memories',
+                                            'Explore',
                                             style: TextStyle(
                                               color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
                                               fontSize: 12,
@@ -564,7 +564,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 return Center(
                   child: Padding(
                     padding: EdgeInsets.only(right: MediaQuery.sizeOf(context).width * 0.10),
-                    child: const Text('Explore',
+                    child: const Text('Memories',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 22,
@@ -576,7 +576,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 return Center(
                   child: Padding(
                     padding: EdgeInsets.only(right: MediaQuery.sizeOf(context).width * 0.10),
-                    child: const Text('Memories',
+                    child: const Text('Explore',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 22,
@@ -585,9 +585,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   ),
                 );
               } else {
-                return Expanded(
+                return const Expanded(
                   child: Center(
-                    child: const Text(
+                    child: Text(
                       '',
                       style: TextStyle(
                         color: Colors.white,
