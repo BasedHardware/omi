@@ -40,7 +40,7 @@ Future<List<ServerMessage>> getMessagesServer({
 Future<List<ServerMessage>> clearChatServer({String? pluginId}) async {
   if (pluginId == 'no_selected') pluginId = null;
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/messages?plugin_id=${pluginId ?? ''}',
+    url: '${Env.apiBaseUrl}v2/messages?plugin_id=${pluginId ?? ''}',
     headers: {},
     method: 'DELETE',
     body: '',
@@ -138,7 +138,7 @@ Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId, 
 
 Future<ServerMessage> getInitialAppMessage(String? appId) {
   return makeApiCall(
-    url: '${Env.apiBaseUrl}v1/initial-message?plugin_id=$appId',
+    url: '${Env.apiBaseUrl}v2/initial-message?app_id=$appId',
     headers: {},
     method: 'POST',
     body: '',
@@ -210,9 +210,9 @@ Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files) async*
 }
 
 Future<List<MessageFile>?> uploadFilesServer(List<File> files, {String? appId}) async {
-  var url = '${Env.apiBaseUrl}v1/files?plugin_id=$appId';
+  var url = '${Env.apiBaseUrl}v2/files?app_id=$appId';
   if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
-    url = '${Env.apiBaseUrl}v1/files';
+    url = '${Env.apiBaseUrl}v2/files';
   }
   var request = http.MultipartRequest(
     'POST',
@@ -249,7 +249,7 @@ Future<List<MessageFile>?> uploadFilesServer(List<File> files, {String? appId}) 
 
 Future reportMessageServer(String messageId) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/messages/$messageId/report',
+    url: '${Env.apiBaseUrl}v2/messages/$messageId/report',
     headers: {},
     method: 'POST',
     body: '',
@@ -264,7 +264,7 @@ Future<String> transcribeVoiceMessage(File audioFile) async {
   try {
     var request = http.MultipartRequest(
       'POST',
-      Uri.parse('${Env.apiBaseUrl}v1/voice-message/transcribe'),
+      Uri.parse('${Env.apiBaseUrl}v2/voice-message/transcribe'),
     );
 
     request.headers.addAll({'Authorization': await getAuthHeader()});
