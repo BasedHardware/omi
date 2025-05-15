@@ -6,7 +6,6 @@ import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
 import 'delete_confirmation.dart';
-import 'category_chip.dart';
 
 class MemoryItem extends StatelessWidget {
   final Memory memory;
@@ -28,36 +27,21 @@ class MemoryItem extends StatelessWidget {
       onTap: () => onTap(context, memory, provider),
       child: Container(
         margin: const EdgeInsets.only(bottom: AppStyles.spacingM),
+        padding: const EdgeInsets.symmetric(horizontal: AppStyles.spacingL, vertical: AppStyles.spacingL),
         decoration: AppStyles.cardDecoration,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Padding(
-              padding: const EdgeInsets.all(AppStyles.spacingL),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        child: CategoryChip(
-                          category: memory.category,
-                          showIcon: true,
-                        ),
-                      ),
-                      _buildVisibilityButton(context),
-                    ],
-                  ),
-                  const SizedBox(height: AppStyles.spacingM),
-                  Text(
-                    memory.content.decodeString,
-                    style: AppStyles.body,
-                  ),
-                ],
+            Expanded(
+              child: Text(
+                memory.content.decodeString,
+                style: AppStyles.body,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
+            const SizedBox(width: AppStyles.spacingM),
+            _buildVisibilityButton(context),
           ],
         ),
       ),
@@ -103,11 +87,11 @@ class MemoryItem extends StatelessWidget {
       ),
       offset: const Offset(0, 4),
       child: Container(
-        height: 26,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+        height: 36,
+        width: 56,
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(AppStyles.radiusSmall),
+          borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -118,10 +102,10 @@ class MemoryItem extends StatelessWidget {
               size: 16,
               color: Colors.white70,
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 6),
             const Icon(
               Icons.keyboard_arrow_down,
-              size: 16,
+              size: 18,
               color: Colors.white70,
             ),
           ],
@@ -143,6 +127,7 @@ class MemoryItem extends StatelessWidget {
       ],
       onSelected: (visibility) {
         provider.updateMemoryVisibility(memory, visibility);
+        MixpanelManager().memoryVisibilityChanged(memory, visibility);
       },
     );
   }
@@ -178,13 +163,14 @@ class MemoryItem extends StatelessWidget {
                       fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                     ),
                   ),
-                  const SizedBox(height: 2),
                   Text(
                     description,
                     style: TextStyle(
                       color: Colors.grey.shade400,
                       fontSize: 12,
                     ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
