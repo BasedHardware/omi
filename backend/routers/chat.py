@@ -159,7 +159,7 @@ def send_message(
     )
 
 
-@router.post('/v1/messages/{message_id}/report', tags=['chat'], response_model=dict)
+@router.post('/v2/messages/{message_id}/report', tags=['chat'], response_model=dict)
 def report_message(
         message_id: str, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -174,16 +174,16 @@ def report_message(
     return {'message': 'Message reported'}
 
 
-@router.delete('/v1/messages', tags=['chat'], response_model=Message)
-def clear_chat_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
-    if plugin_id in ['null', '']:
-        plugin_id = None
+@router.delete('/v2/messages', tags=['chat'], response_model=Message)
+def clear_chat_messages(app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
+    if app_id in ['null', '']:
+        app_id = None
 
     # get current chat session
-    chat_session = chat_db.get_chat_session(uid, plugin_id=plugin_id)
+    chat_session = chat_db.get_chat_session(uid, plugin_id=app_id)
     chat_session_id = chat_session['id'] if chat_session else None
 
-    err = chat_db.clear_chat(uid, plugin_id=plugin_id, chat_session_id=chat_session_id)
+    err = chat_db.clear_chat(uid, app_id=app_id, chat_session_id=chat_session_id)
     if err:
         raise HTTPException(status_code=500, detail='Failed to clear chat')
 
@@ -195,7 +195,7 @@ def clear_chat_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth
     if chat_session_id is not None:
         chat_db.delete_chat_session(uid, chat_session_id)
 
-    return initial_message_util(uid, plugin_id)
+    return initial_message_util(uid, app_id)
 
 
 def initial_message_util(uid: str, app_id: Optional[str] = None):
@@ -238,9 +238,9 @@ def initial_message_util(uid: str, app_id: Optional[str] = None):
     return ai_message
 
 
-@router.post('/v1/initial-message', tags=['chat'], response_model=Message)
-def create_initial_message(plugin_id: Optional[str], uid: str = Depends(auth.get_current_user_uid)):
-    return initial_message_util(uid, plugin_id)
+@router.post('/v2/initial-message', tags=['chat'], response_model=Message)
+def create_initial_message(app_id: Optional[str], uid: str = Depends(auth.get_current_user_uid)):
+    return initial_message_util(uid, app_id)
 
 
 @router.get('/v2/messages', response_model=List[Message], tags=['chat'])
@@ -280,6 +280,196 @@ async def create_voice_message_stream(files: List[UploadFile] = File(...),
         generate_stream(),
         media_type="text/event-stream"
     )
+
+
+@router.post("/v2/voice-message/transcribe")
+async def transcribe_voice_message(files: List[UploadFile] = File(...),
+                                   uid: str = Depends(auth.get_current_user_uid)):
+    # Check if files are empty
+    if not files or len(files) == 0:
+        raise HTTPException(status_code=400, detail='No files provided')
+
+    wav_paths = []
+    other_file_paths = []
+
+    # Process all files in a single loop
+    for file in files:
+        if file.filename.lower().endswith('.wav'):
+            # For WAV files, save directly to a temporary path
+            temp_path = f"/tmp/{uid}_{uuid.uuid4()}.wav"
+            with open(temp_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            wav_paths.append(temp_path)
+        else:
+            # For other files, collect paths for later conversion
+            path = retrieve_file_paths([file], uid)
+            if path:
+                other_file_paths.extend(path)
+
+    # Convert other files to WAV if needed
+    if other_file_paths:
+        converted_wav_paths = decode_files_to_wav(other_file_paths)
+        if converted_wav_paths:
+            wav_paths.extend(converted_wav_paths)
+
+    # Process all WAV files
+    for wav_path in wav_paths:
+        transcript = transcribe_voice_message_segment(wav_path)
+
+        # Clean up temporary WAV files created directly
+        if wav_path.startswith(f"/tmp/{uid}_"):
+            try:
+                Path(wav_path).unlink()
+            except:
+                pass
+
+        # If we got a transcript, return it
+        if transcript:
+            return {"transcript": transcript}
+
+    # If we got here, no transcript was produced
+    raise HTTPException(status_code=400, detail='Failed to transcribe audio')
+
+
+@router.post('/v2/files', response_model=List[FileChat], tags=['chat'])
+def upload_file_chat(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
+    thumbs_name = []
+    files_chat = []
+    for file in files:
+        temp_file = Path(f"{file.filename}")
+        with temp_file.open("wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        fc_tool = FileChatTool()
+        result = fc_tool.upload(temp_file)
+
+        thumb_name = result.get("thumbnail_name", "")
+        if thumb_name != "":
+            thumbs_name.append(thumb_name)
+
+        filechat = FileChat(
+            id=str(uuid.uuid4()),
+            name=result.get("file_name", ""),
+            mime_type=result.get("mime_type", ""),
+            openai_file_id=result.get("file_id", ""),
+            created_at=datetime.now(timezone.utc),
+            thumb_name=thumb_name,
+        )
+        files_chat.append(filechat)
+
+        # cleanup temp_file
+        temp_file.unlink()
+
+    if len(thumbs_name) > 0:
+        thumbs_path = storage.upload_multi_chat_files(thumbs_name, uid)
+        for fc in files_chat:
+            if not fc.is_image():
+                continue
+            thumb_path = thumbs_path.get(fc.thumb_name, "")
+            fc.thumbnail = thumb_path
+            # cleanup file thumb
+            thumb_file = Path(fc.thumb_name)
+            thumb_file.unlink()
+
+    # save db
+    files_chat_dict = [fc.dict() for fc in files_chat]
+
+    chat_db.add_multi_files(uid, files_chat_dict)
+
+    response = [fc.dict() for fc in files_chat]
+
+    return response
+
+
+#CLEANUP: Remove after new app goes to prod ----------------------------------------------------------
+
+@router.post('/v1/files', response_model=List[FileChat], tags=['chat'])
+def upload_file_chat(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
+    thumbs_name = []
+    files_chat = []
+    for file in files:
+        temp_file = Path(f"{file.filename}")
+        with temp_file.open("wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        fc_tool = FileChatTool()
+        result = fc_tool.upload(temp_file)
+
+        thumb_name = result.get("thumbnail_name", "")
+        if thumb_name != "":
+            thumbs_name.append(thumb_name)
+
+        filechat = FileChat(
+            id=str(uuid.uuid4()),
+            name=result.get("file_name", ""),
+            mime_type=result.get("mime_type", ""),
+            openai_file_id=result.get("file_id", ""),
+            created_at=datetime.now(timezone.utc),
+            thumb_name=thumb_name,
+        )
+        files_chat.append(filechat)
+
+        # cleanup temp_file
+        temp_file.unlink()
+
+    if len(thumbs_name) > 0:
+        thumbs_path = storage.upload_multi_chat_files(thumbs_name, uid)
+        for fc in files_chat:
+            if not fc.is_image():
+                continue
+            thumb_path = thumbs_path.get(fc.thumb_name, "")
+            fc.thumbnail = thumb_path
+            # cleanup file thumb
+            thumb_file = Path(fc.thumb_name)
+            thumb_file.unlink()
+
+    # save db
+    files_chat_dict = [fc.dict() for fc in files_chat]
+
+    chat_db.add_multi_files(uid, files_chat_dict)
+
+    response = [fc.dict() for fc in files_chat]
+
+    return response
+
+
+@router.post('/v1/messages/{message_id}/report', tags=['chat'], response_model=dict)
+def report_message(
+        message_id: str, uid: str = Depends(auth.get_current_user_uid)
+):
+    message, msg_doc_id = chat_db.get_message(uid, message_id)
+    if message is None:
+        raise HTTPException(status_code=404, detail='Message not found')
+    if message.sender != 'ai':
+        raise HTTPException(status_code=400, detail='Only AI messages can be reported')
+    if message.reported:
+        raise HTTPException(status_code=400, detail='Message already reported')
+    chat_db.report_message(uid, msg_doc_id)
+    return {'message': 'Message reported'}
+
+
+@router.delete('/v1/messages', tags=['chat'], response_model=Message)
+def clear_chat_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
+    if plugin_id in ['null', '']:
+        plugin_id = None
+
+    # get current chat session
+    chat_session = chat_db.get_chat_session(uid, plugin_id=plugin_id)
+    chat_session_id = chat_session['id'] if chat_session else None
+
+    err = chat_db.clear_chat(uid, app_id=plugin_id, chat_session_id=chat_session_id)
+    if err:
+        raise HTTPException(status_code=500, detail='Failed to clear chat')
+
+    # clean thread chat file
+    fc_tool = FileChatTool()
+    fc_tool.cleanup(uid)
+
+    # clear session
+    if chat_session_id is not None:
+        chat_db.delete_chat_session(uid, chat_session_id)
+
+    return initial_message_util(uid, plugin_id)
 
 
 @router.post("/v1/voice-message/transcribe")
@@ -331,51 +521,6 @@ async def transcribe_voice_message(files: List[UploadFile] = File(...),
     raise HTTPException(status_code=400, detail='Failed to transcribe audio')
 
 
-@router.post('/v1/files', response_model=List[FileChat], tags=['chat'])
-def upload_file_chat(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
-    thumbs_name = []
-    files_chat = []
-    for file in files:
-        temp_file = Path(f"{file.filename}")
-        with temp_file.open("wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-
-        fc_tool = FileChatTool()
-        result = fc_tool.upload(temp_file)
-
-        thumb_name = result.get("thumbnail_name", "")
-        if thumb_name != "":
-            thumbs_name.append(thumb_name)
-
-        filechat = FileChat(
-            id=str(uuid.uuid4()),
-            name=result.get("file_name", ""),
-            mime_type=result.get("mime_type", ""),
-            openai_file_id=result.get("file_id", ""),
-            created_at=datetime.now(timezone.utc),
-            thumb_name=thumb_name,
-        )
-        files_chat.append(filechat)
-
-        # cleanup temp_file
-        temp_file.unlink()
-
-    if len(thumbs_name) > 0:
-        thumbs_path = storage.upload_multi_chat_files(thumbs_name, uid)
-        for fc in files_chat:
-            if not fc.is_image():
-                continue
-            thumb_path = thumbs_path.get(fc.thumb_name, "")
-            fc.thumbnail = thumb_path
-            # cleanup file thumb
-            thumb_file = Path(fc.thumb_name)
-            thumb_file.unlink()
-
-    # save db
-    files_chat_dict = [fc.dict() for fc in files_chat]
-
-    chat_db.add_multi_files(uid, files_chat_dict)
-
-    response = [fc.dict() for fc in files_chat]
-
-    return response
+@router.post('/v1/initial-message', tags=['chat'], response_model=Message)
+def create_initial_message(plugin_id: Optional[str], uid: str = Depends(auth.get_current_user_uid)):
+    return initial_message_util(uid, plugin_id)
