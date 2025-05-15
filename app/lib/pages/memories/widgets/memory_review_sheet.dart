@@ -70,9 +70,17 @@ class MemoriesReviewSheet extends StatelessWidget {
                             borderRadius: BorderRadius.circular(10),
                           ),
                         ),
-                        onPressed: () => Navigator.pop(context),
+                        onPressed: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => MemoriesReviewPage(memories: memories),
+                            ),
+                          );
+                        },
                         child: Text(
-                          'Later',
+                          'Review Manually',
                           style: TextStyle(
                             color: Colors.grey.shade300,
                             fontSize: 14,
@@ -91,16 +99,13 @@ class MemoriesReviewSheet extends StatelessWidget {
                           ),
                         ),
                         onPressed: () {
+                          for (var memory in memories) {
+                            provider.reviewMemory(memory, true, 'review_sheet_accept_all');
+                          }
                           Navigator.pop(context);
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => MemoriesReviewPage(memories: memories),
-                            ),
-                          );
                         },
                         child: const Text(
-                          'Review now',
+                          'Accept All',
                           style: TextStyle(
                             color: Colors.black,
                             fontSize: 14,

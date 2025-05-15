@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/payments/payments_page.dart';
 import 'package:omi/pages/settings/change_name_widget.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
@@ -12,6 +11,9 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/pages/persona/persona_profile.dart';
 
 import 'delete_account.dart';
 
@@ -49,7 +51,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget _buildProfileTile({
     required String title,
     required String subtitle,
-    required IconData icon,
+    required Widget iconWidget,
     required VoidCallback onTap,
     Color iconColor = Colors.white,
   }) {
@@ -77,7 +79,7 @@ class _ProfilePageState extends State<ProfilePage> {
             fontSize: 13,
           ),
         ),
-        trailing: Icon(icon, size: 20, color: iconColor),
+        trailing: iconWidget,
         onTap: onTap,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),
@@ -168,7 +170,7 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildProfileTile(
               title: SharedPreferencesUtil().givenName.isEmpty ? 'Set Your Name' : 'Change Your Name',
               subtitle: SharedPreferencesUtil().givenName.isEmpty ? 'Not set' : SharedPreferencesUtil().givenName,
-              icon: Icons.person,
+              iconWidget: const Icon(Icons.person, size: 20, color: Colors.white),
               onTap: () async {
                 MixpanelManager().pageOpened('Profile Change Name');
                 await showDialog(
@@ -192,7 +194,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 return _buildProfileTile(
                   title: 'Primary Language',
                   subtitle: languageName,
-                  icon: Icons.language,
+                  iconWidget: const Icon(Icons.language, size: 20, color: Colors.white),
                   onTap: () async {
                     MixpanelManager().pageOpened('Profile Change Language');
                     await LanguageSelectionDialog.show(context, isRequired: false, forceShow: true);
@@ -202,13 +204,34 @@ class _ProfilePageState extends State<ProfilePage> {
                 );
               },
             ),
+            _buildProfileTile(
+              title: 'Persona',
+              subtitle: 'Manage your Omi persona',
+              iconWidget: SvgPicture.asset(
+                Assets.images.icPersonaProfile.path,
+                width: 20,
+                height: 20,
+                colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+              ),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const PersonaProfilePage(),
+                    settings: const RouteSettings(
+                      arguments: 'from_settings',
+                    ),
+                  ),
+                );
+                MixpanelManager().pageOpened('Profile Persona Settings');
+              },
+            ),
 
             // VOICE & PEOPLE SECTION
             _buildSectionHeader('VOICE & PEOPLE'),
             _buildProfileTile(
               title: 'Speech Profile',
               subtitle: 'Teach Omi your voice',
-              icon: Icons.multitrack_audio,
+              iconWidget: const Icon(Icons.multitrack_audio, size: 20, color: Colors.white),
               onTap: () {
                 routeToPage(context, const SpeechProfilePage());
                 MixpanelManager().pageOpened('Profile Speech Profile');
@@ -217,7 +240,7 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildProfileTile(
               title: 'Identifying Others',
               subtitle: 'Tell Omi who said it 🗣️',
-              icon: Icons.people,
+              iconWidget: const Icon(Icons.people, size: 20, color: Colors.white),
               onTap: () {
                 routeToPage(context, const UserPeoplePage());
               },
@@ -228,7 +251,7 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildProfileTile(
               title: 'Payment Methods',
               subtitle: 'Add or change your payment method',
-              icon: Icons.attach_money_outlined,
+              iconWidget: const Icon(Icons.attach_money_outlined, size: 20, color: Colors.white),
               onTap: () {
                 routeToPage(context, const PaymentsPage());
               },
@@ -256,17 +279,17 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildProfileTile(
               title: 'User ID',
               subtitle: SharedPreferencesUtil().uid,
-              icon: Icons.copy_rounded,
+              iconWidget: const Icon(Icons.copy_rounded, size: 20, color: Colors.white),
               onTap: () {
                 Clipboard.setData(ClipboardData(text: SharedPreferencesUtil().uid));
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User ID copied to clipboard')));
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(const SnackBar(content: Text('User ID copied to clipboard')));
               },
             ),
             _buildProfileTile(
               title: 'Delete Account',
               subtitle: 'Delete your account and all data',
-              icon: Icons.warning,
-              iconColor: Colors.red.shade300,
+              iconWidget: Icon(Icons.warning, size: 20, color: Colors.red.shade300),
               onTap: () {
                 MixpanelManager().pageOpened('Profile Delete Account Dialog');
                 Navigator.push(context, MaterialPageRoute(builder: (context) => const DeleteAccount()));
