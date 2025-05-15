@@ -3,6 +3,7 @@ import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/base_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:tuple/tuple.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter/foundation.dart';
@@ -86,9 +87,13 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   void deleteAllMemories() async {
+    final int countBeforeDeletion = _memories.length;
     await deleteAllMemoriesServer();
     _memories.clear();
     _unreviewed.clear();
+    if (countBeforeDeletion > 0) {
+      MixpanelManager().memoriesAllDeleted(countBeforeDeletion);
+    }
     _setCategories();
   }
 
@@ -117,9 +122,12 @@ class MemoriesProvider extends ChangeNotifier {
 
     final idx = _memories.indexWhere((m) => m.id == memory.id);
     if (idx != -1) {
-      memory.visibility = visibility;
-      _memories[idx] = memory;
-      _unreviewed.remove(memory);
+      Memory memoryToUpdate = _memories[idx];
+      memoryToUpdate.visibility = visibility;
+      _memories[idx] = memoryToUpdate;
+      _unreviewed.removeWhere((m) => m.id == memory.id);
+
+      MixpanelManager().memoryVisibilityChanged(memoryToUpdate, visibility);
       _setCategories();
     }
   }
@@ -147,7 +155,9 @@ class MemoriesProvider extends ChangeNotifier {
     }
   }
 
-  void reviewMemory(Memory memory, bool approved) async {
+  void reviewMemory(Memory memory, bool approved, String source) async {
+    MixpanelManager().memoryReviewed(memory, approved, source);
+
     await reviewMemoryServer(memory.id, approved);
 
     final idx = _memories.indexWhere((m) => m.id == memory.id);
@@ -176,13 +186,29 @@ class MemoriesProvider extends ChangeNotifier {
 
   Future<void> updateAllMemoriesVisibility(bool makePrivate) async {
     final visibility = makePrivate ? MemoryVisibility.private : MemoryVisibility.public;
+    int updatedCount = 0;
+    List<Memory> memoriesSuccessfullyUpdated = [];
 
-    for (var memory in _memories) {
+    for (var memory in List.from(_memories)) {
       if (memory.visibility != visibility) {
-        await updateMemoryVisibility(memory, visibility);
+        try {
+          await updateMemoryVisibilityServer(memory.id, visibility.name);
+          final idx = _memories.indexWhere((m) => m.id == memory.id);
+          if (idx != -1) {
+            _memories[idx].visibility = visibility;
+            memoriesSuccessfullyUpdated.add(_memories[idx]);
+            updatedCount++;
+          }
+        } catch (e) {
+          print('Failed to update visibility for memory ${memory.id}: $e');
+        }
       }
     }
 
-    notifyListeners();
+    if (updatedCount > 0) {
+      MixpanelManager().memoriesAllVisibilityChanged(visibility, updatedCount);
+    }
+
+    _setCategories();
   }
 }

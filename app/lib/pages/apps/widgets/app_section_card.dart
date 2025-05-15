@@ -7,6 +7,7 @@ import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
 class AppSectionCard extends StatelessWidget {
@@ -146,7 +147,7 @@ class SectionAppItemCard extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.only(top: 2.0),
                       child: Text(
-                        app.getCategoryName(),
+                        app.description.decodeString,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(color: Colors.grey, fontSize: 13),

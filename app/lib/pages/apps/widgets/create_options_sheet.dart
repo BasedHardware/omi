@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:omi/pages/apps/add_app.dart';
+import 'package:omi/pages/persona/persona_profile.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:provider/provider.dart';
@@ -64,8 +65,16 @@ class CreateOptionsSheet extends StatelessWidget {
                 MixpanelManager().pageOpened('Create Persona');
                 // Set routing in provider and navigate to Persona Profile page
                 Provider.of<PersonaProvider>(context, listen: false).setRouting(PersonaProfileRouting.create_my_clone);
-                Provider.of<HomeProvider>(context, listen: false).setIndex(3);
-                Provider.of<HomeProvider>(context, listen: false).onSelectedIndexChanged!(3);
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const PersonaProfilePage(),
+                    settings: const RouteSettings(
+                      arguments: 'from_settings',
+                    ),
+                  ),
+                );
+                // Provider.of<HomeProvider>(context, listen: false).setIndex(3);
+                // Provider.of<HomeProvider>(context, listen: false).onSelectedIndexChanged!(3);
               },
             ),
           ),

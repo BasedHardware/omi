@@ -167,6 +167,56 @@ class MixpanelManager {
   void memoriesPageCreatedMemory(MemoryCategory category) =>
       track('Fact Page Created Fact', properties: {'fact_category': category.toString().split('.').last});
 
+  void memorySearched(String query, int resultsCount) {
+    track('Fact Searched', properties: {
+      'search_query_length': query.length,
+      'results_count': resultsCount,
+    });
+  }
+
+  void memorySearchCleared(int totalFactsCount) {
+    track('Fact Search Cleared', properties: {'total_facts_count': totalFactsCount});
+  }
+
+  void memoryListItemClicked(Memory memory) {
+    track('Fact List Item Clicked', properties: {
+      'fact_id': memory.id,
+      'fact_category': memory.category.toString().split('.').last,
+    });
+  }
+
+  void memoryVisibilityChanged(Memory memory, MemoryVisibility newVisibility) {
+    track('Fact Visibility Changed', properties: {
+      'fact_id': memory.id,
+      'fact_category': memory.category.toString().split('.').last,
+      'new_visibility': newVisibility.name,
+    });
+  }
+
+  void memoriesAllVisibilityChanged(MemoryVisibility newVisibility, int count) {
+    track('All Facts Visibility Changed', properties: {
+      'new_visibility': newVisibility.name,
+      'facts_count': count,
+    });
+  }
+
+  void memoryReviewed(Memory memory, bool approved, String source) {
+    track('Fact Reviewed', properties: {
+      'fact_id': memory.id,
+      'fact_category': memory.category.toString().split('.').last,
+      'status': approved ? 'approved' : 'discarded',
+      'source': source,
+    });
+  }
+
+  void memoriesAllDeleted(int countBeforeDeletion) {
+    track('All Facts Deleted', properties: {
+      'facts_count_before_deletion': countBeforeDeletion,
+    });
+  }
+
+  void memoriesManagementSheetOpened() => track('Facts Management Sheet Opened');
+
   Map<String, dynamic> _getTranscriptProperties(String transcript) {
     String transcriptCopy = transcript.substring(0, transcript.length);
     int speakersCount = 0;
