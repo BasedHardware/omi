@@ -80,13 +80,19 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            textBaseline: TextBaseline.alphabetic,
             children: [
-              const Text(
-                'Select your primary language',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+              const Flexible(
+                child: Text(
+                  'Select your primary language',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: true,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
               ),
               TextButton(
@@ -102,7 +108,8 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
                 child: Text(
                   'Done',
                   style: TextStyle(
-                    color: currentSelectedLanguage == null ? null : Colors.white,
+                    color:
+                        currentSelectedLanguage == null ? null : Colors.white,
                   ),
                 ),
               ),
