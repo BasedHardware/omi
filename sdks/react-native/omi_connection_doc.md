@@ -29,6 +29,7 @@ Battery Level Characteristic: 00002a19-0000-1000-8000-00805f9b34fb
 - **disconnect**: Terminates the connection with the device
 - **isConnected**: Checks if the device is currently connected
 - **ping**: Sends a ping to the device to check connectivity
+- **requestConnectionPriority**: Requests a specific connection priority for better performance or battery efficiency (Android only)
 
 ### Audio Functions
 
@@ -59,3 +60,5 @@ The Omi device supports several audio codecs:
 2. Handle disconnection events gracefully
 3. Clean up listeners when they are no longer needed
 4. For Android devices, request a larger MTU size (512) to avoid GATT errors
+5. For Android devices, you can use `requestConnectionPriority` to optimize for performance (ConnectionPriority.HIGH) or battery life (ConnectionPriority.LOW_POWER)
+# TODO: Check if balanced and low_power provide enough bandwidth to support opus streaming
