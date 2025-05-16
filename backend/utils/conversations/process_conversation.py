@@ -202,9 +202,9 @@ def _extract_memories(uid: str, conversation: Conversation):
         new_memories = new_memories_extractor(uid, conversation.transcript_segments)
 
     parsed_memories = []
-    for fact in new_memories:
-        parsed_memories.append(MemoryDB.from_memory(fact, uid, conversation.id, False))
-        print('_extract_memories:', fact.category.value.upper(), '|', fact.content)
+    for memory in new_memories:
+        parsed_memories.append(MemoryDB.from_memory(memory, uid, conversation.id, False))
+        print('_extract_memories:', memory.category.value.upper(), '|', memory.content)
 
     if len(parsed_memories) == 0:
         print(f"No memories extracted for conversation {conversation.id}")
