@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:omi/pages/apps/explore_install_page.dart';
+import 'package:omi/pages/apps/manage_create_page.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -36,34 +37,32 @@ class _AppsPageState extends State<AppsPage> {
             )
           : null,
       body: const DefaultTabController(
-        length: 1,
+        length: 2,
         initialIndex: 0,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // TabBar(
-            //   indicatorSize: TabBarIndicatorSize.label,
-            //   isScrollable: true,
-            //   padding: EdgeInsets.zero,
-            //   indicatorPadding: EdgeInsets.zero,
-            //   labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
-            //   indicatorColor: Colors.white,
-            //   tabs: const [
-            //     Tab(text: 'Explore & Install'),
-            //     Tab(text: 'Manage & Create'),
-            //   ],
-            // ),
-            Expanded(
-              child: ExploreInstallPage(),
+            TabBar(
+              indicatorSize: TabBarIndicatorSize.label,
+              isScrollable: true,
+              padding: EdgeInsets.zero,
+              indicatorPadding: EdgeInsets.zero,
+              labelStyle: TextStyle(fontSize: 18),
+              indicatorColor: Colors.white,
+              tabs: [
+                Tab(text: 'Explore & Install'),
+                Tab(text: 'Installed Apps'),
+              ],
             ),
-            // const Expanded(
-            //     child: TabBarView(
-            //   children: [
-            //     ExploreInstallPage(),
-            //     ManageCreatePage(),
-            //   ],
-            // )),
+            Expanded(
+              child: TabBarView(
+                children: [
+                  ExploreInstallPage(),
+                  ManageCreatePage(),
+                ],
+              ),
+            ),
           ],
         ),
       ),
