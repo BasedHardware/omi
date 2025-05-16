@@ -3,7 +3,7 @@ from typing import List, Tuple, Optional
 import database.memories as memories_db
 from models.memories import MemoryDB, Memory, CategoryEnum
 from models.integrations import ExternalIntegrationCreateMemory
-from utils.llm import extract_memories_from_text
+from utils.llm.memories import extract_memories_from_text
 
 
 def process_external_integration_memory(uid: str, memory_data: ExternalIntegrationCreateMemory, app_id: str) -> List[

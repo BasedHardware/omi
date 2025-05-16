@@ -19,7 +19,8 @@ from routers.sync import retrieve_file_paths, decode_files_to_wav
 from utils.apps import get_available_app_by_id
 from utils.chat import process_voice_message_segment, process_voice_message_segment_stream, \
     transcribe_voice_message_segment
-from utils.llm import initial_chat_message, initial_persona_chat_message
+from utils.llm.persona import initial_persona_chat_message
+from utils.llm.chat import initial_chat_message
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream, execute_persona_chat_stream
