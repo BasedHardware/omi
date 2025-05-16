@@ -84,6 +84,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       }
     });
     SchedulerBinding.instance.addPostFrameCallback((_) async {
+      var provider = context.read<MessageProvider>();
+      if (provider.messages.isEmpty) {
+        provider.refreshMessages();
+      }
       scrollToBottom();
     });
     super.initState();
