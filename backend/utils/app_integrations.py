@@ -16,10 +16,8 @@ from models.conversation import Conversation, ConversationSource
 from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps
 from utils.notifications import send_notification
-from utils.llm import (
-    generate_embedding,
-    get_proactive_message
-)
+from utils.llm.clients import generate_embedding
+from utils.llm.proactive_notification import get_proactive_message
 from database.vector_db import query_vectors_by_metadata
 import database.conversations as conversations_db
 

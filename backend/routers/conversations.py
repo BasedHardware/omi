@@ -8,7 +8,7 @@ from models.conversation import SearchRequest
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.conversations.search import search_conversations
-from utils.llm import generate_summary_with_prompt
+from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
