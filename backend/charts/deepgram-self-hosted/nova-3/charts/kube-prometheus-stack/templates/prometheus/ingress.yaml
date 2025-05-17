@@ -1,0 +1,77 @@
+{{- if and .Values.prometheus.enabled .Values.prometheus.ingress.enabled -}}
+  {{- $pathType := .Values.prometheus.ingress.pathType | default "ImplementationSpecific" -}}
+  {{- $serviceName := printf "%s-%s" (include "kube-prometheus-stack.fullname" .) "prometheus" -}}
+  {{- $servicePort := .Values.prometheus.ingress.servicePort | default .Values.prometheus.service.port -}}
+  {{- $routePrefix := list .Values.prometheus.prometheusSpec.routePrefix -}}
+  {{- $paths := .Values.prometheus.ingress.paths | default $routePrefix -}}
+  {{- $apiIsStable := eq (include "kube-prometheus-stack.ingress.isStable" .) "true" -}}
+  {{- $ingressSupportsPathType := eq (include "kube-prometheus-stack.ingress.supportsPathType" .) "true" -}}
+apiVersion: {{ include "kube-prometheus-stack.ingress.apiVersion" . }}
+kind: Ingress
+metadata:
+{{- if .Values.prometheus.ingress.annotations }}
+  annotations:
+    {{- tpl (toYaml .Values.prometheus.ingress.annotations) . | nindent 4 }}
+{{- end }}
+  name: {{ $serviceName }}
+  namespace: {{ template "kube-prometheus-stack.namespace" . }}
+  labels:
+    app: {{ template "kube-prometheus-stack.name" . }}-prometheus
+{{ include "kube-prometheus-stack.labels" . | indent 4 }}
+{{- if .Values.prometheus.ingress.labels }}
+{{ toYaml .Values.prometheus.ingress.labels | indent 4 }}
+{{- end }}
+spec:
+  {{- if $apiIsStable }}
+  {{- if .Values.prometheus.ingress.ingressClassName }}
+  ingressClassName: {{ .Values.prometheus.ingress.ingressClassName }}
+  {{- end }}
+  {{- end }}
+  rules:
+  {{- if .Values.prometheus.ingress.hosts }}
+  {{- range $host := .Values.prometheus.ingress.hosts }}
+    - host: {{ tpl $host $ }}
+      http:
+        paths:
+  {{- range $p := $paths }}
+          - path: {{ tpl $p $ }}
+            {{- if and $pathType $ingressSupportsPathType }}
+            pathType: {{ $pathType }}
+            {{- end }}
+            backend:
+              {{- if $apiIsStable }}
+              service:
+                name: {{ $serviceName }}
+                port:
+                  number: {{ $servicePort }}
+              {{- else }}
+              serviceName: {{ $serviceName }}
+              servicePort: {{ $servicePort }}
+    {{- end }}
+    {{- end -}}
+  {{- end -}}
+  {{- else }}
+    - http:
+        paths:
+  {{- range $p := $paths }}
+          - path: {{ tpl $p $ }}
+            {{- if and $pathType $ingressSupportsPathType }}
+            pathType: {{ $pathType }}
+            {{- end }}
+            backend:
+              {{- if $apiIsStable }}
+              service:
+                name: {{ $serviceName }}
+                port:
+                  number: {{ $servicePort }}
+              {{- else }}
+              serviceName: {{ $serviceName }}
+              servicePort: {{ $servicePort }}
+  {{- end }}
+  {{- end -}}
+  {{- end -}}
+  {{- if .Values.prometheus.ingress.tls }}
+  tls:
+{{ tpl (toYaml .Values.prometheus.ingress.tls | indent 4) . }}
+  {{- end -}}
+{{- end -}}

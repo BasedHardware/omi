@@ -1,0 +1,47 @@
+{{- if and .Values.kubeApiServer.enabled .Values.kubernetesServiceMonitors.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ template "kube-prometheus-stack.fullname" . }}-apiserver
+  {{- if .Values.prometheus.prometheusSpec.ignoreNamespaceSelectors }}
+  namespace: default
+  {{- else }}
+  namespace: {{ template "kube-prometheus-stack.namespace" . }}
+  {{- end }}
+  labels:
+    app: {{ template "kube-prometheus-stack.name" . }}-apiserver
+  {{- with .Values.kubeApiServer.serviceMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{ include "kube-prometheus-stack.labels" . | indent 4 }}
+spec:
+  {{- include "servicemonitor.scrapeLimits" .Values.kubeApiServer.serviceMonitor | nindent 2 }}
+  endpoints:
+  - bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+    {{- if .Values.kubeApiServer.serviceMonitor.interval }}
+    interval: {{ .Values.kubeApiServer.serviceMonitor.interval }}
+    {{- end }}
+    {{- if .Values.kubeApiServer.serviceMonitor.proxyUrl }}
+    proxyUrl: {{ .Values.kubeApiServer.serviceMonitor.proxyUrl }}
+    {{- end }}
+    port: https
+    scheme: https
+{{- if .Values.kubeApiServer.serviceMonitor.metricRelabelings }}
+    metricRelabelings:
+{{ tpl (toYaml .Values.kubeApiServer.serviceMonitor.metricRelabelings | indent 6) . }}
+{{- end }}
+{{- if .Values.kubeApiServer.serviceMonitor.relabelings }}
+    relabelings:
+{{ tpl (toYaml .Values.kubeApiServer.serviceMonitor.relabelings | indent 6) . }}
+{{- end }}
+    tlsConfig:
+      caFile: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      serverName: {{ .Values.kubeApiServer.tlsConfig.serverName }}
+      insecureSkipVerify: {{ .Values.kubeApiServer.tlsConfig.insecureSkipVerify }}
+  jobLabel: {{ .Values.kubeApiServer.serviceMonitor.jobLabel }}
+  namespaceSelector:
+    matchNames:
+    - default
+  selector:
+{{ toYaml .Values.kubeApiServer.serviceMonitor.selector | indent 4 }}
+{{- end}}
