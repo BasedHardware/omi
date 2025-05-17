@@ -2,8 +2,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Optional, List, Tuple, Dict, Any, Union
 
-from fastapi import APIRouter, Header, HTTPException, Depends, Query
-import database.conversations as conversations_db
+from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
@@ -72,13 +71,8 @@ async def create_conversation_via_integration(
     app_id: str,
     create_conversation: conversation_models.ExternalIntegrationCreateConversation,
     uid: str,
-    authorization: Optional[str] = Header(None)
+    api_key: Annotated[str, Depends(apps_utils.get_api_key)]
 ):
-    # Verify API key from Authorization header
-    if not authorization or not authorization.startswith('Bearer '):
-        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'")
-
-    api_key = authorization.replace('Bearer ', '')
     if not verify_api_key(app_id, api_key):
         raise HTTPException(status_code=403, detail="Invalid integration API key")
 
@@ -139,13 +133,8 @@ async def create_memories_via_integration(
     app_id: str,
     fact_data: integration_models.ExternalIntegrationCreateMemory,
     uid: str,
-    authorization: Optional[str] = Header(None)
+    api_key: Annotated[str, Depends(apps_utils.get_api_key)]
 ):
-    # Verify API key from Authorization header
-    if not authorization or not authorization.startswith('Bearer '):
-        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'")
-
-    api_key = authorization.replace('Bearer ', '')
     if not verify_api_key(app_id, api_key):
         raise HTTPException(status_code=403, detail="Invalid integrationAPI key")
 
@@ -182,13 +171,8 @@ async def create_facts_via_integration(
     app_id: str,
     fact_data: integration_models.ExternalIntegrationCreateMemory,
     uid: str,
-    authorization: Optional[str] = Header(None)
+    api_key: Annotated[str, Depends(apps_utils.get_api_key)]
 ):
-    # Verify API key from Authorization header
-    if not authorization or not authorization.startswith('Bearer '):
-        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'")
-
-    api_key = authorization.replace('Bearer ', '')
     if not verify_api_key(app_id, api_key):
         raise HTTPException(status_code=403, detail="Invalid integrationAPI key")
 
@@ -223,19 +207,14 @@ async def get_memories_via_integration(
     request: Request,
     app_id: str,
     uid: str,
+    api_key: Annotated[str, Depends(apps_utils.get_api_key)],
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    authorization: Optional[str] = Header(None)
 ):
     """
     Get all memories (facts) for a user via integration API.
     Authentication is required via API key in the Authorization header.
     """
-    # Verify API key from Authorization header
-    if not authorization or not authorization.startswith('Bearer '):
-        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'")
-
-    api_key = authorization.replace('Bearer ', '')
     if not verify_api_key(app_id, api_key):
         raise HTTPException(status_code=403, detail="Invalid integrationAPI key")
 
@@ -265,6 +244,7 @@ async def get_conversations_via_integration(
     request: Request,
     app_id: str,
     uid: str,
+    api_key: Annotated[str, Depends(apps_utils.get_api_key)],
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     include_discarded: bool = Query(False),
@@ -272,7 +252,6 @@ async def get_conversations_via_integration(
     start_date: Optional[Union[datetime, str]] = Query(None, description="Filter conversations after this date (ISO format)"),
     end_date: Optional[Union[datetime, str]] = Query(None, description="Filter conversations before this date (ISO format)"),
     max_transcript_segments: int = Query(100, ge=-1, le=1000, description="Maximum number of transcript segments to include per conversation. Use -1 for no limit."),
-    authorization: Optional[str] = Header(None)
 ):
     """
     Get all conversations for a user via integration API.
@@ -282,11 +261,6 @@ async def get_conversations_via_integration(
     - start_date: Filter conversations after this date (ISO format)
     - end_date: Filter conversations before this date (ISO format)
     """
-    # Verify API key from Authorization header
-    if not authorization or not authorization.startswith('Bearer '):
-        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'")
-
-    api_key = authorization.replace('Bearer ', '')
     if not verify_api_key(app_id, api_key):
         raise HTTPException(status_code=403, detail="Invalid API key")
 
@@ -355,19 +329,14 @@ async def search_conversations_via_integration(
     request: Request,
     app_id: str,
     uid: str,
+    api_key: Annotated[str, Depends(apps_utils.get_api_key)],
     search_request: SearchRequest,
     max_transcript_segments: int = Query(100, ge=-1, le=1000, description="Maximum number of transcript segments to include per conversation. Use -1 for no limit."),
-    authorization: Optional[str] = Header(None)
 ):
     """
     Search conversations for a user via integration API.
     Authentication is required via API key in the Authorization header.
     """
-    # Verify API key from Authorization header
-    if not authorization or not authorization.startswith('Bearer '):
-        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'")
-
-    api_key = authorization.replace('Bearer ', '')
     if not verify_api_key(app_id, api_key):
         raise HTTPException(status_code=403, detail="Invalid API key")
 
@@ -448,13 +417,8 @@ async def send_notification_via_integration(
     app_id: str,
     message: str,
     uid: str,
-    authorization: Optional[str] = Header(None)
+    api_key: Annotated[str, Depends(apps_utils.get_api_key)]
 ):
-    # Verify API key from Authorization header
-    if not authorization or not authorization.startswith('Bearer '):
-        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'")
-
-    api_key = authorization.replace('Bearer ', '')
     if not verify_api_key(app_id, api_key):
         raise HTTPException(status_code=403, detail="Invalid API key")
 

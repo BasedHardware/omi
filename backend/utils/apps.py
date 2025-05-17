@@ -2,9 +2,11 @@ import os
 import threading
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Annotated
 import hashlib
 import secrets
+from fastapi import Depends
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
     get_public_approved_apps_db, get_app_by_id_db, get_app_usage_history_db, set_app_review_in_db, \
@@ -30,6 +32,8 @@ from utils.social import get_twitter_timeline, TwitterProfile, get_twitter_profi
 
 MarketplaceAppReviewUIDs = os.getenv('MARKETPLACE_APP_REVIEWERS').split(',') if os.getenv(
     'MARKETPLACE_APP_REVIEWERS') else []
+
+security = HTTPBearer()
 
 
 # ********************************
@@ -666,3 +670,9 @@ def app_can_read_conversations(app: dict) -> bool:
 def app_can_create_conversation(app: dict) -> bool:
     """Check if an app can create a conversation."""
     return app_has_action(app, 'create_conversation')
+
+
+def get_api_key(
+    authorization: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+):
+    return authorization.credentials

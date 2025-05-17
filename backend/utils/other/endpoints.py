@@ -1,11 +1,15 @@
 import json
 import os
 import time
+from typing import Annotated
 
-from fastapi import Header, HTTPException
+from fastapi import Depends, HTTPException
 from fastapi import Request
 from firebase_admin import auth
-from firebase_admin.auth import InvalidIdTokenError
+from firebase_admin.auth import ExpiredIdTokenError, InvalidIdTokenError
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
+security = HTTPBearer()
 
 
 def get_user(uid: str):
@@ -13,25 +17,24 @@ def get_user(uid: str):
     return user
 
 
-def get_current_user_uid(authorization: str = Header(None)):
-    if authorization and os.getenv('ADMIN_KEY') in authorization:
-        return authorization.split(os.getenv('ADMIN_KEY'))[1]
-
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Authorization header not found")
-    elif len(str(authorization).split(' ')) != 2:
-        raise HTTPException(status_code=401, detail="Invalid authorization token")
+def get_current_user_uid(authorization: Annotated[HTTPAuthorizationCredentials, Depends(security)]):
+    token = authorization.credentials
+    key = os.getenv("ADMIN_KEY")
+    if key and key in token:
+        return token.split(key)[1]
 
     try:
-        token = authorization.split(' ')[1]
-        decoded_token = auth.verify_id_token(token)
-        # print('get_current_user_uid', decoded_token['uid'])
-        return decoded_token['uid']
-    except InvalidIdTokenError as e:
-        if os.getenv('LOCAL_DEVELOPMENT') == 'true':
-            return '123'
-        print(e)
+        decoded_token = auth.verify_id_token(authorization.credentials)
+        return decoded_token["uid"]
+    except KeyError:
+        raise HTTPException(status_code=400, detail="User ID not found")
+    except InvalidIdTokenError:
         raise HTTPException(status_code=401, detail="Invalid authorization token")
+    except ExpiredIdTokenError:
+        raise HTTPException(status_code=401, detail="Authorization token has expired")
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=400, detail="Authorization failed")
 
 
 cached = {}
