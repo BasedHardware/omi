@@ -5,8 +5,8 @@ from fastapi import APIRouter
 router = APIRouter()
 
 
-@router.get('/v1/plugin-categories', tags=['v1'])
-def get_plugin_categories():
+@router.get('/v1/app-categories', tags=['v1'])
+def get_app_categories():
     return [
         {'title': 'Conversation Analysis', 'id': 'conversation-analysis'},
         {'title': 'Personality Emulation', 'id': 'personality-emulation'},
