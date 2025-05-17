@@ -29,45 +29,27 @@ global:
   deepgramSecretRef: "dg-self-hosted-api-key"
 
 scaling:
-  # -- Number of replicas to set during initial installation.
-  # @default -- ``
   replicas:
     api: 1
     engine: 1
   auto:
     # Can toggle to true to enable autoscaling. Make sure to set a value for one of the available metrics
-    enabled: true
-
-    api:
-      metrics:
-        # -- Scale the API deployment to this Engine-to-Api pod ratio
-        engineToApiRatio: 1
-
+    enabled: false
     engine:
-      # -- Minimum number of Engine replicas.
-      minReplicas: 1
-      # -- Maximum number of Engine replicas.
-      maxReplicas: 10
       metrics:
         speechToText:
           batch:
             requestsPerPod: # Discuss a reasonable value with your Deepgram Account Representative
           streaming:
-            requestsPerPod: 30
+            requestsPerPod: # Discuss a reasonable value with your Deepgram Account Representative
         textToSpeech:
           batch:
             requestsPerPod: # Discuss a reasonable value with your Deepgram Account Representative
         # Discuss a reasoanble value with your Deepgram Account Representative
         # Must also set engine.concurrencyLimit.activeRequests if using request ratio for autoscaling
         requestCapacityRatio:
-      behavior:
-        scaleUp:
-          stabilizationWindowSeconds: 120  # Wait 2 minutes before scaling up
 
 api:
-  image:
-    path: us-central1-docker.pkg.dev/based-hardware-dev/deepgram/self-hosted-api
-    tag: release-250130
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -77,18 +59,6 @@ api:
                 operator: In
                 values:
                   - api
-  ingress:
-    annotations:
-      kubernetes.io/ingress.class: "gce-internal"
-      kubernetes.io/ingress.regional-static-ip-name: "dev-omi-deepgram-ilb-ip-address"
-      kubernetes.io/ingress.allow-http: "false"
-      ingress.gcp.kubernetes.io/pre-shared-cert: "dev-omi-deepgram-ilb-cert"
-    hosts:
-      - host: dg.omiapi.com
-        paths:
-          - path: /
-            pathType: Prefix
-
   resources:
     requests:
       memory: "4Gi"
@@ -98,9 +68,6 @@ api:
       cpu: "4000m"
 
 engine:
-  image:
-    path: us-central1-docker.pkg.dev/based-hardware-dev/deepgram/self-hosted-engine
-    tag: release-250130
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -117,7 +84,7 @@ engine:
       gpu: 1
     limits:
       memory: "40Gi"
-      cpu: "12000m"
+      cpu: "8000m"
       gpu: 1
   # Discuss a reasonable value with your Deepgram Account Representative
   # If not using autoscaling, can be left empty, but must be set if using
@@ -130,13 +97,11 @@ engine:
         gpd:
           enabled: true
           # Replace with your Google disk handle
-          volumeHandle: "projects/based-hardware-dev/zones/us-central1-a/disks/dev-omi-deepgram-model-storage"
+          volumeHandle: "projects/<your-project-id>/zones/<your-zone>/disks/<your-disk>"
 
 licenseProxy:
   enabled: true
-  image:
-    path: us-central1-docker.pkg.dev/based-hardware-dev/deepgram/self-hosted-license-proxy
-    tag: release-250130
+
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -157,26 +122,3 @@ licenseProxy:
 gpu-operator:
   # GKE will manage the driver and toolkit installation for us by default.
   enabled: false
-
-kube-prometheus-stack:
-  grafana:
-    enabled: true
-    ingress:
-      enabled: true
-      annotations:
-        kubernetes.io/ingress.class: "gce"
-        kubernetes.io/ingress.global-static-ip-name: "dev-omi-deepgram-grafana-alb-ip-address"
-        networking.gke.io/managed-certificates: "dev-omi-deepgram-grafana-alb-cert"
-        kubernetes.io/ingress.allow-http: "false"
-      hosts:
-        - dg-monitor.omiapi.com
-      path: /
-    persistence:
-      enabled: true
-      type: sts
-      storageClassName: standard-rwo
-      accessModes:
-        - ReadWriteOnce
-      size: 20Gi
-      finalizers:
-        - kubernetes.io/pvc-protection

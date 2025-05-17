@@ -1,0 +1,17 @@
+{{- if and .Values.rbac.create (or .Values.rules.default .Values.rules.custom) -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  {{- if .Values.customAnnotations }}
+  annotations:
+  {{- toYaml .Values.customAnnotations | nindent 4 }}
+  {{- end }}
+  labels:
+    {{- include "k8s-prometheus-adapter.labels" . | indent 4 }}
+  name: {{ template "k8s-prometheus-adapter.name" . }}-server-resources
+rules:
+- apiGroups:
+  - custom.metrics.k8s.io
+  resources: {{ toYaml .Values.rbac.customMetrics.resources | nindent 2 }}
+  verbs: ["*"]
+{{- end -}}

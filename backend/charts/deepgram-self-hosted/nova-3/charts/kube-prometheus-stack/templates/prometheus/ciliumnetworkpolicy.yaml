@@ -1,0 +1,27 @@
+{{- if and .Values.prometheus.networkPolicy.enabled (eq .Values.prometheus.networkPolicy.flavor "cilium") }}
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ template "kube-prometheus-stack.fullname" . }}-prometheus
+  namespace: {{ template "kube-prometheus-stack.namespace" . }}
+  labels:
+    app: {{ template "kube-prometheus-stack.name" . }}-prometheus
+    {{- include "kube-prometheus-stack.labels" . | nindent 4 }}
+spec:
+  endpointSelector:
+    {{- if .Values.prometheus.networkPolicy.cilium.endpointSelector }}
+    {{- toYaml .Values.prometheus.networkPolicy.cilium.endpointSelector | nindent 4 }}
+    {{- else }}
+    matchExpressions:
+      - {key: app.kubernetes.io/name, operator: In, values: [prometheus]}
+      - {key: prometheus, operator: In, values: [{{ template "kube-prometheus-stack.prometheus.crname" . }}]}
+    {{- end }}
+  {{- if and .Values.prometheus.networkPolicy.cilium .Values.prometheus.networkPolicy.cilium.egress }}  
+  egress:
+    {{ toYaml .Values.prometheus.networkPolicy.cilium.egress | nindent 4 }}
+  {{- end }}
+  {{- if and .Values.prometheus.networkPolicy.cilium .Values.prometheus.networkPolicy.cilium.ingress }}  
+  ingress:
+    {{ toYaml .Values.prometheus.networkPolicy.cilium.ingress | nindent 4 }}
+  {{- end }}
+{{- end }}

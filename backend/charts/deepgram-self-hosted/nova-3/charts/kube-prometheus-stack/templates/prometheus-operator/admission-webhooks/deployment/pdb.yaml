@@ -1,0 +1,15 @@
+{{- if .Values.prometheusOperator.admissionWebhooks.deployment.podDisruptionBudget -}}
+apiVersion: {{ include "kube-prometheus-stack.pdb.apiVersion" . }}
+kind: PodDisruptionBudget
+metadata:
+  name: {{ template "kube-prometheus-stack.operator.fullname" . }}-webhook
+  namespace: {{ template "kube-prometheus-stack.namespace" . }}
+  labels:
+    {{- include "kube-prometheus-stack.prometheus-operator-webhook.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "kube-prometheus-stack.name" . }}-operator-webhook
+      release: {{ $.Release.Name | quote }}
+{{ toYaml .Values.prometheusOperator.admissionWebhooks.deployment.podDisruptionBudget | indent 2 }}
+{{- end }}

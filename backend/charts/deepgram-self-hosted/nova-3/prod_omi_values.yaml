@@ -41,19 +41,19 @@ scaling:
     api:
       metrics:
         # -- Scale the API deployment to this Engine-to-Api pod ratio
-        engineToApiRatio: 1
+        engineToApiRatio: 5
 
     engine:
       # -- Minimum number of Engine replicas.
-      minReplicas: 1
+      minReplicas: 5
       # -- Maximum number of Engine replicas.
-      maxReplicas: 10
+      maxReplicas: 20
       metrics:
         speechToText:
           batch:
             requestsPerPod: # Discuss a reasonable value with your Deepgram Account Representative
           streaming:
-            requestsPerPod: 30
+            requestsPerPod: 18
         textToSpeech:
           batch:
             requestsPerPod: # Discuss a reasonable value with your Deepgram Account Representative
@@ -62,12 +62,12 @@ scaling:
         requestCapacityRatio:
       behavior:
         scaleUp:
-          stabilizationWindowSeconds: 120  # Wait 2 minutes before scaling up
+          stabilizationWindowSeconds: 60  # Wait 1 minute before scaling up
 
 api:
   image:
-    path: us-central1-docker.pkg.dev/based-hardware-dev/deepgram/self-hosted-api
-    tag: release-250130
+    path: us-central1-docker.pkg.dev/based-hardware/deepgram/self-hosted-api
+    tag: release-250331
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -80,11 +80,11 @@ api:
   ingress:
     annotations:
       kubernetes.io/ingress.class: "gce-internal"
-      kubernetes.io/ingress.regional-static-ip-name: "dev-omi-deepgram-ilb-ip-address"
+      kubernetes.io/ingress.regional-static-ip-name: "prod-omi-deepgram-ilb-ip-address"
       kubernetes.io/ingress.allow-http: "false"
-      ingress.gcp.kubernetes.io/pre-shared-cert: "dev-omi-deepgram-ilb-cert"
+      ingress.gcp.kubernetes.io/pre-shared-cert: "prod-omi-deepgram-ilb-cert"
     hosts:
-      - host: dg.omiapi.com
+      - host: dg.omi.me
         paths:
           - path: /
             pathType: Prefix
@@ -99,8 +99,8 @@ api:
 
 engine:
   image:
-    path: us-central1-docker.pkg.dev/based-hardware-dev/deepgram/self-hosted-engine
-    tag: release-250130
+    path: us-central1-docker.pkg.dev/based-hardware/deepgram/self-hosted-engine
+    tag: release-250331
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -130,13 +130,13 @@ engine:
         gpd:
           enabled: true
           # Replace with your Google disk handle
-          volumeHandle: "projects/based-hardware-dev/zones/us-central1-a/disks/dev-omi-deepgram-model-storage"
+          volumeHandle: "projects/based-hardware/zones/us-central1-a/disks/prod-omi-deepgram-model-storage"
 
 licenseProxy:
   enabled: true
   image:
-    path: us-central1-docker.pkg.dev/based-hardware-dev/deepgram/self-hosted-license-proxy
-    tag: release-250130
+    path: us-central1-docker.pkg.dev/based-hardware/deepgram/self-hosted-license-proxy
+    tag: release-250331
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -165,11 +165,11 @@ kube-prometheus-stack:
       enabled: true
       annotations:
         kubernetes.io/ingress.class: "gce"
-        kubernetes.io/ingress.global-static-ip-name: "dev-omi-deepgram-grafana-alb-ip-address"
-        networking.gke.io/managed-certificates: "dev-omi-deepgram-grafana-alb-cert"
+        kubernetes.io/ingress.global-static-ip-name: "prod-omi-deepgram-grafana-alb-ip-address"
+        networking.gke.io/managed-certificates: "prod-omi-deepgram-grafana-alb-cert"
         kubernetes.io/ingress.allow-http: "false"
       hosts:
-        - dg-monitor.omiapi.com
+        - dg-monitor.omi.me
       path: /
     persistence:
       enabled: true

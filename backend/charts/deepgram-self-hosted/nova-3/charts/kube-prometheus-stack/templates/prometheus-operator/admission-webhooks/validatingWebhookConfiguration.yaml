@@ -1,0 +1,81 @@
+{{- if and .Values.prometheusOperator.enabled .Values.prometheusOperator.admissionWebhooks.enabled }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name:  {{ template "kube-prometheus-stack.fullname" . }}-admission
+{{- if .Values.prometheusOperator.admissionWebhooks.certManager.enabled }}
+  annotations:
+    certmanager.k8s.io/inject-ca-from: {{ printf "%s/%s-admission" (include "kube-prometheus-stack.namespace" .) (include "kube-prometheus-stack.fullname" .) | quote }}
+    cert-manager.io/inject-ca-from: {{ printf "%s/%s-admission" (include "kube-prometheus-stack.namespace" .) (include "kube-prometheus-stack.fullname" .) | quote }}
+{{- end }}
+  labels:
+    app: {{ template "kube-prometheus-stack.name" $ }}-admission
+    {{- include "kube-prometheus-stack.prometheus-operator-webhook.labels" $ | nindent 4 }}
+webhooks:
+  - name: prometheusrulemutate.monitoring.coreos.com
+    {{- if eq .Values.prometheusOperator.admissionWebhooks.failurePolicy "IgnoreOnInstallOnly" }}
+    failurePolicy: {{ .Release.IsInstall | ternary "Ignore" "Fail" }}
+    {{- else if .Values.prometheusOperator.admissionWebhooks.failurePolicy  }}
+    failurePolicy: {{ .Values.prometheusOperator.admissionWebhooks.failurePolicy }}
+    {{- else if .Values.prometheusOperator.admissionWebhooks.patch.enabled }}
+    failurePolicy: Ignore
+    {{- else }}
+    failurePolicy: Fail
+    {{- end }}
+    rules:
+      - apiGroups:
+          - monitoring.coreos.com
+        apiVersions:
+          - "*"
+        resources:
+          - prometheusrules
+        operations:
+          - CREATE
+          - UPDATE
+    clientConfig:
+      service:
+        namespace: {{ template "kube-prometheus-stack.namespace" . }}
+        name: {{ template "kube-prometheus-stack.operator.fullname" $ }}{{ if .Values.prometheusOperator.admissionWebhooks.deployment.enabled }}-webhook{{ end }}
+        path: /admission-prometheusrules/validate
+      {{- if and .Values.prometheusOperator.admissionWebhooks.caBundle (not .Values.prometheusOperator.admissionWebhooks.patch.enabled) (not .Values.prometheusOperator.admissionWebhooks.certManager.enabled) }}
+      caBundle: {{ .Values.prometheusOperator.admissionWebhooks.caBundle }}
+      {{- end }}
+    timeoutSeconds: {{ .Values.prometheusOperator.admissionWebhooks.timeoutSeconds }}
+    admissionReviewVersions: ["v1", "v1beta1"]
+    sideEffects: None
+    {{- if or .Values.prometheusOperator.denyNamespaces .Values.prometheusOperator.namespaces .Values.prometheusOperator.admissionWebhooks.namespaceSelector }}
+    namespaceSelector:
+      {{- with (omit .Values.prometheusOperator.admissionWebhooks.namespaceSelector "matchExpressions") }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+      {{- if or .Values.prometheusOperator.denyNamespaces .Values.prometheusOperator.namespaces .Values.prometheusOperator.admissionWebhooks.namespaceSelector.matchExpressions }}
+      matchExpressions:
+        {{- with (.Values.prometheusOperator.admissionWebhooks.namespaceSelector.matchExpressions) }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if .Values.prometheusOperator.denyNamespaces }}
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+        {{- range $namespace := mustUniq .Values.prometheusOperator.denyNamespaces }}
+            - {{ $namespace }}
+        {{- end }}
+        {{- else if and .Values.prometheusOperator.namespaces .Values.prometheusOperator.namespaces.additional }}
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values:
+        {{- if and .Values.prometheusOperator.namespaces.releaseNamespace (default .Values.prometheusOperator.namespaces.releaseNamespace true) }}
+        {{- $namespace := printf "%s" (include "kube-prometheus-stack.namespace" .) }}
+            - {{ $namespace }}
+        {{- end }}
+        {{- range $namespace := mustUniq .Values.prometheusOperator.namespaces.additional }}
+            - {{ $namespace }}
+        {{- end }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+    {{- with .Values.prometheusOperator.admissionWebhooks.objectSelector }}
+    objectSelector:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+{{- end }}

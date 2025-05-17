@@ -1,0 +1,16 @@
+{{- if and .Values.rbac.create .Values.rbac.pspEnabled (.Capabilities.APIVersions.Has "policy/v1beta1/PodSecurityPolicy") }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: psp-{{ include "prometheus-node-exporter.fullname" . }}
+  labels:
+    {{- include "prometheus-node-exporter.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: psp-{{ include "prometheus-node-exporter.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "prometheus-node-exporter.fullname" . }}
+    namespace: {{ include "prometheus-node-exporter.namespace" . }}
+{{- end }}
