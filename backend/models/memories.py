@@ -35,7 +35,7 @@ CATEGORY_BOOSTS = {MemoryCategory.core.value: 1,
 class Memory(BaseModel):
     content: str = Field(description="The content of the memory")
     category: MemoryCategory = Field(description="The category of the memory", default=MemoryCategory.other)
-    visibility: str = Field(description="The visibility of the memory", default='public')
+    visibility: str = Field(description="The visibility of the memory", default='private')
     tags: List[str] = Field(description="The tags of the memory and learning", default=[])
 
     @staticmethod
