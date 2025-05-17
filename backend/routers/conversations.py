@@ -76,7 +76,7 @@ def reprocess_conversation(
 
 
 @router.get('/v1/conversations', response_model=List[Conversation], tags=['conversations'])
-def get_conversations(limit: int = 100, offset: int = 0, statuses: str = "", include_discarded: bool = True,
+def get_conversations(limit: int = 100, offset: int = 0, statuses: str = "processing,completed", include_discarded: bool = True,
                       uid: str = Depends(auth.get_current_user_uid)):
     print('get_conversations', uid, limit, offset, statuses)
     return conversations_db.get_conversations(uid, limit, offset, include_discarded=include_discarded,
@@ -85,6 +85,7 @@ def get_conversations(limit: int = 100, offset: int = 0, statuses: str = "", inc
 
 @router.get("/v1/conversations/{conversation_id}", response_model=Conversation, tags=['conversations'])
 def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    print('get_conversation_by_id', uid, conversation_id)
     return _get_conversation_by_id(uid, conversation_id)
 
 

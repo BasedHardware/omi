@@ -163,8 +163,9 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
   Future fetchNewConversations() async {
     List<ServerConversation> newConversations = await getConversationsFromServer();
-    List<ServerConversation> upsertConvos =
-        newConversations.where((c) => conversations.indexWhere((cc) => cc.id == c.id) == -1).toList();
+    List<ServerConversation> upsertConvos = newConversations
+        .where((c) => c.status == ConversationStatus.completed && conversations.indexWhere((cc) => cc.id == c.id) == -1)
+        .toList();
     if (upsertConvos.isEmpty) {
       return;
     }
@@ -181,8 +182,10 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
     conversations = await getConversationsFromServer();
 
+    // processing convos
     processingConversations = conversations.where((m) => m.status == ConversationStatus.processing).toList();
 
+    // completed convos
     conversations = conversations.where((m) => m.status == ConversationStatus.completed).toList();
     if (conversations.isEmpty) {
       conversations = SharedPreferencesUtil().cachedConversations;
