@@ -25,7 +25,7 @@ from database.users import get_stripe_connect_account_id
 from models.app import App, UsageHistoryItem, UsageHistoryType
 from models.conversation import Conversation
 from utils import stripe
-from utils.llm import condense_conversations, condense_memories, generate_persona_description, condense_tweets
+from utils.llm.persona import condense_conversations, condense_memories, generate_persona_description, condense_tweets
 from utils.social import get_twitter_timeline, TwitterProfile, get_twitter_profile
 
 MarketplaceAppReviewUIDs = os.getenv('MARKETPLACE_APP_REVIEWERS').split(',') if os.getenv(

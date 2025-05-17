@@ -13,8 +13,9 @@ import database.conversations as conversations_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.memory import CategoryEnum
 from utils.apps import update_personas_async
-from utils.llm import identify_category_for_memory
 from firebase_admin import auth
+
+from utils.llm.memories import identify_category_for_memory
 
 router = APIRouter()
 
