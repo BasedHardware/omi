@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -663,6 +664,9 @@ class AddAppProvider extends ChangeNotifier {
       var file = await imagePicker.pickImage(source: ImageSource.gallery);
       if (file != null) {
         imageFile = File(file.path);
+        if (imageUrl != null) {
+          await CachedNetworkImage.evictFromCache(imageUrl!, cacheKey: imageUrl);
+        }
         imageUrl = null;
       }
       notifyListeners();
