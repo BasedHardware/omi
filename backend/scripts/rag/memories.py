@@ -1,5 +1,5 @@
 import database.memories as memories_db
-from utils.llm import new_memories_extractor
+from utils.llm.memories import new_memories_extractor
 import threading
 from typing import Tuple
 

@@ -19,10 +19,9 @@ import database.notifications as notification_db
 from models.app import App
 from models.chat import ChatSession, Message
 from models.conversation import Conversation
-from utils.llm import (
+from utils.llm.chat import (
     answer_omi_question,
     answer_omi_question_stream,
-    answer_persona_question_stream,
     requires_context,
     answer_simple_message,
     answer_simple_message_stream,
@@ -34,6 +33,7 @@ from utils.llm import (
     select_structured_filters,
     extract_question_from_conversation,
 )
+from utils.llm.persona import answer_persona_question_stream
 from utils.other.chat_file import FileChatTool
 from utils.other.endpoints import timeit
 from utils.app_integrations import get_github_docs_content

@@ -21,7 +21,7 @@ from _shared import *
 from models.chat import Message
 from models.conversation import Conversation
 from models.transcript_segment import TranscriptSegment
-from utils.llm import qa_rag
+from utils.llm.chat import qa_rag
 from utils.retrieval.rag import retrieve_rag_context
 
 # File to store the state

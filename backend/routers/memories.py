@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 import database.memories as memories_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.apps import update_personas_async
-from utils.llm import identify_category_for_memory
+from utils.llm.memories import identify_category_for_memory
 from utils.other import endpoints as auth
 
 router = APIRouter()

@@ -12,7 +12,7 @@ from models.conversation import Geolocation, Conversation
 from models.other import Person, CreatePerson
 from models.users import WebhookType
 from utils.apps import get_available_app_by_id
-from utils.llm import followup_question_prompt
+from utils.llm.followup import followup_question_prompt
 from utils.other import endpoints as auth
 from utils.other.storage import delete_all_conversation_recordings, get_user_person_speech_samples, \
     delete_user_person_speech_samples

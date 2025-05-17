@@ -25,8 +25,7 @@ from utils.apps import get_available_apps, get_available_app_by_id, get_approved
 
 from database.memories import migrate_memories
 
-from utils.llm import generate_description, generate_persona_intro_message
-
+from utils.llm.persona import generate_persona_intro_message, generate_description
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
 from models.app import App, ActionType, AppCreate, AppUpdate

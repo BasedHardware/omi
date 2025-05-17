@@ -1,7 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
-from typing import Optional, List, Dict
-from datetime import datetime
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException
 
 import database.conversations as conversations_db
 import database.redis_db as redis_db
@@ -11,15 +8,12 @@ from models.conversation import SearchRequest
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.conversations.search import search_conversations
-from utils.llm import generate_summary_with_prompt
+from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
 
 router = APIRouter()
-
-
-
 
 
 def _get_conversation_by_id(uid: str, conversation_id: str) -> dict:
@@ -42,16 +36,6 @@ def process_in_progress_conversation(uid: str = Depends(auth.get_current_user_ui
     messages = trigger_external_integrations(uid, conversation)
     return CreateConversationResponse(conversation=conversation, messages=messages)
 
-
-# class TranscriptRequest(BaseModel):
-#     transcript: str
-
-# @router.post('/v2/test-memory', response_model= [], tags=['conversations'])
-# def process_test_memory(
-#         request: TranscriptRequest, uid: str = Depends(auth.get_current_user_uid)
-# ):
-#   st =  get_transcript_structure(request.transcript, datetime.now(),'en','Asia/Kolkata')
-#   return [st.json()]
 
 @router.post('/v1/conversations/{conversation_id}/reprocess', response_model=Conversation, tags=['conversations'])
 def reprocess_conversation(
@@ -376,7 +360,6 @@ def search_conversations_endpoint(search_request: SearchRequest, uid: str = Depe
                                 include_discarded=search_request.include_discarded,
                                 start_date=start_timestamp,
                                 end_date=end_timestamp)
-
 
 
 @router.post("/v1/conversations/{conversation_id}/test-prompt", response_model=dict, tags=['conversations'])
