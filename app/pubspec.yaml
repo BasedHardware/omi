@@ -84,7 +84,7 @@ dependencies:
   sign_in_with_apple: ^6.1.1
   google_sign_in: 6.2.1
   location: ^7.0.0
-  cached_network_image: ^3.3.1
+  cached_network_image: 3.4.1
   map_launcher: ^3.3.1
   internet_connection_checker_plus: ^2.5.0
   geolocator:

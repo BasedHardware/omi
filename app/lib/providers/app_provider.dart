@@ -56,7 +56,7 @@ class AppProvider extends BaseProvider {
     var app = await getAppDetailsServer(id);
     if (app != null) {
       var oldApp = apps.where((element) => element.id == id).firstOrNull;
-      if (oldApp == null){
+      if (oldApp == null) {
         return null;
       }
       var idx = apps.indexOf(oldApp);
