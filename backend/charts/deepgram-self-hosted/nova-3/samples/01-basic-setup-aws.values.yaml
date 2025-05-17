@@ -29,45 +29,26 @@ global:
   deepgramSecretRef: "dg-self-hosted-api-key"
 
 scaling:
-  # -- Number of replicas to set during initial installation.
-  # @default -- ``
   replicas:
     api: 1
     engine: 1
   auto:
     # Can toggle to true to enable autoscaling. Make sure to set a value for one of the available metrics
-    enabled: true
-
-    api:
-      metrics:
-        # -- Scale the API deployment to this Engine-to-Api pod ratio
-        engineToApiRatio: 1
-
+    enabled: false
     engine:
-      # -- Minimum number of Engine replicas.
-      minReplicas: 2
-      # -- Maximum number of Engine replicas.
-      maxReplicas: 10
       metrics:
         speechToText:
           batch:
             requestsPerPod: # Discuss a reasonable value with your Deepgram Account Representative
           streaming:
-            requestsPerPod: 30
+            requestsPerPod: # Discuss a reasonable value with your Deepgram Account Representative
         textToSpeech:
           batch:
             requestsPerPod: # Discuss a reasonable value with your Deepgram Account Representative
         # Discuss a reasoanble value with your Deepgram Account Representative
         # Must also set engine.concurrencyLimit.activeRequests if using request ratio for autoscaling
         requestCapacityRatio:
-      behavior:
-        scaleUp:
-          stabilizationWindowSeconds: 120  # Wait 2 minutes before scaling up
-
 api:
-  image:
-    path: us-central1-docker.pkg.dev/based-hardware/deepgram/self-hosted-api
-    tag: release-250331
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -77,30 +58,15 @@ api:
                 operator: In
                 values:
                   - api
-  ingress:
-    annotations:
-      kubernetes.io/ingress.class: "gce-internal"
-      kubernetes.io/ingress.regional-static-ip-name: "prod-omi-deepgram-ilb-ip-address"
-      kubernetes.io/ingress.allow-http: "false"
-      ingress.gcp.kubernetes.io/pre-shared-cert: "prod-omi-deepgram-ilb-cert"
-    hosts:
-      - host: dg.omi.me
-        paths:
-          - path: /
-            pathType: Prefix
-
   resources:
     requests:
       memory: "4Gi"
       cpu: "2000m"
     limits:
-      memory: "12Gi"
+      memory: "8Gi"
       cpu: "4000m"
 
 engine:
-  image:
-    path: us-central1-docker.pkg.dev/based-hardware/deepgram/self-hosted-engine
-    tag: release-250331
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -112,31 +78,40 @@ engine:
                   - engine
   resources:
     requests:
-      memory: "24Gi"
-      cpu: "5000m"
+      memory: "28Gi"
+      cpu: "6000m"
       gpu: 1
     limits:
       memory: "40Gi"
-      cpu: "12000m"
+      cpu: "8000m"
       gpu: 1
   # Discuss a reasonable value with your Deepgram Account Representative
   # If not using autoscaling, can be left empty, but must be set if using
   # autoscaling with scaling.auto.engine.metrics.requestCapacityRatio
   concurrencyLimit:
     activeRequests:
+
   modelManager:
     volumes:
-      gcp:
-        gpd:
+      aws:
+        efs:
           enabled: true
-          # Replace with your Google disk handle
-          volumeHandle: "projects/based-hardware/zones/us-central1-a/disks/prod-omi-deepgram-model-storage"
+          fileSystemId: fs-xxxxxxxxxxxxxxxx # Replace with your EFS ID
+    models:
+      add:
+        - https://link-to-model-1.dg # Replace these links with those provided to you
+        - https://link-to-model-2.dg #   by your Deepgram Account Representative.
+        - https://link-to-model-3.dg
+        - ...
+      remove:
+        # - https://link-to-old-model-1.dg # Replace these with identifiers for any models already present
+        # - https://link-to-old-model-2.dg #   in the EFS that you'd like removed. For a new installation,
+        # - name-of-old-model-3.dg #   this will likely be empty.
+        # - ...
 
 licenseProxy:
   enabled: true
-  image:
-    path: us-central1-docker.pkg.dev/based-hardware/deepgram/self-hosted-license-proxy
-    tag: release-250331
+
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -148,35 +123,32 @@ licenseProxy:
                   - license-proxy
   resources:
     requests:
-      memory: "4Gi"
-      cpu: "1000m"
+      memory: "6Gi"
+      cpu: "1500m"
     limits:
       memory: "8Gi"
       cpu: "2000m"
 
-gpu-operator:
-  # GKE will manage the driver and toolkit installation for us by default.
-  enabled: false
-
-kube-prometheus-stack:
-  grafana:
-    enabled: true
-    ingress:
-      enabled: true
+cluster-autoscaler:
+  enabled: true
+  rbac:
+    serviceAccount:
+      name: "cluster-autoscaler-sa"
       annotations:
-        kubernetes.io/ingress.class: "gce"
-        kubernetes.io/ingress.global-static-ip-name: "prod-omi-deepgram-grafana-alb-ip-address"
-        networking.gke.io/managed-certificates: "prod-omi-deepgram-grafana-alb-cert"
-        kubernetes.io/ingress.allow-http: "false"
-      hosts:
-        - dg-monitor.omi.me
-      path: /
-    persistence:
-      enabled: true
-      type: sts
-      storageClassName: standard-rwo
-      accessModes:
-        - ReadWriteOnce
-      size: 20Gi
-      finalizers:
-        - kubernetes.io/pvc-protection
+        # Replace with the AWS Role ARN configured for the Cluster Autoscaler
+        eks.amazonaws.com/role-arn: "arn:aws:iam::000000000000:role/MyRoleName"
+  autoDiscovery:
+    clusterName: "deepgram-self-hosted-cluster"
+  awsRegion: "us-west-2"
+
+gpu-operator:
+  enabled: true
+
+  # If using EKS accelerated AMIs based on Amazon Linux 2023 (default with Deepgram guides as of Oct 2024),
+  # driver and toolkit come bundled with the AMI.
+  #
+  # If using other AMIs, such as Ubuntu, you should re-enable the driver and toolkit below.
+  driver:
+    enabled: false
+  toolkit:
+    enabled: false

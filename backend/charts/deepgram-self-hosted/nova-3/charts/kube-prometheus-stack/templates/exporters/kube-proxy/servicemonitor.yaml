@@ -1,0 +1,53 @@
+{{- if and .Values.kubeProxy.enabled .Values.kubeProxy.serviceMonitor.enabled .Values.kubernetesServiceMonitors.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ template "kube-prometheus-stack.fullname" . }}-kube-proxy
+  {{- if .Values.prometheus.prometheusSpec.ignoreNamespaceSelectors }}
+  namespace: kube-system
+  {{- else }}
+  namespace: {{ template "kube-prometheus-stack.namespace" . }}
+  {{- end }}
+  labels:
+    app: {{ template "kube-prometheus-stack.name" . }}-kube-proxy
+  {{- with .Values.kubeProxy.serviceMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{ include "kube-prometheus-stack.labels" . | indent 4 }}
+spec:
+  jobLabel: {{ .Values.kubeProxy.serviceMonitor.jobLabel }}
+  {{- include "servicemonitor.scrapeLimits" .Values.kubeProxy.serviceMonitor | nindent 2 }}
+  selector:
+    {{- if .Values.kubeProxy.serviceMonitor.selector }}
+    {{ tpl (toYaml .Values.kubeProxy.serviceMonitor.selector | nindent 4) . }}
+    {{- else }}
+    matchLabels:
+      app: {{ template "kube-prometheus-stack.name" . }}-kube-proxy
+      release: {{ $.Release.Name | quote }}
+    {{- end }}
+  namespaceSelector:
+    matchNames:
+      - "kube-system"
+  endpoints:
+  - port: {{ .Values.kubeProxy.serviceMonitor.port }}
+    {{- if .Values.kubeProxy.serviceMonitor.interval }}
+    interval: {{ .Values.kubeProxy.serviceMonitor.interval }}
+    {{- end }}
+    bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+    {{- if .Values.kubeProxy.serviceMonitor.proxyUrl }}
+    proxyUrl: {{ .Values.kubeProxy.serviceMonitor.proxyUrl}}
+    {{- end }}
+    {{- if .Values.kubeProxy.serviceMonitor.https }}
+    scheme: https
+    tlsConfig:
+      caFile: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    {{- end}}
+{{- if .Values.kubeProxy.serviceMonitor.metricRelabelings }}
+    metricRelabelings:
+{{ tpl (toYaml .Values.kubeProxy.serviceMonitor.metricRelabelings | indent 4) . }}
+{{- end }}
+{{- if .Values.kubeProxy.serviceMonitor.relabelings }}
+    relabelings:
+{{ tpl (toYaml .Values.kubeProxy.serviceMonitor.relabelings | indent 4) . }}
+{{- end }}
+{{- end }}
