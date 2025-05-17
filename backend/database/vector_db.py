@@ -7,7 +7,7 @@ from typing import List
 from pinecone import Pinecone
 
 from models.conversation import Conversation
-from utils.llm import embeddings
+from utils.llm.clients import embeddings
 
 if os.getenv('PINECONE_API_KEY') is not None:
     pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY', ''))
