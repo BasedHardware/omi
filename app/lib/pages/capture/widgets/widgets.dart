@@ -139,6 +139,7 @@ getTranscriptWidget(
   List<TranscriptSegment> segments,
   List<Tuple2<String, String>> photos,
   BtDevice? btDevice,
+  {RecordingState recordingState = RecordingState.stop}
 ) {
   if (conversationCreating) {
     return const Padding(
@@ -149,6 +150,7 @@ getTranscriptWidget(
 
   final bool showPhotos = photos.isNotEmpty;
   final bool showTranscript = segments.isNotEmpty;
+  final bool shouldAutoScroll = true;
 
   if (showPhotos && showTranscript) {
     return Column(
@@ -156,14 +158,22 @@ getTranscriptWidget(
       children: [
         const PhotosGridComponent(),
         Expanded(
-          child: TranscriptWidget(segments: segments, bottomMargin: 100),
+          child: TranscriptWidget(
+            segments: segments,
+            bottomMargin: 100,
+            autoScroll: shouldAutoScroll,
+          ),
         ),
       ],
     );
   } else if (showPhotos) {
     return const PhotosGridComponent();
   } else if (showTranscript) {
-    return TranscriptWidget(segments: segments, bottomMargin: 100);
+    return TranscriptWidget(
+      segments: segments,
+      bottomMargin: 100,
+      autoScroll: shouldAutoScroll,
+    );
   } else {
     return const SizedBox.shrink();
   }
