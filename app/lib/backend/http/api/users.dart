@@ -183,7 +183,6 @@ Future<List<Person>> getAllPeople({bool includeSpeechSamples = true}) async {
     body: '',
   );
   if (response == null) return [];
-  debugPrint('getAllPeople response: ${response.body}');
   if (response.statusCode == 200) {
     List<dynamic> peopleJson = jsonDecode(response.body);
     List<Person> people = peopleJson.mapIndexed((idx, json) {
