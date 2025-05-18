@@ -156,32 +156,32 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                 //     },
                                 //   ),
                                 // ),
-                                // Group/Ungroup toggle button
-                                Container(
-                                  width: 44,
-                                  height: 44,
-                                  decoration: BoxDecoration(
-                                    color: _showGroupedView
-                                        ? Colors.deepPurpleAccent.withOpacity(0.3)
-                                        : Colors.grey.shade700.withOpacity(0.3),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: _showGroupedView
-                                        ? Border.all(color: Colors.deepPurpleAccent, width: 1.5)
-                                        : null,
-                                  ),
-                                  child: IconButton(
-                                    icon: Icon(
-                                      _showGroupedView ? Icons.view_agenda_outlined : Icons.view_list_outlined,
-                                      size: 20,
-                                    ),
-                                    color: _showGroupedView ? Colors.deepPurpleAccent : Colors.white,
-                                    onPressed: () {
-                                      setState(() {
-                                        _showGroupedView = !_showGroupedView;
-                                      });
-                                    },
-                                  ),
-                                ),
+                                // Group/Ungroup toggle button hidden for now
+                                // Container(
+                                //   width: 44,
+                                //   height: 44,
+                                //   decoration: BoxDecoration(
+                                //     color: _showGroupedView
+                                //         ? Colors.deepPurpleAccent.withOpacity(0.3)
+                                //         : Colors.grey.shade700.withOpacity(0.3),
+                                //     borderRadius: BorderRadius.circular(12),
+                                //     border: _showGroupedView
+                                //         ? Border.all(color: Colors.deepPurpleAccent, width: 1.5)
+                                //         : null,
+                                //   ),
+                                //   child: IconButton(
+                                //     icon: Icon(
+                                //       _showGroupedView ? Icons.view_agenda_outlined : Icons.view_list_outlined,
+                                //       size: 20,
+                                //     ),
+                                //     color: _showGroupedView ? Colors.deepPurpleAccent : Colors.white,
+                                //     onPressed: () {
+                                //       setState(() {
+                                //         _showGroupedView = !_showGroupedView;
+                                //       });
+                                //     },
+                                //   ),
+                                // ),
                               ],
                             ),
                           ],
