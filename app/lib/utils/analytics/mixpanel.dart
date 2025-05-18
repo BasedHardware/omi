@@ -558,4 +558,33 @@ class MixpanelManager {
       'conversation_id': conversationId,
     });
   }
+
+  // Action Items Page Events
+  void actionItemsPageOpened() => track('Action Items Page Opened');
+
+  void actionItemsViewToggled(bool isGroupedView) {
+    track('Action Items View Toggled', properties: {'grouped_view': isGroupedView});
+  }
+
+  void actionItemToggledCompletionOnActionItemsPage({
+    required String conversationId,
+    required String actionItemDescription, // Using description as a pseudo-ID if no stable ID exists
+    required bool isCompleted,
+  }) {
+    track('Action Item Completion Toggled on Action Items Page', properties: {
+      'conversation_id': conversationId,
+      'action_item_description': actionItemDescription,
+      'is_completed': isCompleted,
+    });
+  }
+
+  void actionItemTappedForEditOnActionItemsPage({
+    required String conversationId,
+    required String actionItemDescription,
+  }) {
+    track('Action Item Tapped for Edit on Action Items Page', properties: {
+      'conversation_id': conversationId,
+      'action_item_description': actionItemDescription,
+    });
+  }
 }
