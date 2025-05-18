@@ -327,6 +327,11 @@ class DeleteActionItemRequest(BaseModel):
     completed: bool
 
 
+class UpdateActionItemDescriptionRequest(BaseModel):
+    old_description: str
+    description: str
+
+
 class SearchRequest(BaseModel):
     query: str
     page: Optional[int] = 1
