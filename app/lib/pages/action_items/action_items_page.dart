@@ -136,7 +136,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            Row(
+                            const Row(
                               children: [
                                 // Settings button
                                 // TODO: Add settings once we have more stuff for action items
@@ -233,14 +233,14 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                 ),
                               ],
                             ),
-                            Text(
-                              'Hide',
-                              style: TextStyle(
-                                color: Colors.grey.shade400,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
+                            // Text(
+                            //   'Hide',
+                            //   style: TextStyle(
+                            //     color: Colors.grey.shade400,
+                            //     fontSize: 14,
+                            //     fontWeight: FontWeight.w500,
+                            //   ),
+                            // ),
                           ],
                         ),
                       ],
