@@ -417,7 +417,6 @@ async def _listen(
         pusher_connected = False
 
         # Transcript
-        transcript_ws = None
         segment_buffers = []
         in_progress_conversation_id = None
 
@@ -431,11 +430,11 @@ async def _listen(
             nonlocal websocket_active
             nonlocal segment_buffers
             nonlocal in_progress_conversation_id
-            nonlocal transcript_ws
+            nonlocal pusher_ws
             nonlocal pusher_connected
             while websocket_active or len(segment_buffers) > 0:
                 await asyncio.sleep(1)
-                if transcript_ws and len(segment_buffers) > 0:
+                if pusher_connected and pusher_ws and len(segment_buffers) > 0:
                     try:
                         # 102|data
                         data = bytearray()
@@ -444,17 +443,15 @@ async def _listen(
                             bytes(json.dumps({"segments": segment_buffers, "memory_id": in_progress_conversation_id}),
                                   "utf-8"))
                         segment_buffers = []  # reset
-                        await transcript_ws.send(data)
+                        await pusher_ws.send(data)
                     except websockets.exceptions.ConnectionClosed as e:
                         print(f"Pusher transcripts Connection closed: {e}", uid)
-                        transcript_ws = None
                         pusher_connected = False
                         await reconnect()
                     except Exception as e:
                         print(f"Pusher transcripts failed: {e}", uid)
 
         # Audio bytes
-        audio_bytes_ws = None
         audio_buffers = bytearray()
         audio_bytes_enabled = bool(get_audio_bytes_webhook_seconds(uid)) or is_audio_bytes_app_enabled(uid)
 
@@ -465,21 +462,20 @@ async def _listen(
         async def audio_bytes_consume():
             nonlocal websocket_active
             nonlocal audio_buffers
-            nonlocal audio_bytes_ws
+            nonlocal pusher_ws
             nonlocal pusher_connected
             while websocket_active or len(audio_buffers) > 0:
                 await asyncio.sleep(1)
-                if audio_bytes_ws and len(audio_buffers) > 0:
+                if pusher_connected and pusher_ws and len(audio_buffers) > 0:
                     try:
                         # 101|data
                         data = bytearray()
                         data.extend(struct.pack("I", 101))
                         data.extend(audio_buffers.copy())
                         audio_buffers = bytearray()  # reset
-                        await audio_bytes_ws.send(data)
+                        await pusher_ws.send(data)
                     except websockets.exceptions.ConnectionClosed as e:
                         print(f"Pusher audio_bytes Connection closed: {e}", uid)
-                        audio_bytes_ws = None
                         pusher_connected = False
                         await reconnect()
                     except Exception as e:
@@ -488,24 +484,27 @@ async def _listen(
         async def reconnect():
             nonlocal pusher_connected
             nonlocal pusher_connect_lock
+            nonlocal pusher_ws
             async with pusher_connect_lock:
                 if pusher_connected:
                     return
+                # drain
+                if pusher_ws:
+                    try:
+                        await pusher_ws.close()
+                        pusher_ws = None
+                    except Exception as e:
+                        print(f"Pusher draining failed: {e}", uid)
+                # connect
                 await connect()
 
         async def connect():
             nonlocal pusher_ws
-            nonlocal transcript_ws
-            nonlocal audio_bytes_ws
-            nonlocal audio_bytes_enabled
             nonlocal pusher_connected
 
             try:
                 pusher_ws = await connect_to_trigger_pusher(uid, sample_rate)
                 pusher_connected = True
-                transcript_ws = pusher_ws
-                if audio_bytes_enabled:
-                    audio_bytes_ws = pusher_ws
             except Exception as e:
                 print(f"Exception in connect: {e}")
 
