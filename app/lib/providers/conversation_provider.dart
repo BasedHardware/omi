@@ -638,7 +638,6 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   // New Getter for Action Items Page
   Map<ServerConversation, List<ActionItem>> get conversationsWithActiveActionItems {
     final Map<ServerConversation, List<ActionItem>> result = {};
-    // Use searchedConversations if a search query is active, otherwise use all conversations
     final List<ServerConversation> sourceList = conversations;
 
     for (final convo in sourceList) {
@@ -697,6 +696,28 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
       if (groupIndex != -1) {
         if (convoList[groupIndex].structured.actionItems.length > itemIndex) {
           convoList[groupIndex].structured.actionItems[itemIndex].description = newDescription;
+        }
+      }
+    });
+
+    notifyListeners();
+  }
+
+  Future<void> deleteActionItemAndUpdateLocally(String conversationId, int itemIndex, ActionItem actionItem) async {
+    deleteConversationActionItem(conversationId, actionItem);
+
+    final convoIndex = conversations.indexWhere((c) => c.id == conversationId);
+    if (convoIndex != -1) {
+      if (conversations[convoIndex].structured.actionItems.length > itemIndex) {
+        conversations[convoIndex].structured.actionItems.removeAt(itemIndex);
+      }
+    }
+
+    groupedConversations.forEach((date, convoList) {
+      final groupConvoIndex = convoList.indexWhere((c) => c.id == conversationId);
+      if (groupConvoIndex != -1) {
+        if (convoList[groupConvoIndex].structured.actionItems.length > itemIndex) {
+          convoList[groupConvoIndex].structured.actionItems.removeAt(itemIndex);
         }
       }
     });
