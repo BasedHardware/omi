@@ -171,7 +171,6 @@ def update_action_item_description(
 
 @router.delete("/v1/conversations/{conversation_id}/action-items", response_model=dict, tags=['conversations'])
 def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=Depends(auth.get_current_user_uid)):
-    print('here inside of delete action item')
     conversation = _get_conversation_by_id(uid, conversation_id)
     conversation = Conversation(**conversation)
     action_items = conversation.structured.action_items
