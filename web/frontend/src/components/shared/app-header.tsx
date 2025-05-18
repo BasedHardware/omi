@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import ShareButton from '../memories/share-button';
 import { useParams, usePathname } from 'next/navigation';
+import { AppWindow } from 'lucide-react';
 
 interface NavItem {
   href: string;
@@ -80,32 +81,32 @@ const CartIcon = () => (
 
 export default function AppHeader({
   navItems = [
-    {
-      href: 'https://rebrand.ly/discord-invite-a2a451',
-      label: '6.7k+ Join Discord',
-      icon: <DiscordIcon />,
-      className: 'flex items-center space-x-2 text-white hover:text-gray-300',
-    },
-    {
-      href: 'https://github.com/BasedHardware/Omi',
-      label: '4.4K Github',
-      icon: <GithubIcon />,
-      className: 'flex items-center space-x-2 text-white hover:text-gray-300',
-    },
-    {
-      href: 'https://docs.omi.me',
-      label: 'Docs',
-      className: 'text-white hover:text-gray-300',
-    },
-    {
-      href: 'https://www.omi.me/help',
-      label: 'Help center',
-      className: 'text-white hover:text-gray-300',
-    },
+    // {
+    //   href: 'https://rebrand.ly/discord-invite-a2a451',
+    //   label: '6.7k+ Join Discord',
+    //   icon: <DiscordIcon />,
+    //   className: 'flex items-center space-x-2 text-white hover:text-gray-300',
+    // },
+    // {
+    //   href: 'https://github.com/BasedHardware/Omi',
+    //   label: '4.4K Github',
+    //   icon: <GithubIcon />,
+    //   className: 'flex items-center space-x-2 text-white hover:text-gray-300',
+    // },
+    // {
+    //   href: 'https://docs.omi.me',
+    //   label: 'Docs',
+    //   className: 'text-white hover:text-gray-300',
+    // },
+    // {
+    //   href: 'https://www.omi.me/help',
+    //   label: 'Help center',
+    //   className: 'text-white hover:text-gray-300',
+    // },
     {
       href: 'https://docs.omi.me/docs/developer/apps/Introduction',
-      label: 'Start Building',
-      icon: <ZapIcon />,
+      label: 'Create App',
+      icon: <AppWindow className="h-4 w-4" />,
       className: 'flex items-center space-x-2 rounded-full bg-[#6C2BD9] px-3 py-1 text-white transition-colors hover:bg-[#5A1CB8]',
       target: '_blank',
     },
@@ -208,7 +209,7 @@ export default function AppHeader({
                   </li>
                 );
               }
-              
+
               return (
                 <li key={index}>
                   <Link href={item.href} target={item.target} className={item.className}>
