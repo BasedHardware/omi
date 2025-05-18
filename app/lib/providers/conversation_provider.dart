@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -628,6 +629,75 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
   void setIsFetchingConversations(bool value) {
     isFetchingConversations = value;
+    notifyListeners();
+  }
+
+  // New Getter for Action Items Page
+  Map<ServerConversation, List<ActionItem>> get conversationsWithActiveActionItems {
+    final Map<ServerConversation, List<ActionItem>> result = {};
+    // Use searchedConversations if a search query is active, otherwise use all conversations
+    final List<ServerConversation> sourceList = conversations;
+
+    for (final convo in sourceList) {
+      if (convo.discarded && !showDiscardedConversations) continue;
+
+      final activeItems = convo.structured.actionItems.where((item) => !item.deleted).toList();
+      if (activeItems.isNotEmpty) {
+        result[convo] = activeItems;
+      }
+    }
+    return result;
+  }
+
+  Future<void> updateGlobalActionItemState(
+      ServerConversation conversation, int itemIndexInConversation, bool newState) async {
+    final convoId = conversation.id;
+    bool conversationFoundAndUpdated = false;
+
+    final originalConvoIndex = conversations.indexWhere((c) => c.id == convoId);
+    if (originalConvoIndex != -1) {
+      if (conversations[originalConvoIndex].structured.actionItems.length > itemIndexInConversation) {
+        conversations[originalConvoIndex].structured.actionItems[itemIndexInConversation].completed = newState;
+        conversationFoundAndUpdated = true;
+      }
+    }
+
+    var dateKey = DateTime(conversation.createdAt.year, conversation.createdAt.month, conversation.createdAt.day);
+    if (groupedConversations.containsKey(dateKey)) {
+      final groupIndex = groupedConversations[dateKey]!.indexWhere((c) => c.id == convoId);
+      if (groupIndex != -1) {
+        if (groupedConversations[dateKey]![groupIndex].structured.actionItems.length > itemIndexInConversation) {
+          groupedConversations[dateKey]![groupIndex].structured.actionItems[itemIndexInConversation].completed =
+              newState;
+        }
+      }
+    }
+
+    if (conversationFoundAndUpdated) {
+      await setConversationActionItemState(convoId, [itemIndexInConversation], [newState]);
+      notifyListeners();
+    } else {
+      debugPrint("Error: Conversation or action item not found for updateGlobalActionItemState.");
+    }
+  }
+
+  void updateActionItemDescriptionInConversation(String conversationId, int itemIndex, String newDescription) {
+    final convoIndex = conversations.indexWhere((c) => c.id == conversationId);
+    if (convoIndex != -1) {
+      if (conversations[convoIndex].structured.actionItems.length > itemIndex) {
+        conversations[convoIndex].structured.actionItems[itemIndex].description = newDescription;
+      }
+    }
+
+    groupedConversations.forEach((date, convoList) {
+      final groupIndex = convoList.indexWhere((c) => c.id == conversationId);
+      if (groupIndex != -1) {
+        if (convoList[groupIndex].structured.actionItems.length > itemIndex) {
+          convoList[groupIndex].structured.actionItems[itemIndex].description = newDescription;
+        }
+      }
+    });
+
     notifyListeners();
   }
 }

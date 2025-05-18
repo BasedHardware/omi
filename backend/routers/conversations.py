@@ -158,6 +158,30 @@ def set_action_item_status(data: SetConversationActionItemsStateRequest, convers
     return {"status": "Ok"}
 
 
+@router.patch("/v1/conversations/{conversation_id}/action-items/{action_item_idx}", response_model=dict, tags=['conversations'])
+def update_action_item_description(
+        conversation_id: str, data: UpdateActionItemDescriptionRequest,
+        uid=Depends(auth.get_current_user_uid)
+):
+    conversation = _get_conversation_by_id(uid, conversation_id)
+    conversation = Conversation(**conversation)
+    action_items = conversation.structured.action_items
+
+    found_item = False
+    for item in action_items:
+        if item.description == data.old_description:
+            item.description = data.description
+            found_item = True
+            break
+    
+    if not found_item:
+        raise HTTPException(status_code=404, detail=f"Action item with description '{data.old_description}' not found")
+
+    conversations_db.update_conversation_action_items(uid, conversation_id,
+                                                      [action_item.dict() for action_item in action_items])
+    return {"status": "Ok"}
+
+
 @router.delete("/v1/conversations/{conversation_id}/action-items", response_model=dict, tags=['conversations'])
 def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=Depends(auth.get_current_user_uid)):
     print('here inside of delete action item')
