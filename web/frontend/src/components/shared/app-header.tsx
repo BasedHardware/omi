@@ -104,11 +104,10 @@ export default function AppHeader({
     //   className: 'text-white hover:text-gray-300',
     // },
     {
-      href: 'https://docs.omi.me/docs/developer/apps/Introduction',
+      href: '/apps/create',
       label: 'Create App',
       icon: <AppWindow className="h-4 w-4" />,
       className: 'flex items-center space-x-2 rounded-full bg-[#6C2BD9] px-3 py-1 text-white transition-colors hover:bg-[#5A1CB8]',
-      target: '_blank',
     },
     {
       href: 'https://www.omi.me/products/omi-dev-kit-2',
