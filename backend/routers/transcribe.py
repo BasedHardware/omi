@@ -447,9 +447,10 @@ async def _listen(
                     except websockets.exceptions.ConnectionClosed as e:
                         print(f"Pusher transcripts Connection closed: {e}", uid)
                         pusher_connected = False
-                        await reconnect()
                     except Exception as e:
                         print(f"Pusher transcripts failed: {e}", uid)
+                if pusher_connected is False:
+                    await connect()
 
         # Audio bytes
         audio_buffers = bytearray()
@@ -477,11 +478,12 @@ async def _listen(
                     except websockets.exceptions.ConnectionClosed as e:
                         print(f"Pusher audio_bytes Connection closed: {e}", uid)
                         pusher_connected = False
-                        await reconnect()
                     except Exception as e:
                         print(f"Pusher audio_bytes failed: {e}", uid)
+                if pusher_connected is False:
+                    await connect()
 
-        async def reconnect():
+        async def connect():
             nonlocal pusher_connected
             nonlocal pusher_connect_lock
             nonlocal pusher_ws
@@ -496,9 +498,9 @@ async def _listen(
                     except Exception as e:
                         print(f"Pusher draining failed: {e}", uid)
                 # connect
-                await connect()
+                await _connect()
 
-        async def connect():
+        async def _connect():
             nonlocal pusher_ws
             nonlocal pusher_connected
 
@@ -509,7 +511,8 @@ async def _listen(
                 print(f"Exception in connect: {e}")
 
         async def close(code: int = 1000):
-            await pusher_ws.close(code)
+            if pusher_ws:
+                await pusher_ws.close(code)
 
         return (connect, close,
                 transcript_send, transcript_consume,
