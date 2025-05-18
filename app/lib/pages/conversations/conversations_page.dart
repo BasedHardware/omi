@@ -4,6 +4,7 @@ import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/search_result_header_widget.dart';
 import 'package:omi/pages/conversations/widgets/search_widget.dart';
+import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -43,7 +44,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         backgroundColor: Colors.black,
         color: Colors.white,
         onRefresh: () async {
-          return await convoProvider.getInitialConversations();
+          Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
+          await convoProvider.getInitialConversations();
+          return;
         },
         child: CustomScrollView(
           slivers: [

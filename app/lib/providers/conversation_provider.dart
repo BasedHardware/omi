@@ -162,8 +162,15 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     notifyListeners();
   }
 
-  Future fetchNewConversations() async {
-    List<ServerConversation> newConversations = await getConversationsFromServer();
+  Future refreshConversations() async {
+    _fetchNewConversations();
+  }
+
+  Future _fetchNewConversations() async {
+    setLoadingConversations(true);
+    List<ServerConversation> newConversations = await _getConversationsFromServer();
+    setLoadingConversations(false);
+
     List<ServerConversation> upsertConvos = [];
 
     // processing convos
@@ -194,7 +201,9 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     totalSearchPages = 0;
     searchedConversations = [];
 
-    conversations = await getConversationsFromServer();
+    setLoadingConversations(true);
+    conversations = await _getConversationsFromServer();
+    setLoadingConversations(false);
 
     // processing convos
     processingConversations = conversations.where((m) => m.status == ConversationStatus.processing).toList();
@@ -269,14 +278,8 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     notifyListeners();
   }
 
-  Future getConversationsFromServer() async {
-    setLoadingConversations(true);
-    var mem = await getConversations(includeDiscarded: showDiscardedConversations);
-    conversations = mem;
-    conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    setLoadingConversations(false);
-    notifyListeners();
-    return conversations;
+  Future _getConversationsFromServer() async {
+    return await getConversations(includeDiscarded: showDiscardedConversations);
   }
 
   void updateActionItemState(String convoId, bool state, int i, DateTime date) {

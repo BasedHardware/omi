@@ -37,11 +37,6 @@ class CaptureProvider extends ChangeNotifier
   SdCardSocketService sdCardSocket = SdCardSocketService();
   Timer? _keepAliveTimer;
 
-  // In progress memory
-  ServerConversation? _inProgressConversation;
-
-  ServerConversation? get inProgressConversation => _inProgressConversation;
-
   IWalService get _wal => ServiceManager.instance().wal;
 
   IDeviceService get _deviceService => ServiceManager.instance().device;
@@ -97,10 +92,6 @@ class CaptureProvider extends ChangeNotifier
 
   bool get havingRecordingDevice => _recordingDevice != null;
 
-  // -----------------------
-  // Conversation creation variables
-  String conversationId = const Uuid().v4();
-
   void setHasTranscripts(bool value) {
     hasTranscripts = value;
     notifyListeners();
@@ -124,7 +115,6 @@ class CaptureProvider extends ChangeNotifier
 
   Future _resetStateVariables() async {
     segments = [];
-    conversationId = const Uuid().v4();
     hasTranscripts = false;
     notifyListeners();
   }
@@ -451,11 +441,6 @@ class CaptureProvider extends ChangeNotifier
     _transcriptServiceReady = false;
     debugPrint('[Provider] Socket is closed');
 
-    // Wait for in process Conversation or reset
-    if (inProgressConversation == null) {
-      _resetStateVariables();
-    }
-
     notifyListeners();
     _startKeepAliveServices();
   }
@@ -495,13 +480,19 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void _loadInProgressConversation() async {
-    var memories = await getConversations(statuses: [ConversationStatus.in_progress], limit: 1);
-    _inProgressConversation = memories.isNotEmpty ? memories.first : null;
-    if (_inProgressConversation != null) {
-      segments = _inProgressConversation!.transcriptSegments;
-      setHasTranscripts(segments.isNotEmpty);
+  Future refreshInProgressConversations() async {
+    _loadInProgressConversation();
+  }
+
+  Future _loadInProgressConversation() async {
+    var convos = await getConversations(statuses: [ConversationStatus.in_progress], limit: 1);
+    var convo = convos.isNotEmpty ? convos.first : null;
+    if (convo != null) {
+      segments = convo.transcriptSegments;
+    } else {
+      segments = [];
     }
+    setHasTranscripts(segments.isNotEmpty);
     notifyListeners();
   }
 
@@ -618,12 +609,16 @@ class CaptureProvider extends ChangeNotifier
 
   @override
   void onSegmentReceived(List<TranscriptSegment> newSegments) {
+    _processNewSegmentReceived(newSegments);
+  }
+
+  void _processNewSegmentReceived(List<TranscriptSegment> newSegments) async {
     if (newSegments.isEmpty) return;
 
     if (segments.isEmpty) {
       debugPrint('newSegments: ${newSegments.last}');
       FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
-      _loadInProgressConversation();
+      await _loadInProgressConversation();
     }
     var remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
     TranscriptSegment.combineSegments(segments, remainSegments);
