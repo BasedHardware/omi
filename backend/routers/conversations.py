@@ -60,9 +60,12 @@ def reprocess_conversation(
 
 
 @router.get('/v1/conversations', response_model=List[Conversation], tags=['conversations'])
-def get_conversations(limit: int = 100, offset: int = 0, statuses: str = "processing,completed", include_discarded: bool = True,
+def get_conversations(limit: int = 100, offset: int = 0, statuses: Optional[str] = "processing,completed", include_discarded: bool = True,
                       uid: str = Depends(auth.get_current_user_uid)):
     print('get_conversations', uid, limit, offset, statuses)
+    # force convos statuses to processing, completed on the empty filter
+    if len(statuses) == 0:
+        statuses = "processing,completed"
     return conversations_db.get_conversations(uid, limit, offset, include_discarded=include_discarded,
                                               statuses=statuses.split(",") if len(statuses) > 0 else [])
 
@@ -157,7 +160,7 @@ def update_action_item_description(
             item.description = data.description
             found_item = True
             break
-    
+
     if not found_item:
         raise HTTPException(status_code=404, detail=f"Action item with description '{data.old_description}' not found")
 

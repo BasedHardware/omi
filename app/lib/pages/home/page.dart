@@ -118,8 +118,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
       // Reload convos
       if (mounted) {
-        debugPrint('Reload convos');
-        Provider.of<ConversationProvider>(context, listen: false).fetchNewConversations();
+        Provider.of<ConversationProvider>(context, listen: false).refreshConversations();
+        Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
       }
     } else if (state == AppLifecycleState.hidden) {
       event = 'App is hidden';

@@ -122,7 +122,7 @@ class PureSocket implements IPureSocket {
         'Authorization': await getAuthHeader(),
       },
       pingInterval: const Duration(seconds: 20),
-      connectTimeout: const Duration(seconds: 10),
+      connectTimeout: const Duration(seconds: 15),
     );
     if (_channel?.ready == null) {
       return false;
