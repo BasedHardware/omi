@@ -5,6 +5,7 @@ import 'widgets/action_item_title_widget.dart';
 import 'widgets/convo_action_items_group_widget.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 
 class ActionItemsPage extends StatefulWidget {
   const ActionItemsPage({super.key});
@@ -24,6 +25,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Initial data load handled by ConversationProvider
+      MixpanelManager().actionItemsPageOpened();
     });
   }
 
@@ -179,6 +181,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                 //       setState(() {
                                 //         _showGroupedView = !_showGroupedView;
                                 //       });
+                                //       MixpanelManager().actionItemsViewToggled(_showGroupedView);
                                 //     },
                                 //   ),
                                 // ),

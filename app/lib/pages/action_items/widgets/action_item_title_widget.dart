@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 
 import 'edit_action_item_sheet.dart';
 
@@ -170,6 +171,10 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
           child: InkWell(
             onTap: () {
               HapticFeedback.lightImpact();
+              MixpanelManager().actionItemTappedForEditOnActionItemsPage(
+                conversationId: widget.conversationId,
+                actionItemDescription: widget.actionItem.description,
+              );
               _showEditActionItemBottomSheet(context, widget.actionItem);
             },
             child: Padding(
@@ -186,6 +191,11 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                         onTap: () {
                           HapticFeedback.lightImpact();
                           final newValue = !widget.actionItem.completed;
+                          MixpanelManager().actionItemToggledCompletionOnActionItemsPage(
+                            conversationId: widget.conversationId,
+                            actionItemDescription: widget.actionItem.description,
+                            isCompleted: newValue,
+                          );
                           context.read<ConversationProvider>().updateGlobalActionItemState(
                                 conversation,
                                 widget.itemIndexInConversation,
