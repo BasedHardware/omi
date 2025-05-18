@@ -833,6 +833,16 @@ async def _listen(
     print("_listen ended", uid)
 
 
+# @deprecated
+# TODO: should be removed after Sep 2025 due to backward compatibility
+router.websocket("/v3/listen")
+async def listen_handler_v3(
+        websocket: WebSocket, uid: str = Depends(auth.get_current_user_uid), language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
+        channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = None
+):
+    await _listen(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, None)
+
+
 @router.websocket("/v4/listen")
 async def listen_handler(
         websocket: WebSocket, uid: str = Depends(auth.get_current_user_uid), language: str = 'en',
