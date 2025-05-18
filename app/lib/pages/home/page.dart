@@ -592,18 +592,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   ),
                 );
               } else if (provider.selectedIndex == 3) {
-                return Center(
-                  child: Padding(
-                    padding: EdgeInsets.only(right: MediaQuery.sizeOf(context).width * 0.10),
-                    child: const Text('Explore',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w600,
-                        )),
-                  ),
-                );
-              } else if (provider.selectedIndex == 4) {
                 return const Expanded(
                   child: Center(
                     child: Text(
@@ -614,6 +602,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         fontWeight: FontWeight.w600,
                       ),
                     ),
+                  ),
+                );
+              } else if (provider.selectedIndex == 4) {
+                return Center(
+                  child: Padding(
+                    padding: EdgeInsets.only(right: MediaQuery.sizeOf(context).width * 0.10),
+                    child: const Text('Explore',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w600,
+                        )),
                   ),
                 );
               } else {
