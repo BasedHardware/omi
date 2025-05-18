@@ -835,7 +835,7 @@ async def _listen(
 
 # @deprecated
 # TODO: should be removed after Sep 2025 due to backward compatibility
-router.websocket("/v3/listen")
+@router.websocket("/v3/listen")
 async def listen_handler_v3(
         websocket: WebSocket, uid: str = Depends(auth.get_current_user_uid), language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = None
