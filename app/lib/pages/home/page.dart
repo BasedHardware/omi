@@ -13,6 +13,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/main.dart';
+import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/apps/page.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
@@ -356,9 +357,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           builder: (context, homeProvider, _) {
             return Scaffold(
               backgroundColor: Theme.of(context).colorScheme.primary,
-              appBar: homeProvider.selectedIndex == 4 ? null : _buildAppBar(context),
+              appBar: homeProvider.selectedIndex == 5 ? null : _buildAppBar(context),
               body: DefaultTabController(
-                length: 4,
+                length: 5,
                 initialIndex: _controller?.initialPage ?? 0,
                 child: GestureDetector(
                   onTap: () {
@@ -376,6 +377,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                             ConversationsPage(),
                             ChatPage(isPivotBottom: false),
                             MemoriesPage(),
+                            ActionItemsPage(),
                             AppsPage(),
                           ],
                         ),
@@ -411,8 +413,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   labelPadding: const EdgeInsets.symmetric(vertical: 10),
                                   indicatorPadding: EdgeInsets.zero,
                                   onTap: (index) {
-                                    MixpanelManager()
-                                        .bottomNavigationTabClicked(['Memories', 'Chat', 'Facts', 'Explore'][index]);
+                                    MixpanelManager().bottomNavigationTabClicked(
+                                        ['Memories', 'Chat', 'Facts', 'Action Items', 'Explore'][index]);
                                     primaryFocus?.unfocus();
                                     if (home.selectedIndex == index) {
                                       return;
@@ -477,6 +479,26 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                             'Memories',
                                             style: TextStyle(
                                               color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Tab(
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            FontAwesomeIcons.listCheck,
+                                            color: home.selectedIndex == 4 ? Colors.white : Colors.grey,
+                                            size: 18,
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            'Actions',
+                                            style: TextStyle(
+                                              color: home.selectedIndex == 4 ? Colors.white : Colors.grey,
                                               fontSize: 12,
                                             ),
                                           ),
@@ -579,6 +601,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           fontSize: 22,
                           fontWeight: FontWeight.w600,
                         )),
+                  ),
+                );
+              } else if (provider.selectedIndex == 4) {
+                return const Expanded(
+                  child: Center(
+                    child: Text(
+                      'Actions',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 );
               } else {
