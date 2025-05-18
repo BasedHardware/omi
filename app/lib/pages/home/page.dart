@@ -491,14 +491,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         children: [
                                           Icon(
                                             FontAwesomeIcons.listCheck,
-                                            color: home.selectedIndex == 4 ? Colors.white : Colors.grey,
+                                            color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
                                             size: 18,
                                           ),
                                           const SizedBox(height: 6),
                                           Text(
                                             'Actions',
                                             style: TextStyle(
-                                              color: home.selectedIndex == 4 ? Colors.white : Colors.grey,
+                                              color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
                                               fontSize: 12,
                                             ),
                                           ),
@@ -511,14 +511,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         children: [
                                           Icon(
                                             FontAwesomeIcons.search,
-                                            color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
+                                            color: home.selectedIndex == 4 ? Colors.white : Colors.grey,
                                             size: 18,
                                           ),
                                           const SizedBox(height: 6),
                                           Text(
                                             'Explore',
                                             style: TextStyle(
-                                              color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
+                                              color: home.selectedIndex == 4 ? Colors.white : Colors.grey,
                                               fontSize: 12,
                                             ),
                                           ),
