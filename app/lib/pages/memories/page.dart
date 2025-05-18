@@ -71,7 +71,8 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
 
       if (!mounted) return;
       final unreviewedMemories = provider.unreviewed;
-      if (unreviewedMemories.isNotEmpty) {
+      final home = context.read<HomeProvider>();
+      if (unreviewedMemories.isNotEmpty && home.selectedIndex == 2) {
         _showReviewSheet(context, unreviewedMemories, provider);
       }
     }).withPostFrameCallback();
