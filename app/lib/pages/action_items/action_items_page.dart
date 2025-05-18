@@ -24,7 +24,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Initial data load handled by ConversationProvider
       MixpanelManager().actionItemsPageOpened();
     });
   }
@@ -35,6 +34,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
     for (final entry in itemsByConversation.entries) {
       for (final item in entry.value) {
+        if (item.deleted) continue;
         result.add(
           ActionItemData(
             actionItem: item,

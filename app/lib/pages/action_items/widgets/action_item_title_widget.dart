@@ -6,6 +6,8 @@ import 'package:provider/provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 
 import 'edit_action_item_sheet.dart';
+import 'package:omi/widgets/confirmation_dialog.dart';
+import 'package:omi/backend/preferences.dart';
 
 class ActionItemTileWidget extends StatefulWidget {
   final ActionItem actionItem;
@@ -30,6 +32,10 @@ class ActionItemTileWidget extends StatefulWidget {
 }
 
 class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
+  // Assume SharedPreferencesUtil is available and has these methods:
+  // bool get dontAskAgainDeleteActionItem => _prefs.getBool('dont_ask_again_delete_action_item') ?? false;
+  // Future<void> setDontAskAgainDeleteActionItem(bool value) async => await _prefs.setBool('dont_ask_again_delete_action_item', value);
+
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<ConversationProvider>(context, listen: false);
@@ -108,37 +114,43 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
 
         confirmDismiss: (direction) async {
           if (direction == DismissDirection.endToStart) {
+            final prefsUtil = SharedPreferencesUtil();
+            bool dontAskAgain = !(prefsUtil.showActionItemDeleteConfirmation);
+
+            if (dontAskAgain) {
+              context.read<ConversationProvider>().deleteActionItemAndUpdateLocally(
+                    widget.conversationId,
+                    widget.itemIndexInConversation,
+                    widget.actionItem,
+                  );
+              return true;
+            }
+
             // Delete action (swipe left) - show confirmation dialog
-            return await showDialog(
-              context: context,
-              builder: (context) => AlertDialog(
-                backgroundColor: Colors.grey.shade900,
-                title: const Text(
-                  'Delete Action Item',
-                  style: TextStyle(color: Colors.white),
-                ),
-                content: Text(
-                  'Are you sure you want to delete this action item?',
-                  style: TextStyle(color: Colors.grey.shade300),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: Text(
-                      'Cancel',
-                      style: TextStyle(color: Colors.grey.shade400),
-                    ),
+            return await showDialog<bool>(
+                  context: context,
+                  builder: (context) => ConfirmationDialog(
+                    title: 'Delete Action Item',
+                    description: 'Are you sure you want to delete this action item?',
+                    checkboxText: "Don't ask again",
+                    checkboxValue: dontAskAgain,
+                    onCheckboxChanged: (value) {
+                      prefsUtil.showActionItemDeleteConfirmation = !value;
+                    },
+                    confirmText: 'Delete',
+                    cancelText: 'Cancel',
+                    onConfirm: () {
+                      context.read<ConversationProvider>().deleteActionItemAndUpdateLocally(
+                            widget.conversationId,
+                            widget.itemIndexInConversation,
+                            widget.actionItem,
+                          );
+                      Navigator.pop(context, true);
+                    },
+                    onCancel: () => Navigator.pop(context, false),
                   ),
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    child: const Text(
-                      'Delete',
-                      style: TextStyle(color: Colors.red),
-                    ),
-                  ),
-                ],
-              ),
-            );
+                ) ??
+                false;
           } else if (direction == DismissDirection.startToEnd) {
             // Complete action (swipe right) - toggle completed state
             final newValue = !widget.actionItem.completed;
@@ -152,19 +164,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
           return false;
         },
 
-        onDismissed: (direction) {
-          // if (direction == DismissDirection.endToStart) {
-          //   ScaffoldMessenger.of(context).showSnackBar(
-          //     SnackBar(
-          //       content: const Text('Action item deleted'),
-          //       action: SnackBarAction(
-          //         label: 'Undo',
-          //         onPressed: () {},
-          //       ),
-          //     ),
-          //   );
-          // }
-        },
+        onDismissed: (direction) {},
 
         child: Material(
           color: Colors.transparent,
