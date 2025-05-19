@@ -28,7 +28,8 @@
               "docs/developer/apps/Integrations",
               "docs/developer/apps/AudioStreaming",
               "docs/developer/apps/Import",
-              "docs/developer/apps/Submitting"
+              "docs/developer/apps/Submitting",
+              "docs/developer/apps/Oauth"
             ]
           },
           "docs/developer/AppSetup",
