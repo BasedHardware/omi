@@ -5,7 +5,8 @@ The Omi App is a Flutter-based mobile application that serves as the companion a
 ## 📚 **[View Full App setup instructions in the documentation](https://docs.omi.me/docs/developer/AppSetup)**
 
 ### Quick Setup
-Before getting started make sure your device is unlocked and Iphone is in Devmode this can be toggles in Iphone settings
+
+Before getting started, make sure your device is connected and unlocked. If you're using an iPhone, ensure that Developer Mode is enabled — you can toggle this in the iPhone settings. For Android devices, make sure the device is connected and USB debugging is enabled in Developer Options
 
 1. Navigate to the app directory:
    ```bash
@@ -21,25 +22,15 @@ Before getting started make sure your device is unlocked and Iphone is in Devmod
    bash setup.sh android
    ```
  
-3. Ensure GitHub access is available for pulling private repositories.
- cd ~/.ssh; ssh-add  
+3. Ensure GitHub SSH access is set up correctly for pulling certificates from repositories. After running the command below, if you're prompted for a passphrase, enter your SSH passphrase — or simply press Enter/Return if you haven't set one.
+    ```bash
+   cd ~/.ssh; ssh-add
+   ```
 
-4. Run the app:
+4. To run the app, navigate to the app directory and use the following command:
    ```bash
    flutter run --flavor dev
-
    ```
-5. If no Github Access.
-`` bash 
-
-flutter run --flavor dev -d "iPhone 16 Plus"
-
-command will allow you to run it on a MACos Simulator 
-```
-6. open xcode with 
-```bash
-open ios/Runner.xcworkspace
-```
 
 
 ### Building and Deploying to iPhone
