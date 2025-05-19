@@ -26,6 +26,20 @@ class MemoriesByTexts(BaseModel):
     )
 
 
+# Map for converting categories from old to new format
+LEGACY_TO_NEW_CATEGORY = {
+    'core': MemoryCategory.system,
+    'hobbies': MemoryCategory.system,
+    'lifestyle': MemoryCategory.system,
+    'interests': MemoryCategory.system,
+    'work': MemoryCategory.system,
+    'skills': MemoryCategory.system,
+    'learnings': MemoryCategory.system,
+    'habits': MemoryCategory.system,
+    'other': MemoryCategory.system,
+}
+
+
 def new_memories_extractor(
         uid: str, segments: List[TranscriptSegment], user_name: Optional[str] = None, memories_str: Optional[str] = None
 ) -> List[Memory]:
@@ -50,8 +64,12 @@ def new_memories_extractor(
             'memories_str': memories_str,
             'format_instructions': parser.get_format_instructions(),
         })
-        # for fact in response:
-        #     fact.content = fact.content.replace(user_name, '').replace('The User', '').replace('User', '').strip()
+        
+        # Ensure all new memories use the new category format
+        for memory in response.facts:
+            if isinstance(memory.category, str) and memory.category in LEGACY_TO_NEW_CATEGORY:
+                memory.category = LEGACY_TO_NEW_CATEGORY[memory.category]
+        
         return response.facts
     except Exception as e:
         print(f'Error extracting new facts: {e}')
@@ -78,6 +96,12 @@ def extract_memories_from_text(
             'memories_str': memories_str,
             'format_instructions': parser.get_format_instructions(),
         })
+        
+        # Ensure all new memories use the new category format
+        for memory in response.facts:
+            if isinstance(memory.category, str) and memory.category in LEGACY_TO_NEW_CATEGORY:
+                memory.category = LEGACY_TO_NEW_CATEGORY[memory.category]
+        
         return response.facts
     except Exception as e:
         print(f'Error extracting facts from {text_source}: {e}')
@@ -113,7 +137,7 @@ def new_learnings_extractor(
             'learnings_str': learnings_str,
             'format_instructions': parser.get_format_instructions(),
         })
-        return list(map(lambda x: Memory(content=x, category=MemoryCategory.learnings), response.result))
+        return list(map(lambda x: Memory(content=x, category=MemoryCategory.interesting), response.result))
     except Exception as e:
         print(f'Error extracting new facts: {e}')
         return []

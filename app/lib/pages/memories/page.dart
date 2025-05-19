@@ -7,12 +7,16 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/widgets/extensions/functions.dart';
 import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
 
 import 'widgets/memory_edit_sheet.dart';
 import 'widgets/memory_item.dart';
 import 'widgets/memory_dialog.dart';
 import 'widgets/memory_review_sheet.dart';
 import 'widgets/memory_management_sheet.dart';
+
+// Filter options for the dropdown
+enum FilterOption { interesting, system, all }
 
 class MemoriesPage extends StatefulWidget {
   const MemoriesPage({super.key});
@@ -55,6 +59,10 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   MemoryCategory? _selectedCategory;
   final ScrollController _scrollController = ScrollController();
 
+  // Filter options for the dropdown
+  // Default will be set in initState based on current date
+  late FilterOption _currentFilter;
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -65,9 +73,22 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   @override
   void initState() {
     super.initState();
+    // Set default filter based on current date
+    final now = DateTime.now();
+    final cutoffDate = DateTime(2025, 5, 31);
+
+    if (now.isAfter(cutoffDate)) {
+      _currentFilter = FilterOption.interesting;
+    } else {
+      _currentFilter = FilterOption.all;
+    }
+
     (() async {
       final provider = context.read<MemoriesProvider>();
       await provider.init();
+
+      // Apply the date-based default filter
+      _applyFilter(_currentFilter);
 
       if (!mounted) return;
       final unreviewedMemories = provider.unreviewed;
@@ -75,6 +96,28 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
         _showReviewSheet(context, unreviewedMemories, provider);
       }
     }).withPostFrameCallback();
+  }
+
+  void _applyFilter(FilterOption option) {
+    final provider = context.read<MemoriesProvider>();
+    setState(() {
+      _currentFilter = option;
+
+      switch (option) {
+        case FilterOption.interesting:
+          _filterByCategory(MemoryCategory.interesting);
+          MixpanelManager().track('Memories: Filtered to interesting memories');
+          break;
+        case FilterOption.system:
+          _filterByCategory(MemoryCategory.system);
+          MixpanelManager().track('Memories: Filtered to system memories');
+          break;
+        case FilterOption.all:
+          _filterByCategory(null); // null means no category filter
+          MixpanelManager().track('Memories: Filtered to all memories');
+          break;
+      }
+    });
   }
 
   void _filterByCategory(MemoryCategory? category) {
@@ -102,10 +145,68 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
           child: Scaffold(
             backgroundColor: Theme.of(context).colorScheme.primary,
             body: provider.loading
-                ? const Center(
-                    child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ))
+                ? NestedScrollView(
+                    headerSliverBuilder: (context, innerBoxIsScrolled) {
+                      return [
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: SizedBox(
+                                    height: 44,
+                                    child: SearchBar(
+                                      hintText: 'Search memories',
+                                      leading: const Padding(
+                                        padding: EdgeInsets.only(left: 6.0),
+                                        child: Icon(FontAwesomeIcons.magnifyingGlass, color: Colors.white70, size: 14),
+                                      ),
+                                      backgroundColor: WidgetStateProperty.all(AppStyles.backgroundSecondary),
+                                      elevation: WidgetStateProperty.all(0),
+                                      padding: WidgetStateProperty.all(
+                                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                      ),
+                                      hintStyle: WidgetStateProperty.all(
+                                        TextStyle(color: AppStyles.textTertiary, fontSize: 14),
+                                      ),
+                                      textStyle: WidgetStateProperty.all(
+                                        TextStyle(color: AppStyles.textPrimary, fontSize: 14),
+                                      ),
+                                      shape: WidgetStateProperty.all(
+                                        RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                SizedBox(
+                                  width: 44,
+                                  height: 44,
+                                  child: _buildShimmerButton(),
+                                ),
+                                const SizedBox(width: 8),
+                                SizedBox(
+                                  width: 44,
+                                  height: 44,
+                                  child: _buildShimmerButton(),
+                                ),
+                                const SizedBox(width: 8),
+                                SizedBox(
+                                  width: 44,
+                                  height: 44,
+                                  child: _buildShimmerButton(),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ];
+                    },
+                    body: _buildShimmerMemoryList(),
+                  )
                 : NestedScrollView(
                     controller: _scrollController,
                     headerSliverBuilder: (context, innerBoxIsScrolled) {
@@ -123,8 +224,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                         hintText: 'Search memories',
                                         leading: const Padding(
                                           padding: EdgeInsets.only(left: 6.0),
-                                          child:
-                                              Icon(FontAwesomeIcons.magnifyingGlass, color: Colors.white70, size: 14),
+                                          child: Icon(FontAwesomeIcons.magnifyingGlass, color: Colors.white70, size: 14),
                                         ),
                                         backgroundColor: WidgetStateProperty.all(AppStyles.backgroundSecondary),
                                         elevation: WidgetStateProperty.all(0),
@@ -171,6 +271,76 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                     ),
                                   );
                                 }),
+                                const SizedBox(width: 8),
+                                SizedBox(
+                                  width: 44,
+                                  height: 44,
+                                  child: PopupMenuButton<FilterOption>(
+                                    onSelected: _applyFilter,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    color: AppStyles.backgroundSecondary,
+                                    offset: const Offset(0, 8),
+                                    elevation: 4,
+                                    tooltip: 'Filter memories by category',
+                                    position: PopupMenuPosition.under,
+                                    itemBuilder: (BuildContext context) => <PopupMenuEntry<FilterOption>>[
+                                      PopupMenuItem<FilterOption>(
+                                        value: FilterOption.all,
+                                        child: Row(
+                                          children: [
+                                            const Text(
+                                              'All',
+                                              style: TextStyle(color: Colors.white),
+                                            ),
+                                            const Spacer(),
+                                            if (_currentFilter == FilterOption.all) const Icon(Icons.check, size: 16, color: Colors.white),
+                                          ],
+                                        ),
+                                      ),
+                                      PopupMenuItem<FilterOption>(
+                                        value: FilterOption.interesting,
+                                        child: Row(
+                                          children: [
+                                            const Text(
+                                              'Interesting',
+                                              style: TextStyle(color: Colors.white),
+                                            ),
+                                            const Spacer(),
+                                            if (_currentFilter == FilterOption.interesting) const Icon(Icons.check, size: 16, color: Colors.white),
+                                          ],
+                                        ),
+                                      ),
+                                      PopupMenuItem<FilterOption>(
+                                        value: FilterOption.system,
+                                        child: Row(
+                                          children: [
+                                            const Text(
+                                              'System',
+                                              style: TextStyle(color: Colors.white),
+                                            ),
+                                            const Spacer(),
+                                            if (_currentFilter == FilterOption.system) const Icon(Icons.check, size: 16, color: Colors.white),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: AppStyles.backgroundSecondary,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: const Center(
+                                        child: Icon(
+                                          FontAwesomeIcons.filter,
+                                          size: 16,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
                                 const SizedBox(width: 8),
                                 SizedBox(
                                   width: 44,
@@ -233,15 +403,12 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                         Expanded(
                                           child: Row(
                                             children: [
-                                              Icon(FontAwesomeIcons.listCheck,
-                                                  color: Theme.of(context).colorScheme.onSurfaceVariant, size: 18),
+                                              Icon(FontAwesomeIcons.listCheck, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 18),
                                               const SizedBox(width: 12),
                                               Flexible(
                                                 child: Text(
                                                   '${provider.unreviewed.length} ${provider.unreviewed.length == 1 ? "memory" : "memories"} to review',
-                                                  style: TextStyle(
-                                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                                      fontWeight: FontWeight.w500),
+                                                  style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w500),
                                                   overflow: TextOverflow.ellipsis,
                                                 ),
                                               ),
@@ -250,10 +417,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                         ),
                                         Padding(
                                           padding: const EdgeInsets.only(left: 8.0),
-                                          child: Text('Review',
-                                              style: TextStyle(
-                                                  color: Theme.of(context).colorScheme.primary,
-                                                  fontWeight: FontWeight.bold)),
+                                          child: Text('Review', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
                                         ),
                                       ],
                                     ),
@@ -284,7 +448,11 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                   provider.searchQuery.isEmpty && _selectedCategory == null
                                       ? 'No memories yet'
                                       : _selectedCategory != null
-                                          ? 'No memories in this category'
+                                          ? _selectedCategory == MemoryCategory.interesting
+                                              ? 'No interesting memories yet'
+                                              : _selectedCategory == MemoryCategory.system
+                                                  ? 'No system memories yet'
+                                                  : 'No memories in this category'
                                           : 'No memories found',
                                   style: TextStyle(
                                     color: Colors.grey.shade400,
@@ -302,7 +470,8 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                             ),
                           )
                         : ListView.builder(
-                            padding: const EdgeInsets.only(top: 8, left: 16, right: 16, bottom: 16),
+                            // Add significant bottom padding to prevent content from being covered by floating action bar
+                            padding: const EdgeInsets.only(top: 8, left: 16, right: 16, bottom: 120),
                             itemCount: provider.filteredMemories.length,
                             itemBuilder: (context, index) {
                               final memory = provider.filteredMemories[index];
@@ -320,6 +489,42 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
           ),
         );
       },
+    );
+  }
+
+  Widget _buildShimmerButton() {
+    return Shimmer.fromColors(
+      baseColor: AppStyles.backgroundSecondary,
+      highlightColor: AppStyles.backgroundTertiary,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppStyles.backgroundSecondary,
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildShimmerMemoryList() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, left: 16, right: 16, bottom: 120),
+      child: ListView.builder(
+        itemCount: 8, // Show 8 shimmer items
+        itemBuilder: (context, index) {
+          return Shimmer.fromColors(
+            baseColor: AppStyles.backgroundSecondary,
+            highlightColor: AppStyles.backgroundTertiary,
+            child: Container(
+              margin: const EdgeInsets.only(bottom: AppStyles.spacingM),
+              height: 88, // Approximate height of a memory item
+              decoration: BoxDecoration(
+                color: AppStyles.backgroundSecondary,
+                borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 

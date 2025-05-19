@@ -1,7 +1,7 @@
 from typing import List, Tuple, Optional
 
 import database.memories as memories_db
-from models.memories import MemoryDB, Memory, CategoryEnum
+from models.memories import MemoryDB, Memory, MemoryCategory
 from models.integrations import ExternalIntegrationCreateMemory
 from utils.llm.memories import extract_memories_from_text
 
@@ -17,7 +17,7 @@ def process_external_integration_memory(uid: str, memory_data: ExternalIntegrati
             # Create a memory object from the explicit memory content
             memory = Memory(
                 content=explicit_memory.content,
-                category=CategoryEnum.other,
+                category=MemoryCategory.system,
                 tags=explicit_memory.tags if explicit_memory.tags else []
             )
 
