@@ -9,7 +9,7 @@ replicaCount: 1
 image:
   repository: gcr.io/based-hardware-dev/backend
   # This sets the pull policy for images.
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: "latest"
 
