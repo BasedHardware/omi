@@ -49,7 +49,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
   bool isLoading = false;
   Timer? _paymentCheckTimer;
   late App app;
-  late bool showInstallAppConfirmation;
 
   checkSetupCompleted() {
     // TODO: move check to backend
@@ -69,7 +68,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
   @override
   void initState() {
     app = widget.app;
-    showInstallAppConfirmation = SharedPreferencesUtil().showInstallAppConfirmation;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Automatically open app home page if conditions are met
       if (app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
@@ -458,14 +456,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                               title: 'Data Access Notice',
                                               description:
                                                   'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app',
-                                              checkboxText: "Don't show it again",
-                                              checkboxValue: !showInstallAppConfirmation,
-                                              onCheckboxChanged: (value) {
-                                                setState(() {
-                                                  showInstallAppConfirmation = !value;
-                                                  SharedPreferencesUtil().showInstallAppConfirmation = !value;
-                                                });
-                                              },
                                               onConfirm: () {
                                                 _toggleApp(app.id, true);
                                                 Navigator.pop(context);
