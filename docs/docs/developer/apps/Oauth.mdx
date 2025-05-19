@@ -1,0 +1,105 @@
+---
+title: OMI OAuth 2.0 Integration
+description: "Learn how to integrate your application with OMI using OAuth 2.0 to securely access user data."
+---
+
+## Overview
+
+OMI uses an OAuth 2.0-like flow to allow third-party applications to access OMI user data with their explicit consent. This ensures that users have control over their data and what applications can access.
+
+When an application wants to access a user's OMI data, it directs the user to OMI's authorization server. The user logs in with their OMI account (via Firebase - Google or Apple) and approves the permissions requested by the application. OMI then provides the application with a user identifier (`uid`) which can be used to interact with OMI APIs on behalf of the user.
+
+## Prerequisites
+
+Before you begin, ensure your application is registered with OMI and has an `App ID`. You also need to configure an **App Home URL** in your app's settings within the OMI platform. This URL is where users will be redirected after successfully authorizing your application.
+
+## OAuth Flow
+
+The OMI OAuth flow consists of the following steps:
+
+1.  **User Authorization Request**: Your application redirects the user to the OMI OAuth authorization endpoint.
+2.  **User Authentication & Consent**: The user logs into their OMI account (if not already logged in) and reviews the permissions requested by your application. If they approve, they grant consent.
+3.  **Token Exchange & User Redirection**: After successful authentication and consent, OMI's authorization page will internally facilitate the exchange of the Firebase ID token (obtained client-side) for an OMI user ID (`uid`). The user is then redirected back to your application's **App Home URL** with the `uid` and an optional `state` parameter.
+
+### Step 1: Redirect User to OMI for Authorization
+
+Your application initiates the OAuth flow by redirecting the user's browser to OMI's authorization endpoint:
+
+`https://api.omi.me/v1/oauth/authorize?app_id=YOUR_APP_ID&state=YOUR_OPAQUE_STATE_STRING`
+
+**Parameters:**
+
+*   `app_id` (required): Your application's unique ID.
+*   `state` (optional): An opaque value used to maintain state between the request and callback. This is useful for preventing CSRF attacks and can also store application-specific state. OMI will return this value to your application after the user authorizes your app.
+
+
+### Step 2: User Authentication and Consent
+
+Upon visiting the `/v1/oauth/authorize` URL, the user will be presented with an OMI page where they can:
+1.  Log in using their Firebase credentials (Google or Apple).
+2.  Review the permissions your application is requesting. These permissions are derived from the capabilities configured for your app (e.g., access chat, read/create memories, etc.).
+3.  Grant or deny access.
+
+The permissions displayed are user-friendly descriptions based on your app's declared capabilities, such as:
+- "Engage in chat conversations with Omi."
+- "Access and manage your conversations."
+- "Process audio data in real-time."
+- "Trigger actions when new conversations are created."
+- "Create new conversations on your behalf."
+- "Access and read your stored memories."
+- "Access your basic Omi profile information." (This may be shown as a default if no other specific permissions are applicable or as a general permission).
+
+### Step 3: Token Exchange and Redirection to Your App
+
+This step is primarily handled by the client-side JavaScript on the OMI authorization page after the user successfully logs in via Firebase.
+
+1.  **Firebase Authentication**: The user authenticates with Firebase on the OMI authorization page.
+2.  **Token POST**: The client-side script on the OMI authorization page makes a `POST` request to:
+
+    `POST https://api.omi.me/v1/oauth/token`
+
+    **Request Body (form-data):**
+    *   `firebase_id_token` (required): The ID token obtained from Firebase after successful user login on the OMI page.
+    *   `app_id` (required): Your application's unique ID.
+    *   `state` (optional): The `state` parameter that was initially passed to the `/v1/oauth/authorize` endpoint.
+
+    **Response (JSON):**
+    If successful, the `/v1/oauth/token` endpoint responds with a JSON object containing:
+    ```json
+    {
+      "uid": "USER_UNIQUE_ID",
+      "redirect_url": "YOUR_APP_HOME_URL",
+      "state": "YOUR_OPAQUE_STATE_STRING_IF_PROVIDED"
+    }
+    ```
+    - `uid`: The unique identifier for the OMI user.
+    - `redirect_url`: Your application's configured **App Home URL**.
+    - `state`: The `state` parameter, if it was included in the initial authorization request.
+
+3.  **Redirection to App Home URL**: The client-side script on the OMI authorization page then uses the `redirect_url`, `uid`, and `state` from the response to redirect the user's browser to your application.
+
+    **Example Redirect URL constructed by the client-side script:**
+    ```
+    YOUR_APP_HOME_URL?uid=USER_UNIQUE_ID&state=YOUR_OPAQUE_STATE_STRING
+    ```
+
+Your application, at its **App Home URL**, can then retrieve the `uid` from the query parameters to identify the user. If you used a `state` parameter, your application should validate it against the value it initially sent to protect against CSRF attacks.
+
+## Automatic App Enablement
+
+When a user successfully completes the OAuth flow for your app:
+- If the app is not already enabled for the user, OMI will attempt to enable it automatically as part of the `/v1/oauth/token` processing.
+- This automatic enablement process includes several checks:
+    - **Privacy**: If the app is marked as private, only the app owner or designated testers can enable it.
+    - **Setup Completion**: If the app has a `setup_completed_url` configured in its `external_integration` settings, OMI will make a GET request to this URL (appending `?uid={user_uid}`). Your app's `setup_completed_url` endpoint must return a JSON response: `{"is_setup_completed": true}` for the flow to proceed. If it returns `false` or fails, an error will be shown.
+    - **Payment**: If the app is a paid app, OMI verifies that the user has an active subscription or has otherwise fulfilled the payment requirements.
+- If all these checks pass, the app is enabled for the user, and its public install count may be incremented (if applicable).
+- If any check fails (e.g., setup not completed, payment required), the OAuth flow will be halted before redirection, and an appropriate error message will be displayed to the user.
+
+## App Configuration
+
+To use OMI OAuth, ensure your app is configured within the OMI platform with:
+- An **App ID**.
+- An **App Home URL**: This is the primary URL of your application where users will be redirected after authorization. It must be an HTTPS URL. This URL is specified in the `external_integration.app_home_url` field of your app's configuration.
+
+These settings are typically managed through the OMI developer portal or during the app submission process.

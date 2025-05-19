@@ -666,3 +666,9 @@ def app_can_read_conversations(app: dict) -> bool:
 def app_can_create_conversation(app: dict) -> bool:
     """Check if an app can create a conversation."""
     return app_has_action(app, 'create_conversation')
+
+
+def is_user_app_enabled(uid: str, app_id: str) -> bool:
+    """Check if a specific app is enabled for the user based on Redis cache."""
+    user_enabled_apps = set(get_enabled_plugins(uid))
+    return app_id in user_enabled_apps
