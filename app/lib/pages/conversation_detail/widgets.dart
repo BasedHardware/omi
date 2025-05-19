@@ -158,27 +158,29 @@ class ActionItemsListWidget extends StatelessWidget {
                   var tempItem = provider.conversation.structured.actionItems[idx];
                   var tempIdx = idx;
                   provider.deleteActionItem(idx);
-                  ScaffoldMessenger.of(context)
-                      .showSnackBar(
-                        SnackBar(
-                          content: const Text('Action Item deleted successfully 🗑️'),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                          action: SnackBarAction(
-                            label: 'Undo',
-                            textColor: Colors.white,
-                            onPressed: () {
-                              provider.undoDeleteActionItem(idx);
-                            },
-                          ),
-                        ),
-                      )
-                      .closed
-                      .then((reason) {
-                    if (reason != SnackBarClosedReason.action) {
-                      provider.deleteActionItemPermanently(tempItem, tempIdx);
-                      MixpanelManager().deletedActionItem(provider.conversation);
-                    }
-                  });
+                  provider.deleteActionItemPermanently(tempItem, tempIdx);
+                  MixpanelManager().deletedActionItem(provider.conversation);
+                  // ScaffoldMessenger.of(context)
+                  //     .showSnackBar(
+                  //       SnackBar(
+                  //         content: const Text('Action Item deleted successfully 🗑️'),
+                  //         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  //         action: SnackBarAction(
+                  //           label: 'Undo',
+                  //           textColor: Colors.white,
+                  //           onPressed: () {
+                  //             provider.undoDeleteActionItem(idx);
+                  //           },
+                  //         ),
+                  //       ),
+                  //     )
+                  //     .closed
+                  //     .then((reason) {
+                  //   if (reason != SnackBarClosedReason.action) {
+                  //     provider.deleteActionItemPermanently(tempItem, tempIdx);
+                  //     MixpanelManager().deletedActionItem(provider.conversation);
+                  //   }
+                  // });
                 },
                 child: Padding(
                   padding: const EdgeInsets.only(top: 10, bottom: 2),
