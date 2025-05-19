@@ -11,6 +11,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  mailer: ^6.0.1
+  email_validator: ^2.1.17  
 
   # State Management
   provider: ^6.1.2
