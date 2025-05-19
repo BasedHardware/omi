@@ -4,9 +4,11 @@ from fastapi import APIRouter, Request, HTTPException, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 import firebase_admin.auth
+import requests
 
 from database.apps import get_app_by_id_db
-from utils.apps import is_user_app_enabled
+from database.redis_db import enable_app, increase_app_installs_count
+from utils.apps import is_user_app_enabled, get_is_user_paid_app, is_tester
 from models.app import App as AppModel, ActionType
 
 router = APIRouter(
@@ -121,9 +123,41 @@ async def oauth_token(
     if not app.external_integration or not app.external_integration.app_home_url:
         raise HTTPException(status_code=400, detail="App not configured for OAuth or app home URL not set")
 
-    # Validate if the user has enabled this app
+    # Validate if the user has enabled this app, if not, try to enable it automatically
     if not is_user_app_enabled(uid, app_id):
-        raise HTTPException(status_code=403, detail="App is not enabled for this user.")
+        if app.private is not None:
+            if app.private and app.uid != uid and not is_tester(uid):
+                raise HTTPException(status_code=403,
+                                    detail="This app is private and you are not authorized to enable it.")
+
+        # Check Setup completes
+        if app.works_externally() and app.external_integration.setup_completed_url:
+            try:
+                res = requests.get(app.external_integration.setup_completed_url + f'?uid={uid}')
+                res.raise_for_status()
+                if not res.json().get('is_setup_completed', False):
+                    raise HTTPException(status_code=400,
+                                        detail='App setup is not completed. Please complete app setup before authorizing.')
+            except requests.RequestException as e:
+                raise HTTPException(status_code=503,
+                                    detail=f'Failed to verify app setup completion. Please try again later or contact support.')
+            except ValueError:
+                raise HTTPException(status_code=503,
+                                    detail='Could not verify app setup due to an invalid response from the app. Please contact app developer or support.')
+
+        # Check payment status
+        if app.is_paid and not get_is_user_paid_app(app.id, uid):
+            raise HTTPException(status_code=403,
+                                detail='This is a paid app. Please purchase the app before authorizing.')
+
+        try:
+            enable_app(uid, app_id)
+            if (app.private is None or not app.private) and \
+               (app.uid is None or app.uid != uid) and \
+               not is_tester(uid):
+                increase_app_installs_count(app_id)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Could not automatically enable the app. Please try again or enable it manually.")
 
     redirect_url = app.external_integration.app_home_url
 
