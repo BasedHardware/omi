@@ -62,7 +62,7 @@ def send_message(
         plugin_id = None
 
     # get chat session
-    chat_session = chat_db.get_chat_session(uid, plugin_id=plugin_id)
+    chat_session = chat_db.get_chat_session(uid, app_id=plugin_id)
     chat_session = ChatSession(**chat_session) if chat_session else None
 
     message = Message(
