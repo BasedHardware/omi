@@ -1,4 +1,4 @@
-enum MemoryCategory { core, lifestyle, hobbies, interests, habits, work, skills, learnings, other }
+enum MemoryCategory { interesting, system }
 
 enum MemoryVisibility { private, public }
 
@@ -40,7 +40,7 @@ class Memory {
       content: json['content'],
       category: MemoryCategory.values.firstWhere(
         (e) => e.toString().split('.').last == json['category'],
-        orElse: () => MemoryCategory.other,
+        orElse: () => MemoryCategory.interesting,
       ),
       createdAt: DateTime.parse(json['created_at']).toLocal(),
       updatedAt: DateTime.parse(json['updated_at']).toLocal(),
@@ -50,9 +50,7 @@ class Memory {
       manuallyAdded: json['manually_added'] ?? false,
       edited: json['edited'] ?? false,
       deleted: json['deleted'] ?? false,
-      visibility: json['visibility'] != null
-          ? (MemoryVisibility.values.asNameMap()[json['visibility']] ?? MemoryVisibility.public)
-          : MemoryVisibility.public,
+      visibility: json['visibility'] != null ? (MemoryVisibility.values.asNameMap()[json['visibility']] ?? MemoryVisibility.public) : MemoryVisibility.public,
     );
   }
 

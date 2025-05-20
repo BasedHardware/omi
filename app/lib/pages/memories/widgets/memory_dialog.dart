@@ -222,8 +222,8 @@ class _MemoryDialogState extends State<MemoryDialog> {
         }
         MixpanelManager().memoriesPageEditedMemory();
       } else {
-        widget.provider.createMemory(value, selectedVisibility);
-        MixpanelManager().memoriesPageCreatedMemory(MemoryCategory.values.first);
+        widget.provider.createMemory(value, selectedVisibility, MemoryCategory.interesting);
+        MixpanelManager().memoriesPageCreatedMemory(MemoryCategory.interesting);
       }
       Navigator.pop(context);
     }

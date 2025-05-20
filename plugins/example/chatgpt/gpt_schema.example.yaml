@@ -457,15 +457,8 @@ components:
     FactCategory:
       type: string
       enum:
-        - core
-        - hobbies
-        - lifestyle
-        - interests
-        - habits
-        - work
-        - skills
-        - learnings
-        - other
+        - interesting
+        - system
       title: FactCategory
     CategoryEnum:
       type: string

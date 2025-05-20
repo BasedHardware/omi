@@ -67,8 +67,7 @@ class MixpanelManager {
     setUserProperty('\$email', SharedPreferencesUtil().email);
   }
 
-  void track(String eventName, {Map<String, dynamic>? properties}) =>
-      _mixpanel?.track(eventName, properties: properties);
+  void track(String eventName, {Map<String, dynamic>? properties}) => _mixpanel?.track(eventName, properties: properties);
 
   void startTimingEvent(String eventName) => _mixpanel?.timeEvent(eventName);
 
@@ -148,8 +147,7 @@ class MixpanelManager {
 
   void deviceDisconnected() => track('Device Disconnected');
 
-  void memoriesPageCategoryOpened(MemoryCategory category) =>
-      track('Fact Page Category Opened', properties: {'category': category.toString().split('.').last});
+  void memoriesPageCategoryOpened(MemoryCategory category) => track('Fact Page Category Opened', properties: {'category': category.toString().split('.').last});
 
   void memoriesPageDeletedMemory(Memory memory) => track(
         'Fact Page Deleted Fact',
@@ -164,8 +162,7 @@ class MixpanelManager {
 
   void memoriesPageReviewBtn() => track('Fact page Review Button Pressed');
 
-  void memoriesPageCreatedMemory(MemoryCategory category) =>
-      track('Fact Page Created Fact', properties: {'fact_category': category.toString().split('.').last});
+  void memoriesPageCreatedMemory(MemoryCategory category) => track('Fact Page Created Fact', properties: {'fact_category': category.toString().split('.').last});
 
   void memorySearched(String query, int resultsCount) {
     track('Fact Searched', properties: {
@@ -215,6 +212,8 @@ class MixpanelManager {
     });
   }
 
+  void memoriesFiltered(String filter) => track('Facts Filtered', properties: {'filter': filter});
+
   void memoriesManagementSheetOpened() => track('Facts Management Sheet Opened');
 
   Map<String, dynamic> _getTranscriptProperties(String transcript) {
@@ -249,14 +248,11 @@ class MixpanelManager {
     track('Memory Created', properties: properties);
   }
 
-  void conversationListItemClicked(ServerConversation conversation, int idx) =>
-      track('Memory List Item Clicked', properties: getConversationEventProperties(conversation));
+  void conversationListItemClicked(ServerConversation conversation, int idx) => track('Memory List Item Clicked', properties: getConversationEventProperties(conversation));
 
-  void conversationShareButtonClick(ServerConversation conversation) =>
-      track('Memory Share Button Clicked', properties: getConversationEventProperties(conversation));
+  void conversationShareButtonClick(ServerConversation conversation) => track('Memory Share Button Clicked', properties: getConversationEventProperties(conversation));
 
-  void conversationDeleted(ServerConversation conversation) =>
-      track('Memory Deleted', properties: getConversationEventProperties(conversation));
+  void conversationDeleted(ServerConversation conversation) => track('Memory Deleted', properties: getConversationEventProperties(conversation));
 
   void chatMessageSent({
     required String message,
@@ -285,16 +281,13 @@ class MixpanelManager {
 
   void speechProfileCapturePageClicked() => track('Speech Profile Capture Page Clicked');
 
-  void showDiscardedMemoriesToggled(bool showDiscarded) =>
-      track('Show Discarded Memories Toggled', properties: {'show_discarded': showDiscarded});
+  void showDiscardedMemoriesToggled(bool showDiscarded) => track('Show Discarded Memories Toggled', properties: {'show_discarded': showDiscarded});
 
-  void chatMessageConversationClicked(ServerConversation conversation) =>
-      track('Chat Message Memory Clicked', properties: getConversationEventProperties(conversation));
+  void chatMessageConversationClicked(ServerConversation conversation) => track('Chat Message Memory Clicked', properties: getConversationEventProperties(conversation));
 
   void addManualConversationClicked() => track('Add Manual Memory Clicked');
 
-  void manualConversationCreated(ServerConversation conversation) =>
-      track('Manual Memory Created', properties: getConversationEventProperties(conversation));
+  void manualConversationCreated(ServerConversation conversation) => track('Manual Memory Created', properties: getConversationEventProperties(conversation));
 
   void setUserProperties(String whatDoYouDo, String whereDoYouPlanToUseYourFriend, String ageRange) {
     setUserProperty('What the user does', whatDoYouDo);
@@ -302,8 +295,7 @@ class MixpanelManager {
     setUserProperty('Age Range', ageRange);
   }
 
-  void reProcessConversation(ServerConversation conversation) =>
-      track('Re-process Memory', properties: getConversationEventProperties(conversation));
+  void reProcessConversation(ServerConversation conversation) => track('Re-process Memory', properties: getConversationEventProperties(conversation));
 
   void developerModeEnabled() {
     track('Developer Mode Enabled');
@@ -325,17 +317,13 @@ class MixpanelManager {
 
   void supportContacted() => track('Support Contacted');
 
-  void copiedConversationDetails(ServerConversation conversation, {String source = ''}) =>
-      track('Copied Memory Detail $source'.trim(), properties: getConversationEventProperties(conversation));
+  void copiedConversationDetails(ServerConversation conversation, {String source = ''}) => track('Copied Memory Detail $source'.trim(), properties: getConversationEventProperties(conversation));
 
-  void checkedActionItem(ServerConversation conversation, int idx) =>
-      track('Checked Action Item', properties: getConversationEventProperties(conversation));
+  void checkedActionItem(ServerConversation conversation, int idx) => track('Checked Action Item', properties: getConversationEventProperties(conversation));
 
-  void uncheckedActionItem(ServerConversation conversation, int idx) =>
-      track('Unchecked Action Item', properties: getConversationEventProperties(conversation));
+  void uncheckedActionItem(ServerConversation conversation, int idx) => track('Unchecked Action Item', properties: getConversationEventProperties(conversation));
 
-  void deletedActionItem(ServerConversation conversation) =>
-      track('Deleted Action Item', properties: getConversationEventProperties(conversation));
+  void deletedActionItem(ServerConversation conversation) => track('Deleted Action Item', properties: getConversationEventProperties(conversation));
 
   void upgradeModalDismissed() => track('Upgrade Modal Dismissed');
 
