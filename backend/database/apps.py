@@ -9,29 +9,28 @@ from ulid import ULID
 
 from models.app import UsageHistoryType
 from ._client import db
-from .redis_db import get_plugin_reviews
+from .redis_db import get_app_reviews
 
 # *****************************
 # ********** CRUD *************
 # *****************************
 
-omi_plugins_bucket = os.getenv('BUCKET_PLUGINS_LOGOS')
-
+apps_collection = 'plugins_data'
 
 def migrate_reviews_from_redis_to_firestore():
-    apps_ref = db.collection('plugins_data').stream()
+    apps_ref = db.collection(apps_collection).stream()
     for app in apps_ref:
         print('migrating reviews for app:', app.id)
         app_id = app.id
-        reviews = get_plugin_reviews(app_id)
+        reviews = get_app_reviews(app_id)
         for uid, review in reviews.items():
             review['app_id'] = app_id
-            new_app_ref = db.collection('plugins_data').document(app_id).collection('reviews').document(uid)
+            new_app_ref = db.collection(apps_collection).document(app_id).collection('reviews').document(uid)
             new_app_ref.set(review)
 
 
 def get_app_by_id_db(app_id: str):
-    app_ref = db.collection('plugins_data').document(app_id)
+    app_ref = db.collection(apps_collection).document(app_id)
     doc = app_ref.get()
     if doc.exists:
         if doc.to_dict().get('deleted', True):
@@ -46,13 +45,13 @@ def get_audio_apps_count(app_ids: List[str]):
         return 0
     filters = [FieldFilter('id', 'in', app_ids), FieldFilter('deleted', '==', False),
                FieldFilter('external_integration.triggers_on', '==', 'audio_bytes')]
-    apps_ref = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).count().get()
+    apps_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).count().get()
     return apps_ref[0][0].value
 
 
 def get_private_apps_db(uid: str) -> List:
     filters = [FieldFilter('uid', '==', uid), FieldFilter('private', '==', True), FieldFilter('deleted', '==', False)]
-    private_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
+    private_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).stream()
     data = [doc.to_dict() for doc in private_apps]
     return data
 
@@ -61,19 +60,19 @@ def get_private_apps_db(uid: str) -> List:
 def get_unapproved_public_apps_db() -> List:
     filters = [FieldFilter('approved', '==', False), FieldFilter('private', '==', False),
                FieldFilter('deleted', '==', False)]
-    public_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
+    public_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).stream()
     return [doc.to_dict() for doc in public_apps]
 
 
 # This returns all unapproved apps of all users including private apps
 def get_all_unapproved_apps_db() -> List:
     filters = [FieldFilter('approved', '==', False), FieldFilter('deleted', '==', False)]
-    all_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
+    all_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).stream()
     return [doc.to_dict() for doc in all_apps]
 
 
 def get_public_apps_db(uid: str) -> List:
-    public_plugins = db.collection('plugins_data').stream()
+    public_plugins = db.collection(apps_collection).stream()
     data = [doc.to_dict() for doc in public_plugins]
 
     return [plugin for plugin in data if plugin.get('approved') == True or plugin.get('uid') == uid]
@@ -82,19 +81,19 @@ def get_public_apps_db(uid: str) -> List:
 def get_public_approved_apps_db() -> List:
     filters = [FieldFilter('approved', '==', True), FieldFilter('private', '==', False),
                FieldFilter('deleted', '==', False)]
-    public_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
+    public_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).stream()
     return [doc.to_dict() for doc in public_apps]
 
 
 def get_popular_apps_db() -> List:
     filters = [FieldFilter('approved', '==', True), FieldFilter('deleted', '==', False),
                FieldFilter('is_popular', '==', True)]
-    popular_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
+    popular_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).stream()
     return [doc.to_dict() for doc in popular_apps]
 
 
 def set_app_popular_db(app_id: str, popular: bool):
-    app_ref = db.collection('plugins_data').document(app_id)
+    app_ref = db.collection(apps_collection).document(app_id)
     app_ref.update({'is_popular': popular})
 
 
@@ -102,7 +101,7 @@ def set_app_popular_db(app_id: str, popular: bool):
 def get_public_unapproved_apps_db(uid: str) -> List:
     filters = [FieldFilter('approved', '==', False), FieldFilter('uid', '==', uid), FieldFilter('deleted', '==', False),
                FieldFilter('private', '==', False)]
-    public_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
+    public_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).stream()
     return [doc.to_dict() for doc in public_apps]
 
 
@@ -115,33 +114,33 @@ def get_apps_for_tester_db(uid: str) -> List:
             return []
         filters = [FieldFilter('approved', '==', False), FieldFilter('id', 'in', apps),
                    FieldFilter('deleted', '==', False)]
-        public_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
+        public_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).stream()
         return [doc.to_dict() for doc in public_apps]
     return []
 
 
 def add_app_to_db(app_data: dict):
-    app_ref = db.collection('plugins_data')
+    app_ref = db.collection(apps_collection)
     app_ref.add(app_data, app_data['id'])
 
 
 def upsert_app_to_db(app_data: dict):
-    app_ref = db.collection('plugins_data').document(app_data['id'])
+    app_ref = db.collection(apps_collection).document(app_data['id'])
     app_ref.set(app_data)
 
 
 def update_app_in_db(app_data: dict):
-    app_ref = db.collection('plugins_data').document(app_data['id'])
+    app_ref = db.collection(apps_collection).document(app_data['id'])
     app_ref.update(app_data)
 
 
 def delete_app_from_db(app_id: str):
-    app_ref = db.collection('plugins_data').document(app_id)
+    app_ref = db.collection(apps_collection).document(app_id)
     app_ref.update({'deleted': True})
 
 
 def update_app_visibility_in_db(app_id: str, private: bool):
-    app_ref = db.collection('plugins_data').document(app_id)
+    app_ref = db.collection(apps_collection).document(app_id)
     if 'private' in app_id and not private:
         app = app_ref.get().to_dict()
         app_ref.delete()
@@ -155,7 +154,7 @@ def update_app_visibility_in_db(app_id: str, private: bool):
 
 
 def change_app_approval_status(plugin_id: str, approved: bool):
-    plugin_ref = db.collection('plugins_data').document(plugin_id)
+    plugin_ref = db.collection(apps_collection).document(plugin_id)
     plugin_ref.update({'approved': approved, 'status': 'approved' if approved else 'rejected'})
 
 
@@ -192,7 +191,7 @@ def get_app_usage_count_db(app_id: str):
 # ********************************
 
 def set_app_review_in_db(app_id: str, uid: str, review: dict):
-    app_ref = db.collection('plugins_data').document(app_id).collection('reviews').document(uid)
+    app_ref = db.collection(apps_collection).document(app_id).collection('reviews').document(uid)
     app_ref.set(review)
 
 
@@ -262,12 +261,12 @@ def record_app_usage(
 # ********************************
 
 def delete_persona_db(persona_id: str):
-    persona_ref = db.collection('plugins_data').document(persona_id)
+    persona_ref = db.collection(apps_collection).document(persona_id)
     persona_ref.update({'deleted': True})
 
 
 def get_personas_by_username_db(persona_id: str):
-    persona_ref = db.collection('plugins_data').where('username', '==', persona_id)
+    persona_ref = db.collection(apps_collection).where('username', '==', persona_id)
     docs = persona_ref.get()
     if not docs:
         return None
@@ -277,7 +276,7 @@ def get_personas_by_username_db(persona_id: str):
 def get_persona_by_username_db(username: str):
     filters = [FieldFilter('username', '==', username), FieldFilter('capabilities', 'array_contains', 'persona'),
                FieldFilter('deleted', '==', False)]
-    persona_ref = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).limit(1)
+    persona_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).limit(1)
     docs = persona_ref.get()
     if not docs:
         return None
@@ -288,7 +287,7 @@ def get_persona_by_username_db(username: str):
 
 
 def get_persona_by_id_db(persona_id: str):
-    persona_ref = db.collection('plugins_data').document(persona_id)
+    persona_ref = db.collection(apps_collection).document(persona_id)
     doc = persona_ref.get()
     if doc.exists:
         return doc.to_dict()
@@ -298,7 +297,7 @@ def get_persona_by_id_db(persona_id: str):
 def get_persona_by_uid_db(uid: str):
     filters = [FieldFilter('uid', '==', uid), FieldFilter('capabilities', 'array_contains', 'persona'),
                FieldFilter('deleted', '==', False)]
-    persona_ref = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).limit(1)
+    persona_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).limit(1)
     docs = persona_ref.get()
     if not docs:
         return None
@@ -315,7 +314,7 @@ def get_user_persona_by_uid(uid: str):
         FieldFilter('deleted', '==', False),
         FieldFilter('uid', '==', uid),
     ]
-    persona_ref = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).limit(1)
+    persona_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).limit(1)
     docs = persona_ref.get()
     if not docs:
         return None
@@ -327,7 +326,7 @@ def get_user_persona_by_uid(uid: str):
 
 def create_user_persona_db(persona_data: dict):
     """Create a new user persona in the database"""
-    persona_ref = db.collection('plugins_data')
+    persona_ref = db.collection(apps_collection)
     persona_ref.add(persona_data, persona_data['id'])
     return persona_data
 
@@ -338,7 +337,7 @@ def get_persona_by_twitter_handle_db(handle: str):
         FieldFilter('deleted', '==', False),
         FieldFilter('twitter.username', '==', handle)
     ]
-    persona_ref = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).limit(1)
+    persona_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).limit(1)
     docs = persona_ref.get()
     if not docs:
         return None
@@ -355,7 +354,7 @@ def get_persona_by_username_twitter_handle_db(username: str, handle: str):
         FieldFilter('deleted', '==', False),
         FieldFilter('twitter.username', '==', handle)
     ]
-    persona_ref = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).limit(1)
+    persona_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).limit(1)
     docs = persona_ref.get()
     if not docs:
         return None
@@ -368,7 +367,7 @@ def get_persona_by_username_twitter_handle_db(username: str, handle: str):
 def get_omi_personas_by_uid_db(uid: str):
     filters = [FieldFilter('uid', '==', uid), FieldFilter('capabilities', 'array_contains', 'persona'),
                FieldFilter('deleted', '==', False)]
-    persona_ref = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters))
+    persona_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters))
     docs = persona_ref.get()
     if not docs:
         return []
@@ -380,7 +379,7 @@ def get_omi_persona_apps_by_uid_db(uid: str):
     filters = [FieldFilter('uid', '==', uid),
                FieldFilter('category', '==', 'personality-emulation'),
                FieldFilter('deleted', '==', False)]
-    persona_ref = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters))
+    persona_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters))
     docs = persona_ref.get()
     if not docs:
         return []
@@ -389,33 +388,33 @@ def get_omi_persona_apps_by_uid_db(uid: str):
 
 
 def add_persona_to_db(persona_data: dict):
-    persona_ref = db.collection('plugins_data')
+    persona_ref = db.collection(apps_collection)
     persona_ref.add(persona_data, persona_data['id'])
 
 
 def update_persona_in_db(persona_data: dict):
-    persona_ref = db.collection('plugins_data').document(persona_data['id'])
+    persona_ref = db.collection(apps_collection).document(persona_data['id'])
     persona_ref.update(persona_data)
 
 
 def migrate_app_owner_id_db(new_id: str, old_id: str):
     filters = [FieldFilter('uid', '==', old_id), FieldFilter('deleted', '==', False)]
-    apps_ref = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
+    apps_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).stream()
     for app in apps_ref:
-        app_ref = db.collection('plugins_data').document(app.id)
+        app_ref = db.collection(apps_collection).document(app.id)
         app_ref.update({'uid': new_id})
 
 
 def create_api_key_db(app_id: str, api_key_data: dict):
     """Create a new API key for an app in the database"""
-    api_key_ref = db.collection('plugins_data').document(app_id).collection('api_keys').document(api_key_data['id'])
+    api_key_ref = db.collection(apps_collection).document(app_id).collection('api_keys').document(api_key_data['id'])
     api_key_ref.set(api_key_data)
     return api_key_data
 
 
 def get_api_key_by_id_db(app_id: str, key_id: str):
     """Get an API key by its ID"""
-    api_key_ref = db.collection('plugins_data').document(app_id).collection('api_keys').document(key_id)
+    api_key_ref = db.collection(apps_collection).document(app_id).collection('api_keys').document(key_id)
     doc = api_key_ref.get()
     if doc.exists:
         return doc.to_dict()
@@ -425,7 +424,7 @@ def get_api_key_by_id_db(app_id: str, key_id: str):
 def get_api_key_by_hash_db(app_id: str, hashed_key: str):
     """Get an API key by its hash value"""
     filters = [FieldFilter('hashed', '==', hashed_key)]
-    api_keys_ref = db.collection('plugins_data').document(app_id).collection('api_keys').where(
+    api_keys_ref = db.collection(apps_collection).document(app_id).collection('api_keys').where(
         filter=BaseCompositeFilter('AND', filters)).limit(1)
     docs = api_keys_ref.get()
     if not docs:
@@ -438,13 +437,13 @@ def get_api_key_by_hash_db(app_id: str, hashed_key: str):
 
 def list_api_keys_db(app_id: str):
     """List all API keys for an app (excluding the hashed values)"""
-    api_keys_ref = db.collection('plugins_data').document(app_id).collection('api_keys').order_by('created_at',
+    api_keys_ref = db.collection(apps_collection).document(app_id).collection('api_keys').order_by('created_at',
                                                                                                   direction='DESCENDING').stream()
     return [{k: v for k, v in doc.to_dict().items() if k != 'hashed'} for doc in api_keys_ref]
 
 
 def delete_api_key_db(app_id: str, key_id: str):
     """Delete an API key"""
-    api_key_ref = db.collection('plugins_data').document(app_id).collection('api_keys').document(key_id)
+    api_key_ref = db.collection(apps_collection).document(app_id).collection('api_keys').document(key_id)
     api_key_ref.delete()
     return True
