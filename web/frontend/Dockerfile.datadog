@@ -22,9 +22,11 @@ RUN \
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/package.json ./package.json
+COPY --from=deps /app/yarn.lock* /app/package-lock.json* /app/pnpm-lock.yaml* ./
 #COPY frontend/. .
 ENV API_URL=https://backend-hhibjajaja-uc.a.run.app
-COPY frontend .
+COPY web/frontend/. ./
 RUN npm run build
 
 RUN echo "base files"

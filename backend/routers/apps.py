@@ -25,8 +25,7 @@ from utils.apps import get_available_apps, get_available_app_by_id, get_approved
 
 from database.memories import migrate_memories
 
-from utils.llm import generate_description, generate_persona_intro_message
-
+from utils.llm.persona import generate_persona_intro_message, generate_description
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
 from models.app import App, ActionType, AppCreate, AppUpdate
@@ -391,6 +390,28 @@ def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
         ]
 
     return app
+
+
+@router.get('/v1/app-categories', tags=['v1'])
+def get_app_categories():
+    return [
+        {'title': 'Conversation Analysis', 'id': 'conversation-analysis'},
+        {'title': 'Personality Emulation', 'id': 'personality-emulation'},
+        {'title': 'Health and Wellness', 'id': 'health-and-wellness'},
+        {'title': 'Education and Learning', 'id': 'education-and-learning'},
+        {'title': 'Communication Improvement', 'id': 'communication-improvement'},
+        {'title': 'Emotional and Mental Support', 'id': 'emotional-and-mental-support'},
+        {'title': 'Productivity and Organization', 'id': 'productivity-and-organization'},
+        {'title': 'Entertainment and Fun', 'id': 'entertainment-and-fun'},
+        {'title': 'Financial', 'id': 'financial'},
+        {'title': 'Travel and Exploration', 'id': 'travel-and-exploration'},
+        {'title': 'Safety and Security', 'id': 'safety-and-security'},
+        {'title': 'Shopping and Commerce', 'id': 'shopping-and-commerce'},
+        {'title': 'Social and Relationships', 'id': 'social-and-relationships'},
+        {'title': 'News and Information', 'id': 'news-and-information'},
+        {'title': 'Utilities and Tools', 'id': 'utilities-and-tools'},
+        {'title': 'Other', 'id': 'other'}
+    ]
 
 
 @router.post('/v1/apps/review', tags=['v1'])

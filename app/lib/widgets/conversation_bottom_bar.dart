@@ -13,7 +13,7 @@ enum ConversationBottomBarMode {
   detail // For viewing completed conversations
 }
 
-enum ConversationTab { transcript, summary }
+enum ConversationTab { transcript, summary, actionItems }
 
 class ConversationBottomBar extends StatelessWidget {
   final ConversationBottomBarMode mode;
@@ -49,7 +49,7 @@ class ConversationBottomBar extends StatelessWidget {
       borderRadius: BorderRadius.circular(28),
       child: Container(
         height: 56,
-        width: mode == ConversationBottomBarMode.recording ? 180 : 290,
+        width: mode == ConversationBottomBarMode.recording ? 180 : 360,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: Colors.grey.shade900,
@@ -69,8 +69,15 @@ class ConversationBottomBar extends StatelessWidget {
             // Transcript tab
             _buildTranscriptTab(),
 
-            // Stop button or Summary tab
-            if (mode == ConversationBottomBarMode.recording) _buildStopButton() else _buildSummaryTab(context),
+            // Stop button or Summary/Action Items tabs
+            ...switch (mode) {
+              ConversationBottomBarMode.recording => [_buildStopButton()],
+              ConversationBottomBarMode.detail => [
+                  _buildSummaryTab(context),
+                  _buildActionItemsTab(),
+                ],
+              _ => [_buildSummaryTab(context)],
+            },
           ],
         ),
       ),
@@ -162,6 +169,14 @@ class ConversationBottomBar extends StatelessWidget {
           },
         );
       },
+    );
+  }
+
+  Widget _buildActionItemsTab() {
+    return TabButton(
+      icon: Icons.check_circle_outline,
+      isSelected: selectedTab == ConversationTab.actionItems,
+      onTap: () => onTabSelected(ConversationTab.actionItems),
     );
   }
 }

@@ -243,6 +243,7 @@ def upload_plugin_logo(file_path: str, plugin_id: str):
     bucket = storage_client.bucket(omi_plugins_bucket)
     path = f'{plugin_id}.png'
     blob = bucket.blob(path)
+    blob.cache_control = 'public, no-cache'
     blob.upload_from_filename(file_path)
     return f'https://storage.googleapis.com/{omi_plugins_bucket}/{path}'
 
@@ -258,8 +259,10 @@ def upload_app_thumbnail(file_path: str, thumbnail_id: str) -> str:
     bucket = storage_client.bucket(app_thumbnails_bucket)
     path = f'{thumbnail_id}.jpg'
     blob = bucket.blob(path)
+    blob.cache_control = 'public, no-cache'
     blob.upload_from_filename(file_path)
-    return f'https://storage.googleapis.com/{app_thumbnails_bucket}/{path}'
+    public_url = f'https://storage.googleapis.com/{app_thumbnails_bucket}/{path}'
+    return public_url
 
 def get_app_thumbnail_url(thumbnail_id: str) -> str:
     path = f'{thumbnail_id}.jpg'

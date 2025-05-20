@@ -25,12 +25,16 @@ from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
 from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps, update_personas_async, sync_update_persona_prompt
-from utils.llm import obtain_emotional_message, retrieve_metadata_fields_from_transcript, \
-    summarize_open_glass, get_transcript_structure, generate_embedding, \
-    get_app_result, should_discard_conversation, summarize_experience_text, new_memories_extractor, \
-    trends_extractor, get_message_structure, \
-    retrieve_metadata_from_message, retrieve_metadata_from_text, select_best_app_for_conversation, \
-    extract_memories_from_text, get_reprocess_transcript_structure
+from utils.llm.conversation_processing import get_transcript_structure, \
+    get_app_result, should_discard_conversation, select_best_app_for_conversation, \
+    get_reprocess_transcript_structure
+from utils.llm.memories import extract_memories_from_text, new_memories_extractor
+from utils.llm.external_integrations import summarize_experience_text
+from utils.llm.openglass import summarize_open_glass
+from utils.llm.trends import trends_extractor
+from utils.llm.chat import retrieve_metadata_from_text, retrieve_metadata_from_message, retrieve_metadata_fields_from_transcript, obtain_emotional_message
+from utils.llm.external_integrations import get_message_structure
+from utils.llm.clients import generate_embedding
 from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
 from utils.retrieval.rag import retrieve_rag_conversation_context
@@ -202,9 +206,9 @@ def _extract_memories(uid: str, conversation: Conversation):
         new_memories = new_memories_extractor(uid, conversation.transcript_segments)
 
     parsed_memories = []
-    for fact in new_memories:
-        parsed_memories.append(MemoryDB.from_memory(fact, uid, conversation.id, False))
-        print('_extract_memories:', fact.category.value.upper(), '|', fact.content)
+    for memory in new_memories:
+        parsed_memories.append(MemoryDB.from_memory(memory, uid, conversation.id, False))
+        print('_extract_memories:', memory.category.value.upper(), '|', memory.content)
 
     if len(parsed_memories) == 0:
         print(f"No memories extracted for conversation {conversation.id}")

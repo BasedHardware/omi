@@ -1,9 +1,8 @@
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, Optional, List, Tuple, Dict, Any, Union
+from typing import Optional, List, Tuple, Union
 
-from fastapi import APIRouter, Header, HTTPException, Depends, Query
-import database.conversations as conversations_db
+from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
@@ -13,7 +12,6 @@ import utils.apps as apps_utils
 from utils.apps import verify_api_key
 import database.redis_db as redis_db
 import database.memories as memory_db
-from models.memories import MemoryDB
 from database.redis_db import get_enabled_plugins, r as redis_client
 import database.notifications as notification_db
 import models.integrations as integration_models
@@ -24,7 +22,7 @@ from routers.conversations import process_conversation, trigger_external_integra
 from utils.conversations.location import get_google_maps_location
 from utils.conversations.memories import process_external_integration_memory
 from utils.conversations.search import search_conversations
-from utils.plugins import send_plugin_notification
+from utils.app_integrations import send_app_notification
 
 # Rate limit settings - more conservative limits to prevent notification fatigue
 RATE_LIMIT_PERIOD = 3600  # 1 hour in seconds
@@ -491,7 +489,7 @@ async def send_notification_via_integration(
         )
 
     token = notification_db.get_token_only(uid)
-    send_plugin_notification(token, app.name, app.id, message)
+    send_app_notification(token, app.name, app.id, message)
     return JSONResponse(
         status_code=200,
         headers=headers,

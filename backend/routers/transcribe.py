@@ -17,26 +17,28 @@ import database.users as user_db
 from database import redis_db
 from database.redis_db import get_cached_user_geolocation
 from models.conversation import Conversation, TranscriptSegment, ConversationStatus, Structured, Geolocation
-from models.message_event import ConversationEvent, MessageEvent, MessageServiceStatusEvent, LastConversationEvent, TranslationEvent
+from models.message_event import ConversationEvent, MessageEvent, MessageServiceStatusEvent, LastConversationEvent, \
+    TranslationEvent
 from models.transcript_segment import Translation
 from utils.apps import is_audio_bytes_app_enabled
 from utils.conversations.location import get_google_maps_location
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.other.task import safe_create_task
-from utils.plugins import trigger_external_integrations
+from utils.app_integrations import trigger_external_integrations
 from utils.stt.streaming import *
 from utils.stt.streaming import get_stt_service_for_language, STTService
-from utils.stt.streaming import process_audio_soniox, process_audio_dg, process_audio_speechmatics, send_initial_file_path
+from utils.stt.streaming import process_audio_soniox, process_audio_dg, process_audio_speechmatics, \
+    send_initial_file_path
 from utils.webhooks import get_audio_bytes_webhook_seconds
 from utils.pusher import connect_to_trigger_pusher
 from utils.translation import translate_text, detect_language
 from utils.translation_cache import TranscriptSegmentLanguageCache
 
-
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists
 
 router = APIRouter()
+
 
 async def _listen(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
@@ -97,6 +99,8 @@ async def _listen(
     started_at = time.time()
     timeout_seconds = 420  # 7m # Soft timeout, should < MODAL_TIME_OUT - 3m
     has_timeout = os.getenv('NO_SOCKET_TIMEOUT') is None
+    inactivity_timeout_seconds = 30
+    last_audio_received_time = None
 
     # Send pong every 10s then handle it in the app \
     # since Starlette is not support pong automatically
@@ -105,6 +109,7 @@ async def _listen(
         nonlocal websocket_active
         nonlocal websocket_close_code
         nonlocal started_at
+        nonlocal last_audio_received_time
 
         try:
             while websocket_active:
@@ -117,6 +122,13 @@ async def _listen(
                 # timeout
                 if has_timeout and time.time() - started_at >= timeout_seconds:
                     print(f"Session timeout is hit by soft timeout {timeout_seconds}", uid)
+                    websocket_close_code = 1001
+                    websocket_active = False
+                    break
+
+                # Inactivity timeout
+                if last_audio_received_time and time.time() - last_audio_received_time > inactivity_timeout_seconds:
+                    print(f"Session timeout due to inactivity ({inactivity_timeout_seconds}s)", uid)
                     websocket_close_code = 1001
                     websocket_active = False
                     break
@@ -134,7 +146,8 @@ async def _listen(
     # Start heart beat
     heartbeat_task = asyncio.create_task(send_heartbeat())
 
-    _send_message_event(MessageServiceStatusEvent(event_type="service_status", status="initiating", status_text="Service Starting"))
+    _send_message_event(
+        MessageServiceStatusEvent(event_type="service_status", status="initiating", status_text="Service Starting"))
 
     # Validate user
     if not user_db.is_exists_user(uid):
@@ -180,22 +193,28 @@ async def _listen(
 
         _send_message_event(ConversationEvent(event_type="memory_created", memory=conversation, messages=messages))
 
-    async def finalize_processing_conversations(processing: List[dict]):
+    async def finalize_processing_conversations():
         # handle edge case of conversation was actually processing? maybe later, doesn't hurt really anyway.
         # also fix from getMemories endpoint?
+        processing = conversations_db.get_processing_conversations(uid)
         print('finalize_processing_conversations len(processing):', len(processing), uid)
+        if not processing or len(processing) == 0:
+            return
+
+        # sleep for 1 second to yeld the network for ws accepted.
+        await asyncio.sleep(1)
         for conversation in processing:
             await _create_conversation(conversation)
 
     # Process processing conversations
-    processing = conversations_db.get_processing_conversations(uid)
-    asyncio.create_task(finalize_processing_conversations(processing))
+    asyncio.create_task(finalize_processing_conversations())
 
     # Send last completed conversation to client
     async def send_last_conversation():
         last_conversation = conversations_db.get_last_completed_conversation(uid)
         if last_conversation:
             await _send_message_event(LastConversationEvent(memory_id=last_conversation['id']))
+
     asyncio.create_task(send_last_conversation())
 
     async def _create_current_conversation():
@@ -234,24 +253,29 @@ async def _listen(
             finished_at = datetime.fromisoformat(existing_conversation['finished_at'].isoformat())
             seconds_since_last_segment = (datetime.now(timezone.utc) - finished_at).total_seconds()
             if seconds_since_last_segment >= conversation_creation_timeout:
-                print('_websocket_util processing existing_conversation', existing_conversation['id'], seconds_since_last_segment, uid)
+                print('_websocket_util processing existing_conversation', existing_conversation['id'],
+                      seconds_since_last_segment, uid)
                 asyncio.create_task(_create_current_conversation())
             else:
                 print('_websocket_util will process', existing_conversation['id'], 'in',
                       conversation_creation_timeout - seconds_since_last_segment, 'seconds')
                 conversation_creation_task = asyncio.create_task(
-                    _trigger_create_conversation_with_delay(conversation_creation_timeout - seconds_since_last_segment, finished_at)
+                    _trigger_create_conversation_with_delay(conversation_creation_timeout - seconds_since_last_segment,
+                                                            finished_at)
                 )
 
-    _send_message_event(MessageServiceStatusEvent(status="in_progress_memories_processing", status_text="Processing Memories"))
+    _send_message_event(
+        MessageServiceStatusEvent(status="in_progress_memories_processing", status_text="Processing Memories"))
     _process_in_progess_memories()
 
     def _upsert_in_progress_conversation(segments: List[TranscriptSegment], finished_at: datetime):
         if existing := retrieve_in_progress_conversation(uid):
             conversation = Conversation(**existing)
-            conversation.transcript_segments, (starts, ends) = TranscriptSegment.combine_segments(conversation.transcript_segments, segments)
+            conversation.transcript_segments, (starts, ends) = TranscriptSegment.combine_segments(
+                conversation.transcript_segments, segments)
             conversations_db.update_conversation_segments(uid, conversation.id,
-                                                          [segment.dict() for segment in conversation.transcript_segments])
+                                                          [segment.dict() for segment in
+                                                           conversation.transcript_segments])
             conversations_db.update_conversation_finished_at(uid, conversation.id, finished_at)
             redis_db.set_in_progress_conversation_id(uid, conversation.id)
             return conversation, (starts, ends)
@@ -298,7 +322,6 @@ async def _listen(
         return
 
     # Process STT
-    _send_message_event(MessageServiceStatusEvent(status="stt_initiating", status_text="STT Service Starting"))
     soniox_socket = None
     soniox_socket2 = None
     speechmatics_socket = None
@@ -323,16 +346,19 @@ async def _listen(
         try:
             file_path, speech_profile_duration = None, 0
             # Thougts: how bee does for recognizing other languages speech profile?
-            if (language == 'en' or language == 'auto') and (codec == 'opus' or codec == 'pcm16') and include_speech_profile:
+            if (language == 'en' or language == 'auto') and (
+                    codec == 'opus' or codec == 'pcm16') and include_speech_profile:
                 file_path = get_profile_audio_if_exists(uid)
                 speech_profile_duration = AudioSegment.from_wav(file_path).duration_seconds + 5 if file_path else 0
 
             # DEEPGRAM
             if stt_service == STTService.deepgram:
                 deepgram_socket = await process_audio_dg(
-                    stream_transcript, stt_language, sample_rate, 1, preseconds=speech_profile_duration, model=stt_model,)
+                    stream_transcript, stt_language, sample_rate, 1, preseconds=speech_profile_duration,
+                    model=stt_model, )
                 if speech_profile_duration:
-                    deepgram_socket2 = await process_audio_dg(stream_transcript, stt_language, sample_rate, 1, model=stt_model)
+                    deepgram_socket2 = await process_audio_dg(stream_transcript, stt_language, sample_rate, 1,
+                                                              model=stt_model)
 
                     async def deepgram_socket_send(data):
                         return deepgram_socket.send(data)
@@ -381,8 +407,6 @@ async def _listen(
             await websocket.close(code=websocket_close_code)
             return
 
-    await _process_stt()
-
     # Pusher
     #
     def create_pusher_task_handler():
@@ -393,7 +417,6 @@ async def _listen(
         pusher_connected = False
 
         # Transcript
-        transcript_ws = None
         segment_buffers = []
         in_progress_conversation_id = None
 
@@ -407,28 +430,29 @@ async def _listen(
             nonlocal websocket_active
             nonlocal segment_buffers
             nonlocal in_progress_conversation_id
-            nonlocal transcript_ws
+            nonlocal pusher_ws
             nonlocal pusher_connected
             while websocket_active or len(segment_buffers) > 0:
                 await asyncio.sleep(1)
-                if transcript_ws and len(segment_buffers) > 0:
+                if pusher_connected and pusher_ws and len(segment_buffers) > 0:
                     try:
                         # 102|data
                         data = bytearray()
                         data.extend(struct.pack("I", 102))
-                        data.extend(bytes(json.dumps({"segments":segment_buffers,"memory_id":in_progress_conversation_id}), "utf-8"))
+                        data.extend(
+                            bytes(json.dumps({"segments": segment_buffers, "memory_id": in_progress_conversation_id}),
+                                  "utf-8"))
                         segment_buffers = []  # reset
-                        await transcript_ws.send(data)
+                        await pusher_ws.send(data)
                     except websockets.exceptions.ConnectionClosed as e:
                         print(f"Pusher transcripts Connection closed: {e}", uid)
-                        transcript_ws = None
                         pusher_connected = False
-                        await reconnect()
                     except Exception as e:
                         print(f"Pusher transcripts failed: {e}", uid)
+                if pusher_connected is False:
+                    await connect()
 
         # Audio bytes
-        audio_bytes_ws = None
         audio_buffers = bytearray()
         audio_bytes_enabled = bool(get_audio_bytes_webhook_seconds(uid)) or is_audio_bytes_app_enabled(uid)
 
@@ -439,52 +463,56 @@ async def _listen(
         async def audio_bytes_consume():
             nonlocal websocket_active
             nonlocal audio_buffers
-            nonlocal audio_bytes_ws
+            nonlocal pusher_ws
             nonlocal pusher_connected
             while websocket_active or len(audio_buffers) > 0:
                 await asyncio.sleep(1)
-                if audio_bytes_ws and len(audio_buffers) > 0:
+                if pusher_connected and pusher_ws and len(audio_buffers) > 0:
                     try:
                         # 101|data
                         data = bytearray()
                         data.extend(struct.pack("I", 101))
                         data.extend(audio_buffers.copy())
                         audio_buffers = bytearray()  # reset
-                        await audio_bytes_ws.send(data)
+                        await pusher_ws.send(data)
                     except websockets.exceptions.ConnectionClosed as e:
                         print(f"Pusher audio_bytes Connection closed: {e}", uid)
-                        audio_bytes_ws = None
                         pusher_connected = False
-                        await reconnect()
                     except Exception as e:
                         print(f"Pusher audio_bytes failed: {e}", uid)
+                if pusher_connected is False:
+                    await connect()
 
-        async def reconnect():
+        async def connect():
             nonlocal pusher_connected
             nonlocal pusher_connect_lock
+            nonlocal pusher_ws
             async with pusher_connect_lock:
                 if pusher_connected:
                     return
-                await connect()
+                # drain
+                if pusher_ws:
+                    try:
+                        await pusher_ws.close()
+                        pusher_ws = None
+                    except Exception as e:
+                        print(f"Pusher draining failed: {e}", uid)
+                # connect
+                await _connect()
 
-        async def connect():
+        async def _connect():
             nonlocal pusher_ws
-            nonlocal transcript_ws
-            nonlocal audio_bytes_ws
-            nonlocal audio_bytes_enabled
             nonlocal pusher_connected
 
             try:
                 pusher_ws = await connect_to_trigger_pusher(uid, sample_rate)
                 pusher_connected = True
-                transcript_ws = pusher_ws
-                if audio_bytes_enabled:
-                    audio_bytes_ws = pusher_ws
             except Exception as e:
                 print(f"Exception in connect: {e}")
 
         async def close(code: int = 1000):
-            await pusher_ws.close(code)
+            if pusher_ws:
+                await pusher_ws.close(code)
 
         return (connect, close,
                 transcript_send, transcript_consume,
@@ -495,9 +523,8 @@ async def _listen(
     transcript_consume = None
     audio_bytes_send = None
     audio_bytes_consume = None
-    pusher_connect, pusher_close, \
-        transcript_send, transcript_consume, \
-        audio_bytes_send, audio_bytes_consume = create_pusher_task_handler()
+    pusher_close = None
+    pusher_connect = None
 
     # Transcripts
     #
@@ -513,7 +540,8 @@ async def _listen(
                 if not segment_text or len(segment_text) <= 0:
                     continue
                 # Check cache for language detection result
-                is_previously_target_language, diff_text = language_cache.get_language_result(segment.id, segment_text, language)
+                is_previously_target_language, diff_text = language_cache.get_language_result(segment.id, segment_text,
+                                                                                              language)
                 if (is_previously_target_language is None or is_previously_target_language is True) \
                         and diff_text:
                     try:
@@ -628,7 +656,9 @@ async def _listen(
                         segment["end"] -= seconds_to_trim
                         segments[i] = segment
 
-                transcript_segments, _ = TranscriptSegment.combine_segments([], [TranscriptSegment(**segment) for segment in segments])
+                transcript_segments, _ = TranscriptSegment.combine_segments([],
+                                                                            [TranscriptSegment(**segment) for segment in
+                                                                             segments])
 
                 # can trigger race condition? increase soniox utterance?
                 conversation, (starts, ends) = _upsert_in_progress_conversation(transcript_segments, finished_at)
@@ -678,11 +708,14 @@ async def _listen(
     async def receive_audio(dg_socket1, dg_socket2, soniox_socket, soniox_socket2, speechmatics_socket1):
         nonlocal websocket_active
         nonlocal websocket_close_code
+        nonlocal last_audio_received_time
 
         timer_start = time.time()
+        last_audio_received_time = timer_start
         try:
             while websocket_active:
                 data = await websocket.receive_bytes()
+                last_audio_received_time = time.time()
                 if codec == 'opus' and sample_rate == 16000:
                     data = decoder.decode(bytes(data), frame_size=frame_size)
                     # audio_data.extend(data)
@@ -733,26 +766,26 @@ async def _listen(
             websocket_close_code = 1011
         finally:
             websocket_active = False
-            if dg_socket1:
-                dg_socket1.finish()
-            if dg_socket2:
-                dg_socket2.finish()
-            if soniox_socket:
-                await soniox_socket.close()
-            if soniox_socket2:
-                await soniox_socket2.close()
-            if speechmatics_socket:
-                await speechmatics_socket.close()
 
     # Start
     #
     try:
+        # Init STT
+        _send_message_event(MessageServiceStatusEvent(status="stt_initiating", status_text="STT Service Starting"))
+        await _process_stt()
+
+        # Init pusher
+        pusher_connect, pusher_close, \
+            transcript_send, transcript_consume, \
+            audio_bytes_send, audio_bytes_consume = create_pusher_task_handler()
+
+        # Tasks
         audio_process_task = asyncio.create_task(
             receive_audio(deepgram_socket, deepgram_socket2, soniox_socket, soniox_socket2, speechmatics_socket)
         )
         stream_transcript_task = asyncio.create_task(stream_transcript_process())
 
-        # Pusher
+        # Pusher tasks
         pusher_tasks = [asyncio.create_task(pusher_connect())]
         if transcript_consume is not None:
             pusher_tasks.append(asyncio.create_task(transcript_consume()))
@@ -768,17 +801,40 @@ async def _listen(
         print(f"Error during WebSocket operation: {e}", uid)
     finally:
         websocket_active = False
+
+        # STT sockets
+        try:
+            if deepgram_socket:
+                deepgram_socket.finish()
+            if deepgram_socket2:
+                deepgram_socket2.finish()
+            if soniox_socket:
+                await soniox_socket.close()
+            if soniox_socket2:
+                await soniox_socket2.close()
+            if speechmatics_socket:
+                await speechmatics_socket.close()
+        except Exception as e:
+            print(f"Error closing STT sockets: {e}", uid)
+
+        # Client sockets
         if websocket.client_state == WebSocketState.CONNECTED:
             try:
                 await websocket.close(code=websocket_close_code)
             except Exception as e:
-                print(f"Error closing WebSocket: {e}", uid)
+                print(f"Error closing Client WebSocket: {e}", uid)
+
+        # Pusher sockets
         if pusher_close is not None:
             try:
                 await pusher_close()
             except Exception as e:
                 print(f"Error closing Pusher: {e}", uid)
+    print("_listen ended", uid)
 
+
+# @deprecated
+# TODO: should be removed after Sep 2025 due to backward compatibility
 @router.websocket("/v3/listen")
 async def listen_handler_v3(
         websocket: WebSocket, uid: str = Depends(auth.get_current_user_uid), language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
@@ -786,9 +842,12 @@ async def listen_handler_v3(
 ):
     await _listen(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, None)
 
+
 @router.websocket("/v4/listen")
 async def listen_handler(
-        websocket: WebSocket, uid: str = Depends(auth.get_current_user_uid), language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
+        websocket: WebSocket, uid: str = Depends(auth.get_current_user_uid), language: str = 'en',
+        sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = None
 ):
-    await _listen(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, None, including_combined_segments=True)
+    await _listen(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, None,
+                  including_combined_segments=True)

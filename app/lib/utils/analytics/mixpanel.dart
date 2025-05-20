@@ -67,8 +67,7 @@ class MixpanelManager {
     setUserProperty('\$email', SharedPreferencesUtil().email);
   }
 
-  void track(String eventName, {Map<String, dynamic>? properties}) =>
-      _mixpanel?.track(eventName, properties: properties);
+  void track(String eventName, {Map<String, dynamic>? properties}) => _mixpanel?.track(eventName, properties: properties);
 
   void startTimingEvent(String eventName) => _mixpanel?.timeEvent(eventName);
 
@@ -148,8 +147,7 @@ class MixpanelManager {
 
   void deviceDisconnected() => track('Device Disconnected');
 
-  void memoriesPageCategoryOpened(MemoryCategory category) =>
-      track('Fact Page Category Opened', properties: {'category': category.toString().split('.').last});
+  void memoriesPageCategoryOpened(MemoryCategory category) => track('Fact Page Category Opened', properties: {'category': category.toString().split('.').last});
 
   void memoriesPageDeletedMemory(Memory memory) => track(
         'Fact Page Deleted Fact',
@@ -162,8 +160,61 @@ class MixpanelManager {
 
   void memoriesPageCreateMemoryBtn() => track('Fact Page Create Fact Button Pressed');
 
-  void memoriesPageCreatedMemory(MemoryCategory category) =>
-      track('Fact Page Created Fact', properties: {'fact_category': category.toString().split('.').last});
+  void memoriesPageReviewBtn() => track('Fact page Review Button Pressed');
+
+  void memoriesPageCreatedMemory(MemoryCategory category) => track('Fact Page Created Fact', properties: {'fact_category': category.toString().split('.').last});
+
+  void memorySearched(String query, int resultsCount) {
+    track('Fact Searched', properties: {
+      'search_query_length': query.length,
+      'results_count': resultsCount,
+    });
+  }
+
+  void memorySearchCleared(int totalFactsCount) {
+    track('Fact Search Cleared', properties: {'total_facts_count': totalFactsCount});
+  }
+
+  void memoryListItemClicked(Memory memory) {
+    track('Fact List Item Clicked', properties: {
+      'fact_id': memory.id,
+      'fact_category': memory.category.toString().split('.').last,
+    });
+  }
+
+  void memoryVisibilityChanged(Memory memory, MemoryVisibility newVisibility) {
+    track('Fact Visibility Changed', properties: {
+      'fact_id': memory.id,
+      'fact_category': memory.category.toString().split('.').last,
+      'new_visibility': newVisibility.name,
+    });
+  }
+
+  void memoriesAllVisibilityChanged(MemoryVisibility newVisibility, int count) {
+    track('All Facts Visibility Changed', properties: {
+      'new_visibility': newVisibility.name,
+      'facts_count': count,
+    });
+  }
+
+  void memoryReviewed(Memory memory, bool approved, String source) {
+    track('Fact Reviewed', properties: {
+      'fact_id': memory.id,
+      'fact_category': memory.category.toString().split('.').last,
+      'status': approved ? 'approved' : 'discarded',
+      'source': source,
+    });
+  }
+
+  void memoriesAllDeleted(int countBeforeDeletion) {
+    track('All Facts Deleted', properties: {
+      'facts_count_before_deletion': countBeforeDeletion,
+    });
+  }
+
+  void memoriesFiltered(String filter) => track('Facts Filtered', properties: {'filter': filter});
+
+  void memoriesManagementSheetOpened() => track('Facts Management Sheet Opened');
 
   Map<String, dynamic> _getTranscriptProperties(String transcript) {
     String transcriptCopy = transcript.substring(0, transcript.length);
@@ -197,30 +248,46 @@ class MixpanelManager {
     track('Memory Created', properties: properties);
   }
 
-  void conversationListItemClicked(ServerConversation conversation, int idx) =>
-      track('Memory List Item Clicked', properties: getConversationEventProperties(conversation));
+  void conversationListItemClicked(ServerConversation conversation, int idx) => track('Memory List Item Clicked', properties: getConversationEventProperties(conversation));
 
-  void conversationShareButtonClick(ServerConversation conversation) =>
-      track('Memory Share Button Clicked', properties: getConversationEventProperties(conversation));
+  void conversationShareButtonClick(ServerConversation conversation) => track('Memory Share Button Clicked', properties: getConversationEventProperties(conversation));
 
-  void conversationDeleted(ServerConversation conversation) =>
-      track('Memory Deleted', properties: getConversationEventProperties(conversation));
+  void conversationDeleted(ServerConversation conversation) => track('Memory Deleted', properties: getConversationEventProperties(conversation));
 
-  void chatMessageSent(String message) => track('Chat Message Sent',
-      properties: {'message_length': message.length, 'message_word_count': message.split(' ').length});
+  void chatMessageSent({
+    required String message,
+    required bool includesFiles,
+    required int numberOfFiles,
+    required String chatTargetId,
+    required bool isPersonaChat,
+    required bool isVoiceInput,
+  }) =>
+      track('Chat Message Sent', properties: {
+        'message_length': message.length,
+        'message_word_count': message.split(' ').length,
+        'includes_files': includesFiles,
+        'number_of_files': numberOfFiles,
+        'chat_target_id': chatTargetId,
+        'is_persona_chat': isPersonaChat,
+        'is_voice_input': isVoiceInput,
+      });
+
+  void chatVoiceInputUsed({required String chatTargetId, required bool isPersonaChat}) {
+    track('Chat Voice Input Used', properties: {
+      'chat_target_id': chatTargetId,
+      'is_persona_chat': isPersonaChat,
+    });
+  }
 
   void speechProfileCapturePageClicked() => track('Speech Profile Capture Page Clicked');
 
-  void showDiscardedMemoriesToggled(bool showDiscarded) =>
-      track('Show Discarded Memories Toggled', properties: {'show_discarded': showDiscarded});
+  void showDiscardedMemoriesToggled(bool showDiscarded) => track('Show Discarded Memories Toggled', properties: {'show_discarded': showDiscarded});
 
-  void chatMessageConversationClicked(ServerConversation conversation) =>
-      track('Chat Message Memory Clicked', properties: getConversationEventProperties(conversation));
+  void chatMessageConversationClicked(ServerConversation conversation) => track('Chat Message Memory Clicked', properties: getConversationEventProperties(conversation));
 
   void addManualConversationClicked() => track('Add Manual Memory Clicked');
 
-  void manualConversationCreated(ServerConversation conversation) =>
-      track('Manual Memory Created', properties: getConversationEventProperties(conversation));
+  void manualConversationCreated(ServerConversation conversation) => track('Manual Memory Created', properties: getConversationEventProperties(conversation));
 
   void setUserProperties(String whatDoYouDo, String whereDoYouPlanToUseYourFriend, String ageRange) {
     setUserProperty('What the user does', whatDoYouDo);
@@ -228,8 +295,7 @@ class MixpanelManager {
     setUserProperty('Age Range', ageRange);
   }
 
-  void reProcessConversation(ServerConversation conversation) =>
-      track('Re-process Memory', properties: getConversationEventProperties(conversation));
+  void reProcessConversation(ServerConversation conversation) => track('Re-process Memory', properties: getConversationEventProperties(conversation));
 
   void developerModeEnabled() {
     track('Developer Mode Enabled');
@@ -251,17 +317,13 @@ class MixpanelManager {
 
   void supportContacted() => track('Support Contacted');
 
-  void copiedConversationDetails(ServerConversation conversation, {String source = ''}) =>
-      track('Copied Memory Detail $source'.trim(), properties: getConversationEventProperties(conversation));
+  void copiedConversationDetails(ServerConversation conversation, {String source = ''}) => track('Copied Memory Detail $source'.trim(), properties: getConversationEventProperties(conversation));
 
-  void checkedActionItem(ServerConversation conversation, int idx) =>
-      track('Checked Action Item', properties: getConversationEventProperties(conversation));
+  void checkedActionItem(ServerConversation conversation, int idx) => track('Checked Action Item', properties: getConversationEventProperties(conversation));
 
-  void uncheckedActionItem(ServerConversation conversation, int idx) =>
-      track('Unchecked Action Item', properties: getConversationEventProperties(conversation));
+  void uncheckedActionItem(ServerConversation conversation, int idx) => track('Unchecked Action Item', properties: getConversationEventProperties(conversation));
 
-  void deletedActionItem(ServerConversation conversation) =>
-      track('Deleted Action Item', properties: getConversationEventProperties(conversation));
+  void deletedActionItem(ServerConversation conversation) => track('Deleted Action Item', properties: getConversationEventProperties(conversation));
 
   void upgradeModalDismissed() => track('Upgrade Modal Dismissed');
 
@@ -298,4 +360,219 @@ class MixpanelManager {
   void deleteAccountCancelled() => track('Delete Account Cancelled');
 
   void deleteUser() => _mixpanel?.getPeople().deleteUser();
+
+  // Apps Filter
+  void appsFilterOpened() => track('Apps Filter Opened');
+  void appsFilterApplied() => track('Apps Filter Applied');
+  void appsCategoryFilter(String category, bool isSelected) {
+    track('Apps Category Filter', properties: {'category': category, 'selected': isSelected});
+  }
+
+  void appsTypeFilter(String type, bool isSelected) {
+    track('Apps Type Filter', properties: {'type': type, 'selected': isSelected});
+  }
+
+  void appsSortFilter(String sortBy, bool isSelected) {
+    track('Apps Sort Filter', properties: {'sort_by': sortBy, 'selected': isSelected});
+  }
+
+  void appsRatingFilter(String rating, bool isSelected) {
+    track('Apps Rating Filter', properties: {'rating': rating, 'selected': isSelected});
+  }
+
+  void appsCapabilityFilter(String capability, bool isSelected) {
+    track('Apps Capability Filter', properties: {'capability': capability, 'selected': isSelected});
+  }
+
+  void appsClearFilters() => track('Apps Clear Filters');
+
+  // Persona Events
+  void personaProfileViewed({String? personaId, required String source}) {
+    track('Persona Profile Viewed', properties: {
+      if (personaId != null) 'persona_id': personaId,
+      'source': source,
+    });
+  }
+
+  void personaCreateStarted() => track('Persona Create Started');
+
+  void personaCreateImagePicked() => track('Persona Create Image Picked');
+
+  void personaCreated({
+    required String personaId,
+    required bool isPublic,
+    List<String>? connectedAccounts,
+    bool? hasOmiConnection,
+    bool? hasTwitterConnection,
+  }) {
+    track('Persona Created', properties: {
+      'persona_id': personaId,
+      'is_public': isPublic,
+      if (connectedAccounts != null) 'connected_accounts': connectedAccounts,
+      if (hasOmiConnection != null) 'has_omi_connection': hasOmiConnection,
+      if (hasTwitterConnection != null) 'has_twitter_connection': hasTwitterConnection,
+    });
+  }
+
+  void personaCreateFailed({String? errorMessage}) {
+    track('Persona Create Failed', properties: {
+      if (errorMessage != null) 'error_message': errorMessage,
+    });
+  }
+
+  void personaUpdateStarted({required String personaId}) {
+    track('Persona Update Started', properties: {'persona_id': personaId});
+  }
+
+  void personaUpdateImagePicked({required String personaId}) {
+    track('Persona Update Image Picked', properties: {'persona_id': personaId});
+  }
+
+  void personaUpdated({
+    required String personaId,
+    List<String>? updatedFields,
+    required bool isPublic,
+    List<String>? connectedAccounts,
+    bool? hasOmiConnection,
+    bool? hasTwitterConnection,
+  }) {
+    track('Persona Updated', properties: {
+      'persona_id': personaId,
+      if (updatedFields != null && updatedFields.isNotEmpty) 'updated_fields': updatedFields,
+      'is_public': isPublic,
+      if (connectedAccounts != null) 'connected_accounts': connectedAccounts,
+      if (hasOmiConnection != null) 'has_omi_connection': hasOmiConnection,
+      if (hasTwitterConnection != null) 'has_twitter_connection': hasTwitterConnection,
+    });
+  }
+
+  void personaUpdateFailed({required String personaId, String? errorMessage}) {
+    track('Persona Update Failed', properties: {
+      'persona_id': personaId,
+      if (errorMessage != null) 'error_message': errorMessage,
+    });
+  }
+
+  void personaPublicToggled({required String personaId, required bool isPublic}) {
+    track('Persona Public Toggled', properties: {
+      'persona_id': personaId,
+      'is_public': isPublic,
+    });
+  }
+
+  void personaOmiConnectionToggled({required String personaId, required bool omiConnected}) {
+    track('Persona OMI Connection Toggled', properties: {
+      'persona_id': personaId,
+      'omi_connected': omiConnected,
+    });
+  }
+
+  void personaTwitterConnectionToggled({required String personaId, required bool twitterConnected}) {
+    track('Persona Twitter Connection Toggled', properties: {
+      'persona_id': personaId,
+      'twitter_connected': twitterConnected,
+    });
+  }
+
+  void personaTwitterProfileFetched({required String twitterHandle, required bool fetchSuccessful}) {
+    track('Persona Twitter Profile Fetched', properties: {
+      'twitter_handle': twitterHandle,
+      'fetch_successful': fetchSuccessful,
+    });
+  }
+
+  void personaTwitterOwnershipVerified({
+    String? personaId,
+    required String twitterHandle,
+    required bool verificationSuccessful,
+  }) {
+    track('Persona Twitter Ownership Verified', properties: {
+      if (personaId != null) 'persona_id': personaId,
+      'twitter_handle': twitterHandle,
+      'verification_successful': verificationSuccessful,
+    });
+  }
+
+  void personaShared({required String? personaId, required String? personaUsername}) {
+    track('Persona Shared', properties: {
+      if (personaId != null) 'persona_id': personaId,
+      if (personaUsername != null) 'persona_username': personaUsername,
+    });
+  }
+
+  void personaUsernameCheck({required String username, required bool isTaken}) {
+    track('Persona Username Check', properties: {
+      'username': username,
+      'is_taken': isTaken,
+    });
+  }
+
+  void personaEnabled({required String personaId}) {
+    track('Persona Enabled', properties: {'persona_id': personaId});
+  }
+
+  void personaEnableFailed({required String personaId, String? errorMessage}) {
+    track('Persona Enable Failed', properties: {
+      'persona_id': personaId,
+      if (errorMessage != null) 'error_message': errorMessage,
+    });
+  }
+
+  // Summarized Apps Sheet Events
+  void summarizedAppSheetViewed({
+    required String conversationId,
+    String? currentSummarizedAppId,
+  }) {
+    track('Summarized App Sheet Viewed', properties: {
+      'conversation_id': conversationId,
+      'current_summarized_app_id': currentSummarizedAppId ?? 'auto',
+    });
+  }
+
+  void summarizedAppSelected({
+    required String conversationId,
+    required String selectedAppId,
+    String? previousAppId,
+  }) {
+    track('Summarized App Selected', properties: {
+      'conversation_id': conversationId,
+      'selected_app_id': selectedAppId,
+      'previous_app_id': previousAppId ?? 'auto',
+    });
+  }
+
+  void summarizedAppEnableAppsClicked({required String conversationId}) {
+    track('Summarized App Enable Apps Clicked', properties: {
+      'conversation_id': conversationId,
+    });
+  }
+
+  // Action Items Page Events
+  void actionItemsPageOpened() => track('Action Items Page Opened');
+
+  void actionItemsViewToggled(bool isGroupedView) {
+    track('Action Items View Toggled', properties: {'grouped_view': isGroupedView});
+  }
+
+  void actionItemToggledCompletionOnActionItemsPage({
+    required String conversationId,
+    required String actionItemDescription, // Using description as a pseudo-ID if no stable ID exists
+    required bool isCompleted,
+  }) {
+    track('Action Item Completion Toggled on Action Items Page', properties: {
+      'conversation_id': conversationId,
+      'action_item_description': actionItemDescription,
+      'is_completed': isCompleted,
+    });
+  }
+
+  void actionItemTappedForEditOnActionItemsPage({
+    required String conversationId,
+    required String actionItemDescription,
+  }) {
+    track('Action Item Tapped for Edit on Action Items Page', properties: {
+      'conversation_id': conversationId,
+      'action_item_description': actionItemDescription,
+    });
+  }
 }

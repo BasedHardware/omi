@@ -1,0 +1,369 @@
+# Default values for prometheus-windows-exporter.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+image:
+  registry: ghcr.io
+  repository: prometheus-community/windows-exporter
+  # Overrides the image tag whose default is {{ printf "v%s" .Chart.AppVersion }}
+  tag: ""
+  pullPolicy: IfNotPresent
+  digest: ""
+
+config: |-
+  collectors:
+    enabled: '[defaults],memory,container'
+
+imagePullSecrets: []
+# - name: "image-pull-secret"
+nameOverride: ""
+fullnameOverride: ""
+
+global:
+  # To help compatibility with other charts which use global.imagePullSecrets.
+  # Allow either an array of {name: pullSecret} maps (k8s-style), or an array of strings (more common helm-style).
+  # global:
+  #   imagePullSecrets:
+  #   - name: pullSecret1
+  #   - name: pullSecret2
+  # or
+  # global:
+  #   imagePullSecrets:
+  #   - pullSecret1
+  #   - pullSecret2
+  imagePullSecrets: []
+  #
+  # Allow parent charts to override registry hostname
+  imageRegistry: ""
+
+service:
+  type: ClusterIP
+  port: 9182
+  nodePort:
+  portName: metrics
+  annotations: {}
+
+# Additional environment variables that will be passed to the daemonset
+env: {}
+##  env:
+##    VARIABLE: value
+
+prometheus:
+  monitor:
+    enabled: false
+    additionalLabels: {}
+    namespace: ""
+
+    jobLabel: ""
+
+    # List of pod labels to add to windows exporter metrics
+    # https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/api.md#servicemonitor
+    podTargetLabels: []
+
+    scheme: http
+    basicAuth: {}
+    bearerTokenFile:
+    tlsConfig: {}
+
+    ## proxyUrl: URL of a proxy that should be used for scraping.
+    ##
+    proxyUrl: ""
+
+    ## Override serviceMonitor selector
+    ##
+    selectorOverride: {}
+
+    ## Attach node metadata to discovered targets. Requires Prometheus v2.35.0 and above.
+    ##
+    attachMetadata:
+      node: false
+
+    relabelings: []
+    metricRelabelings: []
+    interval: ""
+    scrapeTimeout: 10s
+    ## prometheus.monitor.apiVersion ApiVersion for the serviceMonitor Resource(defaults to "monitoring.coreos.com/v1")
+    apiVersion: ""
+
+    ## SampleLimit defines per-scrape limit on number of scraped samples that will be accepted.
+    ##
+    sampleLimit: 0
+
+    ## TargetLimit defines a limit on the number of scraped targets that will be accepted.
+    ##
+    targetLimit: 0
+
+    ## Per-scrape limit on number of labels that will be accepted for a sample. Only valid in Prometheus versions 2.27.0 and newer.
+    ##
+    labelLimit: 0
+
+    ## Per-scrape limit on length of labels name that will be accepted for a sample. Only valid in Prometheus versions 2.27.0 and newer.
+    ##
+    labelNameLengthLimit: 0
+
+    ## Per-scrape limit on length of labels value that will be accepted for a sample. Only valid in Prometheus versions 2.27.0 and newer.
+    ##
+    labelValueLengthLimit: 0
+
+  # PodMonitor defines monitoring for a set of pods.
+  # ref. https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/api.md#monitoring.coreos.com/v1.PodMonitor
+  # Using a PodMonitor may be preferred in some environments where there is very large number
+  # of Windows Exporter endpoints (1000+) behind a single service.
+  # The PodMonitor is disabled by default. When switching from ServiceMonitor to PodMonitor,
+  # the time series resulting from the configuration through PodMonitor may have different labels.
+  # For instance, there will not be the service label any longer which might
+  # affect PromQL queries selecting that label.
+  podMonitor:
+    enabled: false
+    # Namespace in which to deploy the pod monitor. Defaults to the release namespace.
+    namespace: ""
+    # Additional labels, e.g. setting a label for pod monitor selector as set in prometheus
+    additionalLabels: {}
+    #  release: kube-prometheus-stack
+    # PodTargetLabels transfers labels of the Kubernetes Pod onto the target.
+    podTargetLabels: []
+    # apiVersion defaults to monitoring.coreos.com/v1.
+    apiVersion: ""
+    # Override pod selector to select pod objects.
+    selectorOverride: {}
+    # Attach node metadata to discovered targets. Requires Prometheus v2.35.0 and above.
+    attachMetadata:
+      node: false
+    # The label to use to retrieve the job name from. Defaults to label app.kubernetes.io/name.
+    jobLabel: ""
+
+    # Scheme/protocol to use for scraping.
+    scheme: "http"
+    # Path to scrape metrics at.
+    path: "/metrics"
+
+    # BasicAuth allow an endpoint to authenticate over basic authentication.
+    # More info: https://prometheus.io/docs/operating/configuration/#endpoint
+    basicAuth: {}
+    # Secret to mount to read bearer token for scraping targets.
+    # The secret needs to be in the same namespace as the pod monitor and accessible by the Prometheus Operator.
+    # https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.24/#secretkeyselector-v1-core
+    bearerTokenSecret: {}
+    # TLS configuration to use when scraping the endpoint.
+    tlsConfig: {}
+    # Authorization section for this endpoint.
+    # https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/api.md#monitoring.coreos.com/v1.SafeAuthorization
+    authorization: {}
+    # OAuth2 for the URL. Only valid in Prometheus versions 2.27.0 and newer.
+    # https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/api.md#monitoring.coreos.com/v1.OAuth2
+    oauth2: {}
+
+    # ProxyURL eg http://proxyserver:2195. Directs scrapes through proxy to this endpoint.
+    proxyUrl: ""
+    # Interval at which endpoints should be scraped. If not specified Prometheus’ global scrape interval is used.
+    interval: ""
+    # Timeout after which the scrape is ended. If not specified, the Prometheus global scrape interval is used.
+    scrapeTimeout: ""
+    # HonorTimestamps controls whether Prometheus respects the timestamps present in scraped data.
+    honorTimestamps: true
+    # HonorLabels chooses the metric’s labels on collisions with target labels.
+    honorLabels: true
+    # Whether to enable HTTP2. Default false.
+    enableHttp2: ""
+    # Drop pods that are not running. (Failed, Succeeded).
+    # Enabled by default. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-phase
+    filterRunning: ""
+    # FollowRedirects configures whether scrape requests follow HTTP 3xx redirects. Default false.
+    followRedirects: ""
+    # Optional HTTP URL parameters
+    params: {}
+
+    # RelabelConfigs to apply to samples before scraping. Prometheus Operator automatically adds
+    # relabelings for a few standard Kubernetes fields. The original scrape job’s name
+    # is available via the __tmp_prometheus_job_name label.
+    # More info: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
+    relabelings: []
+    # MetricRelabelConfigs to apply to samples before ingestion.
+    metricRelabelings: []
+
+    # SampleLimit defines per-scrape limit on number of scraped samples that will be accepted.
+    sampleLimit: 0
+    # TargetLimit defines a limit on the number of scraped targets that will be accepted.
+    targetLimit: 0
+    # Per-scrape limit on number of labels that will be accepted for a sample.
+    # Only valid in Prometheus versions 2.27.0 and newer.
+    labelLimit: 0
+    # Per-scrape limit on length of labels name that will be accepted for a sample.
+    # Only valid in Prometheus versions 2.27.0 and newer.
+    labelNameLengthLimit: 0
+    # Per-scrape limit on length of labels value that will be accepted for a sample.
+    # Only valid in Prometheus versions 2.27.0 and newer.
+    labelValueLengthLimit: 0
+
+## Customize the updateStrategy if set
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 200m
+  #   memory: 50Mi
+  # requests:
+  #   cpu: 100m
+#   memory: 30Mi
+
+serviceAccount:
+  # Specifies whether a ServiceAccount should be created
+  create: true
+  # The name of the ServiceAccount to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name:
+  annotations: {}
+  imagePullSecrets: []
+  automountServiceAccountToken: false
+
+securityContext:
+  windowsOptions:
+    hostProcess: true
+    runAsUserName: "NT AUTHORITY\\system"
+
+containerSecurityContext: {}
+
+rbac:
+  ## If true, create & use RBAC resources
+  ##
+  create: true
+
+# Expose the service to the host network
+hostNetwork: true
+
+# Share the host process ID namespace
+hostPID: true
+
+## Assign a group of affinity scheduling rules
+##
+affinity: {}
+#   nodeAffinity:
+#     requiredDuringSchedulingIgnoredDuringExecution:
+#       nodeSelectorTerms:
+#         - matchFields:
+#             - key: metadata.name
+#               operator: In
+#               values:
+#                 - target-host-name
+
+# Annotations to be added to windows exporter pods
+podAnnotations:
+  # Fix for very slow GKE cluster upgrades
+  cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+
+# Extra labels to be added to windows exporter pods
+podLabels: {}
+
+# Annotations to be added to windows exporter daemonset
+daemonsetAnnotations: {}
+
+## set to true to add the release label so scraping of the servicemonitor with kube-prometheus-stack works out of the box
+releaseLabel: false
+
+# Custom DNS configuration to be added to prometheus-windows-exporter pods
+dnsConfig: {}
+# nameservers:
+#   - 1.2.3.4
+# searches:
+#   - ns1.svc.cluster-domain.example
+#   - my.dns.search.suffix
+# options:
+#   - name: ndots
+#     value: "2"
+#   - name: edns0
+
+## Assign a nodeSelector if operating a hybrid cluster
+##
+nodeSelector:
+  kubernetes.io/os: windows
+  #  kubernetes.io/arch: amd64
+
+tolerations:
+  - effect: NoSchedule
+    operator: Exists
+
+## Assign a PriorityClassName to pods if set
+# priorityClassName: ""
+
+## Additional container arguments
+##
+extraArgs: []
+#   - --collector.service.services-where
+#   - "Name LIKE 'sql%'"
+
+## Additional mounts from the host to windows-exporter container
+##
+extraHostVolumeMounts: []
+#  - name: <mountName>
+#    hostPath: <hostPath>
+#    mountPath: <mountPath>
+#    readOnly: true|false
+
+## Additional configmaps to be mounted.
+##
+configmaps: []
+# - name: <configMapName>
+#   mountPath: <mountPath>
+secrets: []
+# - name: <secretName>
+#   mountPath: <mountPatch>
+## Override the deployment namespace
+##
+namespaceOverride: ""
+
+## Additional containers for export metrics to text file
+##
+sidecars: []
+##  - name: nvidia-dcgm-exporter
+##    image: nvidia/dcgm-exporter:1.4.3
+
+## Volume for sidecar containers
+##
+sidecarVolumeMount: []
+##  - name: collector-textfiles
+##    mountPath: /run/prometheus
+##    readOnly: false
+
+## Additional mounts from the host to sidecar containers
+##
+sidecarHostVolumeMounts: []
+#  - name: <mountName>
+#    hostPath: <hostPath>
+#    mountPath: <mountPath>
+#    readOnly: true|false
+#    mountPropagation: None|HostToContainer|Bidirectional
+
+## Additional InitContainers to initialize the pod
+##
+extraInitContainers: []
+
+## Liveness probe
+##
+livenessProbe:
+  failureThreshold: 3
+  httpGet:
+    httpHeaders: []
+    scheme: http
+  initialDelaySeconds: 0
+  periodSeconds: 10
+  successThreshold: 1
+  timeoutSeconds: 1
+
+## Readiness probe
+##
+readinessProbe:
+  failureThreshold: 3
+  httpGet:
+    httpHeaders: []
+    scheme: http
+  initialDelaySeconds: 0
+  periodSeconds: 10
+  successThreshold: 1
+  timeoutSeconds: 1

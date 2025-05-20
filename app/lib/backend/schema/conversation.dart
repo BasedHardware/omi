@@ -220,6 +220,21 @@ class ServerConversation {
       return transcript;
     }
   }
+
+  /// Calculates the conversation duration in seconds based on transcript segments
+  int getDurationInSeconds() {
+    if (transcriptSegments.isEmpty) return 0;
+
+    // Find the last segment's end time
+    double lastEndTime = 0;
+    for (var segment in transcriptSegments) {
+      if (segment.end > lastEndTime) {
+        lastEndTime = segment.end;
+      }
+    }
+
+    return lastEndTime.toInt();
+  }
 }
 
 class SyncLocalFilesResponse {

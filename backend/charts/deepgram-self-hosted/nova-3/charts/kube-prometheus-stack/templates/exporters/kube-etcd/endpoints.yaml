@@ -1,0 +1,20 @@
+{{- if and .Values.kubeEtcd.enabled .Values.kubeEtcd.endpoints .Values.kubernetesServiceMonitors.enabled }}
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: {{ template "kube-prometheus-stack.fullname" . }}-kube-etcd
+  labels:
+    app: {{ template "kube-prometheus-stack.name" . }}-kube-etcd
+    k8s-app: etcd-server
+{{ include "kube-prometheus-stack.labels" . | indent 4 }}
+  namespace: kube-system
+subsets:
+  - addresses:
+      {{- range .Values.kubeEtcd.endpoints }}
+      - ip: {{ . }}
+      {{- end }}
+    ports:
+      - name: {{ .Values.kubeEtcd.serviceMonitor.port }}
+        port: {{ .Values.kubeEtcd.service.port }}
+        protocol: TCP
+{{- end }}

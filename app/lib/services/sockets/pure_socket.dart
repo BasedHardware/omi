@@ -122,7 +122,7 @@ class PureSocket implements IPureSocket {
         'Authorization': await getAuthHeader(),
       },
       pingInterval: const Duration(seconds: 20),
-      connectTimeout: const Duration(seconds: 30),
+      connectTimeout: const Duration(seconds: 15),
     );
     if (_channel?.ready == null) {
       return false;
@@ -132,6 +132,8 @@ class PureSocket implements IPureSocket {
     dynamic err;
     try {
       await channel.ready;
+    } on TimeoutException catch (e) {
+      err = e;
     } on SocketException catch (e) {
       err = e;
     } on WebSocketChannelException catch (e) {

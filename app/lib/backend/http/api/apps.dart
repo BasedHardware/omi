@@ -10,6 +10,7 @@ import 'package:omi/env/env.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
 import 'package:http/http.dart' as http;
+import 'package:omi/utils/logger.dart';
 import 'package:path/path.dart';
 
 Future<List<App>> retrieveApps() async {
@@ -187,7 +188,7 @@ Future<String> getAppMarkdown(String appMarkdownPath) async {
 
 Future<bool> isAppSetupCompleted(String? url) async {
   if (url == null || url.isEmpty) return true;
-  print('isAppSetupCompleted: $url');
+  Logger.debug('isAppSetupCompleted: $url');
   var response = await makeApiCall(
     url: '$url?uid=${SharedPreferencesUtil().uid}',
     method: 'GET',
@@ -197,7 +198,7 @@ Future<bool> isAppSetupCompleted(String? url) async {
   var data;
   try {
     data = jsonDecode(response?.body ?? '{}');
-    print(data);
+    Logger.debug(data);
     return data['is_setup_completed'] ?? false;
   } on FormatException catch (e) {
     debugPrint('Response not a valid json: $e');
@@ -224,7 +225,7 @@ Future<(bool, String, String?)> submitAppServer(File file, Map<String, dynamic> 
     if (response.statusCode == 200) {
       var respData = jsonDecode(response.body);
       String? appId = respData['app_id'];
-      debugPrint('submitAppServer Response body: ${respData}');
+      debugPrint('submitAppServer Response body: $respData');
       return (true, '', appId);
     } else {
       debugPrint('Failed to submit app. Status code: ${response.statusCode}');
@@ -274,7 +275,7 @@ Future<bool> updateAppServer(File? file, Map<String, dynamic> appData) async {
 
 Future<List<Category>> getAppCategories() async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/plugin-categories',
+    url: '${Env.apiBaseUrl}v1/app-categories',
     headers: {},
     body: '',
     method: 'GET',
@@ -303,25 +304,6 @@ Future<List<AppCapability>> getAppCapabilitiesServer() async {
     log('getAppCapabilities: ${response.body}');
     var res = jsonDecode(response.body);
     return AppCapability.fromJsonList(res);
-  } catch (e, stackTrace) {
-    debugPrint(e.toString());
-    CrashReporting.reportHandledCrash(e, stackTrace);
-    return [];
-  }
-}
-
-Future<List<TriggerEvent>> getTriggerEventsServer() async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/plugin-triggers',
-    headers: {},
-    body: '',
-    method: 'GET',
-  );
-  try {
-    if (response == null || response.statusCode != 200) return [];
-    log('getTriggerEvents: ${response.body}');
-    var res = jsonDecode(response.body);
-    return TriggerEvent.fromJsonList(res);
   } catch (e, stackTrace) {
     debugPrint(e.toString());
     CrashReporting.reportHandledCrash(e, stackTrace);

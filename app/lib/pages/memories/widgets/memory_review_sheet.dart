@@ -25,10 +25,11 @@ class MemoriesReviewSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            margin: const EdgeInsets.only(bottom: 12),
             child: Column(
               children: [
+                const SizedBox(height: 10),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -38,11 +39,11 @@ class MemoriesReviewSheet extends StatelessWidget {
                         SizedBox(
                           width: MediaQuery.of(context).size.width * 0.74,
                           child: Text(
-                            'Review and save ${memories.length} memories generated from today\'s conversation with Omi',
+                            '${memories.length} new memories to review',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 16,
-                              fontWeight: FontWeight.w400,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ),
@@ -51,40 +52,22 @@ class MemoriesReviewSheet extends StatelessWidget {
                     ),
                     IconButton(
                       icon: const Icon(Icons.close, color: Colors.white70),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
                       onPressed: () => Navigator.pop(context),
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
                 Row(
                   children: [
                     Expanded(
                       child: TextButton(
                         style: TextButton.styleFrom(
                           backgroundColor: Colors.white.withOpacity(0.1),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: () => Navigator.pop(context),
-                        child: Text(
-                          'Review later',
-                          style: TextStyle(
-                            color: Colors.grey.shade300,
-                            fontSize: 15,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextButton(
-                        style: TextButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(10),
                           ),
                         ),
                         onPressed: () {
@@ -96,11 +79,36 @@ class MemoriesReviewSheet extends StatelessWidget {
                             ),
                           );
                         },
+                        child: Text(
+                          'Review Manually',
+                          style: TextStyle(
+                            color: Colors.grey.shade300,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextButton(
+                        style: TextButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        onPressed: () {
+                          for (var memory in memories) {
+                            provider.reviewMemory(memory, true, 'review_sheet_accept_all');
+                          }
+                          Navigator.pop(context);
+                        },
                         child: const Text(
-                          'Review now',
+                          'Accept All',
                           style: TextStyle(
                             color: Colors.black,
-                            fontSize: 15,
+                            fontSize: 14,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -108,6 +116,7 @@ class MemoriesReviewSheet extends StatelessWidget {
                     ),
                   ],
                 ),
+                const SizedBox(height: 10),
               ],
             ),
           ),

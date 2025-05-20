@@ -5,9 +5,9 @@ import firebase_admin
 from fastapi import FastAPI
 
 from modal import Image, App, asgi_app, Secret
-from routers import workflow, chat, firmware, plugins, memories_deprecated, transcribe, notifications, \
-    speech_profile, agents, facts_deprecated, users, processing_conversations, trends, sync, apps, custom_auth, \
-    payment, integration, conversations, memories, mcp
+from routers import workflow, chat, firmware, plugins, transcribe, notifications, \
+    speech_profile, agents, users, trends, sync, apps, custom_auth, \
+    payment, integration, conversations, memories, mcp, oauth # Added oauth
 
 from utils.other.timeout import TimeoutMiddleware
 
@@ -20,10 +20,8 @@ else:
 
 app = FastAPI()
 app.include_router(transcribe.router)
-app.include_router(memories_deprecated.router)
 app.include_router(conversations.router)
 app.include_router(memories.router)
-app.include_router(facts_deprecated.router)
 app.include_router(chat.router)
 app.include_router(plugins.router)
 app.include_router(speech_profile.router)
@@ -33,7 +31,6 @@ app.include_router(workflow.router)
 app.include_router(integration.router)
 app.include_router(agents.router)
 app.include_router(users.router)
-app.include_router(processing_conversations.router)
 app.include_router(trends.router)
 
 app.include_router(firmware.router)
@@ -41,6 +38,7 @@ app.include_router(sync.router)
 
 app.include_router(apps.router)
 app.include_router(custom_auth.router)
+app.include_router(oauth.router) # Added oauth router
 
 app.include_router(payment.router)
 app.include_router(mcp.router)

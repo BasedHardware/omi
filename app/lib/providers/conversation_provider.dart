@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -161,14 +162,35 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     notifyListeners();
   }
 
-  Future fetchNewConversations() async {
-    List<ServerConversation> newConversations = await getConversationsFromServer();
-    List<ServerConversation> upsertConvos =
-        newConversations.where((c) => conversations.indexWhere((cc) => cc.id == c.id) == -1).toList();
-    if (upsertConvos.isEmpty) {
-      return;
+  Future refreshConversations() async {
+    _fetchNewConversations();
+  }
+
+  Future _fetchNewConversations() async {
+    setLoadingConversations(true);
+    List<ServerConversation> newConversations = await _getConversationsFromServer();
+    setLoadingConversations(false);
+
+    List<ServerConversation> upsertConvos = [];
+
+    // processing convos
+    upsertConvos = newConversations
+        .where((c) =>
+            c.status == ConversationStatus.processing &&
+            processingConversations.indexWhere((cc) => cc.id == c.id) == -1)
+        .toList();
+    if (upsertConvos.isNotEmpty) {
+      processingConversations.insertAll(0, upsertConvos);
     }
-    conversations.insertAll(0, upsertConvos);
+
+    // completed convos
+    upsertConvos = newConversations
+        .where((c) => c.status == ConversationStatus.completed && conversations.indexWhere((cc) => cc.id == c.id) == -1)
+        .toList();
+    if (upsertConvos.isNotEmpty) {
+      conversations.insertAll(0, upsertConvos);
+    }
+
     _groupConversationsByDateWithoutNotify();
     notifyListeners();
   }
@@ -179,10 +201,14 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     totalSearchPages = 0;
     searchedConversations = [];
 
-    conversations = await getConversationsFromServer();
+    setLoadingConversations(true);
+    conversations = await _getConversationsFromServer();
+    setLoadingConversations(false);
 
+    // processing convos
     processingConversations = conversations.where((m) => m.status == ConversationStatus.processing).toList();
 
+    // completed convos
     conversations = conversations.where((m) => m.status == ConversationStatus.completed).toList();
     if (conversations.isEmpty) {
       conversations = SharedPreferencesUtil().cachedConversations;
@@ -252,14 +278,8 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     notifyListeners();
   }
 
-  Future getConversationsFromServer() async {
-    setLoadingConversations(true);
-    var mem = await getConversations(includeDiscarded: showDiscardedConversations);
-    conversations = mem;
-    conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    setLoadingConversations(false);
-    notifyListeners();
-    return conversations;
+  Future _getConversationsFromServer() async {
+    return await getConversations(includeDiscarded: showDiscardedConversations);
   }
 
   void updateActionItemState(String convoId, bool state, int i, DateTime date) {
@@ -612,6 +632,96 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
   void setIsFetchingConversations(bool value) {
     isFetchingConversations = value;
+    notifyListeners();
+  }
+
+  // New Getter for Action Items Page
+  Map<ServerConversation, List<ActionItem>> get conversationsWithActiveActionItems {
+    final Map<ServerConversation, List<ActionItem>> result = {};
+    final List<ServerConversation> sourceList = conversations;
+
+    for (final convo in sourceList) {
+      if (convo.discarded && !showDiscardedConversations) continue;
+
+      final activeItems = convo.structured.actionItems.where((item) => !item.deleted).toList();
+      if (activeItems.isNotEmpty) {
+        result[convo] = activeItems;
+      }
+    }
+    return result;
+  }
+
+  Future<void> updateGlobalActionItemState(
+      ServerConversation conversation, int itemIndexInConversation, bool newState) async {
+    final convoId = conversation.id;
+    bool conversationFoundAndUpdated = false;
+
+    final originalConvoIndex = conversations.indexWhere((c) => c.id == convoId);
+    if (originalConvoIndex != -1) {
+      if (conversations[originalConvoIndex].structured.actionItems.length > itemIndexInConversation) {
+        conversations[originalConvoIndex].structured.actionItems[itemIndexInConversation].completed = newState;
+        conversationFoundAndUpdated = true;
+      }
+    }
+
+    var dateKey = DateTime(conversation.createdAt.year, conversation.createdAt.month, conversation.createdAt.day);
+    if (groupedConversations.containsKey(dateKey)) {
+      final groupIndex = groupedConversations[dateKey]!.indexWhere((c) => c.id == convoId);
+      if (groupIndex != -1) {
+        if (groupedConversations[dateKey]![groupIndex].structured.actionItems.length > itemIndexInConversation) {
+          groupedConversations[dateKey]![groupIndex].structured.actionItems[itemIndexInConversation].completed =
+              newState;
+        }
+      }
+    }
+
+    if (conversationFoundAndUpdated) {
+      await setConversationActionItemState(convoId, [itemIndexInConversation], [newState]);
+      notifyListeners();
+    } else {
+      debugPrint("Error: Conversation or action item not found for updateGlobalActionItemState.");
+    }
+  }
+
+  void updateActionItemDescriptionInConversation(String conversationId, int itemIndex, String newDescription) {
+    final convoIndex = conversations.indexWhere((c) => c.id == conversationId);
+    if (convoIndex != -1) {
+      if (conversations[convoIndex].structured.actionItems.length > itemIndex) {
+        conversations[convoIndex].structured.actionItems[itemIndex].description = newDescription;
+      }
+    }
+
+    groupedConversations.forEach((date, convoList) {
+      final groupIndex = convoList.indexWhere((c) => c.id == conversationId);
+      if (groupIndex != -1) {
+        if (convoList[groupIndex].structured.actionItems.length > itemIndex) {
+          convoList[groupIndex].structured.actionItems[itemIndex].description = newDescription;
+        }
+      }
+    });
+
+    notifyListeners();
+  }
+
+  Future<void> deleteActionItemAndUpdateLocally(String conversationId, int itemIndex, ActionItem actionItem) async {
+    deleteConversationActionItem(conversationId, actionItem);
+
+    final convoIndex = conversations.indexWhere((c) => c.id == conversationId);
+    if (convoIndex != -1) {
+      if (conversations[convoIndex].structured.actionItems.length > itemIndex) {
+        conversations[convoIndex].structured.actionItems.removeAt(itemIndex);
+      }
+    }
+
+    groupedConversations.forEach((date, convoList) {
+      final groupConvoIndex = convoList.indexWhere((c) => c.id == conversationId);
+      if (groupConvoIndex != -1) {
+        if (convoList[groupConvoIndex].structured.actionItems.length > itemIndex) {
+          convoList[groupConvoIndex].structured.actionItems.removeAt(itemIndex);
+        }
+      }
+    });
+
     notifyListeners();
   }
 }

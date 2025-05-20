@@ -25,7 +25,7 @@ from database.users import get_stripe_connect_account_id
 from models.app import App, UsageHistoryItem, UsageHistoryType
 from models.conversation import Conversation
 from utils import stripe
-from utils.llm import condense_conversations, condense_memories, generate_persona_description, condense_tweets
+from utils.llm.persona import condense_conversations, condense_memories, generate_persona_description, condense_tweets
 from utils.social import get_twitter_timeline, TwitterProfile, get_twitter_profile
 
 MarketplaceAppReviewUIDs = os.getenv('MARKETPLACE_APP_REVIEWERS').split(',') if os.getenv(
@@ -409,7 +409,6 @@ def get_omi_personas_by_uid(uid: str):
 async def generate_persona_prompt(uid: str, persona: dict):
     """Generate a persona prompt based on user memories and conversations."""
 
-    print(f"generate_persona_prompt {uid}")
 
     # Get latest memories and user info
     memories = get_memories(uid, limit=250)
@@ -667,3 +666,9 @@ def app_can_read_conversations(app: dict) -> bool:
 def app_can_create_conversation(app: dict) -> bool:
     """Check if an app can create a conversation."""
     return app_has_action(app, 'create_conversation')
+
+
+def is_user_app_enabled(uid: str, app_id: str) -> bool:
+    """Check if a specific app is enabled for the user based on Redis cache."""
+    user_enabled_apps = set(get_enabled_plugins(uid))
+    return app_id in user_enabled_apps

@@ -1,0 +1,66 @@
+{{- if and .Values.psp.create (.Capabilities.APIVersions.Has "policy/v1beta1/PodSecurityPolicy") }}
+---
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: {{ template "k8s-prometheus-adapter.fullname" . }}
+  {{- with (merge .Values.customAnnotations .Values.psp.annotations) }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  labels:
+    {{- include "k8s-prometheus-adapter.labels" . | indent 4 }}
+spec:
+  {{- if .Values.hostNetwork.enabled }}
+  hostNetwork: true
+  hostPorts:
+    - min: {{ .Values.listenPort }}
+      max: {{ .Values.listenPort }}
+  {{- end }}
+  fsGroup:
+    rule: RunAsAny
+  runAsGroup:
+    rule: RunAsAny
+  runAsUser:
+    rule: MustRunAs
+    ranges:
+    - min: 1024
+      max: 65535
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: RunAsAny
+  volumes:
+  - secret
+  - emptyDir
+  - configMap
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    {{- include "k8s-prometheus-adapter.labels" . | indent 4 }}
+  name: {{ template "k8s-prometheus-adapter.name" . }}-psp
+rules:
+- apiGroups: 
+  - 'policy'
+  resources: ['podsecuritypolicies']
+  verbs:     ['use']
+  resourceNames:
+  - {{ template "k8s-prometheus-adapter.fullname" . }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    {{- include "k8s-prometheus-adapter.labels" . | indent 4 }}
+  name: {{ template "k8s-prometheus-adapter.name" . }}-psp
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ template "k8s-prometheus-adapter.name" . }}-psp
+subjects:
+- kind: ServiceAccount
+  name: {{ template "k8s-prometheus-adapter.serviceAccountName" . }}
+  namespace: {{ include "k8s-prometheus-adapter.namespace" . | quote }}
+{{- end -}}
