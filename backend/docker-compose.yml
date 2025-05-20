@@ -1,0 +1,11 @@
+services:
+  backend:
+    image: omi-backend
+    build:
+      context: .
+    container_name: omi-backend
+    ports:
+      - "8111:8000"
+    env_file:
+      - .dev.env
+    restart: unless-stopped
