@@ -16,6 +16,7 @@ from models.chat import ChatSession, Message, SendMessageRequest, MessageSender,
     FileChat
 from models.conversation import Conversation
 from routers.sync import retrieve_file_paths, decode_files_to_wav
+from utils.agent import execute_agent_chat_stream
 from utils.apps import get_available_app_by_id
 from utils.chat import process_voice_message_segment, process_voice_message_segment_stream, \
     transcribe_voice_message_segment
@@ -139,7 +140,7 @@ def send_message(
 
     async def generate_stream():
         callback_data = {}
-        async for chunk in execute_graph_chat_stream(uid, messages, app, cited=True, callback_data=callback_data,
+        async for chunk in execute_agent_chat_stream(uid, messages, app, cited=True, callback_data=callback_data,
                                                      chat_session=chat_session):
             if chunk:
                 msg = chunk.replace("\n", "__CRLF__")
