@@ -83,7 +83,7 @@ Your app needs to handle transcript segments as they arrive in real-time:
      - Click on the top right corner (3 dots menu)
      - In the Developer Tools section, trigger the endpoint call with existing memory data
 
-For reference, check the Realtime News checker Python Example and its respective JSON format for implementation details.
+
 
 ---
 
