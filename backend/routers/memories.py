@@ -14,7 +14,8 @@ router = APIRouter()
 
 @router.post('/v3/memories', tags=['memories'], response_model=MemoryDB)
 def create_memory(memory: Memory, uid: str = Depends(auth.get_current_user_uid)):
-    categories = [category for category in MemoryCategory]
+    # Only use the two primary categories for new memories
+    categories = [MemoryCategory.interesting.value, MemoryCategory.system.value]
     memory.category = identify_category_for_memory(memory.content, categories)
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
     memories_db.create_memory(uid, memory_db.dict())

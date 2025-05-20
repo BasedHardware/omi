@@ -15,6 +15,7 @@ class MemoriesProvider extends ChangeNotifier {
   bool _loading = true;
   String _searchQuery = '';
   MemoryCategory? _categoryFilter;
+  bool _excludeInteresting = false;
   List<Tuple2<MemoryCategory, int>> categories = [];
   MemoryCategory? selectedCategory;
 
@@ -23,19 +24,34 @@ class MemoriesProvider extends ChangeNotifier {
   bool get loading => _loading;
   String get searchQuery => _searchQuery;
   MemoryCategory? get categoryFilter => _categoryFilter;
+  bool get excludeInteresting => _excludeInteresting;
 
   List<Memory> get filteredMemories {
     return _memories.where((memory) {
       // Apply search filter
-      final matchesSearch =
-          _searchQuery.isEmpty || memory.content.decodeString.toLowerCase().contains(_searchQuery.toLowerCase());
+      final matchesSearch = _searchQuery.isEmpty || memory.content.decodeString.toLowerCase().contains(_searchQuery.toLowerCase());
 
-      // Apply category filter
-      final matchesCategory = _categoryFilter == null || memory.category == _categoryFilter;
+      // Apply category filter or exclusion logic
+      bool categoryMatch;
+      if (_excludeInteresting) {
+        // Show all categories except interesting
+        categoryMatch = memory.category != MemoryCategory.interesting;
+      } else if (_categoryFilter != null) {
+        // Show only selected category
+        categoryMatch = memory.category == _categoryFilter;
+      } else {
+        // Show all categories if no filter is applied
+        categoryMatch = true;
+      }
 
-      return matchesSearch && matchesCategory;
+      return matchesSearch && categoryMatch;
     }).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  void setExcludeInteresting(bool exclude) {
+    _excludeInteresting = exclude;
+    notifyListeners();
   }
 
   void setCategory(MemoryCategory? category) {
@@ -50,6 +66,7 @@ class MemoriesProvider extends ChangeNotifier {
 
   void setCategoryFilter(MemoryCategory? category) {
     _categoryFilter = category;
+    _excludeInteresting = false; // Reset exclude filter when setting a category filter
     notifyListeners();
   }
 
@@ -70,10 +87,7 @@ class MemoriesProvider extends ChangeNotifier {
     notifyListeners();
 
     _memories = await getMemories();
-    _unreviewed = _memories
-        .where(
-            (memory) => !memory.reviewed && memory.createdAt.isAfter(DateTime.now().subtract(const Duration(days: 1))))
-        .toList();
+    _unreviewed = _memories.where((memory) => !memory.reviewed && memory.createdAt.isAfter(DateTime.now().subtract(const Duration(days: 1)))).toList();
 
     _loading = false;
     _setCategories();
@@ -97,8 +111,7 @@ class MemoriesProvider extends ChangeNotifier {
     _setCategories();
   }
 
-  void createMemory(String content,
-      [MemoryVisibility visibility = MemoryVisibility.public, MemoryCategory category = MemoryCategory.core]) async {
+  void createMemory(String content, [MemoryVisibility visibility = MemoryVisibility.public, MemoryCategory category = MemoryCategory.interesting]) async {
     final newMemory = Memory(
       id: const Uuid().v4(),
       uid: SharedPreferencesUtil().uid,
