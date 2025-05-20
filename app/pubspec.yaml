@@ -109,6 +109,7 @@ dependency_overrides:
   http: ^1.2.1
   uuid: ^4.4.0
   js: ^0.7.1
+  geolocator_android: 4.6.1
   google_sign_in_ios: 5.8.1
   opus_flutter_ios:
     git:
