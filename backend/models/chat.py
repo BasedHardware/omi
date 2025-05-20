@@ -75,7 +75,7 @@ class Message(BaseModel):
             #     plugin = next((p for p in plugins if p.id == message.plugin_id), None)
             #     if plugin:
             #         return plugin.name RESTORE ME
-            return message.sender.upper()  # TODO: use plugin id
+            return message.sender.upper()  # TODO: use app id
 
         formatted_messages = [
             f"({message.created_at.strftime('%d %b %Y at %H:%M UTC')}) {get_sender_name(message)}: {message.text}"
@@ -99,7 +99,7 @@ class Message(BaseModel):
             #     plugin = next((p for p in plugins if p.id == message.plugin_id), None)
             #     if plugin:
             #         return plugin.name RESTORE ME
-            return message.sender.upper()  # TODO: use plugin id
+            return message.sender.upper()  # TODO: use app id
 
         formatted_messages = [
             f"""
