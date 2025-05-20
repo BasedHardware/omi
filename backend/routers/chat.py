@@ -29,11 +29,11 @@ router = APIRouter()
 fc = FileChatTool()
 
 
-def filter_messages(messages, plugin_id):
-    print('filter_messages', len(messages), plugin_id)
+def filter_messages(messages, app_id):
+    print('filter_messages', len(messages), app_id)
     collected = []
     for message in messages:
-        if message.sender == MessageSender.ai and message.plugin_id != plugin_id:
+        if message.sender == MessageSender.ai and message.plugin_id != app_id:
             break
         collected.append(message)
     print('filter_messages output:', len(collected))
