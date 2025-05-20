@@ -89,7 +89,7 @@ def process_voice_message_segment(path: str, uid: str):
         text=response,
         created_at=datetime.now(timezone.utc),
         sender='ai',
-        plugin_id=app_id,
+        app_id=app_id,
         type='text',
         memories_id=memories_id,
     )
@@ -160,7 +160,7 @@ async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGene
             text=response,
             created_at=datetime.now(timezone.utc),
             sender='ai',
-            plugin_id=app_id,
+            app_id=app_id,
             type='text',
             memories_id=memories_id,
         )

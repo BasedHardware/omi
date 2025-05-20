@@ -350,7 +350,7 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], c
 def send_app_notification(token: str, app_name: str, app_id: str, message: str):
     ai_message = NotificationMessage(
         text=message,
-        plugin_id=app_id,
+        app_id=app_id,
         from_integration='true',
         type='text',
         notification_type='plugin',
