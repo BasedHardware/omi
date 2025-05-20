@@ -106,15 +106,15 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
       switch (option) {
         case FilterOption.interesting:
           _filterByCategory(MemoryCategory.interesting);
-          MixpanelManager().track('Memories: Filtered to interesting memories');
+          MixpanelManager().memoriesFiltered('interesting');
           break;
         case FilterOption.system:
           _filterByCategory(MemoryCategory.system);
-          MixpanelManager().track('Memories: Filtered to system memories');
+          MixpanelManager().memoriesFiltered('system');
           break;
         case FilterOption.all:
           _filterByCategory(null); // null means no category filter
-          MixpanelManager().track('Memories: Filtered to all memories');
+          MixpanelManager().memoriesFiltered('all');
           break;
       }
     });
