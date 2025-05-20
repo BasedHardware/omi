@@ -16,6 +16,9 @@ from .redis_db import get_app_reviews
 # *****************************
 
 apps_collection = 'plugins_data'
+app_analytics_collection = 'plugins'
+testers_collection = 'testers'
+
 
 def migrate_reviews_from_redis_to_firestore():
     apps_ref = db.collection(apps_collection).stream()
@@ -72,10 +75,10 @@ def get_all_unapproved_apps_db() -> List:
 
 
 def get_public_apps_db(uid: str) -> List:
-    public_plugins = db.collection(apps_collection).stream()
-    data = [doc.to_dict() for doc in public_plugins]
+    public_apps = db.collection(apps_collection).stream()
+    data = [doc.to_dict() for doc in public_apps]
 
-    return [plugin for plugin in data if plugin.get('approved') == True or plugin.get('uid') == uid]
+    return [app for app in data if app.get('approved') == True or app.get('uid') == uid]
 
 
 def get_public_approved_apps_db() -> List:
@@ -106,7 +109,7 @@ def get_public_unapproved_apps_db(uid: str) -> List:
 
 
 def get_apps_for_tester_db(uid: str) -> List:
-    tester_ref = db.collection('testers').document(uid)
+    tester_ref = db.collection(testers_collection).document(uid)
     doc = tester_ref.get()
     if doc.exists:
         apps = doc.to_dict().get('apps', [])
@@ -147,42 +150,42 @@ def update_app_visibility_in_db(app_id: str, private: bool):
         new_app_id = app_id.split('-private')[0] + '-' + str(ULID())
         app['id'] = new_app_id
         app['private'] = private
-        app_ref = db.collection('plugins_data').document(new_app_id)
+        app_ref = db.collection(apps_collection).document(new_app_id)
         app_ref.set(app)
     else:
         app_ref.update({'private': private})
 
 
-def change_app_approval_status(plugin_id: str, approved: bool):
-    plugin_ref = db.collection(apps_collection).document(plugin_id)
-    plugin_ref.update({'approved': approved, 'status': 'approved' if approved else 'rejected'})
+def change_app_approval_status(app_id: str, approved: bool):
+    app_ref = db.collection(apps_collection).document(app_id)
+    app_ref.update({'approved': approved, 'status': 'approved' if approved else 'rejected'})
 
 
 def get_app_usage_history_db(app_id: str):
-    usage = db.collection('plugins').document(app_id).collection('usage_history').stream()
+    usage = db.collection(app_analytics_collection).document(app_id).collection('usage_history').stream()
     return [doc.to_dict() for doc in usage]
 
 
 def get_app_memory_created_integration_usage_count_db(app_id: str):
-    usage = db.collection('plugins').document(app_id).collection('usage_history').where(
+    usage = db.collection(app_analytics_collection).document(app_id).collection('usage_history').where(
         filter=FieldFilter('type', '==', UsageHistoryType.memory_created_external_integration)).count().get()
     return usage[0][0].value
 
 
 def get_app_memory_prompt_usage_count_db(app_id: str):
-    usage = db.collection('plugins').document(app_id).collection('usage_history').where(
+    usage = db.collection(app_analytics_collection).document(app_id).collection('usage_history').where(
         filter=FieldFilter('type', '==', UsageHistoryType.memory_created_prompt)).count().get()
     return usage[0][0].value
 
 
 def get_app_chat_message_sent_usage_count_db(app_id: str):
-    usage = db.collection('plugins').document(app_id).collection('usage_history').where(
+    usage = db.collection(app_analytics_collection).document(app_id).collection('usage_history').where(
         filter=FieldFilter('type', '==', UsageHistoryType.chat_message_sent)).count().get()
     return usage[0][0].value
 
 
 def get_app_usage_count_db(app_id: str):
-    usage = db.collection('plugins').document(app_id).collection('usage_history').count().get()
+    usage = db.collection(app_analytics_collection).document(app_id).collection('usage_history').count().get()
     return usage[0][0].value
 
 
@@ -200,27 +203,27 @@ def set_app_review_in_db(app_id: str, uid: str, review: dict):
 # ********************************
 
 def add_tester_db(data: dict):
-    app_ref = db.collection('testers').document(data['uid'])
+    app_ref = db.collection(testers_collection).document(data['uid'])
     app_ref.set(data)
 
 
 def add_app_access_for_tester_db(app_id: str, uid: str):
-    app_ref = db.collection('testers').document(uid)
+    app_ref = db.collection(testers_collection).document(uid)
     app_ref.update({'apps': ArrayUnion([app_id])})
 
 
 def remove_app_access_for_tester_db(app_id: str, uid: str):
-    app_ref = db.collection('testers').document(uid)
+    app_ref = db.collection(testers_collection).document(uid)
     app_ref.update({'apps': ArrayRemove([app_id])})
 
 
 def remove_tester_db(uid: str):
-    app_ref = db.collection('testers').document(uid)
+    app_ref = db.collection(testers_collection).document(uid)
     app_ref.delete()
 
 
 def can_tester_access_app_db(app_id: str, uid: str) -> bool:
-    app_ref = db.collection('testers').document(uid)
+    app_ref = db.collection(testers_collection).document(uid)
     doc = app_ref.get()
     if doc.exists:
         return app_id in doc.to_dict().get('apps', [])
@@ -228,7 +231,7 @@ def can_tester_access_app_db(app_id: str, uid: str) -> bool:
 
 
 def is_tester_db(uid: str) -> bool:
-    app_ref = db.collection('testers').document(uid)
+    app_ref = db.collection(testers_collection).document(uid)
     return app_ref.get().exists
 
 
@@ -251,7 +254,7 @@ def record_app_usage(
         'type': usage_type,
     }
 
-    db.collection('plugins').document(app_id).collection('usage_history').document(conversation_id or message_id).set(
+    db.collection(app_analytics_collection).document(app_id).collection('usage_history').document(conversation_id or message_id).set(
         data)
     return data
 
@@ -438,7 +441,7 @@ def get_api_key_by_hash_db(app_id: str, hashed_key: str):
 def list_api_keys_db(app_id: str):
     """List all API keys for an app (excluding the hashed values)"""
     api_keys_ref = db.collection(apps_collection).document(app_id).collection('api_keys').order_by('created_at',
-                                                                                                  direction='DESCENDING').stream()
+                                                                                                   direction='DESCENDING').stream()
     return [{k: v for k, v in doc.to_dict().items() if k != 'hashed'} for doc in api_keys_ref]
 
 
