@@ -29,11 +29,11 @@ router = APIRouter()
 fc = FileChatTool()
 
 
-def filter_messages(messages, plugin_id):
-    print('filter_messages', len(messages), plugin_id)
+def filter_messages(messages, app_id):
+    print('filter_messages', len(messages), app_id)
     collected = []
     for message in messages:
-        if message.sender == MessageSender.ai and message.plugin_id != plugin_id:
+        if message.sender == MessageSender.ai and message.plugin_id != app_id:
             break
         collected.append(message)
     print('filter_messages output:', len(collected))
@@ -62,12 +62,12 @@ def send_message(
         plugin_id = None
 
     # get chat session
-    chat_session = chat_db.get_chat_session(uid, plugin_id=plugin_id)
+    chat_session = chat_db.get_chat_session(uid, app_id=plugin_id)
     chat_session = ChatSession(**chat_session) if chat_session else None
 
     message = Message(
         id=str(uuid.uuid4()), text=data.text, created_at=datetime.now(timezone.utc), sender='human', type='text',
-        plugin_id=plugin_id
+        app_id=plugin_id
     )
     if data.file_ids is not None:
         new_file_ids = fc.retrieve_new_file(data.file_ids)
@@ -94,7 +94,7 @@ def send_message(
 
     app_id = app.id if app else None
 
-    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, plugin_id=plugin_id)]))
+    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, app_id=plugin_id)]))
 
     def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])
@@ -122,7 +122,7 @@ def send_message(
             text=response,
             created_at=datetime.now(timezone.utc),
             sender='ai',
-            plugin_id=app_id,
+            app_id=app_id,
             type='text',
             memories_id=memories_id,
         )
@@ -228,7 +228,7 @@ def initial_message_util(uid: str, app_id: Optional[str] = None):
         text=text,
         created_at=datetime.now(timezone.utc),
         sender='ai',
-        plugin_id=app_id,
+        app_id=app_id,
         from_external_integration=False,
         type='text',
         memories_id=[],

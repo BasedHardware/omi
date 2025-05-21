@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from typing import Tuple, Optional
 
-from database.redis_db import get_enabled_plugins, r as redis_client
+from database.redis_db import get_enabled_apps, r as redis_client
 from utils.apps import get_available_app_by_id, verify_api_key
 from utils.app_integrations import send_app_notification
 import database.notifications as notification_db
@@ -105,7 +105,7 @@ def send_app_notification_to_user(
     app = App(**app_data)
     
     # Check if user has app installed
-    user_enabled = set(get_enabled_plugins(uid))
+    user_enabled = set(get_enabled_apps(uid))
     if data['aid'] not in user_enabled:
         raise HTTPException(status_code=403, detail='User does not have this app installed')
 

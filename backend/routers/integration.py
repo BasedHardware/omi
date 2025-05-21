@@ -12,7 +12,7 @@ import utils.apps as apps_utils
 from utils.apps import verify_api_key
 import database.redis_db as redis_db
 import database.memories as memory_db
-from database.redis_db import get_enabled_plugins, r as redis_client
+from database.redis_db import get_enabled_apps, r as redis_client
 import database.notifications as notification_db
 import models.integrations as integration_models
 import models.conversation as conversation_models
@@ -86,7 +86,7 @@ async def create_conversation_via_integration(
         raise HTTPException(status_code=404, detail="App not found")
 
     # Verify if the uid has enabled the app
-    enabled_plugins = redis_db.get_enabled_plugins(uid)
+    enabled_plugins = redis_db.get_enabled_apps(uid)
     if app_id not in enabled_plugins:
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
@@ -153,7 +153,7 @@ async def create_memories_via_integration(
         raise HTTPException(status_code=404, detail="App not found")
 
     # Verify if the uid has enabled the app
-    enabled_plugins = redis_db.get_enabled_plugins(uid)
+    enabled_plugins = redis_db.get_enabled_apps(uid)
     if app_id not in enabled_plugins:
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
@@ -196,7 +196,7 @@ async def create_facts_via_integration(
         raise HTTPException(status_code=404, detail="App not found")
 
     # Verify if the uid has enabled the app
-    enabled_plugins = redis_db.get_enabled_plugins(uid)
+    enabled_plugins = redis_db.get_enabled_apps(uid)
     if app_id not in enabled_plugins:
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
@@ -243,7 +243,7 @@ async def get_memories_via_integration(
         raise HTTPException(status_code=404, detail="App not found")
 
     # Verify if the uid has enabled the app
-    enabled_plugins = redis_db.get_enabled_plugins(uid)
+    enabled_plugins = redis_db.get_enabled_apps(uid)
     if app_id not in enabled_plugins:
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
@@ -294,7 +294,7 @@ async def get_conversations_via_integration(
         raise HTTPException(status_code=404, detail="App not found")
 
     # Verify if the uid has enabled the app
-    enabled_plugins = redis_db.get_enabled_plugins(uid)
+    enabled_plugins = redis_db.get_enabled_apps(uid)
     if app_id not in enabled_plugins:
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
@@ -375,7 +375,7 @@ async def search_conversations_via_integration(
         raise HTTPException(status_code=404, detail="App not found")
 
     # Verify if the uid has enabled the app
-    enabled_plugins = redis_db.get_enabled_plugins(uid)
+    enabled_plugins = redis_db.get_enabled_apps(uid)
     if app_id not in enabled_plugins:
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
@@ -464,7 +464,7 @@ async def send_notification_via_integration(
     app = App(**app_data)
 
     # Check if user has app installed
-    user_enabled = set(get_enabled_plugins(uid))
+    user_enabled = set(get_enabled_apps(uid))
     if app_id not in user_enabled:
         raise HTTPException(status_code=403, detail='User does not have this app installed')
 
