@@ -53,13 +53,21 @@ scaling:
           batch:
             requestsPerPod: # Discuss a reasonable value with your Deepgram Account Representative
           streaming:
-            requestsPerPod: 30
+            requestsPerPod: 
         textToSpeech:
           batch:
             requestsPerPod: # Discuss a reasonable value with your Deepgram Account Representative
         # Discuss a reasoanble value with your Deepgram Account Representative
         # Must also set engine.concurrencyLimit.activeRequests if using request ratio for autoscaling
         requestCapacityRatio:
+        custom:
+        - type: External
+          external:
+            metric:
+              name: engine_avg_gpu_utilization
+            target:
+              type: Value
+              value: 70
       behavior:
         scaleUp:
           stabilizationWindowSeconds: 120  # Wait 2 minutes before scaling up
@@ -180,3 +188,112 @@ kube-prometheus-stack:
       size: 20Gi
       finalizers:
         - kubernetes.io/pvc-protection
+  prometheus:
+    prometheusSpec:
+      additionalScrapeConfigs:
+        - job_name: "dg_engine_metrics"
+          scrape_interval: "2s"
+          kubernetes_sd_configs:
+            - role: endpoints
+              namespaces:
+                names:
+                  - "{{ .Release.Namespace }}"
+          relabel_configs:
+            - source_labels: [__meta_kubernetes_service_name]
+              regex: "(.*)-metrics"
+              action: keep
+            - source_labels: [__meta_kubernetes_endpoint_port_name]
+              regex: "metrics"
+              action: keep
+            - source_labels: [__meta_kubernetes_namespace]
+              target_label: namespace
+            - source_labels: [__meta_kubernetes_service_name]
+              target_label: service
+            - source_labels: [__meta_kubernetes_pod_name]
+              target_label: pod
+        - job_name: gpu-metrics
+          scrape_interval: 1s
+          metrics_path: /metrics
+          scheme: http
+          kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+              - gke-managed-system
+          relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            action: replace
+            target_label: kubernetes_node
+
+prometheus-adapter:
+  # -- Normally, this chart will be installed if `scaling.auto.enabled` is true. However, if you wish
+  # to manage the Prometheus adapter in your cluster on your own and not as part of the Deepgram Helm chart,
+  # you can force it to not be installed by setting this to `false`.
+  includeDependency:
+  prometheus:
+    url: http://dg-prometheus-stack-prometheus.{{ .Release.Namespace }}.svc
+  rules:
+    default: false
+    external:
+      - name:
+          as: "engine_active_requests_stt_streaming"
+        seriesQuery: 'engine_active_requests{kind="stream"}'
+        metricsQuery: 'avg(engine_active_requests{kind="stream"})'
+        resources:
+          overrides:
+            namespace: { resource: "namespace" }
+            pod: { resource: "pod" }
+            service: { resource: "service" }
+      - name:
+          as: "engine_active_requests_stt_batch"
+        seriesQuery: 'engine_active_requests{kind="batch"}'
+        metricsQuery: 'avg(engine_active_requests{kind="batch"})'
+        resources:
+          overrides:
+            namespace: { resource: "namespace" }
+            pod: { resource: "pod" }
+            service: { resource: "service" }
+      - name:
+          as: "engine_active_requests_tts_batch"
+        seriesQuery: 'engine_active_requests{kind="tts"}'
+        metricsQuery: 'avg(engine_active_requests{kind="tts"})'
+        resources:
+          overrides:
+            namespace: { resource: "namespace" }
+            pod: { resource: "pod" }
+            service: { resource: "service" }
+      - name:
+          as: "engine_estimated_stream_capacity"
+        seriesQuery: 'engine_active_requests{kind="stream"}'
+        metricsQuery: 'avg_over_time((sum(engine_active_requests{kind="stream"}) / sum(engine_estimated_stream_capacity))[1m:1m])'
+        resources:
+          overrides:
+            namespace: { resource: "namespace" }
+            pod: { resource: "pod" }
+            service: { resource: "service" }
+      - name:
+          as: "engine_requests_active_to_max_ratio"
+        seriesQuery: "engine_max_active_requests"
+        metricsQuery: "avg_over_time((sum(engine_active_requests) / sum(engine_max_active_requests))[1m:1m])"
+        resources:
+          overrides:
+            namespace: { resource: "namespace" }
+            pod: { resource: "pod" }
+            service: { resource: "service" }
+      - name:
+          as: "engine_to_api_pod_ratio"
+        seriesQuery: 'kube_deployment_labels{label_app="deepgram-engine"}'
+        metricsQuery: '(sum(kube_deployment_status_replicas and on(deployment) kube_deployment_labels{label_app="deepgram-engine"})) / (sum(kube_deployment_status_replicas and on(deployment) kube_deployment_labels{label_app="deepgram-api"}))'
+        resources:
+          overrides:
+            namespace: { resource: "namespace" }
+            pod: { resource: "pod" }
+      # Average GPU utilization (%) for autoscaling
+      - name:
+          as: "engine_avg_gpu_utilization"
+        seriesQuery: 'DCGM_FI_DEV_GPU_UTIL{container="deepgram-engine"}'
+        metricsQuery: 'avg(DCGM_FI_DEV_GPU_UTIL{container="deepgram-engine"})'
+        resources:
+          overrides:
+            namespace: { resource: "namespace" }
+            pod: { resource: "pod" }
