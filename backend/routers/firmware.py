@@ -37,6 +37,8 @@ def _get_device_by_model_number(device_model: str):
     # TODO: remove
     if device_model in ['OMI_shell']:
         return DeviceModel.OMI_CV1
+    if device_model in ['nrf5340']:
+        return DeviceModel.OMI_CV1
 
     return None
 
