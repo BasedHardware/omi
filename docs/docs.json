@@ -14,7 +14,8 @@
         "group": "Get Started",
         "pages": [
           "docs/get_started/introduction",
-          "docs/get_started/Flash_device"
+          "docs/get_started/Flash_device",
+           "docs/getstartedwithomi"
         ]
       },
       {
