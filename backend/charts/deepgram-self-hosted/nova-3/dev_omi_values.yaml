@@ -292,7 +292,7 @@ prometheus-adapter:
       - name:
           as: "engine_avg_gpu_utilization"
         seriesQuery: 'DCGM_FI_DEV_GPU_UTIL{container="deepgram-engine"}'
-        metricsQuery: 'avg(DCGM_FI_DEV_GPU_UTIL{container="deepgram-engine"})'
+        metricsQuery: 'avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{container="deepgram-engine"}[1m]))'
         resources:
           overrides:
             namespace: { resource: "namespace" }
