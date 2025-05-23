@@ -26,6 +26,7 @@
     "algoliasearch": "^5.2.5",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
+    "firebase": "^11.8.1",
     "framer-motion": "^11.5.4",
     "fuse.js": "^7.0.0",
     "gleap": "^13.9.2",
