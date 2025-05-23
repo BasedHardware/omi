@@ -1,9 +1,10 @@
 'use client';
+import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
 import ShareButton from '../memories/share-button';
-import { useParams, usePathname } from 'next/navigation';
+import { useParams, usePathname, useRouter } from 'next/navigation';
+import { useAuth } from '@/src/context/AuthContext';
 
 interface NavItem {
   href: string;
@@ -11,6 +12,7 @@ interface NavItem {
   target?: string;
   className?: string;
   icon?: React.ReactNode;
+  onClick?: () => void;
 }
 
 interface AppHeaderProps {
@@ -79,35 +81,11 @@ const CartIcon = () => (
 );
 
 export default function AppHeader({
-  navItems = [
+  navItems: initialNavItems = [
     {
-      href: 'https://rebrand.ly/discord-invite-a2a451',
-      label: '6.7k+ Join Discord',
-      icon: <DiscordIcon />,
-      className: 'flex items-center space-x-2 text-white hover:text-gray-300',
-    },
-    {
-      href: 'https://github.com/BasedHardware/Omi',
-      label: '4.4K Github',
-      icon: <GithubIcon />,
-      className: 'flex items-center space-x-2 text-white hover:text-gray-300',
-    },
-    {
-      href: 'https://docs.omi.me',
-      label: 'Docs',
-      className: 'text-white hover:text-gray-300',
-    },
-    {
-      href: 'https://www.omi.me/help',
-      label: 'Help center',
-      className: 'text-white hover:text-gray-300',
-    },
-    {
-      href: 'https://docs.omi.me/docs/developer/apps/Introduction',
-      label: 'Start Building',
-      icon: <ZapIcon />,
+      href: '/create-app',
+      label: 'Create App',
       className: 'flex items-center space-x-2 rounded-full bg-[#6C2BD9] px-3 py-1 text-white transition-colors hover:bg-[#5A1CB8]',
-      target: '_blank',
     },
     {
       href: 'https://www.omi.me/products/omi-dev-kit-2',
@@ -133,6 +111,32 @@ export default function AppHeader({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const params = useParams();
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, signOut, loading } = useAuth();
+  
+  const navItems = React.useMemo(() => {
+    const authItems: NavItem[] = [];
+    
+    if (user) {
+      authItems.push({
+        href: '#',
+        label: 'Sign Out',
+        className: 'text-white hover:text-gray-300',
+        onClick: () => {
+          signOut();
+          router.push('/');
+        }
+      });
+    } else if (!loading) {
+      authItems.push({
+        href: '/login',
+        label: 'Sign In',
+        className: 'text-white hover:text-gray-300',
+      });
+    }
+    
+    return [...initialNavItems, ...authItems];
+  }, [user, loading, initialNavItems, signOut, router]);
 
   const dreamforcePage = pathname.includes('dreamforce');
 
@@ -168,7 +172,6 @@ export default function AppHeader({
         </h1>
 
         <nav className="flex items-center">
-          {/* Mobile Menu Toggle */}
           <button
             className="rounded-md p-2 text-white hover:bg-white/10 md:hidden"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -189,7 +192,6 @@ export default function AppHeader({
             </svg>
           </button>
 
-          {/* Desktop Navigation */}
           <ul className="hidden items-center gap-3 text-sm md:flex md:gap-4 md:text-base">
             {showShareButton && params.id && (
               <li>
@@ -197,7 +199,6 @@ export default function AppHeader({
               </li>
             )}
             {navItems.map((item, index) => {
-              // Special styling for Start Building button
               if (item.label === 'Start Building') {
                 return (
                   <li key={index} className="ml-1">
@@ -211,10 +212,17 @@ export default function AppHeader({
               
               return (
                 <li key={index}>
-                  <Link href={item.href} target={item.target} className={item.className}>
-                    {item.icon && <span className="flex-shrink-0">{item.icon}</span>}
-                    <span>{item.label}</span>
-                  </Link>
+                  {item.onClick ? (
+                    <button onClick={item.onClick} className={item.className}>
+                      {item.icon && <span className="flex-shrink-0">{item.icon}</span>}
+                      <span>{item.label}</span>
+                    </button>
+                  ) : (
+                    <Link href={item.href} target={item.target} className={item.className}>
+                      {item.icon && <span className="flex-shrink-0">{item.icon}</span>}
+                      <span>{item.label}</span>
+                    </Link>
+                  )}
                 </li>
               );
             })}
@@ -223,7 +231,6 @@ export default function AppHeader({
       </header>
       <div className="h-px w-full bg-white/5"></div>
 
-      {/* Mobile Menu Panel - Moved outside header */}
       <div
         className={`
           fixed inset-0 z-[100] bg-[#0B0F17] transition-transform duration-300
@@ -264,15 +271,28 @@ export default function AppHeader({
           <ul className="flex flex-col gap-4">
             {navItems.map((item, index) => (
               <li key={index}>
-                <Link
-                  href={item.href}
-                  target={item.target}
-                  className={item.className}
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  {item.icon && <span className="flex-shrink-0">{item.icon}</span>}
-                  <span>{item.label}</span>
-                </Link>
+                {item.onClick ? (
+                  <button 
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      item.onClick?.();
+                    }} 
+                    className={item.className}
+                  >
+                    {item.icon && <span className="flex-shrink-0">{item.icon}</span>}
+                    <span>{item.label}</span>
+                  </button>
+                ) : (
+                  <Link
+                    href={item.href}
+                    target={item.target}
+                    className={item.className}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    {item.icon && <span className="flex-shrink-0">{item.icon}</span>}
+                    <span>{item.label}</span>
+                  </Link>
+                )}
               </li>
             ))}
           </ul>
