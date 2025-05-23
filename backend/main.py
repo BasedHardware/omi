@@ -3,6 +3,7 @@ import os
 
 import firebase_admin
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from modal import Image, App, asgi_app, Secret
 from routers import workflow, chat, firmware, plugins, transcribe, notifications, \
@@ -19,6 +20,16 @@ else:
     firebase_admin.initialize_app()
 
 app = FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for development
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods
+    allow_headers=["*"],  # Allow all headers
+)
+
 app.include_router(transcribe.router)
 app.include_router(conversations.router)
 app.include_router(memories.router)

@@ -5,7 +5,7 @@ import AppHeader from '../components/shared/app-header';
 import Footer from '../components/shared/footer';
 import envConfig from '../constants/envConfig';
 import { GleapInit } from '@/src/components/shared/gleap';
-import { GoogleAnalytics } from '@/src/components/shared/google-analytics';
+import { AuthProvider } from '../context/AuthContext';
 
 const inter = Mulish({
   subsets: ['latin'],
@@ -30,14 +30,15 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <AppHeader />
-        <main className="flex min-h-screen flex-col">
-          <div className="w-full flex-grow">{children}</div>
-        </main>
-        <Footer />
+        <AuthProvider>
+          <AppHeader />
+          <main className="flex min-h-screen flex-col">
+            <div className="w-full flex-grow">{children}</div>
+          </main>
+          <Footer />
+          <GleapInit />
+        </AuthProvider>
       </body>
-      <GleapInit />
-      <GoogleAnalytics />
     </html>
   );
 }
