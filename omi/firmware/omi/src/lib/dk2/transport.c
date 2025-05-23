@@ -12,6 +12,7 @@
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/ring_buffer.h>
 #include <hal/nrf_power.h>
+#include <zephyr/dt-bindings/gpio/nordic-nrf-gpio.h>
 #include "transport.h"
 #include "config.h"
 #include "speaker.h"
@@ -21,8 +22,38 @@
 #include "mic.h"
 #include "accel.h"
 #include "haptic.h"
-#include <math.h> // For float conversion in logs
+#include <math.h>
+
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
+
+#ifdef CONFIG_OMI_ENABLE_NRFSW_CTRL
+static const struct gpio_dt_spec rfsw_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rfsw_en_pin), gpios, {0});
+
+static inline void rfsw_ctrl_set_high()
+{
+    if (rfsw_en.port && device_is_ready(rfsw_en.port)) {
+        int err = gpio_pin_configure_dt(&rfsw_en, (GPIO_OUTPUT | NRF_GPIO_DRIVE_S0H1));
+        if (err < 0) {
+            LOG_ERR("Failed to configure nRF RF Switch control pin (%d)", err);
+        } else {
+            gpio_pin_set_dt(&rfsw_en, 1); // Set rfsw_en high
+            LOG_INF("nRF RF Switch control pin configured and set to high");
+        }
+    } else {
+        LOG_WRN("nRF RF Switch control device not ready or not configured. Skipping set high.");
+    }
+}
+
+static inline void rfsw_ctrl_set_low()
+{
+    if (rfsw_en.port && device_is_ready(rfsw_en.port)) {
+        gpio_pin_set_dt(&rfsw_en, 0); // Set rfsw_en low
+        LOG_INF("nRF RF Switch control pin set to low");
+    } else {
+        LOG_WRN("nRF RF Switch control device not ready or not configured. Skipping set low.");
+    }
+}
+#endif
 
 // Counters for tracking function calls
 extern uint32_t gatt_notify_count;
@@ -774,9 +805,17 @@ void pusher(void)
     }
 }
 
-//
-// Public functions
-//
+
+int transport_off()
+{
+    int err = bt_off();
+
+#ifdef CONFIG_OMI_ENABLE_NRFSW_CTRL
+    rfsw_ctrl_set_low();
+#endif
+    return err;
+}
+
 int bt_off()
 {
     // First disconnect any active connections
@@ -820,23 +859,14 @@ int bt_off()
     return 0;
 }
 
-int bt_on()
-{
-   int err = bt_enable(NULL);
-   bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
-#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-   bt_gatt_service_register(&storage_service);
-#endif
-   sd_on();
-   mic_on();
-
-   return 0;
-}
-
-//periodic advertising
+// periodic advertising
 int transport_start()
 {
     k_mutex_init(&write_sdcard_mutex);
+
+#ifdef CONFIG_OMI_ENABLE_NRFSW_CTRL
+        rfsw_ctrl_set_high();
+#endif
 
     // Configure callbacks
     bt_conn_cb_register(&_callback_references);
@@ -849,6 +879,7 @@ int transport_start()
         return err;
     }
     LOG_INF("Transport bluetooth initialized");
+
     //  Enable accelerometer
 #ifdef CONFIG_OMI_ENABLE_ACCELEROMETER
     err = accel_start();

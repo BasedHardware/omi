@@ -55,4 +55,10 @@ config OMI_ENABLE_HAPTIC
         "Enable the haptic support."
     default n
 
+config OMI_ENABLE_NRFSW_CTRL
+    bool "Enable nRF RF Switch Control"
+    help
+        "Enable control of the nRF RF switch pin (rfsw_en)."
+    default y
+
 endmenu
