@@ -11,6 +11,8 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/ring_buffer.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/dt-bindings/gpio/nordic-nrf-gpio.h>
 #include <hal/nrf_power.h>
 #include "transport.h"
 #include "config.h"
@@ -23,6 +25,10 @@
 #include "haptic.h"
 #include <math.h> // For float conversion in logs
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
+
+#ifdef CONFIG_OMI_ENABLE_RFSW_CTRL
+static const struct gpio_dt_spec rfsw_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rfsw_en_pin), gpios, {0});
+#endif
 
 // Counters for tracking function calls
 extern uint32_t gatt_notify_count;
@@ -242,7 +248,6 @@ void broadcast_battery_level(struct k_work *work_item) {
 
 
         LOG_PRINTK("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
-
 
         // Use the Zephyr BAS function to set (and notify) the battery level
         int err = bt_bas_set_battery_level(battery_percentage);
@@ -774,10 +779,7 @@ void pusher(void)
     }
 }
 
-//
-// Public functions
-//
-int bt_off()
+int transport_off()
 {
     // First disconnect any active connections
     if (current_connection != NULL) {
@@ -800,6 +802,15 @@ int bt_off()
         LOG_ERR("Failed to disable Bluetooth %d", err);
     }
 
+    // Pull the rfsw control low
+#ifdef CONFIG_OMI_ENABLE_RFSW_CTRL
+	err = gpio_pin_set_dt(&rfsw_en, 0);
+    if (err)
+    {
+        LOG_ERR("Failed to pull the rfsw control low %d", err);
+    }
+#endif
+
     // Turn off other peripherals
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
@@ -820,29 +831,35 @@ int bt_off()
     return 0;
 }
 
-int bt_on()
-{
-   int err = bt_enable(NULL);
-   bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
-#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-   bt_gatt_service_register(&storage_service);
-#endif
-   sd_on();
-   mic_on();
-
-   return 0;
-}
-
-//periodic advertising
+// periodic advertising
 int transport_start()
 {
     k_mutex_init(&write_sdcard_mutex);
+
+    int err = 0;
+
+    // Pull the nfsw control high
+#ifdef CONFIG_OMI_ENABLE_RFSW_CTRL
+	err = gpio_pin_configure_dt(&rfsw_en, (GPIO_OUTPUT | NRF_GPIO_DRIVE_S0H1));
+    if (err)
+    {
+        LOG_ERR("Failed to get the rfsw pin config (err %d)", err);
+    }
+    else 
+    {
+        err = gpio_pin_set_dt(&rfsw_en, 1);
+        if (err)
+        {
+            LOG_ERR("Failed to pull the rfsw pin control high (err %d)", err);
+        }
+    }
+#endif
 
     // Configure callbacks
     bt_conn_cb_register(&_callback_references);
 
     // Enable Bluetooth
-    int err = bt_enable(NULL);
+    err = bt_enable(NULL);
     if (err)
     {
         LOG_ERR("Transport bluetooth init failed (err %d)", err);
