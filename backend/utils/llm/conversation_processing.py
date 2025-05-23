@@ -79,7 +79,7 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
     {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | llm_mini | parser # parser is imported from .clients
+    chain = prompt | llm_medium_experiment | parser # parser is imported from .clients
 
     response = chain.invoke({
         'transcript': transcript.strip(),
@@ -113,7 +113,7 @@ def get_reprocess_transcript_structure(transcript: str, started_at: datetime, la
     {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | llm_mini | parser # parser is imported from .clients
+    chain = prompt | llm_medium_experiment | parser # parser is imported from .clients
 
     response = chain.invoke({
         'transcript': transcript.strip(),
