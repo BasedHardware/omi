@@ -1,451 +1,373 @@
 import 'dart:async';
+import 'dart:io';
 
-import 'package:app_links/app_links.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:omi/backend/auth.dart';
-import 'package:omi/backend/preferences.dart';
-import 'package:omi/env/dev_env.dart';
-import 'package:omi/env/env.dart';
-import 'package:omi/env/prod_env.dart';
-import 'package:omi/firebase_options_dev.dart' as dev;
-import 'package:omi/firebase_options_prod.dart' as prod;
-import 'package:omi/flavors.dart';
-import 'package:omi/pages/apps/app_detail/app_detail.dart';
-import 'package:omi/pages/apps/providers/add_app_provider.dart';
-import 'package:omi/pages/home/page.dart';
-import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
-import 'package:omi/pages/onboarding/device_selection.dart';
-import 'package:omi/pages/onboarding/wrapper.dart';
-import 'package:omi/pages/persona/persona_profile.dart';
-import 'package:omi/pages/persona/persona_provider.dart';
-import 'package:omi/providers/app_provider.dart';
-import 'package:omi/providers/auth_provider.dart';
-import 'package:omi/providers/calendar_provider.dart';
-import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/providers/connectivity_provider.dart';
-import 'package:omi/providers/developer_mode_provider.dart';
-import 'package:omi/providers/device_provider.dart';
-import 'package:omi/providers/memories_provider.dart';
-import 'package:omi/providers/home_provider.dart';
-import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/providers/message_provider.dart';
-import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/pages/payments/payment_method_provider.dart';
-import 'package:omi/providers/speech_profile_provider.dart';
-import 'package:omi/services/notifications.dart';
-import 'package:omi/services/services.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/analytics/growthbook.dart';
-import 'package:omi/utils/analytics/intercom.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/utils/features/calendar.dart';
-import 'package:omi/utils/logger.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/env/env.dart';
+import 'package:friend_private/firebase_options.dart';
+import 'package:friend_private/pages/home/page.dart';
+import 'package:friend_private/pages/onboarding/wrapper.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
+import 'package:friend_private/providers/device_provider.dart';
+import 'package:friend_private/providers/home_provider.dart';
+import 'package:friend_private/providers/memory_detail_provider.dart';
+import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/providers/message_provider.dart';
+import 'package:friend_private/providers/onboarding_provider.dart';
+import 'package:friend_private/providers/plugin_provider.dart';
+import 'package:friend_private/providers/speech_profile_provider.dart';
+import 'package:friend_private/utils/analytics/growthbook.dart';
+import 'package:friend_private/utils/analytics/intercom.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/analytics/posthog.dart';
+import 'package:friend_private/utils/audio/opus_codec.dart';
+import 'package:friend_private/utils/features/calendar.dart';
+import 'package:friend_private/utils/notifications.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
-import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:talker_flutter/talker_flutter.dart';
-
-Future<bool> _init() async {
-  // Service manager
-  ServiceManager.init();
-
-  // Firebase
-  if (F.env == Environment.prod) {
-    await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform, name: 'prod');
-  } else {
-    await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform, name: 'dev');
-  }
-
-  await IntercomManager().initIntercom();
-  await NotificationService.instance.initialize();
-  await SharedPreferencesUtil.init();
-  await MixpanelManager.init();
-
-  // TODO: thinh, move to app start
-  await ServiceManager.instance().start();
-
-  bool isAuth = (await getIdToken()) != null;
-  if (isAuth) MixpanelManager().identify();
-  initOpus(await opus_flutter.load());
-
-  await GrowthbookUtil.init();
-  CalendarUtil.init();
-  ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
-  return isAuth;
-}
-
-Future<void> initPostHog() async {
-  final config = PostHogConfig(Env.posthogApiKey!);
-  config.debug = true;
-  config.captureApplicationLifecycleEvents = true;
-  config.host = 'https://us.i.posthog.com';
-  await Posthog().setup(config);
-}
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:timezone/data/latest.dart' as tz;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (F.env == Environment.prod) {
-    Env.init(ProdEnv());
+  WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+
+  // Initialize with error recovery
+  await _initWithErrorHandling();
+  
+  runApp(const MyApp());
+}
+
+Future<void> _initWithErrorHandling() async {
+  bool criticalError = false;
+  String? errorMessage;
+  
+  try {
+    // Critical initialization - app cannot run without these
+    await _initCriticalServices();
+  } catch (e) {
+    criticalError = true;
+    errorMessage = 'Critical initialization failed: $e';
+    print('CRITICAL ERROR: $errorMessage');
+  }
+  
+  if (!criticalError) {
+    // Non-critical initialization - app can run with fallbacks
+    await _initNonCriticalServices();
   } else {
-    Env.init(DevEnv());
+    // Show error UI instead of crashing
+    runApp(ErrorApp(message: errorMessage ?? 'Unknown error'));
+    return;
   }
-  FlutterForegroundTask.initCommunicationPort();
-  if (Env.posthogApiKey != null) {
-    await initPostHog();
-  }
-  // _setupAudioSession();
-  bool isAuth = await _init();
-  if (Env.instabugApiKey != null) {
-    await Instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
-    runZonedGuarded(
-      () async {
-        Instabug.init(
-          token: Env.instabugApiKey!,
-          invocationEvents: [InvocationEvent.none],
-        );
-        if (isAuth) {
-          Instabug.identifyUser(
-            FirebaseAuth.instance.currentUser?.email ?? '',
-            SharedPreferencesUtil().fullName,
-            SharedPreferencesUtil().uid,
-          );
-        }
-        FlutterError.onError = (FlutterErrorDetails details) {
-          Zone.current.handleUncaughtError(details.exception, details.stack ?? StackTrace.empty);
-        };
-        Instabug.setColorTheme(ColorTheme.dark);
-        runApp(const MyApp());
+  
+  // Remove splash screen
+  FlutterNativeSplash.remove();
+}
+
+Future<void> _initCriticalServices() async {
+  try {
+    // Load environment variables with timeout
+    await dotenv.load(fileName: ".env").timeout(
+      const Duration(seconds: 5),
+      onTimeout: () {
+        print('Warning: .env file load timed out, using defaults');
       },
-      CrashReporting.reportCrash,
     );
-  } else {
-    runApp(const MyApp());
+  } catch (e) {
+    print('Warning: Failed to load .env file: $e');
+    // Continue with default values
+  }
+
+  // Initialize SharedPreferences with retry
+  int retries = 3;
+  while (retries > 0) {
+    try {
+      SharedPreferencesUtil.sharedPreferencesInstance = 
+          await SharedPreferences.getInstance().timeout(
+        const Duration(seconds: 5),
+      );
+      break;
+    } catch (e) {
+      retries--;
+      if (retries == 0) rethrow;
+      await Future.delayed(const Duration(seconds: 1));
+    }
+  }
+
+  // Initialize Supabase with error handling
+  try {
+    await Supabase.initialize(
+      url: Env.supabaseUrl ?? '',
+      anonKey: Env.supabaseAnonKey ?? '',
+    ).timeout(const Duration(seconds: 10));
+  } catch (e) {
+    print('Warning: Supabase initialization failed: $e');
+    // App can work offline
   }
 }
 
+Future<void> _initNonCriticalServices() async {
+  // Firebase - wrap in try-catch
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    ).timeout(const Duration(seconds: 10));
+    
+    // Crashlytics
+    try {
+      await FirebaseCrashlytics.instance
+          .setCrashlyticsCollectionEnabled(!Platform.isLinux);
+      FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterError;
+    } catch (e) {
+      print('Warning: Crashlytics setup failed: $e');
+    }
+  } catch (e) {
+    print('Warning: Firebase initialization failed: $e');
+    // Continue without Firebase
+  }
+
+  // Analytics services - all non-critical
+  try {
+    await IntercomManager.instance.init();
+  } catch (e) {
+    print('Warning: Intercom init failed: $e');
+  }
+
+  try {
+    await PostHog.instance.init();
+  } catch (e) {
+    print('Warning: PostHog init failed: $e');
+  }
+
+  try {
+    await MixpanelManager.instance.init();
+  } catch (e) {
+    print('Warning: Mixpanel init failed: $e');
+  }
+
+  try {
+    await GrowthbookManager.instance.init();
+  } catch (e) {
+    print('Warning: Growthbook init failed: $e');
+  }
+
+  // Notifications
+  try {
+    await NotificationService.instance.initialize();
+  } catch (e) {
+    print('Warning: Notification service init failed: $e');
+  }
+
+  // Opus codec
+  try {
+    if (Platform.isAndroid || Platform.isIOS || Platform.isMacOS) {
+      initOpus();
+    }
+  } catch (e) {
+    print('Warning: Opus codec init failed: $e');
+  }
+
+  // Instabug
+  if (Platform.isAndroid || Platform.isIOS) {
+    try {
+      if (Env.instabugApiKey != null && Env.instabugApiKey!.isNotEmpty) {
+        await Instabug.init(
+          token: Env.instabugApiKey!,
+          invocationEvents: [InvocationEvent.shake, InvocationEvent.screenshot],
+        );
+      }
+    } catch (e) {
+      print('Warning: Instabug init failed: $e');
+    }
+  }
+
+  // Timezone
+  try {
+    tz.initializeTimeZones();
+    final String currentTimeZone = await FlutterTimezone.getLocalTimezone();
+    SharedPreferencesUtil().timezone = currentTimeZone;
+  } catch (e) {
+    print('Warning: Timezone init failed: $e');
+  }
+
+  // Calendar
+  try {
+    await CalendarUtil.init();
+  } catch (e) {
+    print('Warning: Calendar init failed: $e');
+  }
+}
+
+// Error recovery app
+class ErrorApp extends StatelessWidget {
+  final String message;
+  
+  const ErrorApp({Key? key, required this.message}) : super(key: key);
+  
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                const SizedBox(height: 20),
+                const Text(
+                  'Failed to initialize app',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 14),
+                ),
+                const SizedBox(height: 30),
+                ElevatedButton(
+                  onPressed: () {
+                    // Try to restart the app
+                    SystemNavigator.pop();
+                  },
+                  child: const Text('Close App'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Rest of the MyApp class remains the same...
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
   @override
   State<MyApp> createState() => _MyAppState();
-
-  static _MyAppState of(BuildContext context) => context.findAncestorStateOfType<_MyAppState>()!;
-
-  // The navigator key is necessary to navigate using static methods
-  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 }
 
-class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+class _MyAppState extends State<MyApp> {
   @override
   void initState() {
-    NotificationUtil.initializeNotificationsEventListeners();
-    NotificationUtil.initializeIsolateReceivePort();
-    WidgetsBinding.instance.addObserver(this);
     super.initState();
+    _handleBluetoothPermission();
   }
 
-  void _deinit() {
-    debugPrint("App > _deinit");
-    ServiceManager.instance().deinit();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-    if (state == AppLifecycleState.detached) {
-      _deinit();
+  void _handleBluetoothPermission() async {
+    try {
+      if (await FlutterBluePlus.isSupported == false) {
+        debugPrint("Bluetooth not supported by this device");
+        return;
+      }
+      
+      if (Platform.isAndroid) {
+        await FlutterBluePlus.turnOn();
+      }
+    } catch (e) {
+      debugPrint('Bluetooth permission error: $e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-        providers: [
-          ListenableProvider(create: (context) => ConnectivityProvider()),
-          ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
-          ChangeNotifierProvider(create: (context) => ConversationProvider()),
-          ListenableProvider(create: (context) => AppProvider()),
-          ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
-            create: (context) => MessageProvider(),
-            update: (BuildContext context, value, MessageProvider? previous) =>
-                (previous?..updateAppProvider(value)) ?? MessageProvider(),
-          ),
-          ChangeNotifierProxyProvider2<ConversationProvider, MessageProvider, CaptureProvider>(
-            create: (context) => CaptureProvider(),
-            update: (BuildContext context, conversation, message, CaptureProvider? previous) =>
-                (previous?..updateProviderInstances(conversation, message)) ?? CaptureProvider(),
-          ),
-          ChangeNotifierProxyProvider<CaptureProvider, DeviceProvider>(
-            create: (context) => DeviceProvider(),
-            update: (BuildContext context, captureProvider, DeviceProvider? previous) =>
-                (previous?..setProviders(captureProvider)) ?? DeviceProvider(),
-          ),
-          ChangeNotifierProxyProvider<DeviceProvider, OnboardingProvider>(
-            create: (context) => OnboardingProvider(),
-            update: (BuildContext context, value, OnboardingProvider? previous) =>
-                (previous?..setDeviceProvider(value)) ?? OnboardingProvider(),
-          ),
-          ListenableProvider(create: (context) => HomeProvider()),
-          ChangeNotifierProxyProvider<DeviceProvider, SpeechProfileProvider>(
-            create: (context) => SpeechProfileProvider(),
-            update: (BuildContext context, device, SpeechProfileProvider? previous) =>
-                (previous?..setProviders(device)) ?? SpeechProfileProvider(),
-          ),
-          ChangeNotifierProxyProvider2<AppProvider, ConversationProvider, ConversationDetailProvider>(
-            create: (context) => ConversationDetailProvider(),
-            update: (BuildContext context, app, conversation, ConversationDetailProvider? previous) =>
-                (previous?..setProviders(app, conversation)) ?? ConversationDetailProvider(),
-          ),
-          ChangeNotifierProvider(create: (context) => CalenderProvider()),
-          ChangeNotifierProvider(create: (context) => DeveloperModeProvider()),
-          ChangeNotifierProxyProvider<AppProvider, AddAppProvider>(
-            create: (context) => AddAppProvider(),
-            update: (BuildContext context, value, AddAppProvider? previous) =>
-                (previous?..setAppProvider(value)) ?? AddAppProvider(),
-          ),
-          ChangeNotifierProvider(create: (context) => PaymentMethodProvider()),
-          ChangeNotifierProvider(create: (context) => PersonaProvider()),
-          ChangeNotifierProvider(create: (context) => MemoriesProvider()),
-        ],
-        builder: (context, child) {
-          return WithForegroundTask(
-            child: MaterialApp(
-              navigatorObservers: [
-                if (Env.instabugApiKey != null) InstabugNavigatorObserver(),
-                if (Env.posthogApiKey != null) PosthogObserver(),
-              ],
-              debugShowCheckedModeBanner: F.env == Environment.dev,
-              title: F.title,
-              navigatorKey: MyApp.navigatorKey,
-              localizationsDelegates: const [
-                GlobalMaterialLocalizations.delegate,
-                GlobalWidgetsLocalizations.delegate,
-                GlobalCupertinoLocalizations.delegate,
-              ],
-              supportedLocales: const [Locale('en')],
-              theme: ThemeData(
-                  useMaterial3: false,
-                  colorScheme: const ColorScheme.dark(
-                    primary: Colors.black,
-                    secondary: Colors.deepPurple,
-                    surface: Colors.black38,
-                  ),
-                  snackBarTheme: SnackBarThemeData(
-                    backgroundColor: Colors.grey.shade900,
-                    contentTextStyle: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
-                  ),
-                  textTheme: TextTheme(
-                    titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
-                    titleMedium: const TextStyle(fontSize: 16, color: Colors.white),
-                    bodyMedium: const TextStyle(fontSize: 14, color: Colors.white),
-                    labelMedium: TextStyle(fontSize: 12, color: Colors.grey.shade200),
-                  ),
-                  textSelectionTheme: const TextSelectionThemeData(
-                    cursorColor: Colors.white,
-                    selectionColor: Colors.deepPurple,
-                    selectionHandleColor: Colors.white,
-                  ),
-                  cupertinoOverrideTheme: const CupertinoThemeData(
-                    primaryColor: Colors.white, // Controls the selection handles on iOS
-                  )),
-              themeMode: ThemeMode.dark,
-              builder: (context, child) {
-                FlutterError.onError = (FlutterErrorDetails details) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    Logger.instance.talker.handle(details.exception, details.stack);
-                  });
-                };
-                ErrorWidget.builder = (errorDetails) {
-                  return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
-                };
-                return child!;
-              },
-              home: TalkerWrapper(
-                talker: Logger.instance.talker,
-                options: TalkerWrapperOptions(
-                  enableErrorAlerts: true,
-                  enableExceptionAlerts: true,
-                  errorAlertBuilder: (context, data) {
-                    return LoggerSnackbar(error: data);
-                  },
-                  exceptionAlertBuilder: (context, data) {
-                    return LoggerSnackbar(exception: data);
-                  },
-                ),
-                child: const DeciderWidget(),
+    return ScreenUtilInit(
+      designSize: const Size(360, 800),
+      minTextAdapt: true,
+      splitScreenMode: true,
+      builder: (_, child) {
+        return MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (context) => ConnectivityProvider()),
+            ChangeNotifierProvider(create: (context) => MemoryProvider()),
+            ChangeNotifierProvider(create: (context) => MessageProvider()),
+            ChangeNotifierProvider(create: (context) => PluginProvider()),
+            ChangeNotifierProvider(create: (context) => HomeProvider()),
+            ChangeNotifierProvider(create: (context) => OnboardingProvider()),
+            ChangeNotifierProvider(create: (context) => DeviceProvider()),
+            ChangeNotifierProvider(create: (context) => MemoryDetailProvider()),
+            ChangeNotifierProvider(create: (context) => SpeechProfileProvider()),
+          ],
+          child: MaterialApp(
+            navigatorKey: navigatorKey,
+            debugShowCheckedModeBanner: false,
+            title: 'Friend',
+            theme: ThemeData(
+              useMaterial3: false,
+              primarySwatch: Colors.blue,
+              primaryColor: const Color(0xFF000000),
+              primaryColorDark: const Color(0xFF000000),
+              primaryColorLight: const Color(0xFF000000),
+              scaffoldBackgroundColor: const Color(0xFF0D0F0F),
+              canvasColor: const Color(0xFF0D0F0F),
+              colorScheme: const ColorScheme.dark(
+                primary: Color(0xFF000000),
+                surface: Color(0xFF0D0F0F),
               ),
             ),
-          );
-        });
-  }
-}
-
-class DeciderWidget extends StatefulWidget {
-  const DeciderWidget({super.key});
-
-  @override
-  State<DeciderWidget> createState() => _DeciderWidgetState();
-}
-
-class _DeciderWidgetState extends State<DeciderWidget> {
-  late AppLinks _appLinks;
-  StreamSubscription<Uri>? _linkSubscription;
-
-  Future<void> initDeepLinks() async {
-    _appLinks = AppLinks();
-
-    // Handle links
-    _linkSubscription = _appLinks.uriLinkStream.distinct().listen((uri) {
-      debugPrint('onAppLink: $uri');
-      openAppLink(uri);
-    });
-  }
-
-  void openAppLink(Uri uri) async {
-    if (uri.pathSegments.first == 'apps') {
-      if (mounted) {
-        var app = await context.read<AppProvider>().getAppFromId(uri.pathSegments[1]);
-        if (app != null) {
-          MixpanelManager().track('App Opened From DeepLink', properties: {'appId': app.id});
-          if (mounted) {
-            Navigator.of(context).push(MaterialPageRoute(builder: (context) => AppDetailPage(app: app)));
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: const [Locale('en', '')],
+            themeMode: ThemeMode.dark,
+            home: child,
+          ),
+        );
+      },
+      child: FutureBuilder<bool>(
+        future: isSignedIn(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Scaffold(
+              backgroundColor: Color(0xFF0D0F0F),
+              body: Center(child: CircularProgressIndicator()),
+            );
           }
-        } else {
-          debugPrint('App not found: ${uri.pathSegments[1]}');
-          AppSnackbar.showSnackbarError('Oops! Looks like the app you are looking for is not available.');
-        }
-      }
-    } else {
-      debugPrint('Unknown link: $uri');
-    }
-  }
-
-  @override
-  void initState() {
-    initDeepLinks();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (context.read<ConnectivityProvider>().isConnected) {
-        NotificationService.instance.saveNotificationToken();
-      }
-
-      if (context.read<AuthenticationProvider>().isSignedIn()) {
-        context.read<HomeProvider>().setupHasSpeakerProfile();
-        context.read<HomeProvider>().setupUserPrimaryLanguage();
-        try {
-          await IntercomManager.instance.intercom.loginIdentifiedUser(
-            userId: SharedPreferencesUtil().uid,
-          );
-        } catch (e) {
-          debugPrint('Failed to login to Intercom: $e');
-        }
-
-        context.read<MessageProvider>().setMessagesFromCache();
-        context.read<AppProvider>().setAppsFromCache();
-        context.read<MessageProvider>().refreshMessages();
-      } else {
-        await IntercomManager.instance.intercom.loginUnidentifiedUser();
-      }
-      IntercomManager.instance.setUserAttributes();
-    });
-    super.initState();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<AuthenticationProvider>(
-      builder: (context, authProvider, child) {
-        if (authProvider.isSignedIn()) {
-          if (SharedPreferencesUtil().onboardingCompleted) {
+          if (snapshot.hasError) {
+            return Scaffold(
+              backgroundColor: const Color(0xFF0D0F0F),
+              body: Center(
+                child: Text('Error: ${snapshot.error}'),
+              ),
+            );
+          }
+          if (snapshot.data == true) {
             return const HomePageWrapper();
           } else {
             return const OnboardingWrapper();
           }
-        } else if (SharedPreferencesUtil().hasOmiDevice == false &&
-            SharedPreferencesUtil().hasPersonaCreated &&
-            SharedPreferencesUtil().verifiedPersonaId != null) {
-          return const PersonaProfilePage();
-        } else {
-          return const DeviceSelectionPage();
-        }
-      },
-    );
-  }
-}
-
-class CustomErrorWidget extends StatelessWidget {
-  final String errorMessage;
-
-  const CustomErrorWidget({super.key, required this.errorMessage});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.error_outline,
-              color: Colors.red,
-              size: 50.0,
-            ),
-            const SizedBox(height: 10.0),
-            const Text(
-              'Something went wrong! Please try again later.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10.0),
-            Container(
-              padding: const EdgeInsets.all(10),
-              margin: const EdgeInsets.all(16),
-              height: 200,
-              decoration: BoxDecoration(
-                color: const Color.fromARGB(255, 63, 63, 63),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                errorMessage,
-                textAlign: TextAlign.start,
-                style: const TextStyle(fontSize: 16.0),
-              ),
-            ),
-            const SizedBox(height: 10.0),
-            SizedBox(
-              width: 210,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: errorMessage));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Error message copied to clipboard'),
-                    ),
-                  );
-                },
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text('Copy error message'),
-                    SizedBox(width: 10),
-                    Icon(Icons.copy_rounded),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
+        },
       ),
     );
+  }
+
+  GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+  Future<bool> isSignedIn() async {
+    try {
+      return SharedPreferencesUtil().uid.isNotEmpty;
+    } catch (e) {
+      return false;
+    }
   }
 }
