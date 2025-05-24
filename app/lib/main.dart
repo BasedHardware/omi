@@ -14,9 +14,9 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/dev_env.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/env/prod_env.dart';
+import 'package:omi/flavors.dart';
 import 'package:omi/firebase_options_dev.dart' as dev;
 import 'package:omi/firebase_options_prod.dart' as prod;
-import 'package:omi/flavors.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/home/page.dart';
@@ -94,9 +94,9 @@ Future<void> initPostHog() async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (F.env == Environment.prod) {
-    Env.init(ProdEnv());
+    await Env.init(ProdEnv());
   } else {
-    Env.init(DevEnv());
+    await Env.init(DevEnv());
   }
   FlutterForegroundTask.initCommunicationPort();
   if (Env.posthogApiKey != null) {
