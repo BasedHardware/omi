@@ -1,9 +1,10 @@
-import next from 'next';
-const NextConfig = next.default;
-
+/** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
-  /* other config options */
+  images: {
+    domains: ['pbs.twimg.com', 'firebasestorage.googleapis.com'],
+    formats: ['image/webp'],
+  },
 };
 
 export default nextConfig;
