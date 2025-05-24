@@ -555,7 +555,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           Consumer<HomeProvider>(builder: (context, provider, child) {
             if (provider.selectedIndex == 0) {
               return Consumer<ConversationProvider>(builder: (context, convoProvider, child) {
-                if (convoProvider.missingWalsInSeconds >= 120) {
+                if (convoProvider.missingWalsInSeconds >= 30) {
                   return GestureDetector(
                     onTap: () {
                       routeToPage(context, const SyncPage());
