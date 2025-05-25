@@ -79,10 +79,17 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
     • Exclude vague or trivial remarks ("We should grab lunch sometime").  
     • Merge duplicates; order by due date → spoken urgency → alphabetical.  
     • Format each as a single bullet with its own emoji from the whitelist 📞 📝 🏥 🚗 💻 🛠️ 📦 📊 📚 🔧 ⚠️ ⏳ 🎯 🔋 🎓 📢 💡.
+    • Use consistent timing format in parentheses:
+      - Specific dates: (due MM/DD) or (due Jan 15) or (due Friday)
+      - Relative timing: (today), (tomorrow), (this week), (next week)
+      - Urgency levels: (urgent) for ASAP/immediate, (high priority) for important, (when convenient) for flexible
 
         Example format:  
-        - 🗓️ Submit Q2 budget • due 05/31  
-        - 💻 Update project repo • tomorrow  
+        - 🗓️ Submit Q2 budget (due 05/31)  
+        - 💻 Update project repo (tomorrow)
+        - 📞 Call dentist office (today)
+        - ⚠️ Fix server issue (urgent)
+        - 📝 Review quarterly report (when convenient)  
 
     For the category, classify the conversation into one of the available categories.
 
@@ -128,10 +135,17 @@ def get_reprocess_transcript_structure(transcript: str, started_at: datetime, la
     • Exclude vague or trivial remarks ("We should grab lunch sometime").  
     • Merge duplicates; order by due date → spoken urgency → alphabetical.  
     • Format each as a single bullet with its own emoji from the whitelist 📞 📝 🏥 🚗 💻 🛠️ 📦 📊 📚 🔧 ⚠️ ⏳ 🎯 🔋 🎓 📢 💡.
+    • Use consistent timing format in parentheses:
+      - Specific dates: (due MM/DD) or (due Jan 15) or (due Friday)
+      - Relative timing: (today), (tomorrow), (this week), (next week)
+      - Urgency levels: (urgent) for ASAP/immediate, (high priority) for important, (when convenient) for flexible
 
         Example format:  
-        - 🗓️ Submit Q2 budget • due 05/31  
-        - 💻 Update project repo • tomorrow  
+        - 🗓️ Submit Q2 budget (due 05/31)  
+        - 💻 Update project repo (tomorrow)
+        - 📞 Call dentist office (today)
+        - ⚠️ Fix server issue (urgent)
+        - 📝 Review quarterly report (when convenient)  
 
     For the category, classify the conversation into one of the available categories.
 
