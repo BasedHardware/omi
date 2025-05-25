@@ -157,7 +157,7 @@ def extract_memories_consolidated(text):
             
         # Find all bullet points that follow this title
         # Look for the title followed by bullet points
-        section_text = re.search(f"{re.escape(section_title)}((?:\n\s*[-*•][^\n]+)+)", text, re.DOTALL)
+        section_text = re.search(f"{re.escape(section_title)}{r'((?:\n\s*[-*•][^\n]+)+)'}", text, re.DOTALL)
         
         if section_text:
             bullet_points = re.findall(r'[-*•]\s*([^\n]+)', section_text.group(1))
@@ -515,6 +515,11 @@ def extract_from_instagram():
         # Get the username from the request
         data = request.json
         username = data.get('username', '')
+        
+        # Remove '@' symbol if present
+        if username.startswith('@'):
+            username = username[1:]
+            
         user_id = data.get('uid')
         extract_posts = data.get('extract_posts', False)
         
@@ -571,40 +576,39 @@ def extract_from_instagram():
             posts = None
             if extract_posts:
                 try:
-                    # Get user ID from profile data
-                    user_id_instagram = user_data.get("id")
-                    if user_id_instagram:
-                        # Fetch user posts
-                        posts_result = instagram_client.get(
-                            f"https://i.instagram.com/api/v1/feed/user/{user_id_instagram}/",
-                            timeout=15.0
-                        )
+                    print(f"📸 Extracting posts for Instagram profile: {username}")
+                    
+                    # Get recent posts from the profile data
+                    recent_posts = user_data.get("edge_owner_to_timeline_media", {}).get("edges", [])
+                    posts = []
+                    
+                    # Extract basic post info from profile data
+                    for post_edge in recent_posts:
+                        post_node = post_edge.get("node", {})
+                        shortcode = post_node.get("shortcode")
                         
-                        if posts_result.status_code == 200:
-                            posts_data = posts_result.json()
-                            # Extract relevant post information
-                            posts = []
-                            for item in posts_data.get("items", []):
-                                post = {
-                                    "id": item.get("id"),
-                                    "caption": item.get("caption", {}).get("text") if item.get("caption") else "",
-                                    "like_count": item.get("like_count"),
-                                    "comment_count": item.get("comment_count"),
-                                    "taken_at": item.get("taken_at"),
-                                    "media_type": item.get("media_type"),
-                                    "code": item.get("code"),  # Short code for URL
-                                    "thumbnail_url": item.get("image_versions2", {}).get("candidates", [{}])[0].get("url") if item.get("image_versions2") else None
-                                }
-                                posts.append(post)
-                            
-                            print(f"✅ Successfully extracted {len(posts)} posts from Instagram profile")
-                        else:
-                            print(f"⚠️ Failed to fetch posts: HTTP {posts_result.status_code}")
-                    else:
-                        print(f"⚠️ Could not find Instagram user ID for posts extraction")
+                        if shortcode:
+                            try:
+                                # Use GraphQL to get detailed post data
+                                post_data = scrape_post(shortcode, instagram_client)
+                                posts.append(post_data)
+                                print(f"✅ Extracted post {shortcode}")
+                            except Exception as e:
+                                print(f"⚠️ Error extracting post {shortcode}: {str(e)}")
+                                # Add basic info if GraphQL fails
+                                posts.append({
+                                    "shortcode": shortcode,
+                                    "display_url": post_node.get("display_url"),
+                                    "caption": post_node.get("edge_media_to_caption", {}).get("edges", [{}])[0].get("node", {}).get("text", ""),
+                                    "likes": post_node.get("edge_liked_by", {}).get("count"),
+                                    "comments": post_node.get("edge_media_to_comment", {}).get("count"),
+                                    "timestamp": post_node.get("taken_at_timestamp"),
+                                    "error": str(e)
+                                })
+                    
+                    print(f"📊 Extracted {len(posts)} posts from Instagram profile")
                 except Exception as e:
                     print(f"⚠️ Error extracting posts: {str(e)}")
-                    # Continue with profile info only
             
             # Format the profile information in a human-friendly way
             formatted_text = f"Instagram Profile: {profile_info['full_name']} (@{profile_info['username']})\n\n"
@@ -615,6 +619,15 @@ def extract_from_instagram():
             
             if profile_info['external_url']:
                 formatted_text += f"Website: {profile_info['external_url']}\n"
+            
+            # Add post information to the formatted text if available
+            if posts and len(posts) > 0:
+                formatted_text += f"\nRecent Posts: {len(posts)}\n"
+                for i, post in enumerate(posts[:3], 1):  # Show info for first 3 posts
+                    caption = post.get("caption", "") or ""
+                    if len(caption) > 100:
+                        caption = caption[:97] + "..."
+                    formatted_text += f"\nPost {i}: {caption}\n"
             
             # Check if OpenAI API key is set
             use_ai = data.get('use_ai', True)  # Default to True
@@ -697,13 +710,19 @@ def extract_from_instagram():
                 print(f"📥 Response: {response.text}")
                 result["error"] = response.text
             
-            return jsonify({
+            response_data = {
                 "success": result["success"],
                 "results": [result],
                 "message": f"Processed Instagram profile for @{username}.",
                 "profile_info": profile_info,
                 "ai_used": use_ai and ai_available
-            })
+            }
+            
+            # Add posts to response if available
+            if posts is not None:
+                response_data["posts"] = posts
+                
+            return jsonify(response_data)
             
         except Exception as e:
             print(f"❌ Error extracting content from Instagram: {str(e)}")
@@ -715,22 +734,135 @@ def extract_from_instagram():
         print(traceback.format_exc())
         return jsonify({"success": False, "error": str(e)}), 500
 
-if __name__ == '__main__':
-    print(f"🚀 Starting Memories Collector server...")
-    print(f"📡 API URL: {API_URL}")
-    print(f"⚙️ App ID: {APP_ID}")
-    print(f"👤 User ID: Dynamic (extracted from URL)")
+# Helper function to scrape Instagram post data using GraphQL
+def scrape_post(shortcode, client=None):
+    """Scrape single Instagram post data using GraphQL"""
+    print(f"Scraping Instagram post: {shortcode}")
     
-    # Check if OpenAI API is configured
-    if OPENAI_API_KEY and OPENAI_API_KEY != "your_openai_api_key_here":
-        print(f"🧠 GPT-4o extraction: ENABLED")
-    else:
-        print(f"🧠 GPT-4o extraction: DISABLED (API key not set)")
-        print(f"   Set the OPENAI_API_KEY environment variable or update the key in the code")
+    # Instagram GraphQL constants
+    INSTAGRAM_DOCUMENT_ID = "8845758582119845"  # constant ID for post documents on instagram.com
     
-    print(f"💻 Server running at: http://localhost:5001")
-    print(f"💡 Access with: http://localhost:5001/?uid=YOUR_USER_ID")
-    print("="*50)
-    print("Submit memories through the web interface and watch responses here!")
-    print("="*50 + "\n")
-    app.run(host='0.0.0.0', port=5001, debug=True)
+    # Prepare GraphQL variables
+    variables = {
+        'shortcode': shortcode,
+        'fetch_tagged_user_count': None,
+        'hoisted_comment_id': None,
+        'hoisted_reply_id': None
+    }
+    
+    # URL encode the variables
+    from urllib.parse import quote
+    variables_encoded = quote(json.dumps(variables, separators=(',', ':')))
+    body = f"variables={variables_encoded}&doc_id={INSTAGRAM_DOCUMENT_ID}"
+    
+    # Create a new client if one wasn't provided
+    if client is None:
+        client = httpx.Client(
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/62.0.3202.94 Safari/537.36",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Accept": "*/*",
+                "content-type": "application/x-www-form-urlencoded"
+            }
+        )
+    
+    # Make the GraphQL request
+    result = client.post(
+        url="https://www.instagram.com/graphql/query",
+        headers={"content-type": "application/x-www-form-urlencoded"},
+        data=body,
+        timeout=15.0
+    )
+    
+    # Parse the response
+    if result.status_code != 200:
+        raise Exception(f"Failed to fetch post data: HTTP {result.status_code}")
+    
+    data = result.json()
+    
+    # Check for errors in the response
+    if "errors" in data:
+        error_msg = data.get("errors", [{}])[0].get("message", "Unknown error")
+        raise Exception(f"GraphQL error: {error_msg}")
+    
+    # Extract the post data
+    post_data = data.get("data", {}).get("xdt_shortcode_media", {})
+    
+    if not post_data:
+        raise Exception("No post data found in response")
+    
+    # Parse the post data to extract relevant fields
+    parsed_post = parse_post(post_data)
+    return parsed_post
+
+# Helper function to parse Instagram post data
+def parse_post(data):
+    """Parse Instagram post data to extract relevant fields"""
+    # Basic parsing without jmespath dependency
+    try:
+        # Extract basic post information
+        parsed = {
+            "id": data.get("id"),
+            "shortcode": data.get("shortcode"),
+            "display_url": data.get("display_url"),
+            "is_video": data.get("is_video", False),
+            "taken_at": data.get("taken_at_timestamp"),
+            "likes": data.get("edge_media_preview_like", {}).get("count"),
+            "location": data.get("location", {}).get("name") if data.get("location") else None,
+        }
+        
+        # Extract caption
+        caption_edges = data.get("edge_media_to_caption", {}).get("edges", [])
+        if caption_edges and len(caption_edges) > 0:
+            parsed["caption"] = caption_edges[0].get("node", {}).get("text")
+        else:
+            parsed["caption"] = ""
+        
+        # Extract comments count
+        parsed["comments_count"] = data.get("edge_media_to_parent_comment", {}).get("count", 0)
+        
+        # Extract video URL if it's a video
+        if parsed["is_video"]:
+            parsed["video_url"] = data.get("video_url")
+            parsed["video_view_count"] = data.get("video_view_count")
+            parsed["video_play_count"] = data.get("video_play_count")
+            parsed["video_duration"] = data.get("video_duration")
+        
+        # Extract tagged users
+        tagged_users = []
+        tagged_edges = data.get("edge_media_to_tagged_user", {}).get("edges", [])
+        for edge in tagged_edges:
+            username = edge.get("node", {}).get("user", {}).get("username")
+            if username:
+                tagged_users.append(username)
+        parsed["tagged_users"] = tagged_users
+        
+        # Extract comments (limited to avoid large responses)
+        comments = []
+        comment_edges = data.get("edge_media_to_parent_comment", {}).get("edges", [])
+        for edge in comment_edges[:5]:  # Limit to first 5 comments
+            node = edge.get("node", {})
+            comment = {
+                "id": node.get("id"),
+                "text": node.get("text"),
+                "created_at": node.get("created_at"),
+                "owner": node.get("owner", {}).get("username"),
+                "likes": node.get("edge_liked_by", {}).get("count", 0)
+            }
+            comments.append(comment)
+        parsed["comments"] = comments
+        
+        return parsed
+    except Exception as e:
+        print(f"Error parsing post data: {str(e)}")
+        # Return basic data if parsing fails
+        return {
+            "shortcode": data.get("shortcode"),
+            "display_url": data.get("display_url"),
+            "error": f"Error parsing post data: {str(e)}"
+        }
+
+# Add this at the end of the file
+if __name__ == "__main__":
+    app.run(debug=True, host='0.0.0.0', port=5001)

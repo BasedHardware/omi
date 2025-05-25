@@ -471,7 +471,11 @@ Made to stick
             const submitInstagramBtn = document.getElementById('submit-instagram-btn');
             
             submitInstagramBtn.addEventListener('click', async function() {
-                const username = instagramUsernameField.value.trim();
+                // Get the username and remove '@' symbol if present
+                let username = instagramUsernameField.value.trim();
+                if (username.startsWith('@')) {
+                    username = username.substring(1);
+                }
                 const extractPosts = document.getElementById('extract-posts').checked;
                 
                 if (!userId) {
@@ -518,11 +522,11 @@ Made to stick
                         `;
                         
                         // Add posts JSON section if available
-                        if (result.posts) {
+                        if (result.posts && result.posts.length > 0) {
                             statusHtml += `
                                 <div class="json-data">
                                     <details>
-                                        <summary>View Posts JSON Data</summary>
+                                        <summary>View Posts JSON Data (${result.posts.length} posts)</summary>
                                         <pre>${JSON.stringify(result.posts, null, 2)}</pre>
                                     </details>
                                 </div>
