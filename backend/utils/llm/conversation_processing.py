@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from models.app import App
 from models.conversation import Structured, Conversation, ActionItem, Event
-from .clients import llm_mini, llm_medium_experiment, parser, llm_high
+from .clients import llm_mini, parser, llm_high
 
 
 class DiscardConversation(BaseModel):
