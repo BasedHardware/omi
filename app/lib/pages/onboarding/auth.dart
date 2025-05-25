@@ -38,7 +38,7 @@ class _AuthComponentState extends State<AuthComponent> {
                 ),
               ),
               SizedBox(height: MediaQuery.of(context).textScaleFactor > 1.0 ? 18 : 32),
-              if (Platform.isIOS) ...[
+              if (Platform.isIOS || Platform.isMacOS) ...[
                 SignInButton.withApple(
                   title: 'Sign in with Apple',
                   onTap: () async {
