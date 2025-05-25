@@ -69,15 +69,103 @@ Alternatively, run `flutter run --flavor dev` in terminal
 
 ## Build the app manually:[​](#build-the-app-manually)
 
-Setup manually is useful if you want to build the app to use your own backend.
+Manual setup is useful if you want to build the app with your own backend.
 
-### 1. Upgrade Flutter[​](#1-upgrade-flutter)
+### 1. Flutter Setup
+Ensure Flutter is installed via [FVM](https://fvm.app/docs/getting_started/installation). Do not use global Flutter or upgrade it.
 
-Before proceeding, make sure your Flutter SDK is up to date:
+fvm setup (tested on macos):
 
 ```
-flutter upgrade
+dart pub global activate fvm
+
+# install flutter 3.24.1
+fvm install 3.24.1
+
+# use flutter 3.24.1
+fvm use 3.24.1
+
+# check flutter version
+fvm flutter --version
 ```
+
+Run the following to verify setup:
+
+```
+fvm flutter doctor -v
+```
+
+**Example output:**
+
+```
+[✓] Flutter (Channel stable, 3.24.1, on macOS 15.3.2 24D81 darwin-arm64, locale en-US)
+    • Flutter version 3.24.1 on channel stable at /Users/bread/fvm/versions/3.24.1
+    • Upstream repository https://github.com/flutter/flutter.git
+    • Framework revision 5874a72aa4 (9 months ago), 2024-08-20 16:46:00 -0500
+    • Engine revision c9b9d5780d
+    • Dart version 3.5.1
+    • DevTools version 2.37.2
+
+[✓] Android toolchain - develop for Android devices (Android SDK version 35.0.0)
+    • Android SDK at /Users/bread/Library/Android/sdk
+    • Platform android-35, build-tools 35.0.0
+    • ANDROID_HOME = /Users/bread/Library/Android/sdk
+    • ANDROID_SDK_ROOT = /Users/bread/Library/Android/sdk
+    • Java binary at: /Library/Java/JavaVirtualMachines/jdk-17.jdk/Contents/Home/bin/java
+    • Java version Java(TM) SE Runtime Environment (build 17.0.7+8-LTS-224)
+    • All Android licenses accepted.
+
+[!] Xcode - develop for iOS and macOS (Xcode 16.3)
+    • Xcode at /Applications/Xcode.app/Contents/Developer
+    • Build 16E140
+    ✗ Unable to get list of installed Simulator runtimes.
+    ✗ CocoaPods not installed.
+        CocoaPods is a package manager for iOS or macOS platform code.
+        Without CocoaPods, plugins will not work on iOS or macOS.
+        For more info, see https://flutter.dev/to/platform-plugins
+      For installation instructions, see https://guides.cocoapods.org/using/getting-started.html#installation
+
+[✓] Chrome - develop for the web
+    • Chrome at /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+
+[✓] Android Studio (version 2024.3)
+    • Android Studio at /Applications/Android Studio.app/Contents
+    • Flutter plugin can be installed from:
+      🔨 https://plugins.jetbrains.com/plugin/9212-flutter
+    • Dart plugin can be installed from:
+      🔨 https://plugins.jetbrains.com/plugin/6351-dart
+    • Java version OpenJDK Runtime Environment (build 21.0.6+-13355223-b631.42)
+
+[✓] VS Code (version 1.100.2)
+    • VS Code at /Applications/Visual Studio Code.app/Contents
+    • Flutter extension version 3.110.0
+
+[✓] Connected device (4 available)
+    • sdk gphone64 arm64 (mobile)     • emulator-5554         • android-arm64  • Android 13 (API 33) (emulator)
+    • macOS (desktop)                 • macos                 • darwin-arm64   • macOS 15.3.2 24D81 darwin-arm64
+    • Mac Designed for iPad (desktop) • mac-designed-for-ipad • darwin         • macOS 15.3.2 24D81 darwin-arm64
+    • Chrome (web)                    • chrome                • web-javascript • Google Chrome 136.0.7103.114
+
+[✓] Network resources
+    • All expected network resources are available.
+
+! Doctor found issues in 1 category.
+```
+
+**Notes:**
+- Flutter version must be 3.24.1 on the stable channel, do not use global Flutter or upgrade it.
+
+- Android SDK platform tools must be 35.0.0
+
+- Ensure JDK version is 17 for Android builds. Set it explicitly:
+
+- (On macos you can use the following command to set the jdk version)
+```
+fvm flutter config --jdk-dir /Library/Java/JavaVirtualMachines/jdk-17.jdk/Contents/Home
+```
+
+- CocoaPods must be installed to run on iOS/macOS
+- Android Studio and VS Code versions do not matter as long as fvm flutter is used for all commands
 
 ### 2. Get Flutter Dependencies[​](#2-get-flutter-dependencies)
 
@@ -85,7 +173,7 @@ From within `app` directory, install flutter packages:
 
 ```
 cd app 
-flutter pub get
+fvm flutter pub get
 ```
 
 ### 3. Install iOS Pods[​](#3-install-ios-pods)
@@ -100,7 +188,7 @@ pod repo update
 
 ### 4. Environment Configuration[​](#4-environment-configuration)
 
-Create `.env` using template `.env.template`
+Create `.env` using template `.env.template`, the env template has OPENAI_API_KEY, GOOGLE_MAPS_API_KEY which are optional.
 
 ```
 cd ..
@@ -124,7 +212,7 @@ dart run build_runner build
 ```
 
 ### 7. Setup Firebase[​](#7-setup-firebase)
-
+- This step is mandatory for running the app, otherwise firebase related code needs to be removed from the app.
 - Follow official [Firebase Docs](https://firebase.google.com/docs/flutter/setup) till Step 1
 - If you want to use Apple login, first go and [create an identifier on the apple developer website](https://developer.apple.com/account/resources/identifiers/list)
 - Run the following command to register the prod flavor of the app. The command will prompt you to select `configuration type`; under it, select `Target` and then `Runner`
@@ -144,6 +232,7 @@ If you're facing auth issues running the app, enable Google/Apple sign-in in Fir
 ### 8. Run the App[​](#8-run-the-app)
 
 - Select your target device in Xcode or Android Studio.
-- Run the app.
+- Run the app using `fvm flutter run -v --flavor dev`
+- To generate a dev apk `fvm flutter build apk ---flavor dev`
 
 Having troubles? [Join Discord and search your issue in help channel](https://discord.gg/omi)
