@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
@@ -19,6 +20,7 @@ class IntercomManager {
 
   Future<void> initIntercom() async {
     if (Env.intercomAppId == null) return;
+    if (Platform.isMacOS) return;
     await intercom.initialize(
       Env.intercomAppId!,
       iosApiKey: Env.intercomIOSApiKey,
@@ -47,6 +49,7 @@ class IntercomManager {
   }
 
   Future updateCustomAttributes(Map<String, dynamic> attributes) async {
+    if (Platform.isMacOS) return;
     return await intercom.updateUser(customAttributes: attributes);
   }
 

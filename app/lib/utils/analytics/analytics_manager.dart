@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 
@@ -12,7 +14,7 @@ class AnalyticsManager {
 
   void setUserAttributes() {
     MixpanelManager().setPeopleValues();
-    IntercomManager.instance.setUserAttributes();
+    if (!Platform.isMacOS) IntercomManager.instance.setUserAttributes();
   }
 
   void setUserAttribute(String key, dynamic value) {

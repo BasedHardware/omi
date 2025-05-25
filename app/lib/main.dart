@@ -1,5 +1,5 @@
 import 'dart:async';
-
+import 'dart:io';
 import 'package:app_links/app_links.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -75,7 +75,7 @@ Future<bool> _init() async {
 
   bool isAuth = (await getIdToken()) != null;
   if (isAuth) MixpanelManager().identify();
-  initOpus(await opus_flutter.load());
+  if (!Platform.isMacOS) initOpus(await opus_flutter.load());
 
   await GrowthbookUtil.init();
   CalendarUtil.init();
@@ -105,28 +105,32 @@ void main() async {
   // _setupAudioSession();
   bool isAuth = await _init();
   if (Env.instabugApiKey != null) {
-    await Instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
-    runZonedGuarded(
-      () async {
-        Instabug.init(
-          token: Env.instabugApiKey!,
-          invocationEvents: [InvocationEvent.none],
-        );
-        if (isAuth) {
-          Instabug.identifyUser(
-            FirebaseAuth.instance.currentUser?.email ?? '',
-            SharedPreferencesUtil().fullName,
-            SharedPreferencesUtil().uid,
+    if (Platform.isMacOS) {
+      runApp(const MyApp());
+    } else {
+      await Instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
+      runZonedGuarded(
+        () async {
+          Instabug.init(
+            token: Env.instabugApiKey!,
+            invocationEvents: [InvocationEvent.none],
           );
-        }
-        FlutterError.onError = (FlutterErrorDetails details) {
-          Zone.current.handleUncaughtError(details.exception, details.stack ?? StackTrace.empty);
-        };
-        Instabug.setColorTheme(ColorTheme.dark);
-        runApp(const MyApp());
-      },
-      CrashReporting.reportCrash,
-    );
+          if (isAuth) {
+            Instabug.identifyUser(
+              FirebaseAuth.instance.currentUser?.email ?? '',
+              SharedPreferencesUtil().fullName,
+              SharedPreferencesUtil().uid,
+            );
+          }
+          FlutterError.onError = (FlutterErrorDetails details) {
+            Zone.current.handleUncaughtError(details.exception, details.stack ?? StackTrace.empty);
+          };
+          Instabug.setColorTheme(ColorTheme.dark);
+          runApp(const MyApp());
+        },
+        CrashReporting.reportCrash,
+      );
+    }
   } else {
     runApp(const MyApp());
   }
@@ -352,7 +356,9 @@ class _DeciderWidgetState extends State<DeciderWidget> {
         context.read<AppProvider>().setAppsFromCache();
         context.read<MessageProvider>().refreshMessages();
       } else {
-        await IntercomManager.instance.intercom.loginUnidentifiedUser();
+        if (!Platform.isMacOS) {
+          await IntercomManager.instance.intercom.loginUnidentifiedUser();
+        }
       }
       IntercomManager.instance.setUserAttributes();
     });
