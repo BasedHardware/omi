@@ -81,8 +81,8 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
     • Format each as a single bullet with its own emoji from the whitelist 📞 📝 🏥 🚗 💻 🛠️ 📦 📊 📚 🔧 ⚠️ ⏳ 🎯 🔋 🎓 📢 💡.
 
         Example format:  
-        - 🗓️ **Submit Q2 budget** — @Alice • due 05/31  
-        - 💻 **Update project repo** — @Bob • tomorrow  
+        - 🗓️ **Submit Q2 budget**  • due 05/31  
+        - 💻 **Update project repo**  • tomorrow  
 
     For the category, classify the conversation into one of the available categories.
 
@@ -130,8 +130,8 @@ def get_reprocess_transcript_structure(transcript: str, started_at: datetime, la
     • Format each as a single bullet with its own emoji from the whitelist 📞 📝 🏥 🚗 💻 🛠️ 📦 📊 📚 🔧 ⚠️ ⏳ 🎯 🔋 🎓 📢 💡.
 
         Example format:  
-        - 🗓️ **Submit Q2 budget** — @Alice • due 05/31  
-        - 💻 **Update project repo** — @Bob • tomorrow  
+        - 🗓️ **Submit Q2 budget** • due 05/31  
+        - 💻 **Update project repo** • tomorrow  
 
     For the category, classify the conversation into one of the available categories.
 
