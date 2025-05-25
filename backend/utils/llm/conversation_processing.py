@@ -79,14 +79,41 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
     • Exclude vague or trivial remarks ("We should grab lunch sometime").  
     • Merge duplicates; order by due date → spoken urgency → alphabetical.  
     • Format each as a single bullet with its own emoji from the whitelist 📞 📝 🏥 🚗 💻 🛠️ 📦 📊 📚 🔧 ⚠️ ⏳ 🎯 🔋 🎓 📢 💡.
+    • Use consistent timing format in parentheses:
+      - Specific dates: (due MM/DD) or (due Jan 15) or (due Friday)
+      - Relative timing: (today), (tomorrow), (this week), (next week)
+      - Urgency levels: (urgent) for ASAP/immediate, (high priority) for important, (when convenient) for flexible
 
         Example format:  
-        - 🗓️ **Submit Q2 budget**  • due 05/31  
-        - 💻 **Update project repo**  • tomorrow  
+        - 🗓️ Submit Q2 budget (due 05/31)  
+        - 💻 Update project repo (tomorrow)
+        - 📞 Call dentist office (today)
+        - ⚠️ Fix server issue (urgent)
+        - 📝 Review quarterly report (when convenient)  
 
     For the category, classify the conversation into one of the available categories.
 
-    For Calendar Events, include a list of events extracted from the conversation that the user must have on their calendar. For date context, this conversation happened on {started_at}. {tz} is the user's timezone; convert all event times to UTC and respond in UTC.
+    For Calendar Events, apply strict filtering to include ONLY events that meet ALL these criteria:
+    • **Confirmed commitment**: Not suggestions or "maybe" - actual scheduled events
+    • **User involvement**: The user is expected to attend, participate, or take action
+    • **Specific timing**: Has concrete date/time, not vague references like "sometime" or "soon"
+    • **Important/actionable**: Missing it would have real consequences or impact
+    
+    INCLUDE these event types:
+    • Meetings & appointments (business meetings, doctor visits, interviews)
+    • Hard deadlines (project due dates, payment deadlines, submission dates)
+    • Personal commitments (family events, social gatherings user committed to)
+    • Travel & transportation (flights, trains, scheduled pickups)
+    • Recurring obligations (classes, regular meetings, scheduled calls)
+    
+    EXCLUDE these:
+    • Casual mentions ("we should meet sometime", "maybe next week")
+    • Historical references (past events being discussed)
+    • Other people's events (events user isn't involved in)
+    • Vague suggestions ("let's grab coffee soon")
+    • Hypothetical scenarios ("if we meet Tuesday...")
+    
+    For date context, this conversation happened on {started_at}. {tz} is the user's timezone; convert all event times to UTC and respond in UTC.
 
 
     Transcript: ```{transcript}```
@@ -128,14 +155,41 @@ def get_reprocess_transcript_structure(transcript: str, started_at: datetime, la
     • Exclude vague or trivial remarks ("We should grab lunch sometime").  
     • Merge duplicates; order by due date → spoken urgency → alphabetical.  
     • Format each as a single bullet with its own emoji from the whitelist 📞 📝 🏥 🚗 💻 🛠️ 📦 📊 📚 🔧 ⚠️ ⏳ 🎯 🔋 🎓 📢 💡.
+    • Use consistent timing format in parentheses:
+      - Specific dates: (due MM/DD) or (due Jan 15) or (due Friday)
+      - Relative timing: (today), (tomorrow), (this week), (next week)
+      - Urgency levels: (urgent) for ASAP/immediate, (high priority) for important, (when convenient) for flexible
 
         Example format:  
-        - 🗓️ **Submit Q2 budget** • due 05/31  
-        - 💻 **Update project repo** • tomorrow  
+        - 🗓️ Submit Q2 budget (due 05/31)  
+        - 💻 Update project repo (tomorrow)
+        - 📞 Call dentist office (today)
+        - ⚠️ Fix server issue (urgent)
+        - 📝 Review quarterly report (when convenient)  
 
     For the category, classify the conversation into one of the available categories.
 
-    For Calendar Events, include a list of events extracted from the conversation that the user must have on their calendar. For date context, this conversation happened on {started_at}. {tz} is the user's timezone; convert all event times to UTC and respond in UTC.
+    For Calendar Events, apply strict filtering to include ONLY events that meet ALL these criteria:
+    • **Confirmed commitment**: Not suggestions or "maybe" - actual scheduled events
+    • **User involvement**: The user is expected to attend, participate, or take action
+    • **Specific timing**: Has concrete date/time, not vague references like "sometime" or "soon"
+    • **Important/actionable**: Missing it would have real consequences or impact
+    
+    INCLUDE these event types:
+    • Meetings & appointments (business meetings, doctor visits, interviews)
+    • Hard deadlines (project due dates, payment deadlines, submission dates)
+    • Personal commitments (family events, social gatherings user committed to)
+    • Travel & transportation (flights, trains, scheduled pickups)
+    • Recurring obligations (classes, regular meetings, scheduled calls)
+    
+    EXCLUDE these:
+    • Casual mentions ("we should meet sometime", "maybe next week")
+    • Historical references (past events being discussed)
+    • Other people's events (events user isn't involved in)
+    • Vague suggestions ("let's grab coffee soon")
+    • Hypothetical scenarios ("if we meet Tuesday...")
+    
+    For date context, this conversation happened on {started_at}. {tz} is the user's timezone; convert all event times to UTC and respond in UTC.
 
     Transcript: ```{transcript}```
 
