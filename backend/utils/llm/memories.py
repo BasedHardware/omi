@@ -7,7 +7,7 @@ from models.memories import Memory, MemoryCategory
 from models.transcript_segment import TranscriptSegment
 from utils.prompts import extract_memories_prompt, extract_learnings_prompt, extract_memories_text_content_prompt
 from utils.llms.memory import get_prompt_memories
-from .clients import llm_mini
+from .clients import llm_mini, llm_high
 
 
 class Memories(BaseModel):
@@ -56,7 +56,7 @@ def new_memories_extractor(
 
     try:
         parser = PydanticOutputParser(pydantic_object=Memories)
-        chain = extract_memories_prompt | llm_mini | parser
+        chain = extract_memories_prompt | llm_high | parser
         # with_parser = llm_mini.with_structured_output(Facts)
         response: Memories = chain.invoke({
             'user_name': user_name,
@@ -88,7 +88,7 @@ def extract_memories_from_text(
 
     try:
         parser = PydanticOutputParser(pydantic_object=MemoriesByTexts)
-        chain = extract_memories_text_content_prompt | llm_mini | parser
+        chain = extract_memories_text_content_prompt | llm_high | parser
         response: Memories = chain.invoke({
             'user_name': user_name,
             'text_content': text,
@@ -130,7 +130,7 @@ def new_learnings_extractor(
 
     try:
         parser = PydanticOutputParser(pydantic_object=Learnings)
-        chain = extract_learnings_prompt | llm_mini | parser
+        chain = extract_learnings_prompt | llm_high | parser
         response: Learnings = chain.invoke({
             'user_name': user_name,
             'conversation': content,
@@ -157,5 +157,5 @@ def identify_category_for_memory(memory: str, categories: List) -> str:
 
     Fact: {memory}
     """
-    response = llm_mini.invoke(prompt)
+    response = llm_high.invoke(prompt)
     return response.content
