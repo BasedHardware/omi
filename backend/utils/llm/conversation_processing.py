@@ -67,12 +67,27 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
     prompt_text = '''You are an expert conversation analyzer. Your task is to analyze the conversation and provide structure and clarity to the recording transcription of a conversation.
     The conversation language is {language_code}. Use the same language {language_code} for your response.
 
-    For the title, use the main topic of the conversation.
-    For the overview, condense the conversation into a summary with the main topics discussed, make sure to capture the key points and important details from the conversation.
+    For the title, Write a clear, compelling headline (≤ 10 words) that captures the central topic and outcome. Use Title Case, avoid filler words, and include a key noun + verb where possible (e.g., "Team Finalizes Q2 Budget" or "Family Plans Weekend Road Trip")
+    For the overview, condense the conversation into a summary with the main topics discussed, making sure to capture the key points and important details from the conversation.
     For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the conversation. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
-    For the action items, include a list of commitments, specific tasks or actionable steps from the conversation that the user is planning to do or has to do on that specific day or in future. Remember the speaker is busy so this has to be very efficient and concise, otherwise they might miss some critical tasks. Specify which speaker is responsible for each action item.
+
+    For the action items, apply a strict filter and use the format below:  
+    • Include **only** tasks that have  
+      a) a clear owner (named speaker or implied "you"),  
+      b) a concrete next step **and** timing cue (date, "tomorrow", "next week", etc.),  
+      c) real importance (money, health/safety, hard deadline, or explicit stress if missed).  
+    • Exclude vague or trivial remarks ("We should grab lunch sometime").  
+    • Merge duplicates; order by due date → spoken urgency → alphabetical.  
+    • Format each as a single bullet with its own emoji from the whitelist 📞 📝 🏥 🚗 💻 🛠️ 📦 📊 📚 🔧 ⚠️ ⏳ 🎯 🔋 🎓 📢 💡.
+
+        Example format:  
+        - 🗓️ **Submit Q2 budget** — @Alice • due 05/31  
+        - 💻 **Update project repo** — @Bob • tomorrow  
+
     For the category, classify the conversation into one of the available categories.
-    For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on {started_at}. {tz} is the user's timezone, convert it to UTC and respond in UTC.
+
+    For Calendar Events, include a list of events extracted from the conversation that the user must have on their calendar. For date context, this conversation happened on {started_at}. {tz} is the user's timezone; convert all event times to UTC and respond in UTC.
+
 
     Transcript: ```{transcript}```
 
@@ -102,11 +117,25 @@ def get_reprocess_transcript_structure(transcript: str, started_at: datetime, la
     The conversation language is {language_code}. Use the same language {language_code} for your response.
 
     For the title, use ```{title}```, if it is empty, use the main topic of the conversation.
-    For the overview, condense the conversation into a summary with the main topics discussed, make sure to capture the key points and important details from the conversation.
+    For the overview, condense the conversation into a summary with the main topics discussed, making sure to capture the key points and important details from the conversation.
     For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the conversation. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
-    For the action items, include a list of commitments, specific tasks or actionable steps from the conversation that the user is planning to do or has to do on that specific day or in future. Remember the speaker is busy so this has to be very efficient and concise, otherwise they might miss some critical tasks. Specify which speaker is responsible for each action item.
+
+    For the action items, apply a strict filter and use the format below:  
+    • Include **only** tasks that have  
+      a) a clear owner (named speaker or implied "you"),  
+      b) a concrete next step **and** timing cue (date, "tomorrow", "next week", etc.),  
+      c) real importance (money, health/safety, hard deadline, or explicit stress if missed).  
+    • Exclude vague or trivial remarks ("We should grab lunch sometime").  
+    • Merge duplicates; order by due date → spoken urgency → alphabetical.  
+    • Format each as a single bullet with its own emoji from the whitelist 📞 📝 🏥 🚗 💻 🛠️ 📦 📊 📚 🔧 ⚠️ ⏳ 🎯 🔋 🎓 📢 💡.
+
+        Example format:  
+        - 🗓️ **Submit Q2 budget** — @Alice • due 05/31  
+        - 💻 **Update project repo** — @Bob • tomorrow  
+
     For the category, classify the conversation into one of the available categories.
-    For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on {started_at}. {tz} is the user's timezone, convert it to UTC and respond in UTC.
+
+    For Calendar Events, include a list of events extracted from the conversation that the user must have on their calendar. For date context, this conversation happened on {started_at}. {tz} is the user's timezone; convert all event times to UTC and respond in UTC.
 
     Transcript: ```{transcript}```
 
@@ -133,7 +162,7 @@ def get_reprocess_transcript_structure(transcript: str, started_at: datetime, la
 
 def get_app_result(transcript: str, app: App) -> str:
     prompt = f'''
-    Your are an AI with the following characteristics:
+    You are an AI with the following characteristics:
     Name: {app.name},
     Description: {app.description},
     Task: ${app.memory_prompt}
@@ -148,7 +177,7 @@ def get_app_result(transcript: str, app: App) -> str:
 
 def get_app_result_v1(transcript: str, app: App) -> str:
     prompt = f'''
-    Your are an AI with the following characteristics:
+    You are an AI with the following characteristics:
     Name: ${app.name},
     Description: ${app.description},
     Task: ${app.memory_prompt}
