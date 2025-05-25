@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field
 
 
 class MemoryCategory(str, Enum):
+    interesting = "interesting"
+    system = "system"
     core = "core"
     hobbies = "hobbies"
     lifestyle = "lifestyle"
