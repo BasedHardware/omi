@@ -98,7 +98,10 @@ class PureSocket implements IPureSocket {
 
   PureSocket(this.url) {
     Logger.debug('🔌 Socket initializing for URL: $url');
-    _internetStatusListener = PureCore().internetConnection.onStatusChange.listen((InternetStatus status) {
+    _internetStatusListener = PureCore()
+        .internetConnection
+        .onStatusChange
+        .listen((InternetStatus status) {
       onInternetSatusChanged(status);
     });
   }
@@ -113,7 +116,8 @@ class PureSocket implements IPureSocket {
   }
 
   Future<bool> _connect() async {
-    if (_status == PureSocketStatus.connecting || _status == PureSocketStatus.connected) {
+    if (_status == PureSocketStatus.connecting ||
+        _status == PureSocketStatus.connected) {
       return false;
     }
 
@@ -146,6 +150,8 @@ class PureSocket implements IPureSocket {
       _status = PureSocketStatus.notConnected;
       return false;
     }
+    _status = PureSocketStatus.connected;
+    return true;
   }
 
   @override
@@ -186,7 +192,8 @@ class PureSocket implements IPureSocket {
 
     _listener?.onError(err, trace);
 
-    CrashReporting.reportHandledCrash(err, trace, level: NonFatalExceptionLevel.error);
+    CrashReporting.reportHandledCrash(err, trace,
+        level: NonFatalExceptionLevel.error);
   }
 
   @override
@@ -229,7 +236,8 @@ class PureSocket implements IPureSocket {
     const double multiplier = 1.5;
     const int maxRetries = 8;
 
-    if (_status == PureSocketStatus.connecting || _status == PureSocketStatus.connected) {
+    if (_status == PureSocketStatus.connecting ||
+        _status == PureSocketStatus.connected) {
       debugPrint("[Socket] Can not reconnect, because socket is $_status");
       return;
     }
@@ -242,7 +250,8 @@ class PureSocket implements IPureSocket {
     }
 
     // retry
-    int waitInMilliseconds = pow(multiplier, _retries).toInt() * initialBackoffTimeMs;
+    int waitInMilliseconds =
+        pow(multiplier, _retries).toInt() * initialBackoffTimeMs;
     await Future.delayed(Duration(milliseconds: waitInMilliseconds));
     _retries++;
     if (_retries > maxRetries) {
@@ -259,7 +268,8 @@ class PureSocket implements IPureSocket {
     _internetStatus = status;
     switch (status) {
       case InternetStatus.connected:
-        if (_status == PureSocketStatus.connected || _status == PureSocketStatus.connecting) {
+        if (_status == PureSocketStatus.connected ||
+            _status == PureSocketStatus.connecting) {
           return;
         }
         _reconnect();
