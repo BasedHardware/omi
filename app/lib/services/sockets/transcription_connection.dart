@@ -20,6 +20,8 @@ abstract interface class ITransctipSegmentSocketServiceListener {
   void onConnected();
 
   void onClosed();
+
+  void onImageReceived(dynamic imageData);
 }
 
 class SpeechProfileTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
@@ -119,6 +121,17 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     }
     if (jsonEvent == null) {
       debugPrint("Can not decode message event json $event");
+      return;
+    }
+
+    // Handle image data
+    if (jsonEvent is Map<String, dynamic> && jsonEvent['type'] == 'image') {
+      var imageData = jsonEvent['data'];
+      _listeners.forEach((k, v) {
+        if (v is ITransctipSegmentSocketServiceListener) {
+          v.onImageReceived(imageData);
+        }
+      });
       return;
     }
 

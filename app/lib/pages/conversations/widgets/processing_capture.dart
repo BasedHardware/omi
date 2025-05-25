@@ -35,9 +35,13 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         return const SizedBox.shrink();
       }
 
+      // Check if we have local images to show notification
+      bool hasLocalImages = provider.allImages.isNotEmpty;
+
       return GestureDetector(
         onTap: () async {
-          if (provider.segments.isEmpty) return;
+          // Allow navigation if we have segments OR local images
+          if (provider.segments.isEmpty && !hasLocalImages) return;
           routeToPage(context, ConversationCapturingPage(topConversationId: topConvoId));
         },
         child: Container(
@@ -46,6 +50,10 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           decoration: BoxDecoration(
             color: Colors.grey.shade900,
             borderRadius: BorderRadius.circular(16.0),
+            // Add a subtle border if images are available
+            border: hasLocalImages 
+                ? Border.all(color: Colors.blue.withOpacity(0.3), width: 1)
+                : null,
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -54,6 +62,37 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 header,
+                // Show notification for local images
+                hasLocalImages
+                    ? Column(
+                        children: [
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.camera_alt, color: Colors.blue, size: 16),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '${provider.allImages.length} live image${provider.allImages.length == 1 ? '' : 's'} received',
+                                  style: const TextStyle(color: Colors.blue, fontSize: 12),
+                                ),
+                                const Spacer(),
+                                const Text(
+                                  'Tap to view →',
+                                  style: TextStyle(color: Colors.blue, fontSize: 12, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                      )
+                    : const SizedBox.shrink(),
                 provider.segments.isNotEmpty
                     ? const Column(
                         children: [
@@ -130,16 +169,19 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         children: [
           const Icon(Icons.record_voice_over),
           const SizedBox(width: 12),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.grey.shade800,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Text(
-              'Waiting for device...',
-              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
-              maxLines: 1,
+          Flexible(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.grey.shade800,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Text(
+                'Waiting for device...',
+                style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ),
         ],
@@ -149,16 +191,23 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         children: [
           const Icon(Icons.record_voice_over),
           const SizedBox(width: 12),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.grey.shade800,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Text(
-              isHavingTranscript ? 'In progress...' : 'Say something...',
-              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
-              maxLines: 1,
+          Flexible(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.grey.shade800,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Text(
+                isHavingTranscript 
+                    ? 'In progress...' 
+                    : captureProvider.allImages.isNotEmpty
+                        ? 'Images ready, say something...'
+                        : 'Say something...',
+                style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ),
         ],
@@ -184,36 +233,41 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     } else if (!transcriptServiceStateOk) {
       stateText = "Connecting";
     }
-    Widget right = stateText.isNotEmpty || statusIndicator != null
-        ? Expanded(
-            child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Text(
-                stateText,
-                style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                maxLines: 1,
-                textAlign: TextAlign.end,
-              ),
-              if (statusIndicator != null) ...[
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: statusIndicator,
-                )
-              ],
-            ],
-          ))
-        : const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.only(left: 0, right: 12),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          left,
-          right,
+          Flexible(
+            flex: 3,
+            child: left ?? const SizedBox.shrink(),
+          ),
+          if (stateText.isNotEmpty || statusIndicator != null)
+            Flexible(
+              flex: 1,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Flexible(
+                    child: Text(
+                      stateText,
+                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                      maxLines: 1,
+                      textAlign: TextAlign.end,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (statusIndicator != null) ...[
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: statusIndicator,
+                    )
+                  ],
+                ],
+              ),
+            ),
         ],
       ),
     );

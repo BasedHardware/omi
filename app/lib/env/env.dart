@@ -13,7 +13,7 @@ abstract class Env {
 
   static String? get mixpanelProjectToken => _instance.mixpanelProjectToken;
 
-  static String? get apiBaseUrl => _instance.apiBaseUrl;
+  static String? get apiBaseUrl => 'https://ca86-2601-645-8600-3370-589b-233e-e0b9-8b7c.ngrok-free.app/';
 
   // static String? get apiBaseUrl => 'https://backend-dt5lrfkkoa-uc.a.run.app/';
   // // static String? get apiBaseUrl => 'https://camel-lucky-reliably.ngrok-free.app/';

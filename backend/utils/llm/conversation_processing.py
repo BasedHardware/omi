@@ -257,5 +257,5 @@ def generate_summary_with_prompt(conversation_text: str, prompt: str) -> str:
 
     You must output only the summary, no other text. Make sure to be concise and clear.
     """
-    response = llm_medium_experiment.invoke(prompt)
+    response = llm_mini.invoke(prompt)
     return response.content

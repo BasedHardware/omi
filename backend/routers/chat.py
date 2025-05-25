@@ -13,7 +13,7 @@ import database.chat as chat_db
 from database.apps import record_app_usage
 from models.app import App, UsageHistoryType
 from models.chat import ChatSession, Message, SendMessageRequest, MessageSender, ResponseMessage, MessageConversation, \
-    FileChat
+    FileChat, MessageType
 from models.conversation import Conversation
 from routers.sync import retrieve_file_paths, decode_files_to_wav
 from utils.apps import get_available_app_by_id
@@ -24,6 +24,9 @@ from utils.llm.chat import initial_chat_message
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream, execute_persona_chat_stream
+
+import database.redis_db as redis_db
+import json
 
 router = APIRouter()
 fc = FileChatTool()
@@ -334,51 +337,77 @@ async def transcribe_voice_message(files: List[UploadFile] = File(...),
 
 @router.post('/v2/files', response_model=List[FileChat], tags=['chat'])
 def upload_file_chat(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
-    thumbs_name = []
+    # Process each uploaded file
     files_chat = []
     for file in files:
-        temp_file = Path(f"{file.filename}")
-        with temp_file.open("wb") as buffer:
+        # Save uploaded file temporarily
+        temp_file_path = Path(f"{file.filename}")
+        with temp_file_path.open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
+        # Process the file (generates thumbnail if image)
         fc_tool = FileChatTool()
-        result = fc_tool.upload(temp_file)
+        result = fc_tool.upload(temp_file_path) # result contains local thumbnail_path and thumbnail_name
 
-        thumb_name = result.get("thumbnail_name", "")
-        if thumb_name != "":
-            thumbs_name.append(thumb_name)
-
+        # Create FileChat object
         filechat = FileChat(
             id=str(uuid.uuid4()),
             name=result.get("file_name", ""),
             mime_type=result.get("mime_type", ""),
             openai_file_id=result.get("file_id", ""),
             created_at=datetime.now(timezone.utc),
-            thumb_name=thumb_name,
+            thumb_name=result.get("thumbnail_name", ""),
         )
+
+        # If it's an image and a thumbnail was generated, upload thumbnail to cloud storage
+        if filechat.is_image() and result.get("thumbnail_path"):
+            try:
+                # Use the new function to upload thumbnail and get public URL
+                public_thumbnail_url = storage.upload_chat_file_thumbnail(result["thumbnail_path"], uid)
+                filechat.thumbnail = public_thumbnail_url # Set thumbnail field to public URL
+                print(f"Uploaded thumbnail public URL: {public_thumbnail_url}") # Log the public URL
+            except Exception as e:
+                print(f"Error uploading thumbnail to cloud storage: {e}")
+                # Handle upload error (e.g., log, set thumbnail to empty string)
+                filechat.thumbnail = ""
+
+            # Clean up local thumbnail file
+            local_thumb_file = Path(result["thumbnail_path"])
+            if local_thumb_file.exists():
+                 local_thumb_file.unlink()
+
         files_chat.append(filechat)
 
-        # cleanup temp_file
-        temp_file.unlink()
+        # Clean up original temporary file
+        temp_file_path.unlink()
 
-    if len(thumbs_name) > 0:
-        thumbs_path = storage.upload_multi_chat_files(thumbs_name, uid)
-        for fc in files_chat:
-            if not fc.is_image():
-                continue
-            thumb_path = thumbs_path.get(fc.thumb_name, "")
-            fc.thumbnail = thumb_path
-            # cleanup file thumb
-            thumb_file = Path(fc.thumb_name)
-            thumb_file.unlink()
-
-    # save db
+    # Save FileChat objects to database
     files_chat_dict = [fc.dict() for fc in files_chat]
-
     chat_db.add_multi_files(uid, files_chat_dict)
 
-    response = [fc.dict() for fc in files_chat]
+    # ** Publish image data to Redis for real-time update **
+    try:
+        redis_client = redis_db.r
+        channel = f'user_messages:{uid}'
+        
+        # Create a payload with image data
+        for filechat in files_chat:
+            if filechat.is_image():
+                payload = {
+                    'type': 'image',
+                    'image_data': {
+                        'id': filechat.id,
+                        'thumbnail_url': filechat.thumbnail,
+                        'mime_type': filechat.mime_type,
+                        'created_at': filechat.created_at.isoformat()
+                    }
+                }
+                redis_client.publish(channel, json.dumps(payload))
+                print(f"Published image {filechat.id} to Redis channel {channel}")
+    except Exception as e:
+        print(f"Error publishing image data to Redis: {e}")
 
+    response = [fc.dict() for fc in files_chat]
     return response
 
 

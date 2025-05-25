@@ -19,6 +19,7 @@ from database.redis_db import get_cached_user_geolocation
 from models.conversation import Conversation, TranscriptSegment, ConversationStatus, Structured, Geolocation
 from models.message_event import ConversationEvent, MessageEvent, MessageServiceStatusEvent, LastConversationEvent, \
     TranslationEvent
+from models.chat import Message
 from models.transcript_segment import Translation
 from utils.apps import is_audio_bytes_app_enabled
 from utils.conversations.location import get_google_maps_location
@@ -36,6 +37,10 @@ from utils.translation_cache import TranscriptSegmentLanguageCache
 
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists
+
+import database.chat as chat_db
+import json
+import redis.asyncio as aioredis
 
 router = APIRouter()
 
@@ -154,6 +159,86 @@ async def _listen(
         websocket_active = False
         await websocket.close(code=1008, reason="Bad user")
         return
+
+    # Capture the main event loop before starting the Redis listener thread
+    main_loop = asyncio.get_event_loop()
+
+    def redis_listener():
+        print(f"Starting Redis listener for user {uid}")
+        try:
+            redis_client = redis_db.r
+            pubsub = redis_client.pubsub()
+            channel = f'user_messages:{uid}'
+            pubsub.subscribe(channel)
+            print(f"Subscribed to Redis channel: {channel}")
+
+            # Handle Redis message function
+            def handle_redis_message(message_data: dict):
+                try:
+                    if message_data.get('type') == 'image':
+                        image_data = message_data.get('image_data')
+                        if image_data:
+                            # Check if websocket is still active before sending
+                            if websocket_active and websocket.client_state == WebSocketState.CONNECTED:
+                                # Schedule the coroutine in a thread-safe way using the main loop
+                                try:
+                                    # Use the captured main event loop
+                                    future = asyncio.run_coroutine_threadsafe(
+                                        websocket.send_json({
+                                            'type': 'image',
+                                            'data': image_data
+                                        }), main_loop
+                                    )
+                                    # Optionally wait for completion with a timeout
+                                    future.result(timeout=5.0)
+                                    print(f"Sent image data to websocket for user {uid}")
+                                except Exception as send_error:
+                                    print(f"Error sending to websocket: {send_error}")
+                            else:
+                                print(f"Websocket not active for user {uid}, could not send image data")
+                except Exception as e:
+                    print(f"Error handling Redis message: {e}")
+
+            # Listen for messages
+            for message in pubsub.listen():
+                if not websocket_active:
+                    break
+                if message['type'] == 'message':
+                    try:
+                        data = message['data'].decode('utf-8')
+                        print(f"Received Redis message on {channel}: {data}")
+                        payload = json.loads(data)
+                        if payload.get('type') == 'image':
+                            handle_redis_message(payload)
+                        elif payload.get('message_id'):
+                            # Handle existing message notifications
+                            message_id = payload.get('message_id')
+                            fetched_message, _ = chat_db.get_message(uid, message_id)
+                            if fetched_message:
+                                message_obj = Message(**fetched_message)
+                                # Use asyncio to send the message event using the main loop
+                                asyncio.run_coroutine_threadsafe(
+                                    _asend_message_event(ConversationEvent(event_type="new_chat_message", memory=None, messages=[message_obj])),
+                                    main_loop
+                                )
+                    except json.JSONDecodeError:
+                        print(f"Failed to decode JSON from Redis message: {data}")
+                    except Exception as e:
+                        print(f"Error processing Redis message: {e}")
+        except Exception as e:
+            print(f"Redis listener error for user {uid}: {e}")
+        finally:
+            try:
+                pubsub.unsubscribe(channel)
+                pubsub.close()
+                print(f"Unsubscribed from Redis channel: {channel}")
+            except Exception as e:
+                print(f"Error closing Redis pubsub: {e}")
+
+    # Start the Redis listener in a separate thread
+    import threading
+    redis_listener_thread = threading.Thread(target=redis_listener, daemon=True)
+    redis_listener_thread.start()
 
     # Stream transcript
     async def _trigger_create_conversation_with_delay(delay_seconds: int, finished_at: datetime):

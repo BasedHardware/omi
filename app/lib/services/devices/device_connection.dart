@@ -189,7 +189,7 @@ abstract class DeviceConnection {
       return await performGetButtonState();
     }
     debugPrint('button state error');
-    return Future.value(<int>[]);
+    return <int>[];
   }
 
   Future<List<int>> performGetButtonState();
@@ -230,7 +230,7 @@ abstract class DeviceConnection {
       return await performGetStorageList();
     }
     _showDeviceDisconnectedNotification();
-    return Future.value(<int>[]);
+    return <int>[];
   }
 
   Future<List<int>> performGetStorageList();
@@ -242,7 +242,7 @@ abstract class DeviceConnection {
       return await performWriteToStorage(numFile, command, offset);
     }
     _showDeviceDisconnectedNotification();
-    return Future.value(false);
+    return false;
   }
 
   Future<StreamSubscription?> getBleStorageBytesListener({

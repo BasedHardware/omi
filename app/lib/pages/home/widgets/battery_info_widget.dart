@@ -30,37 +30,54 @@ class BatteryInfoWidget extends StatelessWidget {
                         );
                         MixpanelManager().batteryIndicatorClicked();
                       },
-                child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade900,
-                      borderRadius: BorderRadius.circular(10),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // OpenGlass connection status dot
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: deviceProvider.connectedDevice != null ? Colors.green : Colors.red,
+                        shape: BoxShape.circle,
+                      ),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 10,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            color: deviceProvider.batteryLevel > 75
-                                ? const Color.fromARGB(255, 0, 255, 8)
-                                : deviceProvider.batteryLevel > 20
-                                    ? Colors.yellow.shade700
-                                    : deviceProvider.batteryLevel > 0
-                                        ? Colors.red
-                                        : Colors.grey,
-                            shape: BoxShape.circle,
+                    const SizedBox(width: 8),
+                    // Battery indicator
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade900,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: deviceProvider.batteryLevel > 75
+                                  ? const Color.fromARGB(255, 0, 255, 8)
+                                  : deviceProvider.batteryLevel > 20
+                                      ? Colors.yellow.shade700
+                                      : deviceProvider.batteryLevel > 0
+                                          ? Colors.red
+                                          : Colors.grey,
+                              shape: BoxShape.circle,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 8.0),
-                        Text(
-                          deviceProvider.batteryLevel > 0 ? '${deviceProvider.batteryLevel.toString()}%' : "",
-                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    )),
+                          const SizedBox(width: 8.0),
+                          Text(
+                            deviceProvider.batteryLevel > 0 ? '${deviceProvider.batteryLevel.toString()}%' : "",
+                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               );
             } else {
               return GestureDetector(

@@ -1,3 +1,0 @@
-&uart0 {
- 	current-speed = <921600>;
- };

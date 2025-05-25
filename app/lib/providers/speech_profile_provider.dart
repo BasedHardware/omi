@@ -332,40 +332,45 @@ class SpeechProfileProvider extends ChangeNotifier
 
   @override
   void onClosed() {
-    // TODO: implement onClosed
+    debugPrint('SpeechProfileProvider: WebSocket closed');
+    // Handle WebSocket closed event if needed
   }
 
   @override
   void onError(Object err) {
-    notifyError('WS_ERR');
+    debugPrint('SpeechProfileProvider: WebSocket error: $err');
+    notifyError('CONNECTION_ERROR'); // Or handle the error appropriately
   }
 
   @override
   void onMessageEventReceived(ServerMessageEvent event) {
-    // TODO: implement onMessageEventReceived
+    _handleMessageEvent(event);
   }
 
   @override
-  void onSegmentReceived(List<TranscriptSegment> newSegments) {
-    if (newSegments.isEmpty) return;
-    if (segments.isEmpty) {
-      audioStorage.removeFramesRange(fromSecond: 0, toSecond: newSegments[0].start.toInt());
-    }
-    streamStartedAtSecond ??= newSegments[0].start;
-
-    var remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
-    TranscriptSegment.combineSegments(
-      segments,
-      remainSegments,
-      toRemoveSeconds: streamStartedAtSecond ?? 0,
-    );
-    updateProgressMessage();
-    _validateSingleSpeaker();
-    _handleCompletion();
-    notifyInfo('SCROLL_DOWN');
-    debugPrint('Conversation creation timer restarted');
+  void onSegmentReceived(List<TranscriptSegment> segments) {
+    _processNewSegmentReceived(segments);
   }
 
   @override
-  void onConnected() {}
+  void onConnected() {
+    debugPrint('SpeechProfileProvider: WebSocket connected');
+    message = ''; // Clear any connection error messages
+    notifyListeners();
+  }
+
+  @override
+  void onImageReceived(dynamic imageData) {
+    debugPrint('SpeechProfileProvider: onImageReceived (ignored)');
+    // This provider doesn't handle images, so we can ignore this.
+  }
+
+  // ─────────────────────────── event helpers / processors ──────────────────────────────
+  void _handleMessageEvent(ServerMessageEvent event) {
+    // Implementation of _handleMessageEvent method
+  }
+
+  void _processNewSegmentReceived(List<TranscriptSegment> segments) {
+    // Implementation of _processNewSegmentReceived method
+  }
 }

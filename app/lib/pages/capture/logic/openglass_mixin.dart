@@ -15,32 +15,37 @@ mixin OpenGlassMixin {
   StreamSubscription? _bleBytesStream;
 
   // TODO: use connection directly
-  Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    return connection?.getAudioCodec() ?? Future.value(BleAudioCodec.pcm8);
+  Future<BleAudioCodec> getAudioCodec(String deviceId) async {
+    final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) return BleAudioCodec.pcm8;
+    return connection.getAudioCodec();
   }
 
-  Future<StreamSubscription?> _getImageListener(
-    String deviceId, {
-    required void Function(Uint8List base64JpgData) onImageReceived,
+  Future<StreamSubscription?> getImageListener({
+    required void Function(Uint8List) onImageReceived,
+    required String deviceId,
   }) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    return connection?.getImageListener(onImageReceived: onImageReceived) ?? Future.value(null);
+    final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) return null;
+    return connection.getImageListener(onImageReceived: onImageReceived);
   }
 
-  Future _cameraStopPhotoController(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    return connection?.cameraStopPhotoController() ?? Future.value(null);
+  Future<void> cameraStopPhotoController(String deviceId) async {
+    final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) return;
+    return connection.cameraStopPhotoController();
   }
 
-  Future _cameraStartPhotoController(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    return connection?.cameraStartPhotoController() ?? Future.value(null);
+  Future<void> cameraStartPhotoController(String deviceId) async {
+    final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) return;
+    return connection.cameraStartPhotoController();
   }
 
-  Future<bool> _hasPhotoStreamingCharacteristic(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    return connection?.hasPhotoStreamingCharacteristic() ?? Future.value(false);
+  Future<bool> hasPhotoStreamingCharacteristic(String deviceId) async {
+    final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) return false;
+    return connection.hasPhotoStreamingCharacteristic();
   }
 
   Future<void> openGlassProcessing(
@@ -48,8 +53,7 @@ mixin OpenGlassMixin {
     Function(List<Tuple2<String, String>>) onPhotosUpdated,
     Function(bool) setHasTranscripts,
   ) async {
-    _bleBytesStream = await _getImageListener(
-      device.id,
+    _bleBytesStream = await getImageListener(
       onImageReceived: (Uint8List completedImage) async {
         if (completedImage.isNotEmpty) {
           debugPrint('Completed image bytes length: ${completedImage.length}');
@@ -63,13 +67,14 @@ mixin OpenGlassMixin {
           });
         }
       },
+      deviceId: device.id,
     );
-    await _cameraStopPhotoController(device.id);
-    await _cameraStartPhotoController(device.id);
+    await cameraStopPhotoController(device.id);
+    await cameraStartPhotoController(device.id);
   }
 
   Future<bool> isGlassesDevice(String deviceId) async {
-    return await _hasPhotoStreamingCharacteristic(deviceId);
+    return await hasPhotoStreamingCharacteristic(deviceId);
   }
 
   void disposeOpenGlass() {

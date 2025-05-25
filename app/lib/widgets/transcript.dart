@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
@@ -9,8 +10,32 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 
+class ImageSegment {
+  final String id;
+  final String thumbnailUrl;
+  final String mimeType;
+  final DateTime createdAt;
+
+  ImageSegment({
+    required this.id,
+    required this.thumbnailUrl,
+    required this.mimeType,
+    required this.createdAt,
+  });
+
+  factory ImageSegment.fromJson(Map<String, dynamic> json) {
+    return ImageSegment(
+      id: json['id'] as String,
+      thumbnailUrl: json['thumbnail_url'] as String,
+      mimeType: json['mime_type'] as String,
+      createdAt: DateTime.parse(json['created_at'] as String),
+    );
+  }
+}
+
 class TranscriptWidget extends StatefulWidget {
   final List<TranscriptSegment> segments;
+  final List<ImageSegment> images;
   final bool horizontalMargin;
   final bool topMargin;
   final bool separator;
@@ -22,6 +47,7 @@ class TranscriptWidget extends StatefulWidget {
   const TranscriptWidget({
     super.key,
     required this.segments,
+    this.images = const [],
     this.horizontalMargin = true,
     this.topMargin = true,
     this.separator = true,
@@ -67,29 +93,90 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   @override
   Widget build(BuildContext context) {
-    // Use ListView.builder instead of ListView.separated for better performance
+    // Combine segments and images into a single timeline
+    final allItems = <dynamic>[];
+    allItems.addAll(widget.segments);
+    allItems.addAll(widget.images);
+    
+    // Sort by creation time
+    allItems.sort((a, b) {
+      if (a is TranscriptSegment && b is TranscriptSegment) {
+        return a.start.compareTo(b.start);
+      } else if (a is ImageSegment && b is ImageSegment) {
+        return a.createdAt.compareTo(b.createdAt);
+      } else if (a is TranscriptSegment) {
+        return a.start.compareTo(b.createdAt.millisecondsSinceEpoch / 1000);
+      } else {
+        return a.createdAt.millisecondsSinceEpoch / 1000.compareTo(b.start);
+      }
+    });
+
     return ListView.builder(
       controller: _scrollController,
       padding: EdgeInsets.zero,
-      itemCount: widget.segments.length + 2,
+      itemCount: allItems.length + 2,
       itemBuilder: (context, idx) {
-        // Handle header and footer items
         if (idx == 0) return SizedBox(height: widget.topMargin ? 32 : 0);
-        if (idx == widget.segments.length + 1) return SizedBox(height: widget.bottomMargin);
+        if (idx == allItems.length + 1) return SizedBox(height: widget.bottomMargin);
 
-        // Add separator before the item (except for the first one)
-        if (widget.separator && idx > 1) {
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 16),
-              _buildSegmentItem(idx - 1),
-            ],
-          );
+        final item = allItems[idx - 1];
+        
+        if (item is ImageSegment) {
+          return _buildImageItem(item);
+        } else {
+          return _buildSegmentItem(idx - 1);
         }
-
-        return _buildSegmentItem(idx - 1);
       },
+    );
+  }
+
+  Widget _buildImageItem(ImageSegment image) {
+    return Padding(
+      padding: EdgeInsetsDirectional.fromSTEB(
+        widget.horizontalMargin ? 16 : 0,
+        16,
+        widget.horizontalMargin ? 16 : 0,
+        0,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.network(
+              image.thumbnailUrl,
+              fit: BoxFit.cover,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return Container(
+                  height: 200,
+                  color: Colors.grey[900],
+                  child: const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+              },
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  height: 200,
+                  color: Colors.grey[900],
+                  child: const Center(
+                    child: Icon(Icons.error_outline, color: Colors.red),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Image captured at ${DateFormat('HH:mm:ss').format(image.createdAt)}',
+            style: const TextStyle(
+              color: Colors.grey,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
