@@ -58,6 +58,9 @@ dist/
 **/ios/Flutter/Custom.xcconfig
 **/ios/GoogleService-Info.plist
 **/ios/Runner.xcodeproj/project.pbxproj
+# Entitlements files (local development only)
+**/ios/**/Runner.entitlements
+**/ios/**/RunnerDebug-dev.entitlements
 
 # macOS specific
 **/macos/**/Pods/
