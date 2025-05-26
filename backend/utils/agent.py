@@ -65,11 +65,9 @@ async def run(
             event.data, ResponseTextDeltaEvent
         ):
             if stream_callback:
-                # Remove "data: " prefix if present
+                # Put the delta directly into the queue with "data: " prefix, just like AsyncStreamingCallback.put_data does
                 delta = event.data.delta
-                if isinstance(delta, str) and delta.startswith("data: "):
-                    delta = delta[len("data: ") :]
-                await stream_callback.put_data(delta)
+                await stream_callback.queue.put(f"data: {delta}")
 
 
 async def execute_agent_chat_stream(
@@ -85,6 +83,7 @@ async def execute_agent_chat_stream(
 
     async with MCPServerStdio(
         cache_tools_list=True,
+        client_session_timeout_seconds=30,
         params={"command": "uvx", "args": ["mcp-server-omi", "-v"]},
     ) as server:
         task = asyncio.create_task(
@@ -98,14 +97,11 @@ async def execute_agent_chat_stream(
             )
         )
 
-        # Stream the response chunks
+        # Stream the response chunks - yield them directly like execute_graph_chat_stream does
         while True:
             try:
                 chunk = await callback.queue.get()
                 if chunk:
-                    # Remove "data: " prefix if present
-                    if isinstance(chunk, str) and chunk.startswith("data: "):
-                        chunk = chunk[len("data: ") :]
                     yield chunk
                 else:
                     break

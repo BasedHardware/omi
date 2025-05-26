@@ -13,6 +13,7 @@ from models.conversation import Conversation
 from models.notification_message import NotificationMessage
 from models.app import UsageHistoryType
 from models.transcript_segment import TranscriptSegment
+from utils.agent import execute_agent_chat_stream
 from utils.notifications import send_notification
 from utils.other.storage import get_syncing_file_temporal_signed_url, delete_syncing_temporal_file
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
@@ -174,7 +175,7 @@ async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGene
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
     callback_data = {}
-    async for chunk in execute_graph_chat_stream(uid, messages, plugin, cited=False, callback_data=callback_data):
+    async for chunk in execute_agent_chat_stream(uid, messages, plugin, cited=False, callback_data=callback_data):
         if chunk:
             data = chunk.replace("\n", "__CRLF__")
             yield f'{data}\n\n'
