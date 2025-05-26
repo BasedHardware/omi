@@ -572,7 +572,23 @@
             <section id="auth-section" class="login-info hidden">
                 <h2>Authentication</h2>
                 <p>To use Email Assistant, you need to be logged in with your email account.</p>
-                <p><a id="login-link" href="/api/auth/login" class="button">Login with Email</a></p>
+                <p><a id="login-link" href="/api/email/auth/login" class="button">Login with Email</a></p>
+            </section>
+
+            <section class="instructions">
+                <h2>Navigation</h2>
+                <div class="service-list">
+                    <div class="service-card">
+                        <h3>🏠 Back to Main</h3>
+                        <p>Return to the main Omi Apps interface</p>
+                        <a href="/" class="button">Go to Main Page</a>
+                    </div>
+                    <div class="service-card">
+                        <h3>📊 Presentation App</h3>
+                        <p>Switch to the presentation generator</p>
+                        <a href="/deck" class="button">Go to Deck App</a>
+                    </div>
+                </div>
             </section>
 
             <footer>
@@ -669,7 +685,7 @@
                 if (omiuid) {
                     setupNotice.classList.add('hidden');
                     authSection.classList.remove('hidden');
-                    loginLink.href = `/api/auth/login?uid=${encodeURIComponent(omiuid)}`;
+                    loginLink.href = `/api/email/auth/login?uid=${encodeURIComponent(omiuid)}`;
                 } else {
                     setupNotice.classList.remove('hidden');
                     authSection.classList.add('hidden');

@@ -1,5 +1,5 @@
 {
-  "name": "omisend",
+  "name": "apps",
   "version": "1.0.0",
   "description": "Server with OAuth callback",
   "main": "server.js",
