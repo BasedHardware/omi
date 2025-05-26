@@ -108,6 +108,11 @@ env:
         key: SONIOX_API_KEY
   - name: BUCKET_SPEECH_PROFILES
     value: "speech-profiles-dev"
+  - name: BUCKET_CHAT_FILES
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: BUCKET_CHAT_FILES
   - name: BUCKET_TEMPORAL_SYNC_LOCAL
     value: "syncing-local-development"
   - name: HOSTED_VAD_API_URL

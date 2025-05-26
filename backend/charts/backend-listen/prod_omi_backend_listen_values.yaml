@@ -78,6 +78,11 @@ ingress:
 env:
   - name: BUCKET_SPEECH_PROFILES
     value: "speech-profiles"
+  - name: BUCKET_CHAT_FILES
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: BUCKET_CHAT_FILES
   - name: GITHUB_TOKEN
     valueFrom:
       secretKeyRef:
