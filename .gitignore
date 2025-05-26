@@ -119,6 +119,10 @@ env.g.dart
 */key.properties
 *.jks
 
+# Flutter ephemeral files
+**/ios/Flutter/ephemeral/
+**/macos/Flutter/ephemeral/
+
 # Jekyll
 docs/_site/
 .jekyll-metadata
