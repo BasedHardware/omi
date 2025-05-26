@@ -161,7 +161,7 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
                 print(f"Selected best app for conversation: {best_app.name}")
 
                 # enabled
-                user_enabled = set(redis_db.get_enabled_plugins(uid))
+                user_enabled = set(redis_db.get_enabled_apps(uid))
                 if best_app.id not in user_enabled:
                     redis_db.enable_app(uid, best_app.id)
 

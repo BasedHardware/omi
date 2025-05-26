@@ -69,11 +69,11 @@ def process_voice_message_segment(path: str, uid: str):
     chat_db.add_message(uid, message.dict())
 
     # not support plugin
-    plugin = None
-    plugin_id = None
+    app = None
+    app_id = None
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
-    response, ask_for_nps, memories = execute_graph_chat(uid, messages, plugin)  # plugin
+    response, ask_for_nps, memories = execute_graph_chat(uid, messages, app)  # app
     memories_id = []
     # check if the items in the conversations list are dict
     if memories:
@@ -89,14 +89,14 @@ def process_voice_message_segment(path: str, uid: str):
         text=response,
         created_at=datetime.now(timezone.utc),
         sender='ai',
-        plugin_id=plugin_id,
+        app_id=app_id,
         type='text',
         memories_id=memories_id,
     )
     chat_db.add_message(uid, ai_message.dict())
     ai_message.memories = memories if len(memories) < 5 else memories[:5]
-    if plugin_id:
-        record_app_usage(uid, plugin_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
+    if app_id:
+        record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
 
     ai_message_resp = ai_message.dict()
 
@@ -139,8 +139,8 @@ async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGene
     yield f"message: {mdata}\n\n"
 
     # not support plugin
-    plugin = None
-    plugin_id = None
+    app = None
+    app_id = None
 
     def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])
@@ -160,21 +160,21 @@ async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGene
             text=response,
             created_at=datetime.now(timezone.utc),
             sender='ai',
-            plugin_id=plugin_id,
+            app_id=app_id,
             type='text',
             memories_id=memories_id,
         )
         chat_db.add_message(uid, ai_message.dict())
         ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
 
-        if plugin_id:
-            record_app_usage(uid, plugin_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
+        if app_id:
+            record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
 
         return ai_message, ask_for_nps
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
     callback_data = {}
-    async for chunk in execute_graph_chat_stream(uid, messages, plugin, cited=False, callback_data=callback_data):
+    async for chunk in execute_graph_chat_stream(uid, messages, app, cited=False, callback_data=callback_data):
         if chunk:
             data = chunk.replace("\n", "__CRLF__")
             yield f'{data}\n\n'
@@ -196,14 +196,14 @@ async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGene
     return
 
 
-def send_chat_message_notification(token: str, plugin_name: str, plugin_id: str, message: str, message_id: str):
+def send_chat_message_notification(token: str, app_name: str, app_id: str, message: str, message_id: str):
     ai_message = NotificationMessage(
         id=message_id,
         text=message,
-        plugin_id=plugin_id,
+        plugin_id=app_id,
         from_integration='true',
         type='text',
         notification_type='plugin',
-        navigate_to=f'/chat/{plugin_id}',
+        navigate_to=f'/chat/{app_id}',
     )
-    send_notification(token, plugin_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
+    send_notification(token, app_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message))

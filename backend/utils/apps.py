@@ -16,9 +16,9 @@ from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
 from database.auth import get_user_name
 from database.conversations import get_conversations
 from database.memories import get_memories, get_user_public_memories
-from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_generic_cache, \
+from database.redis_db import get_enabled_apps, get_app_reviews, get_generic_cache, \
     set_generic_cache, set_app_usage_history_cache, get_app_usage_history_cache, get_app_money_made_cache, \
-    set_app_money_made_cache, get_plugins_installs_count, get_plugins_reviews, get_app_cache_by_id, set_app_cache_by_id, \
+    set_app_money_made_cache, get_apps_installs_count, get_apps_reviews, get_app_cache_by_id, set_app_cache_by_id, \
     set_app_review_cache, get_app_usage_count_cache, set_app_money_made_amount_cache, get_app_money_made_amount_cache, \
     set_app_usage_count_cache, set_user_paid_app, get_user_paid_app, delete_app_cache_by_id, is_username_taken
 from database.users import get_stripe_connect_account_id
@@ -62,11 +62,11 @@ def remove_app_access_for_tester(app_id: str, uid: str):
 
 # ********************************
 
-def weighted_rating(plugin):
-    C = 3.0  # Assume 3.0 is the mean rating across all plugins
+def weighted_rating(app):
+    C = 3.0  # Assume 3.0 is the mean rating across all apps
     m = 5  # Minimum number of ratings required to be considered
-    R = plugin.rating_avg or 0
-    v = plugin.rating_count or 0
+    R = app.rating_avg or 0
+    v = app.rating_count or 0
     return (v / (v + m) * R) + (m / (v + m) * C)
 
 
@@ -81,14 +81,14 @@ def get_popular_apps() -> List[App]:
         set_generic_cache('get_popular_apps_data', popular_apps, 60 * 30)  # 30 minutes cached
 
     app_ids = [app['id'] for app in popular_apps]
-    plugins_install = get_plugins_installs_count(app_ids)
-    plugins_review = get_plugins_reviews(app_ids)
+    apps_install = get_apps_installs_count(app_ids)
+    apps_reviews = get_apps_reviews(app_ids)
 
     apps = []
     for app in popular_apps:
         app_dict = app
-        app_dict['installs'] = plugins_install.get(app['id'], 0)
-        reviews = plugins_review.get(app['id'], {})
+        app_dict['installs'] = apps_install.get(app['id'], 0)
+        reviews = apps_reviews.get(app['id'], {})
         sorted_reviews = reviews.values()
         rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
         app_dict['rating_avg'] = rating_avg
@@ -119,21 +119,21 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
         set_generic_cache('get_public_approved_apps_data', public_approved_data, 60 * 10)  # 10 minutes cached
     if tester:
         tester_apps = get_apps_for_tester_db(uid)
-    user_enabled = set(get_enabled_plugins(uid))
+    user_enabled = set(get_enabled_apps(uid))
     all_apps = private_data + public_approved_data + public_unapproved_data + tester_apps
     apps = []
 
     app_ids = [app['id'] for app in all_apps]
-    plugins_install = get_plugins_installs_count(app_ids)
-    plugins_review = get_plugins_reviews(app_ids) if include_reviews else {}
+    apps_install = get_apps_installs_count(app_ids)
+    apps_review = get_apps_reviews(app_ids) if include_reviews else {}
 
     for app in all_apps:
         app_dict = app
         app_dict['enabled'] = app['id'] in user_enabled
         app_dict['rejected'] = app['approved'] is False
-        app_dict['installs'] = plugins_install.get(app['id'], 0)
+        app_dict['installs'] = apps_install.get(app['id'], 0)
         if include_reviews:
-            reviews = plugins_review.get(app['id'], {})
+            reviews = apps_review.get(app['id'], {})
             sorted_reviews = reviews.values()
             rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
             app_dict['reviews'] = [details for details in reviews.values() if details['review']]
@@ -170,7 +170,7 @@ def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> dict |
         return None
     app['money_made'] = get_app_money_made_amount(app['id']) if not app['private'] else None
     app['usage_count'] = get_app_usage_count(app['id']) if not app['private'] else None
-    reviews = get_plugin_reviews(app['id'])
+    reviews = get_app_reviews(app['id'])
     sorted_reviews = reviews.values()
     rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
     app['reviews'] = [details for details in reviews.values() if details['review']]
@@ -179,12 +179,12 @@ def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> dict |
     app['user_review'] = reviews.get(uid)
 
     # enabled
-    user_enabled = set(get_enabled_plugins(uid))
+    user_enabled = set(get_enabled_apps(uid))
     app['enabled'] = app['id'] in user_enabled
 
     # install
-    plugins_install = get_plugins_installs_count([app['id']])
-    app['installs'] = plugins_install.get(app['id'], 0)
+    apps_install = get_apps_installs_count([app['id']])
+    app['installs'] = apps_install.get(app['id'], 0)
     return app
 
 
@@ -209,15 +209,15 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
         set_generic_cache('get_public_approved_apps_data', all_apps, 60 * 10)  # 10 minutes cached
 
     app_ids = [app['id'] for app in all_apps]
-    plugins_install = get_plugins_installs_count(app_ids)
-    plugins_review = get_plugins_reviews(app_ids) if include_reviews else {}
+    apps_installs = get_apps_installs_count(app_ids)
+    apps_reviews = get_apps_reviews(app_ids) if include_reviews else {}
 
     apps = []
     for app in all_apps:
         app_dict = app
-        app_dict['installs'] = plugins_install.get(app['id'], 0)
+        app_dict['installs'] = apps_installs.get(app['id'], 0)
         if include_reviews:
-            reviews = plugins_review.get(app['id'], {})
+            reviews = apps_reviews.get(app['id'], {})
             sorted_reviews = reviews.values()
             rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
             app_dict['reviews'] = []
@@ -233,10 +233,6 @@ def set_app_review(app_id: str, uid: str, review: dict):
     set_app_review_in_db(app_id, uid, review)
     set_app_review_cache(app_id, uid, review)
     return {'status': 'ok'}
-
-
-def get_app_reviews(app_id: str) -> dict:
-    return get_plugin_reviews(app_id)
 
 
 def get_app_usage_count(app_id: str) -> int:
@@ -381,7 +377,7 @@ def paid_app(app_id: str, uid: str):
 
 
 def is_audio_bytes_app_enabled(uid: str):
-    enabled_apps = get_enabled_plugins(uid)
+    enabled_apps = get_enabled_apps(uid)
     # https://firebase.google.com/docs/firestore/query-data/queries#in_and_array-contains-any
     limit = 30
     enabled_apps = list(set(enabled_apps))
@@ -670,5 +666,5 @@ def app_can_create_conversation(app: dict) -> bool:
 
 def is_user_app_enabled(uid: str, app_id: str) -> bool:
     """Check if a specific app is enabled for the user based on Redis cache."""
-    user_enabled_apps = set(get_enabled_plugins(uid))
+    user_enabled_apps = set(get_enabled_apps(uid))
     return app_id in user_enabled_apps
