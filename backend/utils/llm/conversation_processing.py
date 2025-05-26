@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from models.app import App
 from models.conversation import Structured, Conversation, ActionItem, Event
-from .clients import llm_mini, parser, llm_high
+from .clients import llm_mini, parser, llm_high, llm_medium_experiment
 
 
 class DiscardConversation(BaseModel):
@@ -121,7 +121,7 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
     {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | llm_high | parser # parser is imported from .clients
+    chain = prompt | llm_medium_experiment | parser # parser is imported from .clients
 
     response = chain.invoke({
         'transcript': transcript.strip(),
@@ -196,7 +196,7 @@ def get_reprocess_transcript_structure(transcript: str, started_at: datetime, la
     {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | llm_high | parser # parser is imported from .clients
+    chain = prompt | llm_medium_experiment | parser # parser is imported from .clients
 
     response = chain.invoke({
         'transcript': transcript.strip(),
@@ -224,7 +224,7 @@ def get_app_result(transcript: str, app: App) -> str:
     Conversation: ```{transcript.strip()}```,
     '''
 
-    response = llm_high.invoke(prompt)
+    response = llm_medium_experiment.invoke(prompt)
     content = response.content.replace('```json', '').replace('```', '')
     return content
 
@@ -340,5 +340,5 @@ def generate_summary_with_prompt(conversation_text: str, prompt: str) -> str:
 
     You must output only the summary, no other text. Make sure to be concise and clear.
     """
-    response = llm_high.invoke(prompt)
+    response = llm_medium_experiment.invoke(prompt)
     return response.content
