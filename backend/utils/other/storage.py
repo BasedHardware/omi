@@ -20,7 +20,7 @@ speech_profiles_bucket = os.getenv('BUCKET_SPEECH_PROFILES')
 postprocessing_audio_bucket = os.getenv('BUCKET_POSTPROCESSING')
 memories_recordings_bucket = os.getenv('BUCKET_MEMORIES_RECORDINGS')
 syncing_local_bucket = os.getenv('BUCKET_TEMPORAL_SYNC_LOCAL')
-omi_plugins_bucket = os.getenv('BUCKET_PLUGINS_LOGOS')
+omi_apps_bucket = os.getenv('BUCKET_PLUGINS_LOGOS')
 app_thumbnails_bucket = os.getenv('BUCKET_APP_THUMBNAILS')
 chat_files_bucket = os.getenv('BUCKET_CHAT_FILES')
 
@@ -239,19 +239,19 @@ def _get_signed_url(blob, minutes):
     return signed_url
 
 
-def upload_plugin_logo(file_path: str, plugin_id: str):
-    bucket = storage_client.bucket(omi_plugins_bucket)
-    path = f'{plugin_id}.png'
+def upload_app_logo(file_path: str, app_id: str):
+    bucket = storage_client.bucket(omi_apps_bucket)
+    path = f'{app_id}.png'
     blob = bucket.blob(path)
     blob.cache_control = 'public, no-cache'
     blob.upload_from_filename(file_path)
-    return f'https://storage.googleapis.com/{omi_plugins_bucket}/{path}'
+    return f'https://storage.googleapis.com/{omi_apps_bucket}/{path}'
 
 
-def delete_plugin_logo(img_url: str):
-    bucket = storage_client.bucket(omi_plugins_bucket)
-    path = img_url.split(f'https://storage.googleapis.com/{omi_plugins_bucket}/')[1]
-    print('delete_plugin_logo', path)
+def delete_app_logo(img_url: str):
+    bucket = storage_client.bucket(omi_apps_bucket)
+    path = img_url.split(f'https://storage.googleapis.com/{omi_apps_bucket}/')[1]
+    print('delete_app_logo', path)
     blob = bucket.blob(path)
     blob.delete()
 

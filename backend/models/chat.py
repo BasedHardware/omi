@@ -1,8 +1,8 @@
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 class MessageSender(str, Enum):
@@ -48,6 +48,8 @@ class Message(BaseModel):
     text: str
     created_at: datetime
     sender: MessageSender
+    app_id: Optional[str] = None
+    # TODO: remove plugin_id after migration
     plugin_id: Optional[str] = None
     from_external_integration: bool = False
     type: MessageType
@@ -60,6 +62,19 @@ class Message(BaseModel):
     files: List[FileChat] = []
     chat_session_id: Optional[str] = None
 
+    @model_validator(mode='before')
+    @classmethod
+    def _sync_app_and_plugin_ids(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            app_id_val = data.get('app_id')
+            plugin_id_val = data.get('plugin_id')
+
+            if app_id_val is not None:
+                data['plugin_id'] = app_id_val
+            elif plugin_id_val is not None:
+                data['app_id'] = plugin_id_val
+        return data
+
     @staticmethod
     def get_messages_as_string(
             messages: List['Message'],
@@ -71,11 +86,11 @@ class Message(BaseModel):
         def get_sender_name(message: Message) -> str:
             if message.sender == 'human':
                 return 'User'
-            # elif use_plugin_name_if_available and message.plugin_id is not None:
-            #     plugin = next((p for p in plugins if p.id == message.plugin_id), None)
+            # elif use_plugin_name_if_available and message.app_id is not None:
+            #     plugin = next((p for p in plugins if p.id == message.app_id), None)
             #     if plugin:
             #         return plugin.name RESTORE ME
-            return message.sender.upper()  # TODO: use plugin id
+            return message.sender.upper()  # TODO: use app id
 
         formatted_messages = [
             f"({message.created_at.strftime('%d %b %Y at %H:%M UTC')}) {get_sender_name(message)}: {message.text}"
@@ -95,11 +110,11 @@ class Message(BaseModel):
         def get_sender_name(message: Message) -> str:
             if message.sender == 'human':
                 return 'User'
-            # elif use_plugin_name_if_available and message.plugin_id is not None:
-            #     plugin = next((p for p in plugins if p.id == message.plugin_id), None)
+            # elif use_plugin_name_if_available and message.app_id is not None:
+            #     plugin = next((p for p in plugins if p.id == message.app_id), None)
             #     if plugin:
             #         return plugin.name RESTORE ME
-            return message.sender.upper()  # TODO: use plugin id
+            return message.sender.upper()  # TODO: use app id
 
         formatted_messages = [
             f"""
@@ -135,9 +150,23 @@ class ChatSession(BaseModel):
     id: str
     message_ids: Optional[List[str]] = []
     file_ids: Optional[List[str]] = []
+    app_id: Optional[str] = None
     plugin_id: Optional[str] = None
     created_at: datetime
     deleted: bool = False
+
+    @model_validator(mode='before')
+    @classmethod
+    def _sync_chat_session_app_and_plugin_ids(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            app_id_val = data.get('app_id')
+            plugin_id_val = data.get('plugin_id')
+
+            if app_id_val is not None:
+                data['plugin_id'] = app_id_val
+            elif plugin_id_val is not None:
+                data['app_id'] = plugin_id_val
+        return data
 
     def add_file_ids(self, new_file_ids: List[str]):
         if self.file_ids is None:
