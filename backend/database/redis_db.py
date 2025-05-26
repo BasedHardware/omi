@@ -185,9 +185,9 @@ def get_specific_user_review(app_id: str, uid: str) -> dict:
     return reviews.get(uid, {})
 
 
-def migrate_user_plugins_reviews(prev_uid: str, new_uid: str):
+def migrate_user_apps_reviews(prev_uid: str, new_uid: str):
     for key in r.scan_iter(f'plugins:*:reviews'):
-        plugin_id = key.decode().split(':')[1]
+        app_id = key.decode().split(':')[1]
         reviews = r.get(key)
         if not reviews:
             continue
@@ -195,7 +195,7 @@ def migrate_user_plugins_reviews(prev_uid: str, new_uid: str):
         if prev_uid in reviews:
             reviews[new_uid] = reviews.pop(prev_uid)
             reviews[new_uid]['uid'] = new_uid
-            r.set(f'plugins:{plugin_id}:reviews', str(reviews))
+            r.set(f'plugins:{app_id}:reviews', str(reviews))
 
 
 def set_user_paid_app(app_id: str, uid: str, ttl: int):
@@ -217,36 +217,36 @@ def disable_app(uid: str, app_id: str):
     r.srem(f'users:{uid}:enabled_plugins', app_id)
 
 
-def get_enabled_plugins(uid: str):
+def get_enabled_apps(uid: str):
     val = r.smembers(f'users:{uid}:enabled_plugins')
     if not val:
         return []
     return [x.decode() for x in val]
 
 
-def get_plugin_reviews(plugin_id: str) -> dict:
-    reviews = r.get(f'plugins:{plugin_id}:reviews')
+def get_app_reviews(app_id: str) -> dict:
+    reviews = r.get(f'plugins:{app_id}:reviews')
     if not reviews:
         return {}
     return eval(reviews)
 
 
-def get_plugins_reviews(plugin_ids: list) -> dict:
-    if not plugin_ids:
+def get_apps_reviews(app_ids: list) -> dict:
+    if not app_ids:
         return {}
 
-    keys = [f'plugins:{plugin_id}:reviews' for plugin_id in plugin_ids]
+    keys = [f'plugins:{app_id}:reviews' for app_id in app_ids]
     reviews = r.mget(keys)
     if reviews is None:
         return {}
     return {
-        plugin_id: eval(review) if review else {}
-        for plugin_id, review in zip(plugin_ids, reviews)
+        app_id: eval(review) if review else {}
+        for app_id, review in zip(app_ids, reviews)
     }
 
 
-def set_plugin_installs_count(plugin_id: str, count: int):
-    r.set(f'plugins:{plugin_id}:installs', count)
+def set_app_installs_count(app_id: str, count: int):
+    r.set(f'plugins:{app_id}:installs', count)
 
 
 def increase_app_installs_count(app_id: str):
@@ -257,24 +257,24 @@ def decrease_app_installs_count(app_id: str):
     r.decr(f'plugins:{app_id}:installs')
 
 
-def get_plugin_installs_count(plugin_id: str) -> int:
-    count = r.get(f'plugins:{plugin_id}:installs')
+def get_app_installs_count(app_id: str) -> int:
+    count = r.get(f'plugins:{app_id}:installs')
     if not count:
         return 0
     return int(count)
 
 
-def get_plugins_installs_count(plugin_ids: list) -> dict:
-    if not plugin_ids:
+def get_apps_installs_count(app_ids: list) -> dict:
+    if not app_ids:
         return {}
 
-    keys = [f'plugins:{plugin_id}:installs' for plugin_id in plugin_ids]
+    keys = [f'plugins:{app_id}:installs' for app_id in app_ids]
     counts = r.mget(keys)
     if counts is None:
         return {}
     return {
-        plugin_id: int(count) if count else 0
-        for plugin_id, count in zip(plugin_ids, counts)
+        app_id: int(count) if count else 0
+        for app_id, count in zip(app_ids, counts)
     }
 
 
@@ -460,19 +460,19 @@ def has_migrated_retrieval_conversation_id(conversation_id: str) -> bool:
     return r.sismember('migrated_retrieval_memory_ids', conversation_id)
 
 
-def set_proactive_noti_sent_at(uid: str, plugin_id: str, ts: int, ttl: int = 30):
-    r.set(f'{uid}:{plugin_id}:proactive_noti_sent_at', ts, ex=ttl)
+def set_proactive_noti_sent_at(uid: str, app_id: str, ts: int, ttl: int = 30):
+    r.set(f'{uid}:{app_id}:proactive_noti_sent_at', ts, ex=ttl)
 
 
-def get_proactive_noti_sent_at(uid: str, plugin_id: str):
-    val = r.get(f'{uid}:{plugin_id}:proactive_noti_sent_at')
+def get_proactive_noti_sent_at(uid: str, app_id: str):
+    val = r.get(f'{uid}:{app_id}:proactive_noti_sent_at')
     if not val:
         return None
     return int(val)
 
 
-def get_proactive_noti_sent_at_ttl(uid: str, plugin_id: str):
-    return r.ttl(f'{uid}:{plugin_id}:proactive_noti_sent_at')
+def get_proactive_noti_sent_at_ttl(uid: str, app_id: str):
+    return r.ttl(f'{uid}:{app_id}:proactive_noti_sent_at')
 
 
 def set_user_preferred_app(uid: str, app_id: str):

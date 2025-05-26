@@ -29,14 +29,14 @@ from plotly.subplots import make_subplots
 
 # noinspection PyUnresolvedReferences
 from models.conversation import Conversation
-from database.redis_db import get_enabled_plugins, set_plugin_installs_count
+from database.redis_db import get_enabled_apps, set_app_installs_count
 from database._client import get_users_uid
 import database.conversations as conversations_db
 import database.chat as chat_db
 
 
 def single(uid, data):
-    pids = get_enabled_plugins(uid)
+    pids = get_enabled_apps(uid)
     for pid in pids:
         data[pid] += 1
     return pids
@@ -58,7 +58,7 @@ def execute():
 
     print(json.dumps(data, indent=2))
     for pid, count in data.items():
-        set_plugin_installs_count(pid, count)
+        set_app_installs_count(pid, count)
 
 
 def count_memory_prompt_plugins_trigger():

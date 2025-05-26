@@ -10,7 +10,6 @@ from models.chat import Message, ChatSession, MessageType
 from utils.retrieval.graph import AsyncStreamingCallback
 from openai.types.responses import ResponseTextDeltaEvent
 
-
 # omi_documentation: dict = get_github_docs_content()
 # omi_documentation_str = "\n\n".join(
 #     [f"{k}:\n {v}" for k, v in omi_documentation.items()]
@@ -25,12 +24,12 @@ Documentation:
 
 
 async def run(
-    mcp_server: MCPServer,
-    uid: str,
-    messages: List[Message],
-    respond: callable,
-    plugin: Optional[App] = None,
-    stream_callback: Optional[AsyncStreamingCallback] = None,
+        mcp_server: MCPServer,
+        uid: str,
+        messages: List[Message],
+        respond: callable,
+        plugin: Optional[App] = None,
+        stream_callback: Optional[AsyncStreamingCallback] = None,
 ):
     docs_agent = Agent(
         name="Omi Documentation Agent",
@@ -62,30 +61,30 @@ async def run(
 
     async for event in result.stream_events():
         if event.type == "raw_response_event" and isinstance(
-            event.data, ResponseTextDeltaEvent
+                event.data, ResponseTextDeltaEvent
         ):
             if stream_callback:
                 # Remove "data: " prefix if present
                 delta = event.data.delta
                 if isinstance(delta, str) and delta.startswith("data: "):
-                    delta = delta[len("data: ") :]
+                    delta = delta[len("data: "):]
                 await stream_callback.put_data(delta)
 
 
 async def execute_agent_chat_stream(
-    uid: str,
-    messages: List[Message],
-    plugin: Optional[App] = None,
-    cited: Optional[bool] = False,
-    callback_data: dict = {},
-    chat_session: Optional[ChatSession] = None,
+        uid: str,
+        messages: List[Message],
+        app: Optional[App] = None,
+        cited: Optional[bool] = False,
+        callback_data: dict = {},
+        chat_session: Optional[ChatSession] = None,
 ) -> AsyncGenerator[str, None]:
-    print("execute_agent_chat_stream plugin: ", plugin.id if plugin else "<none>")
+    print("execute_agent_chat_stream app: ", app.id if app else "<none>")
     callback = AsyncStreamingCallback()
 
     async with MCPServerStdio(
-        cache_tools_list=True,
-        params={"command": "uvx", "args": ["mcp-server-omi", "-v"]},
+            cache_tools_list=True,
+            params={"command": "uvx", "args": ["mcp-server-omi", "-v"]},
     ) as server:
         task = asyncio.create_task(
             run(
@@ -93,7 +92,7 @@ async def execute_agent_chat_stream(
                 uid,
                 messages,
                 lambda x: callback_data.update({"answer": x}),
-                plugin,
+                app,
                 callback,
             )
         )
@@ -105,7 +104,7 @@ async def execute_agent_chat_stream(
                 if chunk:
                     # Remove "data: " prefix if present
                     if isinstance(chunk, str) and chunk.startswith("data: "):
-                        chunk = chunk[len("data: ") :]
+                        chunk = chunk[len("data: "):]
                     yield chunk
                 else:
                     break
@@ -123,8 +122,8 @@ async def execute_agent_chat_stream(
 
 async def send_single_message():
     async with MCPServerStdio(
-        cache_tools_list=True,
-        params={"command": "uvx", "args": ["mcp-server-omi"]},
+            cache_tools_list=True,
+            params={"command": "uvx", "args": ["mcp-server-omi"]},
     ) as server:
         with trace(workflow_name="Omi Agent"):
             await run(
@@ -138,8 +137,8 @@ async def send_single_message():
 async def interactive_chat_stream():
     print("Starting interactive chat with Omi Agent. Type 'exit' to quit.")
     async with MCPServerStdio(
-        cache_tools_list=True,
-        params={"command": "uvx", "args": ["mcp-server-omi", "-v"]},
+            cache_tools_list=True,
+            params={"command": "uvx", "args": ["mcp-server-omi", "-v"]},
     ) as server:
         while True:
             user_input = input("\nYou: ")
@@ -196,12 +195,14 @@ if __name__ == "__main__":
         ),
     ]
 
+
     async def main():
         async for chunk in execute_agent_chat_stream(
-            uid="viUv7GtdoHXbK1UBCDlPuTDuPgJ2", messages=messages
+                uid="viUv7GtdoHXbK1UBCDlPuTDuPgJ2", messages=messages
         ):
             if chunk:
                 print(chunk, end="", flush=True)
         print()  # for newline after stream ends
+
 
     asyncio.run(main())
