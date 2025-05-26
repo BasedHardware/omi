@@ -25,10 +25,9 @@ build/
 dist/
 .build/
 .swiftpm/
-# VS Code - exclude everything except specific files
+
+# VS Code
 .vscode/*
-!.vscode/launch.json
-!.vscode/extensions.json
 
 # Android specific
 **/android/**/build/
