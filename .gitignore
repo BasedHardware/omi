@@ -58,9 +58,18 @@ dist/
 **/ios/Flutter/Custom.xcconfig
 **/ios/GoogleService-Info.plist
 **/ios/Runner.xcodeproj/project.pbxproj
+# Flutter ephemeral files (iOS)
+**/ios/Flutter/ephemeral/
 # Entitlements files (local development only)
 **/ios/**/Runner.entitlements
 **/ios/**/RunnerDebug-dev.entitlements
+**/ios/**/RunnerDebug-prod.entitlements
+**/ios/**/RunnerProfile-dev.entitlements
+**/ios/**/RunnerProfile-prod.entitlements
+**/ios/**/RunnerRelease-dev.entitlements
+**/ios/**/RunnerRelease-prod.entitlements
+# Launch screen files (local development)
+**/ios/**/devLaunchScreen.storyboard
 
 # macOS specific
 **/macos/**/Pods/
