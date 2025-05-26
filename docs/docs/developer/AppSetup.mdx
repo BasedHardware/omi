@@ -34,13 +34,26 @@ This is the best way to get started, make changes to the app, and build apps on 
 
 Alternatively, you can [build the app manually (see below)](#build-the-app-manually) - which allows you to use your own backend, etc.
 
-**1. Navigate to the  directory:**
+**1. Fvm Setup:**
+Ensure Flutter is installed via [FVM](https://fvm.app/docs/getting_started/installation). Do not use global Flutter or upgrade it.
+
+```
+dart pub global activate fvm
+
+# install flutter 3.24.1
+fvm install 3.24.1
+
+# use flutter 3.24.1
+fvm use 3.24.1
+
+
+**2. Navigate to the  directory:**
 
 ```
 cd app
 ```
 
-**2. Build the app for iOS:**
+**3. Build the app for iOS:**
 
 ```
 bash setup.sh ios
@@ -48,7 +61,7 @@ bash setup.sh ios
 
 Note: This works great for iOS simulators\! 🎉 Want to run on your real device? Ping us on [Discord](https://discord.omi.me) - we'd love to help\! (Apple limits us to 100 dev devices)
 
-**3. Build the app for Android:**
+**4. Build the app for Android:**
 
 ```
 bash setup.sh android
@@ -72,22 +85,7 @@ Alternatively, run `flutter run --flavor dev` in terminal
 Manual setup is useful if you want to build the app with your own backend.
 
 ### 1. Flutter Setup
-Ensure Flutter is installed via [FVM](https://fvm.app/docs/getting_started/installation). Do not use global Flutter or upgrade it.
-
-fvm setup (tested on macos):
-
-```
-dart pub global activate fvm
-
-# install flutter 3.24.1
-fvm install 3.24.1
-
-# use flutter 3.24.1
-fvm use 3.24.1
-
-# check flutter version
-fvm flutter --version
-```
+Ensure Flutter is installed via [FVM](https://fvm.app/docs/getting_started/installation) as shown in step 1.
 
 Run the following to verify setup:
 
