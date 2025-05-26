@@ -25,7 +25,10 @@ build/
 dist/
 .build/
 .swiftpm/
-.vscode/
+# VS Code - exclude everything except specific files
+.vscode/*
+!.vscode/launch.json
+!.vscode/extensions.json
 
 # Android specific
 **/android/**/build/
@@ -183,3 +186,4 @@ omiGlass/.expo
 
 # Logs
 /backend/logs/
+app/.fvm/
