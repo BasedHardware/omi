@@ -20,6 +20,7 @@ class STTService(str, Enum):
     deepgram = "deepgram"
     soniox = "soniox"
     speechmatics = "speechmatics"
+    wyoming = "wyoming"
 
     @staticmethod
     def get_model_name(value):
@@ -29,6 +30,8 @@ class STTService(str, Enum):
             return 'soniox_streaming'
         elif value == STTService.speechmatics:
             return 'speechmatics_streaming'
+        elif value == STTService.wyoming:
+            return 'wyoming_streaming'
 
 
 # Languages supported by Soniox
@@ -40,10 +43,13 @@ deepgram_supported_languages = {'multi','bg','ca', 'zh', 'zh-CN', 'zh-Hans', 'zh
 deepgram_nova2_multi_languages = ['multi', 'en', 'es']
 deepgram_multi_languages = ["multi", "en", "en-US", "en-AU", "en-GB", "en-NZ", "en-IN", "es", "es-419", "fr", "fr-CA", "de", "hi", "ru", "pt", "pt-BR", "pt-PT", "ja", "it", "nl", "nl-BE"]
 
+# Add Wyoming supported languages
+wyoming_supported_languages = ['multi', 'en', 'es', 'fr', 'de', 'it', 'pt', 'nl', 'ja', 'ko', 'zh']  # Add more as needed
+
 def get_stt_service_for_language(language: str):
-    # # Soniox's 'multi'
-    # if language in soniox_multi_languages:
-    #     return STTService.soniox, 'multi', 'stt-rt-preview'
+    # Wyoming's 'multi'
+    if language in wyoming_supported_languages:
+        return STTService.wyoming, language, 'whisper'
 
     # Deepgram's 'multi', nova-3
     if language in deepgram_multi_languages:
@@ -520,4 +526,65 @@ async def process_audio_speechmatics(stream_transcript, sample_rate: int, langua
         return socket
     except Exception as e:
         print(f"Exception in process_audio_speechmatics: {e}")
+        raise
+
+async def process_audio_wyoming(stream_transcript, language: str, sample_rate: int, channels: int, preseconds: int = 0):
+    """Process audio using Wyoming Whisper backend"""
+    from wyoming.asr import Transcribe, Transcript
+    from wyoming.audio import AudioStart, AudioStop, AudioChunk
+    from wyoming.client import AsyncTcpClient
+
+    WYOMING_HOST = os.getenv('WYOMING_HOST', 'localhost')
+    WYOMING_PORT = int(os.getenv('WYOMING_PORT', '10300'))
+
+    try:
+        # Connect to Wyoming server
+        client = AsyncTcpClient(WYOMING_HOST, WYOMING_PORT)
+        await client.connect()
+
+        # Send transcription request
+        await client.write_event(Transcribe().event())
+        await client.write_event(AudioStart(rate=sample_rate, width=2, channels=channels).event())
+
+        async def send_audio(data):
+            """Send audio data to Wyoming server"""
+            chunk = AudioChunk(rate=sample_rate, width=2, channels=channels, audio=data)
+            await client.write_event(chunk.event())
+
+        async def receive_transcript():
+            """Receive and process transcriptions"""
+            try:
+                while True:
+                    event = await client.read_event()
+                    if event and Transcript.is_type(event.type):
+                        transcript = Transcript.from_event(event)
+                        text = transcript.text.strip()
+                        if text:
+                            # Create a segment similar to other STT services
+                            segment = {
+                                'speaker': "SPEAKER_1",  # Wyoming doesn't do diarization
+                                'start': 0,  # Wyoming doesn't provide timing
+                                'end': 0,
+                                'text': text,
+                                'is_user': True if preseconds > 0 else False,
+                                'person_id': None,
+                            }
+                            stream_transcript([segment])
+            except Exception as e:
+                print(f"Wyoming transcription error: {e}")
+                raise
+
+        # Start transcript receiver
+        transcript_task = asyncio.create_task(receive_transcript())
+
+        # Return the send_audio function and cleanup
+        async def cleanup():
+            await client.write_event(AudioStop().event())
+            transcript_task.cancel()
+            await client.disconnect()
+
+        return send_audio, cleanup
+
+    except Exception as e:
+        print(f"Failed to connect to Wyoming server: {e}")
         raise

@@ -304,6 +304,8 @@ async def _listen(
     speechmatics_socket = None
     deepgram_socket = None
     deepgram_socket2 = None
+    wyoming_send_audio = None
+    wyoming_cleanup = None
     speech_profile_duration = 0
 
     realtime_segment_buffers = []
@@ -319,6 +321,8 @@ async def _listen(
         nonlocal speechmatics_socket
         nonlocal deepgram_socket
         nonlocal deepgram_socket2
+        nonlocal wyoming_send_audio
+        nonlocal wyoming_cleanup
         nonlocal speech_profile_duration
         try:
             file_path, speech_profile_duration = None, 0
@@ -327,8 +331,16 @@ async def _listen(
                 file_path = get_profile_audio_if_exists(uid)
                 speech_profile_duration = AudioSegment.from_wav(file_path).duration_seconds + 5 if file_path else 0
 
+            # WYOMING
+            if stt_service == STTService.wyoming:
+                wyoming_send_audio, wyoming_cleanup = await process_audio_wyoming(
+                    stream_transcript, stt_language, sample_rate, channels, preseconds=speech_profile_duration
+                )
+                if speech_profile_duration and file_path:
+                    safe_create_task(send_initial_file_path(file_path, wyoming_send_audio))
+
             # DEEPGRAM
-            if stt_service == STTService.deepgram:
+            elif stt_service == STTService.deepgram:
                 deepgram_socket = await process_audio_dg(
                     stream_transcript, stt_language, sample_rate, 1, preseconds=speech_profile_duration, model=stt_model,)
                 if speech_profile_duration:
@@ -678,6 +690,7 @@ async def _listen(
     async def receive_audio(dg_socket1, dg_socket2, soniox_socket, soniox_socket2, speechmatics_socket1):
         nonlocal websocket_active
         nonlocal websocket_close_code
+        nonlocal wyoming_send_audio
 
         timer_start = time.time()
         try:
@@ -694,6 +707,10 @@ async def _listen(
                 #     has_speech = _has_speech(data, sample_rate)
 
                 if has_speech:
+                    # Handle Wyoming
+                    if wyoming_send_audio is not None:
+                        await wyoming_send_audio(data)
+
                     # Handle Soniox sockets
                     if soniox_socket is not None:
                         elapsed_seconds = time.time() - timer_start
@@ -733,6 +750,8 @@ async def _listen(
             websocket_close_code = 1011
         finally:
             websocket_active = False
+            if wyoming_cleanup is not None:
+                await wyoming_cleanup()
             if dg_socket1:
                 dg_socket1.finish()
             if dg_socket2:
