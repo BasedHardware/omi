@@ -13,7 +13,7 @@ from .clients import llm_mini, llm_high
 class Memories(BaseModel):
     facts: List[Memory] = Field(
         min_items=0,
-        max_items=3,
+        max_items=4,
         description="List of **new** facts. If any",
         default=[],
     )
