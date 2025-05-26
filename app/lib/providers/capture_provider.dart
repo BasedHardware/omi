@@ -37,11 +37,6 @@ class CaptureProvider extends ChangeNotifier
   SdCardSocketService sdCardSocket = SdCardSocketService();
   Timer? _keepAliveTimer;
 
-  // In progress memory
-  ServerConversation? _inProgressConversation;
-
-  ServerConversation? get inProgressConversation => _inProgressConversation;
-
   IWalService get _wal => ServiceManager.instance().wal;
 
   IDeviceService get _deviceService => ServiceManager.instance().device;
@@ -92,13 +87,10 @@ class CaptureProvider extends ChangeNotifier
 
   bool get transcriptServiceReady => _transcriptServiceReady && _internetStatus == InternetStatus.connected;
 
+  // having a connected device or using the phone's mic for recording
   bool get recordingDeviceServiceReady => _recordingDevice != null || recordingState == RecordingState.record;
 
   bool get havingRecordingDevice => _recordingDevice != null;
-
-  // -----------------------
-  // Conversation creation variables
-  String conversationId = const Uuid().v4();
 
   void setHasTranscripts(bool value) {
     hasTranscripts = value;
@@ -123,7 +115,6 @@ class CaptureProvider extends ChangeNotifier
 
   Future _resetStateVariables() async {
     segments = [];
-    conversationId = const Uuid().v4();
     hasTranscripts = false;
     notifyListeners();
   }
@@ -179,13 +170,15 @@ class CaptureProvider extends ChangeNotifier
     }
 
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
-    await messageProvider?.sendVoiceMessageStreamToServer(
-      data,
-      onFirstChunkRecived: () {
-        _playSpeakerHaptic(deviceId, 2);
-      },
-      codec: codec,
-    );
+    if (messageProvider != null) {
+      await messageProvider?.sendVoiceMessageStreamToServer(
+        data,
+        onFirstChunkRecived: () {
+          _playSpeakerHaptic(deviceId, 2);
+        },
+        codec: codec,
+      );
+    }
   }
 
   // Just incase the ble connection get loss
@@ -448,29 +441,28 @@ class CaptureProvider extends ChangeNotifier
     _transcriptServiceReady = false;
     debugPrint('[Provider] Socket is closed');
 
-    // Wait for in process Conversation or reset
-    if (inProgressConversation == null) {
-      _resetStateVariables();
-    }
-
     notifyListeners();
     _startKeepAliveServices();
   }
 
   void _startKeepAliveServices() {
-    if (_recordingDevice != null && _socket?.state != SocketServiceState.connected) {
-      _keepAliveTimer?.cancel();
-      _keepAliveTimer = Timer.periodic(const Duration(seconds: 15), (t) async {
-        debugPrint("[Provider] keep alive...");
-
-        if (_recordingDevice == null || _socket?.state == SocketServiceState.connected) {
-          t.cancel();
-          return;
-        }
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = Timer.periodic(const Duration(seconds: 15), (t) async {
+      debugPrint("[Provider] keep alive...");
+      if (!recordingDeviceServiceReady || _socket?.state == SocketServiceState.connected) {
+        t.cancel();
+        return;
+      }
+      if (_recordingDevice != null) {
         BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
         await _initiateWebsocket(audioCodec: codec);
-      });
-    }
+        return;
+      }
+      if (recordingState == RecordingState.record) {
+        await _initiateWebsocket(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
+        return;
+      }
+    });
   }
 
   @override
@@ -488,13 +480,19 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void _loadInProgressConversation() async {
-    var memories = await getConversations(statuses: [ConversationStatus.in_progress], limit: 1);
-    _inProgressConversation = memories.isNotEmpty ? memories.first : null;
-    if (_inProgressConversation != null) {
-      segments = _inProgressConversation!.transcriptSegments;
-      setHasTranscripts(segments.isNotEmpty);
+  Future refreshInProgressConversations() async {
+    _loadInProgressConversation();
+  }
+
+  Future _loadInProgressConversation() async {
+    var convos = await getConversations(statuses: [ConversationStatus.in_progress], limit: 1);
+    var convo = convos.isNotEmpty ? convos.first : null;
+    if (convo != null) {
+      segments = convo.transcriptSegments;
+    } else {
+      segments = [];
     }
+    setHasTranscripts(segments.isNotEmpty);
     notifyListeners();
   }
 
@@ -611,12 +609,16 @@ class CaptureProvider extends ChangeNotifier
 
   @override
   void onSegmentReceived(List<TranscriptSegment> newSegments) {
+    _processNewSegmentReceived(newSegments);
+  }
+
+  void _processNewSegmentReceived(List<TranscriptSegment> newSegments) async {
     if (newSegments.isEmpty) return;
 
     if (segments.isEmpty) {
       debugPrint('newSegments: ${newSegments.last}');
       FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
-      _loadInProgressConversation();
+      await _loadInProgressConversation();
     }
     var remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
     TranscriptSegment.combineSegments(segments, remainSegments);

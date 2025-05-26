@@ -10,7 +10,7 @@ import database.chat as chat_db
 import database.conversations as conversations_db
 import database.notifications as notification_db
 from models.notification_message import NotificationMessage
-from utils.llm import get_conversation_summary
+from utils.llm.external_integrations import get_conversation_summary
 from utils.notifications import send_notification, send_bulk_notification
 from utils.webhooks import day_summary_webhook
 

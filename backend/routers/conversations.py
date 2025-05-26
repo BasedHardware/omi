@@ -1,7 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
-from typing import Optional, List, Dict
-from datetime import datetime
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException
 
 import database.conversations as conversations_db
 import database.redis_db as redis_db
@@ -11,15 +8,12 @@ from models.conversation import SearchRequest
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.conversations.search import search_conversations
-from utils.llm import generate_summary_with_prompt
+from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
 
 router = APIRouter()
-
-
-
 
 
 def _get_conversation_by_id(uid: str, conversation_id: str) -> dict:
@@ -42,16 +36,6 @@ def process_in_progress_conversation(uid: str = Depends(auth.get_current_user_ui
     messages = trigger_external_integrations(uid, conversation)
     return CreateConversationResponse(conversation=conversation, messages=messages)
 
-
-# class TranscriptRequest(BaseModel):
-#     transcript: str
-
-# @router.post('/v2/test-memory', response_model= [], tags=['conversations'])
-# def process_test_memory(
-#         request: TranscriptRequest, uid: str = Depends(auth.get_current_user_uid)
-# ):
-#   st =  get_transcript_structure(request.transcript, datetime.now(),'en','Asia/Kolkata')
-#   return [st.json()]
 
 @router.post('/v1/conversations/{conversation_id}/reprocess', response_model=Conversation, tags=['conversations'])
 def reprocess_conversation(
@@ -76,15 +60,19 @@ def reprocess_conversation(
 
 
 @router.get('/v1/conversations', response_model=List[Conversation], tags=['conversations'])
-def get_conversations(limit: int = 100, offset: int = 0, statuses: str = "", include_discarded: bool = True,
+def get_conversations(limit: int = 100, offset: int = 0, statuses: Optional[str] = "processing,completed", include_discarded: bool = True,
                       uid: str = Depends(auth.get_current_user_uid)):
     print('get_conversations', uid, limit, offset, statuses)
+    # force convos statuses to processing, completed on the empty filter
+    if len(statuses) == 0:
+        statuses = "processing,completed"
     return conversations_db.get_conversations(uid, limit, offset, include_discarded=include_discarded,
                                               statuses=statuses.split(",") if len(statuses) > 0 else [])
 
 
 @router.get("/v1/conversations/{conversation_id}", response_model=Conversation, tags=['conversations'])
 def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    print('get_conversation_by_id', uid, conversation_id)
     return _get_conversation_by_id(uid, conversation_id)
 
 
@@ -157,9 +145,32 @@ def set_action_item_status(data: SetConversationActionItemsStateRequest, convers
     return {"status": "Ok"}
 
 
+@router.patch("/v1/conversations/{conversation_id}/action-items/{action_item_idx}", response_model=dict, tags=['conversations'])
+def update_action_item_description(
+        conversation_id: str, data: UpdateActionItemDescriptionRequest,
+        uid=Depends(auth.get_current_user_uid)
+):
+    conversation = _get_conversation_by_id(uid, conversation_id)
+    conversation = Conversation(**conversation)
+    action_items = conversation.structured.action_items
+
+    found_item = False
+    for item in action_items:
+        if item.description == data.old_description:
+            item.description = data.description
+            found_item = True
+            break
+
+    if not found_item:
+        raise HTTPException(status_code=404, detail=f"Action item with description '{data.old_description}' not found")
+
+    conversations_db.update_conversation_action_items(uid, conversation_id,
+                                                      [action_item.dict() for action_item in action_items])
+    return {"status": "Ok"}
+
+
 @router.delete("/v1/conversations/{conversation_id}/action-items", response_model=dict, tags=['conversations'])
 def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=Depends(auth.get_current_user_uid)):
-    print('here inside of delete action item')
     conversation = _get_conversation_by_id(uid, conversation_id)
     conversation = Conversation(**conversation)
     action_items = conversation.structured.action_items
@@ -375,7 +386,6 @@ def search_conversations_endpoint(search_request: SearchRequest, uid: str = Depe
                                 include_discarded=search_request.include_discarded,
                                 start_date=start_timestamp,
                                 end_date=end_timestamp)
-
 
 
 @router.post("/v1/conversations/{conversation_id}/test-prompt", response_model=dict, tags=['conversations'])

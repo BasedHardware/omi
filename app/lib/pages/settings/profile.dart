@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/payments/payments_page.dart';
 import 'package:omi/pages/settings/change_name_widget.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
@@ -12,6 +11,9 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/pages/persona/persona_profile.dart';
 
 import 'delete_account.dart';
 
@@ -23,23 +25,124 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  // Future<void> _checkRecordingPermission() async {
-  //   final permission = await getStoreRecordingPermission();
-  //   if (mounted) {
-  //     setState(() {
-  //       if (permission != null) {
-  //         SharedPreferencesUtil().permissionStoreRecordingsEnabled = permission;
-  //       } else {
-  //         SharedPreferencesUtil().permissionStoreRecordingsEnabled = false;
-  //       }
-  //     });
-  //   }
-  // }
-
   @override
   void initState() {
-    // _checkRecordingPermission();
     super.initState();
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 18, bottom: 8),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          title,
+          style: const TextStyle(
+            color: Color(0xFFE0E0E0),
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 1.2,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileTile({
+    required String title,
+    required String subtitle,
+    required Widget iconWidget,
+    required VoidCallback onTap,
+    Color iconColor = Colors.white,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1D1D1D),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: ListTile(
+        dense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        title: Text(
+          title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: const TextStyle(
+            color: Color(0xFFAAAAAA),
+            fontSize: 13,
+          ),
+        ),
+        trailing: iconWidget,
+        onTap: onTap,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPreferenceToggle({
+    required String title,
+    required bool value,
+    required Function(bool) onChanged,
+    required VoidCallback onInfoTap,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1D1D1D),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: onInfoTap,
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: Color(0xFFAAAAAA),
+                  fontSize: 14,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          GestureDetector(
+            onTap: () => onChanged(!value),
+            child: Container(
+              decoration: BoxDecoration(
+                color: value ? const Color(0xFF4A90E2) : Colors.transparent,
+                border: Border.all(
+                  color: value ? const Color(0xFF4A90E2) : const Color(0xFFAAAAAA),
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              width: 20,
+              height: 20,
+              child: value
+                  ? const Icon(
+                      Icons.check,
+                      color: Colors.white,
+                      size: 16,
+                    )
+                  : null,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -47,54 +150,27 @@ class _ProfilePageState extends State<ProfilePage> {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
-        title: const Text('Profile'),
+        title: const Text(
+          'Profile',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        centerTitle: true,
         backgroundColor: Theme.of(context).colorScheme.primary,
+        elevation: 0,
       ),
       body: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 4, 16),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
         child: ListView(
           children: <Widget>[
-            ListTile(
-              contentPadding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
-              title: const Text('Identifying Others', style: TextStyle(color: Colors.white)),
-              subtitle: const Text('Tell Omi who said it 🗣️'),
-              trailing: const Icon(Icons.people, size: 20),
-              onTap: () {
-                routeToPage(context, const UserPeoplePage());
-              },
-            ),
-            ListTile(
-              contentPadding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
-              title: Text(
-                  SharedPreferencesUtil().givenName.isEmpty
-                      ? 'About YOU'
-                      : 'About ${SharedPreferencesUtil().givenName.toUpperCase()}',
-                  style: const TextStyle(color: Colors.white)),
-              subtitle: const Text('What Omi has learned about you 👀'),
-              trailing: const Icon(Icons.self_improvement, size: 20),
-              onTap: () {
-                routeToPage(context, const MemoriesPage());
-                MixpanelManager().pageOpened('Profile Facts');
-              },
-            ),
-            ListTile(
-              contentPadding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
-              title: const Text('Speech Profile', style: TextStyle(color: Colors.white)),
-              subtitle: const Text('Teach Omi your voice'),
-              trailing: const Icon(Icons.multitrack_audio, size: 20),
-              onTap: () {
-                routeToPage(context, const SpeechProfilePage());
-                MixpanelManager().pageOpened('Profile Speech Profile');
-              },
-            ),
-            ListTile(
-              contentPadding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
-              title: Text(
-                SharedPreferencesUtil().givenName.isEmpty ? 'Set Your Name' : 'Change Your Name',
-                style: const TextStyle(color: Colors.white),
-              ),
-              subtitle: Text(SharedPreferencesUtil().givenName.isEmpty ? 'Not set' : SharedPreferencesUtil().givenName),
-              trailing: const Icon(Icons.person, size: 20),
+            // YOUR INFORMATION SECTION
+            _buildSectionHeader('YOUR INFORMATION'),
+            _buildProfileTile(
+              title: SharedPreferencesUtil().givenName.isEmpty ? 'Set Your Name' : 'Change Your Name',
+              subtitle: SharedPreferencesUtil().givenName.isEmpty ? 'Not set' : SharedPreferencesUtil().givenName,
+              iconWidget: const Icon(Icons.person, size: 20, color: Colors.white),
               onTap: () async {
                 MixpanelManager().pageOpened('Profile Change Name');
                 await showDialog(
@@ -114,202 +190,111 @@ class _ProfilePageState extends State<ProfilePage> {
                         )
                         .key
                     : 'Not set';
-                
-                return ListTile(
-                  contentPadding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
-                  title: const Text('Primary Language', style: TextStyle(color: Colors.white)),
-                  subtitle: Text(languageName),
-                  trailing: const Icon(Icons.language, size: 20),
+
+                return _buildProfileTile(
+                  title: 'Primary Language',
+                  subtitle: languageName,
+                  iconWidget: const Icon(Icons.language, size: 20, color: Colors.white),
                   onTap: () async {
                     MixpanelManager().pageOpened('Profile Change Language');
-                    // Force the dialog to show even if the user has already set a language
                     await LanguageSelectionDialog.show(context, isRequired: false, forceShow: true);
-                    // Refresh the UI after language is updated
                     await homeProvider.setupUserPrimaryLanguage();
                     setState(() {});
                   },
                 );
               },
             ),
-            const SizedBox(height: 56),
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'CREATORS',
-                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                textAlign: TextAlign.start,
+            _buildProfileTile(
+              title: 'Persona',
+              subtitle: 'Manage your Omi persona',
+              iconWidget: SvgPicture.asset(
+                Assets.images.icPersonaProfile.path,
+                width: 20,
+                height: 20,
+                colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
               ),
-            ),
-            ListTile(
-              contentPadding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
-              title: const Text('Payments', style: TextStyle(color: Colors.white)),
-              subtitle: const Text('Add or change your payment method'),
-              trailing: const Icon(Icons.attach_money_outlined, size: 20),
               onTap: () {
-                routeToPage(context, const PaymentsPage());
-                // MixpanelManager().pageOpened('Profile Connect Stripe');
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const PersonaProfilePage(),
+                    settings: const RouteSettings(
+                      arguments: 'from_settings',
+                    ),
+                  ),
+                );
+                MixpanelManager().pageOpened('Profile Persona Settings');
               },
             ),
-            const SizedBox(height: 56),
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'PREFERENCES',
-                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                textAlign: TextAlign.start,
-              ),
+
+            // VOICE & PEOPLE SECTION
+            _buildSectionHeader('VOICE & PEOPLE'),
+            _buildProfileTile(
+              title: 'Speech Profile',
+              subtitle: 'Teach Omi your voice',
+              iconWidget: const Icon(Icons.multitrack_audio, size: 20, color: Colors.white),
+              onTap: () {
+                routeToPage(context, const SpeechProfilePage());
+                MixpanelManager().pageOpened('Profile Speech Profile');
+              },
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
-              child: InkWell(
-                onTap: () {
-                  setState(() {
-                    SharedPreferencesUtil().optInAnalytics = !SharedPreferencesUtil().optInAnalytics;
-                    SharedPreferencesUtil().optInAnalytics
-                        ? MixpanelManager().optInTracking()
-                        : MixpanelManager().optOutTracking();
-                  });
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            routeToPage(context, const PrivacyInfoPage());
-                            MixpanelManager().pageOpened('Share Analytics Data Details');
-                          },
-                          child: const Text(
-                            'Help improve Omi by sharing anonymized analytics data',
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontSize: 16,
-                              decoration: TextDecoration.underline,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(
-                        width: 16,
-                      ),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: SharedPreferencesUtil().optInAnalytics
-                              ? const Color.fromARGB(255, 150, 150, 150)
-                              : Colors.transparent, // Fill color when checked
-                          border: Border.all(
-                            color: const Color.fromARGB(255, 150, 150, 150),
-                            width: 2,
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        width: 22,
-                        height: 22,
-                        child: SharedPreferencesUtil().optInAnalytics // Show the icon only when checked
-                            ? const Icon(
-                                Icons.check,
-                                color: Colors.white, // Tick color
-                                size: 18,
-                              )
-                            : null, // No icon when unchecked
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+            _buildProfileTile(
+              title: 'Identifying Others',
+              subtitle: 'Tell Omi who said it 🗣️',
+              iconWidget: const Icon(Icons.people, size: 20, color: Colors.white),
+              onTap: () {
+                routeToPage(context, const UserPeoplePage());
+              },
             ),
-            // Padding(
-            //   padding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
-            //   child: InkWell(
-            //     onTap: () {
-            //       routeToPage(context, const RecordingsStoragePermission());
-            //     },
-            //     child: Padding(
-            //       padding: const EdgeInsets.symmetric(vertical: 12.0),
-            //       child: Row(
-            //         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            //         children: [
-            //           Expanded(
-            //             child: GestureDetector(
-            //               onTap: () {
-            //                 routeToPage(context, const RecordingsStoragePermission());
-            //               },
-            //               child: const Text(
-            //                 'Allow Omi to store recordings of your conversations',
-            //                 style: TextStyle(
-            //                   color: Colors.grey,
-            //                   fontSize: 16,
-            //                   decoration: TextDecoration.underline,
-            //                 ),
-            //               ),
-            //             ),
-            //           ),
-            //           const SizedBox(
-            //             width: 16,
-            //           ),
-            //           Container(
-            //             decoration: BoxDecoration(
-            //               color: SharedPreferencesUtil().permissionStoreRecordingsEnabled
-            //                   ? const Color.fromARGB(255, 150, 150, 150)
-            //                   : Colors.transparent,
-            //               border: Border.all(
-            //                 color: const Color.fromARGB(255, 150, 150, 150),
-            //                 width: 2,
-            //               ),
-            //               borderRadius: BorderRadius.circular(12),
-            //             ),
-            //             width: 22,
-            //             height: 22,
-            //             child: SharedPreferencesUtil().permissionStoreRecordingsEnabled
-            //                 ? const Icon(
-            //                     Icons.check,
-            //                     color: Colors.white,
-            //                     size: 18,
-            //                   )
-            //                 : null,
-            //           ),
-            //         ],
-            //       ),
-            //     ),
-            //   ),
-            // ),
-            const SizedBox(height: 32),
-            // Divider(color: Colors.grey.shade300, height: 1),
-            const SizedBox(height: 24),
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'OTHER',
-                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                textAlign: TextAlign.start,
-              ),
+
+            // PAYMENT SECTION
+            _buildSectionHeader('PAYMENT'),
+            _buildProfileTile(
+              title: 'Payment Methods',
+              subtitle: 'Add or change your payment method',
+              iconWidget: const Icon(Icons.attach_money_outlined, size: 20, color: Colors.white),
+              onTap: () {
+                routeToPage(context, const PaymentsPage());
+              },
             ),
-            ListTile(
-              contentPadding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
-              title: const Text('Your User ID', style: TextStyle(color: Colors.white)),
-              subtitle: Text(SharedPreferencesUtil().uid),
-              trailing: const Icon(Icons.copy_rounded, size: 20, color: Colors.white),
+
+            // PREFERENCES SECTION
+            _buildSectionHeader('PREFERENCES'),
+            _buildPreferenceToggle(
+              title: 'Help improve Omi by sharing anonymized analytics data',
+              value: SharedPreferencesUtil().optInAnalytics,
+              onChanged: (value) {
+                setState(() {
+                  SharedPreferencesUtil().optInAnalytics = value;
+                  value ? MixpanelManager().optInTracking() : MixpanelManager().optOutTracking();
+                });
+              },
+              onInfoTap: () {
+                routeToPage(context, const PrivacyInfoPage());
+                MixpanelManager().pageOpened('Share Analytics Data Details');
+              },
+            ),
+
+            // ACCOUNT SECTION
+            _buildSectionHeader('ACCOUNT'),
+            _buildProfileTile(
+              title: 'User ID',
+              subtitle: SharedPreferencesUtil().uid,
+              iconWidget: const Icon(Icons.copy_rounded, size: 20, color: Colors.white),
               onTap: () {
                 Clipboard.setData(ClipboardData(text: SharedPreferencesUtil().uid));
                 ScaffoldMessenger.of(context)
                     .showSnackBar(const SnackBar(content: Text('User ID copied to clipboard')));
               },
             ),
-            ListTile(
-              contentPadding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
-              title: const Text('Delete Account', style: TextStyle(color: Colors.white)),
-              subtitle: const Text('Delete your account and all data'),
-              trailing: const Icon(
-                Icons.warning,
-                size: 20,
-              ),
+            _buildProfileTile(
+              title: 'Delete Account',
+              subtitle: 'Delete your account and all data',
+              iconWidget: Icon(Icons.warning, size: 20, color: Colors.red.shade300),
               onTap: () {
                 MixpanelManager().pageOpened('Profile Delete Account Dialog');
                 Navigator.push(context, MaterialPageRoute(builder: (context) => const DeleteAccount()));
               },
-            )
+            ),
           ],
         ),
       ),

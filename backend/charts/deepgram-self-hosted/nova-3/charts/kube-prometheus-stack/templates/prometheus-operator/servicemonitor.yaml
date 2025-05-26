@@ -1,0 +1,47 @@
+{{- if and .Values.prometheusOperator.enabled .Values.prometheusOperator.serviceMonitor.selfMonitor }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ template "kube-prometheus-stack.operator.fullname" . }}
+  namespace: {{ template "kube-prometheus-stack.namespace" . }}
+  labels:
+    {{- include "kube-prometheus-stack.prometheus-operator.labels" . | nindent 4 }}
+{{- with .Values.prometheusOperator.serviceMonitor.additionalLabels }}
+{{ toYaml . | indent 4 }}
+{{- end }}
+spec:
+  {{- include "servicemonitor.scrapeLimits" .Values.prometheusOperator.serviceMonitor | nindent 2 }}
+  endpoints:
+  {{- if .Values.prometheusOperator.tls.enabled }}
+  - port: https
+    scheme: https
+    tlsConfig:
+      serverName: {{ template "kube-prometheus-stack.operator.fullname" . }}
+      ca:
+        secret:
+          name: {{ template "kube-prometheus-stack.fullname" . }}-admission
+          key: {{ if .Values.prometheusOperator.admissionWebhooks.certManager.enabled }}ca.crt{{ else }}ca{{ end }}
+          optional: false
+  {{- else }}
+  - port: http
+  {{- end }}
+    honorLabels: true
+    {{- if .Values.prometheusOperator.serviceMonitor.interval }}
+    interval: {{ .Values.prometheusOperator.serviceMonitor.interval }}
+    {{- end }}
+{{- if .Values.prometheusOperator.serviceMonitor.metricRelabelings }}
+    metricRelabelings:
+{{ tpl (toYaml .Values.prometheusOperator.serviceMonitor.metricRelabelings | indent 6) . }}
+{{- end }}
+{{- if .Values.prometheusOperator.serviceMonitor.relabelings }}
+    relabelings:
+{{ toYaml .Values.prometheusOperator.serviceMonitor.relabelings | indent 6 }}
+{{- end }}
+  selector:
+    matchLabels:
+      app: {{ template "kube-prometheus-stack.name" . }}-operator
+      release: {{ $.Release.Name | quote }}
+  namespaceSelector:
+    matchNames:
+      - {{ printf "%s" (include "kube-prometheus-stack.namespace" .) | quote }}
+{{- end }}

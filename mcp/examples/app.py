@@ -3,8 +3,9 @@ import asyncio
 import shutil
 from dotenv import load_dotenv
 
-from agents import Agent, Runner, trace
+from agents import Agent, Runner, trace, ModelSettings
 from agents.mcp import MCPServerStdio
+from openai.types.shared import Reasoning
 
 load_dotenv()
 
@@ -82,10 +83,12 @@ async def process_message_with_agent(
                 name="Omi Agent",
                 instructions=f"You are a helpful assistant that answers questions based on my Omi data, my UID is {uid}. You are processing a conversation, the history of which is provided.",
                 mcp_servers=[server],
-                model="o4-mini",
+                model="o3",
+                # model="litellm/anthropic/claude-3-7-sonnet-20250219",
+                model_settings=ModelSettings(reasoning=Reasoning(effort="high")),
             )
 
-            with trace(workflow_name="Streamlit_Omi_Agent_Chat_Interaction"):
+            with trace(workflow_name="Stramlit Omi MCP Example"):
                 run_output = await Runner.run(
                     starting_agent=omi_agent,
                     input=agent_input_messages,  # Pass the formatted conversation history

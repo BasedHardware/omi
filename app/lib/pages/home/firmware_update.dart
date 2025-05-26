@@ -242,8 +242,8 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
   }
 
   Widget _buildUpdateSection() {
-    bool hasChangelog = latestFirmwareDetails['changelog'] != null &&
-        (List<String>.from(latestFirmwareDetails['changelog'])).isNotEmpty;
+    dynamic changelogData = latestFirmwareDetails['changelog'];
+    bool hasChangelog = changelogData != null && changelogData is List && (List<String>.from(changelogData)).isNotEmpty;
 
     return Card(
       color: Colors.black.withOpacity(0.2),
@@ -340,7 +340,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          ...(List<String>.from(latestFirmwareDetails['changelog'])).map((change) => Padding(
+                          ...(List<String>.from(changelogData)).map((change) => Padding(
                                 padding: const EdgeInsets.only(bottom: 6.0),
                                 child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,

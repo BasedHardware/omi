@@ -6,16 +6,11 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/main.dart';
-import 'package:omi/pages/chat/clone_chat_page.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
-import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/pages/persona/twitter/social_profile.dart';
-import 'package:omi/pages/settings/page.dart';
-import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/providers/message_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:posthog_flutter/posthog_flutter.dart';
@@ -46,10 +41,20 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final provider = Provider.of<PersonaProvider>(context, listen: false);
+      String source = 'unknown'; // Default source
+
+      // Check if we came from settings
+      final isFromSettings = ModalRoute.of(context)?.settings.arguments == 'from_settings';
+      if (isFromSettings) {
+        provider.setRouting(PersonaProfileRouting.home);
+      }
+
       if (provider.routing == PersonaProfileRouting.apps_updates && provider.userPersona != null) {
         provider.prepareUpdatePersona(provider.userPersona!);
+        MixpanelManager().personaProfileViewed(personaId: provider.userPersona!.id, source: source);
       } else {
         await provider.getVerifiedUserPersona();
+        MixpanelManager().personaProfileViewed(personaId: provider.userPersona?.id, source: source);
       }
     });
     super.initState();
@@ -71,95 +76,37 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
             backgroundColor: Colors.transparent,
             appBar: AppBar(
               backgroundColor: Colors.transparent,
-              leading: Consumer<PersonaProvider>(builder: (context, personaProvider, _) {
-                return personaProvider.routing == PersonaProfileRouting.apps_updates
-                    ? IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Colors.white),
-                        onPressed: () {
-                          Navigator.pop(context);
-                        },
-                      )
-                    : GestureDetector(
-                        onTap: () async {
-                          if (personaProvider.routing == PersonaProfileRouting.no_device) {
-                            routeToPage(context, const CloneChatPage(), replace: false);
-                          } else {
-                            context.read<HomeProvider>().setIndex(1);
-                            if (context.read<HomeProvider>().onSelectedIndexChanged != null) {
-                              context.read<HomeProvider>().onSelectedIndexChanged!(1);
-                            }
-                            var appId = persona!.id;
-                            var appProvider = Provider.of<AppProvider>(context, listen: false);
-                            var messageProvider = Provider.of<MessageProvider>(context, listen: false);
-                            App? selectedApp;
-                            if (appId.isNotEmpty) {
-                              selectedApp = await appProvider.getAppFromId(appId);
-                            }
-                            appProvider.setSelectedChatAppId(appId);
-                            await messageProvider.refreshMessages();
-                            if (messageProvider.messages.isEmpty) {
-                              messageProvider.sendInitialAppMessage(selectedApp);
-                            }
-                          }
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: SvgPicture.asset(
-                            Assets.images.icCloneChat.path,
-                            width: 24,
-                            height: 24,
-                          ),
-                        ),
-                      );
-              }),
-              actions: [
-                // Only show settings icon for create_my_clone or home routing
-                Consumer<PersonaProvider>(builder: (context, personaProvider, _) {
-                  if (personaProvider.routing == PersonaProfileRouting.no_device) {
-                    return Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: GestureDetector(
-                        onTap: () async {
-                          await routeToPage(context, const SettingsPage(mode: SettingsMode.no_device));
-                        },
-                        child: SvgPicture.asset(
-                          Assets.images.icSettingPersona.path,
-                          width: 44,
-                          height: 44,
-                        ),
-                      ),
-                    );
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () {
+                  final isFromSettings = ModalRoute.of(context)?.settings.arguments == 'from_settings';
+
+                  if (isFromSettings) {
+                    // If we came from settings, just pop back to it
+                    Navigator.pop(context);
+                  } else if (provider.routing == PersonaProfileRouting.apps_updates) {
+                    // Regular back for apps updates flow
+                    Navigator.pop(context);
+                  } else {
+                    // For main app navigation
+                    var homeProvider = Provider.of<HomeProvider>(context, listen: false);
+                    homeProvider.setIndex(0); // Go back to home tab
+                    if (homeProvider.onSelectedIndexChanged != null) {
+                      homeProvider.onSelectedIndexChanged!(0);
+                    }
                   }
-                  if (personaProvider.routing == PersonaProfileRouting.create_my_clone ||
-                      personaProvider.routing == PersonaProfileRouting.home) {
-                    return Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: GestureDetector(
-                        onTap: () async {
-                          MixpanelManager().pageOpened('Settings');
-                          String language = SharedPreferencesUtil().userPrimaryLanguage;
-                          bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
-                          String transcriptModel = SharedPreferencesUtil().transcriptionModel;
-                          await routeToPage(context, const SettingsPage());
-                          if (language != SharedPreferencesUtil().userPrimaryLanguage ||
-                              hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
-                              transcriptModel != SharedPreferencesUtil().transcriptionModel) {
-                            if (context.mounted) {
-                              context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                            }
-                          }
-                        },
-                        child: SvgPicture.asset(
-                          Assets.images.icSettingPersona.path,
-                          width: 44,
-                          height: 44,
-                        ),
-                      ),
-                    );
-                  }
-                  return const SizedBox.shrink();
-                }),
-              ],
+                },
+              ),
+              title: const Text(
+                'Persona',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+              centerTitle: true,
+              actions: [], // Empty actions - no settings button needed
             ),
             body: persona == null
                 ? const Center(
@@ -320,6 +267,8 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                   await Posthog().capture(eventName: 'share_persona_clicked', properties: {
                                     'persona_username': persona.username ?? '',
                                   });
+                                  MixpanelManager()
+                                      .personaShared(personaId: persona.id, personaUsername: persona.username);
                                   Share.share(
                                     'https://personas.omi.me/u/${persona.username}',
                                     subject: '${persona.getName()} Persona',
@@ -738,6 +687,8 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
     bool isComingSoon = false,
     bool showConnect = false,
   }) {
+    final Color grayedOutColor = Colors.grey[600]!;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
@@ -759,7 +710,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
           Text(
             text,
             style: TextStyle(
-              color: isComingSoon ? Colors.grey[600] : Colors.white,
+              color: isComingSoon ? grayedOutColor : Colors.white,
               fontSize: 16,
             ),
           ),
@@ -771,10 +722,10 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                 color: const Color(0xFF373737),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: const Text(
+              child: Text(
                 'Coming soon',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: grayedOutColor,
                   fontSize: 12,
                 ),
               ),

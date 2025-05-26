@@ -84,13 +84,16 @@ jobs:
           region: ${{ env.REGION }}
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
 
-      - name: Deploy ${{ env.SERVICE }}-listen to Cloud Run
-        id: deploy-backend-listen
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: ${{ env.SERVICE }}-listen
-          region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+      - name: Connect to GKE cluster
+        run: |
+          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
+          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+          sudo apt-get update && sudo apt-get install google-cloud-cli-gke-gcloud-auth-plugin -y
+          gcloud container clusters get-credentials ${{ vars.GKE_CLUSTER }} --region ${{ env.REGION }} --project ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Deploy ${{ env.SERVICE }}-listen to GKE
+        run: |
+          kubectl -n ${{ vars.ENV }}-omi-backend rollout restart deploy ${{ vars.ENV }}-omi-backend-listen
 
       - name: Deploy ${{ env.SERVICE }}-integration to Cloud Run
         id: deploy-backend-integration

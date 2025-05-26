@@ -109,22 +109,22 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                         const SizedBox(
                           height: 24,
                         ),
-                        TextButton(
-                          onPressed: () async {
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(builder: (context) => const SocialHandleScreen()),
-                            );
-                          },
-                          child: const Text(
-                            'I don\'t have omi',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ),
+                        // TextButton(
+                        //   onPressed: () async {
+                        //     Navigator.pushReplacement(
+                        //       context,
+                        //       MaterialPageRoute(builder: (context) => const SocialHandleScreen()),
+                        //     );
+                        //   },
+                        //   child: const Text(
+                        //     'I don\'t have omi',
+                        //     style: TextStyle(
+                        //       color: Colors.white,
+                        //       fontWeight: FontWeight.bold,
+                        //       fontSize: 16,
+                        //     ),
+                        //   ),
+                        // ),
                       ],
                     ),
                     const Spacer(flex: 3),

@@ -14,11 +14,13 @@ import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:omi/utils/file.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:uuid/uuid.dart';
 
 class MessageProvider extends ChangeNotifier {
   AppProvider? appProvider;
   List<ServerMessage> messages = [];
+  bool _isNextMessageFromVoice = false;
 
   bool isLoadingMessages = false;
   bool hasCachedMessages = false;
@@ -36,6 +38,10 @@ class MessageProvider extends ChangeNotifier {
 
   void updateAppProvider(AppProvider p) {
     appProvider = p;
+  }
+
+  void setNextMessageOriginIsVoice(bool isVoice) {
+    _isNextMessageFromVoice = isVoice;
   }
 
   void setIsUploadingFiles() {
@@ -277,6 +283,19 @@ class MessageProvider extends ChangeNotifier {
       codec?.getFrameSize() ?? 160,
     );
 
+    var currentAppId = appProvider?.selectedChatAppId;
+    if (currentAppId == 'no_selected') {
+      currentAppId = null;
+    }
+    String chatTargetId = currentAppId ?? 'omi';
+    App? targetApp = currentAppId != null ? appProvider?.apps.firstWhereOrNull((app) => app.id == currentAppId) : null;
+    bool isPersonaChat = targetApp != null ? !targetApp.isNotPersona() : false;
+
+    MixpanelManager().chatVoiceInputUsed(
+      chatTargetId: chatTargetId,
+      isPersonaChat: isPersonaChat,
+    );
+
     setShowTypingIndicator(true);
     var message = ServerMessage.empty();
     messages.insert(0, message);
@@ -333,18 +352,33 @@ class MessageProvider extends ChangeNotifier {
 
   Future sendMessageStreamToServer(String text) async {
     setShowTypingIndicator(true);
-    var appId = appProvider?.selectedChatAppId;
-    if (appId == 'no_selected') {
-      appId = null;
+    var currentAppId = appProvider?.selectedChatAppId;
+    if (currentAppId == 'no_selected') {
+      currentAppId = null;
     }
-    var message = ServerMessage.empty(appId: appId);
+
+    String chatTargetId = currentAppId ?? 'omi';
+    App? targetApp = currentAppId != null ? appProvider?.apps.firstWhereOrNull((app) => app.id == currentAppId) : null;
+    bool isPersonaChat = targetApp != null ? !targetApp.isNotPersona() : false;
+
+    MixpanelManager().chatMessageSent(
+      message: text,
+      includesFiles: uploadedFiles.isNotEmpty,
+      numberOfFiles: uploadedFiles.length,
+      chatTargetId: chatTargetId,
+      isPersonaChat: isPersonaChat,
+      isVoiceInput: _isNextMessageFromVoice,
+    );
+    _isNextMessageFromVoice = false;
+
+    var message = ServerMessage.empty(appId: currentAppId);
     messages.insert(0, message);
     notifyListeners();
     List<String> fileIds = uploadedFiles.map((e) => e.id).toList();
     clearSelectedFiles();
     clearUploadedFiles();
     try {
-      await for (var chunk in sendMessageStreamServer(text, appId: appProvider?.selectedChatAppId, filesId: fileIds)) {
+      await for (var chunk in sendMessageStreamServer(text, appId: currentAppId, filesId: fileIds)) {
         if (chunk.type == MessageChunkType.think) {
           message.thinkings.add(chunk.text);
           notifyListeners();
@@ -376,18 +410,6 @@ class MessageProvider extends ChangeNotifier {
     }
 
     setShowTypingIndicator(false);
-  }
-
-  Future sendMessageToServer(String message, String? appId) async {
-    setShowTypingIndicator(true);
-    messages.insert(0, ServerMessage.empty(appId: appId));
-    List<String> fileIds = uploadedFiles.map((e) => e.id).toList();
-    var mes = await sendMessageServer(message, appId: appId, fileIds: fileIds);
-    if (messages[0].id == '0000') {
-      messages[0] = mes;
-    }
-    setShowTypingIndicator(false);
-    notifyListeners();
   }
 
   Future sendInitialAppMessage(App? app) async {
