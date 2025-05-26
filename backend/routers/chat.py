@@ -41,7 +41,7 @@ def filter_messages(messages, app_id):
 
 
 def acquire_chat_session(uid: str, plugin_id: Optional[str] = None):
-    chat_session = chat_db.get_chat_session(uid, plugin_id=plugin_id)
+    chat_session = chat_db.get_chat_session(uid, app_id=plugin_id)
     if chat_session is None:
         cs = ChatSession(
             id=str(uuid.uuid4()),
@@ -181,7 +181,7 @@ def clear_chat_messages(app_id: Optional[str] = None, uid: str = Depends(auth.ge
         app_id = None
 
     # get current chat session
-    chat_session = chat_db.get_chat_session(uid, plugin_id=app_id)
+    chat_session = chat_db.get_chat_session(uid, app_id=app_id)
     chat_session_id = chat_session['id'] if chat_session else None
 
     err = chat_db.clear_chat(uid, app_id=app_id, chat_session_id=chat_session_id)
@@ -205,7 +205,7 @@ def initial_message_util(uid: str, app_id: Optional[str] = None):
     # init chat session
     chat_session = acquire_chat_session(uid, plugin_id=app_id)
 
-    prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, plugin_id=app_id)))
+    prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, app_id=app_id)))
     print('initial_message_util returned', len(prev_messages), 'prev messages for', app_id)
 
     app = get_available_app_by_id(app_id, uid)
@@ -249,10 +249,10 @@ def get_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_cu
     if plugin_id in ['null', '']:
         plugin_id = None
 
-    chat_session = chat_db.get_chat_session(uid, plugin_id=plugin_id)
+    chat_session = chat_db.get_chat_session(uid, app_id=plugin_id)
     chat_session_id = chat_session['id'] if chat_session else None
 
-    messages = chat_db.get_messages(uid, limit=100, include_conversations=True, plugin_id=plugin_id,
+    messages = chat_db.get_messages(uid, limit=100, include_conversations=True, app_id=plugin_id,
                                     chat_session_id=chat_session_id)
     print('get_messages', len(messages), plugin_id)
     if not messages:
@@ -455,7 +455,7 @@ def clear_chat_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth
         plugin_id = None
 
     # get current chat session
-    chat_session = chat_db.get_chat_session(uid, plugin_id=plugin_id)
+    chat_session = chat_db.get_chat_session(uid, app_id=plugin_id)
     chat_session_id = chat_session['id'] if chat_session else None
 
     err = chat_db.clear_chat(uid, app_id=plugin_id, chat_session_id=chat_session_id)
