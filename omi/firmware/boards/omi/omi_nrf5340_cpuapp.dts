@@ -127,7 +127,13 @@
 };
 
 &gpio1 {
-	status = "okay";
+    status = "okay";
+    sdcard_power_default_on: sdcard_power_default_on {
+        gpio-hog;
+        gpios = <10 GPIO_ACTIVE_HIGH>; /* Corresponds to sdcard_en_pin P1.10 */
+        output-high; /* Set pin high as it's GPIO_ACTIVE_HIGH */
+        line-name = "sdcard-power-enable";
+    };
 };
 
 &gpiote {
@@ -204,6 +210,7 @@
 	
 	spi_flash: p25q16h@1 {
 		compatible = "jedec,spi-nor";
+		status = "okay";
 		reg = <1>;
 		spi-max-frequency = <125000>;
 		quad-enable-requirements = "S2B1v1";
