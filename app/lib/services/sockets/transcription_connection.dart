@@ -110,19 +110,12 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
   @override
   void onMessage(event) {
-    // Special handling for ping messages which aren't JSON
-    if (event == "ping") {
-      // Ping messages are handled by PureSocket directly
-      return;
-    }
-
     // Decode json
     dynamic jsonEvent;
     try {
       jsonEvent = jsonDecode(event);
     } on FormatException catch (e) {
-      debugPrint("JSON parsing error: ${e.toString()}");
-      debugPrint("Raw message content: $event");
+      debugPrint(e.toString());
     }
     if (jsonEvent == null) {
       debugPrint("Can not decode message event json $event");

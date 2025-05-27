@@ -9,7 +9,6 @@ import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/status.dart' as socket_channel_status;
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:omi/backend/http/shared.dart';
-import 'package:omi/utils/logger.dart';
 
 enum PureSocketStatus { notConnected, connecting, connected, disconnected }
 
@@ -97,11 +96,7 @@ class PureSocket implements IPureSocket {
   String url;
 
   PureSocket(this.url) {
-    Logger.debug('🔌 Socket initializing for URL: $url');
-    _internetStatusListener = PureCore()
-        .internetConnection
-        .onStatusChange
-        .listen((InternetStatus status) {
+    _internetStatusListener = PureCore().internetConnection.onStatusChange.listen((InternetStatus status) {
       onInternetSatusChanged(status);
     });
   }
@@ -116,8 +111,7 @@ class PureSocket implements IPureSocket {
   }
 
   Future<bool> _connect() async {
-    if (_status == PureSocketStatus.connecting ||
-        _status == PureSocketStatus.connected) {
+    if (_status == PureSocketStatus.connecting || _status == PureSocketStatus.connected) {
       return false;
     }
 
@@ -151,20 +145,43 @@ class PureSocket implements IPureSocket {
       return false;
     }
     _status = PureSocketStatus.connected;
+    _retries = 0;
+    onConnected();
+
+    final that = this;
+
+    _channel?.stream.listen(
+      (message) {
+        if (message == "ping") {
+          debugPrint(message);
+          // Pong frame added manually https://www.rfc-editor.org/rfc/rfc6455#section-5.5.2
+          _channel?.sink.add([0x8A, 0x00]);
+          return;
+        }
+        that.onMessage(message);
+      },
+      onError: (err, trace) {
+        that.onError(err, trace);
+      },
+      onDone: () {
+        debugPrint("onDone");
+        that.onClosed();
+      },
+      cancelOnError: true,
+    );
+
     return true;
   }
 
   @override
   Future disconnect() async {
-    Logger.debug('🔌 Socket disconnecting from: $url');
-    try {
-      await _channel?.sink.close(socket_channel_status.normalClosure);
-      _status = PureSocketStatus.disconnected;
-    } catch (e, trace) {
-      debugPrint('Error closing socket: $e');
-      CrashReporting.reportHandledCrash(e, trace);
+    if (_status == PureSocketStatus.connected) {
+      // Warn: should not use await cause dead end by socket closed.
+      _channel?.sink.close(socket_channel_status.normalClosure);
     }
-    return;
+    _status = PureSocketStatus.disconnected;
+    debugPrint("disconnect");
+    onClosed();
   }
 
   Future _cleanUp() async {
@@ -192,25 +209,11 @@ class PureSocket implements IPureSocket {
 
     _listener?.onError(err, trace);
 
-    CrashReporting.reportHandledCrash(err, trace,
-        level: NonFatalExceptionLevel.error);
+    CrashReporting.reportHandledCrash(err, trace, level: NonFatalExceptionLevel.error);
   }
 
   @override
   void onMessage(dynamic message) {
-    // Special handling for ping messages
-    if (message == "ping") {
-      Logger.debug("🔌 Socket received ping message, responding with pong");
-      try {
-        // Send pong response (RFC 6455 compliant frame)
-        channel.sink.add([0x8A, 0x00]);
-        return;
-      } catch (e, trace) {
-        debugPrint('Failed to send pong response: $e');
-        CrashReporting.reportHandledCrash(e, trace);
-      }
-    }
-
     debugPrint("[Socket] Message $message");
     _listener?.onMessage(message);
   }
@@ -221,13 +224,8 @@ class PureSocket implements IPureSocket {
   }
 
   @override
-  void send(dynamic message) {
-    try {
-      channel.sink.add(message);
-    } catch (e, trace) {
-      debugPrint('Failed to send message: $e');
-      CrashReporting.reportHandledCrash(e, trace);
-    }
+  void send(message) {
+    _channel?.sink.add(message);
   }
 
   void _reconnect() async {
@@ -236,8 +234,7 @@ class PureSocket implements IPureSocket {
     const double multiplier = 1.5;
     const int maxRetries = 8;
 
-    if (_status == PureSocketStatus.connecting ||
-        _status == PureSocketStatus.connected) {
+    if (_status == PureSocketStatus.connecting || _status == PureSocketStatus.connected) {
       debugPrint("[Socket] Can not reconnect, because socket is $_status");
       return;
     }
@@ -250,8 +247,7 @@ class PureSocket implements IPureSocket {
     }
 
     // retry
-    int waitInMilliseconds =
-        pow(multiplier, _retries).toInt() * initialBackoffTimeMs;
+    int waitInMilliseconds = pow(multiplier, _retries).toInt() * initialBackoffTimeMs;
     await Future.delayed(Duration(milliseconds: waitInMilliseconds));
     _retries++;
     if (_retries > maxRetries) {
@@ -268,8 +264,7 @@ class PureSocket implements IPureSocket {
     _internetStatus = status;
     switch (status) {
       case InternetStatus.connected:
-        if (_status == PureSocketStatus.connected ||
-            _status == PureSocketStatus.connecting) {
+        if (_status == PureSocketStatus.connected || _status == PureSocketStatus.connecting) {
           return;
         }
         _reconnect();
