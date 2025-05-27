@@ -537,16 +537,21 @@ def extract_from_instagram():
         print(f"\n📱 Extracting content from Instagram profile: {username}")
         
         # Set up the Instagram API client
+        # In your Instagram extraction function, modify the client setup:
+        
+        # Set up the Instagram API client with proxy
         instagram_client = httpx.Client(
-            headers={
-                # Internal ID of Instagram backend app
-                "x-ig-app-id": "936619743392459",
-                # Browser-like headers
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/62.0.3202.94 Safari/537.36",
-                "Accept-Language": "en-US,en;q=0.9",
-                "Accept-Encoding": "gzip, deflate, br",
-                "Accept": "*/*",
-            }
+        headers={
+        "x-ig-app-id": "936619743392459",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/62.0.3202.94 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Accept": "*/*",
+        },
+        proxies={
+        "http://": os.getenv("PROXY_URL"),  # Add this to your environment variables
+        "https://": os.getenv("PROXY_URL")   # Example: "http://username:password@proxy-server:port"
+        }
         )
         
         # Fetch the Instagram profile data
