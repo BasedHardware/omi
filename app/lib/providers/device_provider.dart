@@ -13,7 +13,7 @@ import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
-import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption {
   CaptureProvider? captureProvider;
@@ -249,7 +249,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Wals
     ServiceManager.instance().wal.getSyncs().sdcard.setDevice(null);
 
-    InstabugLog.logInfo('Omi Device Disconnected');
+    PlatformManager.instance.instabug.logInfo('Omi Device Disconnected');
     _disconnectNotificationTimer?.cancel();
     _disconnectNotificationTimer = Timer(const Duration(seconds: 30), () {
       NotificationService.instance.createNotification(

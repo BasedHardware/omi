@@ -8,7 +8,6 @@ import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/string_utils.dart';
 import 'package:http/http.dart' as http;
-import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:path/path.dart';
 
 Future<List<ServerMessage>> getMessagesServer({
