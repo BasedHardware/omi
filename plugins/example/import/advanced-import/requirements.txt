@@ -6,3 +6,5 @@ werkzeug==2.0.3
 python-dotenv
 trafilatura>=2.0.0
 jmespath
+flask-cors
+gunicorn==20.1.0

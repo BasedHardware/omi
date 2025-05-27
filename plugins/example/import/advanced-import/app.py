@@ -12,7 +12,12 @@ import trafilatura
 # Load environment variables from .env file
 load_dotenv()
 
+# Add this near the top with other imports
+from flask_cors import CORS
+
+# After creating the Flask app
 app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 
 # API configuration from fact.py
 APP_ID = "01JW1J54TSCC101VT7SEZFSAQP"
@@ -863,6 +868,12 @@ def parse_post(data):
             "error": f"Error parsing post data: {str(e)}"
         }
 
-# Add this at the end of the file
+# Remove the duplicate blocks and replace with this at the end of the file
+
+# For local development only
 if __name__ == "__main__":
+    # Use this for local development
     app.run(debug=True, host='0.0.0.0', port=5001)
+    
+# For production with Vercel, we don't need to call app.run()
+# Vercel will use the 'app' variable directly
