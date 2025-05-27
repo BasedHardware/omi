@@ -1,0 +1,6 @@
+/ {
+	chosen {
+		nordic,pm-ext-flash = &spi_flash;
+	};
+};
+
