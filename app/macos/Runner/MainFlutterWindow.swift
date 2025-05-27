@@ -19,6 +19,8 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
     private let mixerNode = AVAudioMixerNode()
 
     private var engineProcessingFormat: AVAudioFormat!
+    private var micNode: AVAudioInputNode!
+    private var micNodeFormat: AVAudioFormat!
     var outputAudioFormat: AVAudioFormat?
     var audioConverter: AVAudioConverter?
 
@@ -101,15 +103,28 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
             name: "screenCapturePlatform",
             binaryMessenger: flutterViewController.engine.binaryMessenger)
 
-        // engineProcessingFormat set to mic's native format (usually 44.1kHz)
-        let mic = audioEngine.inputNode
-        let micFormat = mic.outputFormat(forBus: 0)
+        self.micNode = audioEngine.inputNode
+        self.micNodeFormat = self.micNode.outputFormat(forBus: 0)
+
+        // Attempt to enable voice processing for AEC
+        // This should be done before the engine is started or the graph is fully configured.
+        if #available(macOS 10.15, *) { // setVoiceProcessingEnabled is available macOS 10.15+
+            do {
+                try self.micNode.setVoiceProcessingEnabled(true)
+                print("DEBUG: Successfully enabled voice processing on microphone input node. This may help reduce echo.")
+            } catch {
+                print("ERROR: Could not enable voice processing on microphone input node: \(error.localizedDescription). Echo might persist.")
+            }
+        } else {
+            print("INFO: Voice processing on AVAudioInputNode requires macOS 10.15+. Echo might persist on older OS versions.")
+        }
+
         engineProcessingFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32,
-                                               sampleRate: micFormat.sampleRate, // Use mic's native rate
+                                               sampleRate: self.micNodeFormat.sampleRate, // Use mic's native rate
                                                channels: 1, // MONO for mixing
                                                interleaved: false)
         
-        print("DEBUG: Engine processing format (mic native rate) SR: \(engineProcessingFormat.sampleRate), CH: \(engineProcessingFormat.channelCount)")
+        print("DEBUG: Engine processing format (mic native SR: \(self.micNodeFormat.sampleRate)) SR: \(engineProcessingFormat.sampleRate), CH: \(engineProcessingFormat.channelCount)")
 
         setupAudioEngine() // Uses engineProcessingFormat for mixer tap and systemAudioPlayerNode connection
 
@@ -218,15 +233,22 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
         audioEngine.attach(systemAudioPlayerNode)
         audioEngine.attach(mixerNode)
 
-        let mic = audioEngine.inputNode
-        let micFormat = mic.outputFormat(forBus: 0)
-        print("DEBUG: Mic native format: \(micFormat)")
-        print("DEBUG: Engine processing format: \(self.engineProcessingFormat!)")
+        // Set systemAudioPlayerNode to full volume to ensure system audio
+        // is captured at proper levels for recording
+        systemAudioPlayerNode.volume = 4.0
+        print("DEBUG: systemAudioPlayerNode volume set to 1.0 for proper system audio capture.")
+
+        print("DEBUG: Mic native format: \(self.micNodeFormat!))")
+        print("DEBUG: Engine processing format: \(self.engineProcessingFormat!))")
         
-        audioEngine.connect(mic, to: mixerNode, format: micFormat) // Mic uses its native format
+        audioEngine.connect(self.micNode, to: mixerNode, format: self.micNodeFormat) // Mic uses its native format
         
         // systemAudioPlayerNode connected to mixer using engineProcessingFormat
         audioEngine.connect(systemAudioPlayerNode, to: mixerNode, format: self.engineProcessingFormat)
+
+        // Set mixer output volume to ensure proper levels
+        mixerNode.outputVolume = 4.0
+        print("DEBUG: Mixer output volume set to 1.0 for proper audio levels.")
 
         // Mixer tap is at engineProcessingFormat
         mixerNode.installTap(onBus: 0, bufferSize: 1024, format: self.engineProcessingFormat) { [weak self] (buffer, time) in
@@ -270,11 +292,21 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
                 }
             }
         }
+
+        // REMOVED: The connection from mixerNode to outputNode was causing echo feedback.
+        // The mixerNode was routing the combined audio (including microphone) back to system output,
+        // which SCStream would then capture, creating a circular feedback loop.
+        // We only need the mixer for combining sources and tapping for recording, not for playback.
+        // audioEngine.disconnectNodeOutput(mixerNode) // make sure we have a clean slot
+        // audioEngine.connect(mixerNode, to: audioEngine.outputNode, format: self.engineProcessingFormat)
+        // mixerNode.volume = 0 // mute – we only need the connection for clocking, not playback
+        print("DEBUG: Mixer NOT connected to outputNode to prevent echo feedback loop.")
+        
         audioEngine.prepare()
     }
 
     func prepSCStreamFilter() {
-        let excluded = availableContent?.applications.filter { app in
+    let excluded = availableContent?.applications.filter { app in
             Bundle.main.bundleIdentifier == app.bundleIdentifier
     }
     filter = SCContentFilter(display: availableContent!.displays.first!, excludingApplications: excluded ?? [], exceptingWindows: [])
@@ -388,7 +420,7 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
             // Check if formats differ and note for manual processing
             if scStreamSourceFormat != self.engineProcessingFormat {
                 print("DEBUG: SCStream format (\(scStreamSourceFormat!)) differs from Engine format (\(self.engineProcessingFormat!)). Will use manual conversion.")
-            } else {
+    } else {
                 print("DEBUG: SCStream format matches Engine format. No conversion needed.")
             }
         }
@@ -396,46 +428,81 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
         var bufferToSchedule: AVAudioPCMBuffer = pcmBufferFromSCStream
 
         // Manual conversion if formats differ (avoiding AVAudioConverter OSStatus errors)
-        if scStreamSourceFormat != self.engineProcessingFormat {
+        // First, ensure scStreamSourceFormat is not nil before checking its properties or comparing it.
+        guard let currentSCStreamFormat = self.scStreamSourceFormat else {
+            print("ERROR: scStreamSourceFormat is nil. Cannot process SCStream audio buffer. Buffer skipped.")
+            return
+        }
+
+        if currentSCStreamFormat != self.engineProcessingFormat {
+            // This block is for when SCStream's format differs from our desired engineProcessingFormat (mono, float, specific SR).
+            // The original crash happened here due to assumptions about floatChannelData.
+            // We need to ensure the input is deinterleaved float to use floatChannelData directly.
             
-            print("DEBUG: Manual conversion - Input frames: \(pcmBufferFromSCStream.frameLength), SCStream SR: \(scStreamSourceFormat!.sampleRate), Engine SR: \(self.engineProcessingFormat.sampleRate)")
-            
+            guard currentSCStreamFormat.commonFormat == .pcmFormatFloat32,
+                  !currentSCStreamFormat.isInterleaved, // Must be deinterleaved for this specific access pattern
+                  let floatDataPointers = pcmBufferFromSCStream.floatChannelData else {
+                print("ERROR: SCStream buffer (format: \(currentSCStreamFormat.description)) is not in deinterleaved float format or floatChannelData is nil. Cannot perform current manual conversion. Buffer skipped.")
+                // TODO: Consider a fallback to AVAudioConverter if other formats from SCStream need robust handling here.
+                return
+            }
+
             let inputFrameCount = Int(pcmBufferFromSCStream.frameLength)
-            let inputSampleRate = scStreamSourceFormat!.sampleRate
+            let inputSampleRate = currentSCStreamFormat.sampleRate
             let outputSampleRate = self.engineProcessingFormat.sampleRate
-            
-            // Extract stereo channels from deinterleaved SCStream buffer
-            let leftChannel = pcmBufferFromSCStream.floatChannelData![0]
-            let rightChannel = pcmBufferFromSCStream.floatChannelData![1]
-            
-            // Convert deinterleaved to array for processing
-            let leftArray = Array(UnsafeBufferPointer(start: leftChannel, count: inputFrameCount))
-            let rightArray = Array(UnsafeBufferPointer(start: rightChannel, count: inputFrameCount))
-            
-            // Step 1: Resample each channel if needed
-            let leftResampled = resampleAudio(input: leftArray, fromRate: inputSampleRate, toRate: outputSampleRate)
-            let rightResampled = resampleAudio(input: rightArray, fromRate: inputSampleRate, toRate: outputSampleRate)
-            
-            // Step 2: Convert stereo to mono
-            let monoResampled = stereoToMono(leftChannel: leftResampled, rightChannel: rightResampled)
-            
-            // Step 3: Create output buffer
-            let outputFrameCount = monoResampled.count
-            guard let monoBuffer = AVAudioPCMBuffer(pcmFormat: self.engineProcessingFormat, frameCapacity: AVAudioFrameCount(outputFrameCount)) else {
-                print("ERROR: Failed to create mono output buffer")
+            var monoResampled: [Float] // This will hold the audio data after resampling and mono conversion
+
+            if currentSCStreamFormat.channelCount == 1 {
+                // Input is already mono (but deinterleaved float as per guard)
+                let sourceChannelPtr = floatDataPointers[0]
+                let sourceArray = Array(UnsafeBufferPointer(start: sourceChannelPtr, count: inputFrameCount))
+                if inputSampleRate != outputSampleRate {
+                    monoResampled = resampleAudio(input: sourceArray, fromRate: inputSampleRate, toRate: outputSampleRate)
+                } else {
+                    monoResampled = sourceArray
+                }
+                print("DEBUG: Manual conversion: SCStream Mono \(inputSampleRate)Hz -> Engine Mono \(outputSampleRate)Hz")
+            } else if currentSCStreamFormat.channelCount >= 2 {
+                // Input is stereo (or more channels, take first two) deinterleaved float
+                let leftChannelPtr = floatDataPointers[0]
+                let rightChannelPtr = floatDataPointers[1] // Safe due to channelCount >= 2
+
+                let leftArray = Array(UnsafeBufferPointer(start: leftChannelPtr, count: inputFrameCount))
+                let rightArray = Array(UnsafeBufferPointer(start: rightChannelPtr, count: inputFrameCount))
+
+                let leftResampled: [Float]
+                let rightResampled: [Float]
+
+                if inputSampleRate != outputSampleRate {
+                    leftResampled = resampleAudio(input: leftArray, fromRate: inputSampleRate, toRate: outputSampleRate)
+                    rightResampled = resampleAudio(input: rightArray, fromRate: inputSampleRate, toRate: outputSampleRate)
+                } else {
+                    leftResampled = leftArray
+                    rightResampled = rightArray
+                }
+                monoResampled = stereoToMono(leftChannel: leftResampled, rightChannel: rightResampled)
+                print("DEBUG: Manual conversion: SCStream \(currentSCStreamFormat.channelCount)-channel \(inputSampleRate)Hz -> Engine Mono \(outputSampleRate)Hz")
+            } else {
+                print("ERROR: SCStream buffer has \(currentSCStreamFormat.channelCount) channels (e.g., 0), which is not supported for manual conversion. Buffer skipped.")
                 return
             }
             
-            monoBuffer.frameLength = AVAudioFrameCount(outputFrameCount)
+            // Create output buffer for the processed monoResampled data
+            let outputFrameCount = monoResampled.count
+            guard let manuallyConvertedBuffer = AVAudioPCMBuffer(pcmFormat: self.engineProcessingFormat, frameCapacity: AVAudioFrameCount(outputFrameCount)) else {
+                print("ERROR: Failed to create output buffer for manually converted audio.")
+                return
+            }
+            manuallyConvertedBuffer.frameLength = AVAudioFrameCount(outputFrameCount)
             
-            // Copy manual conversion result to output buffer
-            let monoData = monoBuffer.floatChannelData![0]
+            // engineProcessingFormat is known to be non-interleaved Float32, so floatChannelData![0] is correct for it.
+            let monoOutputDataPtr = manuallyConvertedBuffer.floatChannelData![0]
             for i in 0..<outputFrameCount {
-                monoData[i] = monoResampled[i]
+                monoOutputDataPtr[i] = monoResampled[i]
             }
             
-            bufferToSchedule = monoBuffer
-            print("DEBUG: Manual conversion complete: \(inputFrameCount) → \(outputFrameCount) frames (stereo \(inputSampleRate)Hz → mono \(outputSampleRate)Hz)")
+            bufferToSchedule = manuallyConvertedBuffer
+            // Original debug log: print("DEBUG: Manual conversion complete: \(inputFrameCount) → \(outputFrameCount) frames (stereo \(inputSampleRate)Hz → mono \(outputSampleRate)Hz)")
         }
 
         if systemAudioPlayerNode.engine != nil && audioEngine.isRunning {
