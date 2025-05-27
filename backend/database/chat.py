@@ -19,13 +19,13 @@ def add_message(uid: str, message_data: dict):
     return message_data
 
 
-def add_plugin_message(text: str, plugin_id: str, uid: str, conversation_id: Optional[str] = None) -> Message:
+def add_app_message(text: str, app_id: str, uid: str, conversation_id: Optional[str] = None) -> Message:
     ai_message = Message(
         id=str(uuid.uuid4()),
         text=text,
         created_at=datetime.now(timezone.utc),
         sender='ai',
-        plugin_id=plugin_id,
+        app_id=app_id,
         from_external_integration=False,
         type='text',
         memories_id=[conversation_id] if conversation_id else [],
@@ -40,7 +40,7 @@ def add_summary_message(text: str, uid: str) -> Message:
         text=text,
         created_at=datetime.now(timezone.utc),
         sender='ai',
-        plugin_id=None,
+        app_id=None,
         from_external_integration=False,
         type='day_summary',
         memories_id=[],
@@ -49,11 +49,11 @@ def add_summary_message(text: str, uid: str) -> Message:
     return ai_message
 
 
-def get_plugin_messages(uid: str, plugin_id: str, limit: int = 20, offset: int = 0, include_conversations: bool = False):
+def get_app_messages(uid: str, app_id: str, limit: int = 20, offset: int = 0, include_conversations: bool = False):
     user_ref = db.collection('users').document(uid)
     messages_ref = (
         user_ref.collection('messages')
-        .where(filter=FieldFilter('plugin_id', '==', plugin_id))
+        .where(filter=FieldFilter('plugin_id', '==', app_id))
         .order_by('created_at', direction=firestore.Query.DESCENDING)
         .limit(limit)
         .offset(offset)
@@ -87,7 +87,8 @@ def get_plugin_messages(uid: str, plugin_id: str, limit: int = 20, offset: int =
     # Attach conversations to messages
     for message in messages:
         message['memories'] = [
-            conversations[conversation_id] for conversation_id in message.get('memories_id', []) if conversation_id in conversations
+            conversations[conversation_id] for conversation_id in message.get('memories_id', []) if
+            conversation_id in conversations
         ]
 
     return messages
@@ -95,17 +96,18 @@ def get_plugin_messages(uid: str, plugin_id: str, limit: int = 20, offset: int =
 
 @timeit
 def get_messages(
-        uid: str, limit: int = 20, offset: int = 0, include_conversations: bool = False, plugin_id: Optional[str] = None, chat_session_id: Optional[str] = None
+        uid: str, limit: int = 20, offset: int = 0, include_conversations: bool = False, app_id: Optional[str] = None,
+        chat_session_id: Optional[str] = None
         # include_plugin_id_filter: bool = True,
 ):
-    print('get_messages', uid, limit, offset, plugin_id, include_conversations)
+    print('get_messages', uid, limit, offset, app_id, include_conversations)
     user_ref = db.collection('users').document(uid)
     messages_ref = (
         user_ref.collection('messages')
         .where(filter=FieldFilter('deleted', '==', False))
     )
     # if include_plugin_id_filter:
-    messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', plugin_id))
+    messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
     if chat_session_id:
         messages_ref = messages_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
 
@@ -140,7 +142,8 @@ def get_messages(
     # Attach conversations to messages
     for message in messages:
         message['memories'] = [
-            conversations[conversation_id] for conversation_id in message.get('memories_id', []) if conversation_id in conversations
+            conversations[conversation_id] for conversation_id in message.get('memories_id', []) if
+            conversation_id in conversations
         ]
 
     # Fetch file chat
@@ -190,15 +193,16 @@ def report_message(uid: str, msg_doc_id: str):
         return {"message": f"Update failed: {e}"}
 
 
-def batch_delete_messages(parent_doc_ref, batch_size=450, plugin_id: Optional[str] = None, chat_session_id: Optional[str] = None):
+def batch_delete_messages(parent_doc_ref, batch_size=450, app_id: Optional[str] = None,
+                          chat_session_id: Optional[str] = None):
     messages_ref = (
         parent_doc_ref.collection('messages')
         .where(filter=FieldFilter('deleted', '==', False))
     )
-    messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', plugin_id))
+    messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
     if chat_session_id:
         messages_ref = messages_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
-    print('batch_delete_messages', plugin_id)
+    print('batch_delete_messages', app_id)
     last_doc = None  # For pagination
 
     while True:
@@ -234,10 +238,11 @@ def clear_chat(uid: str, app_id: Optional[str] = None, chat_session_id: Optional
         print(f"Deleting messages for user: {uid}")
         if not user_ref.get().exists:
             return {"message": "User not found"}
-        batch_delete_messages(user_ref, plugin_id=app_id, chat_session_id=chat_session_id)
+        batch_delete_messages(user_ref, app_id=app_id, chat_session_id=chat_session_id)
         return None
     except Exception as e:
         return {"message": str(e)}
+
 
 def add_multi_files(uid: str, files_data: list):
     batch = db.batch()
@@ -249,6 +254,7 @@ def add_multi_files(uid: str, files_data: list):
         batch.set(file_ref, file_data)
 
     batch.commit()
+
 
 def get_chat_files(uid: str, files_id: List[str] = []):
     files_ref = (
@@ -272,17 +278,19 @@ def delete_multi_files(uid: str, files_data: list):
 
     batch.commit()
 
+
 def add_chat_session(uid: str, chat_session_data: dict):
     chat_session_data['deleted'] = False
     user_ref = db.collection('users').document(uid)
     user_ref.collection('chat_sessions').document(chat_session_data['id']).set(chat_session_data)
     return chat_session_data
 
-def get_chat_session(uid: str, plugin_id: Optional[str] = None):
+
+def get_chat_session(uid: str, app_id: Optional[str] = None):
     session_ref = (
         db.collection('users').document(uid).collection('chat_sessions')
         .where(filter=FieldFilter('deleted', '==', False))
-        .where(filter=FieldFilter('plugin_id', '==', plugin_id))
+        .where(filter=FieldFilter('plugin_id', '==', app_id))
         .limit(1)
     )
 
@@ -292,15 +300,18 @@ def get_chat_session(uid: str, plugin_id: Optional[str] = None):
 
     return None
 
+
 def delete_chat_session(uid, chat_session_id):
     user_ref = db.collection('users').document(uid)
     session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
     session_ref.update({'deleted': True})
 
+
 def add_message_to_chat_session(uid: str, chat_session_id: str, message_id: str):
     user_ref = db.collection('users').document(uid)
     session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
     session_ref.update({"message_ids": firestore.ArrayUnion([message_id])})
+
 
 def add_files_to_chat_session(uid: str, chat_session_id: str, file_ids: List[str]):
     if not file_ids:

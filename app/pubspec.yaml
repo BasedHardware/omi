@@ -61,7 +61,7 @@ dependencies:
   envied: ^0.5.4+1
   awesome_notifications_core: ^0.9.3
   awesome_notifications: any
-  instabug_flutter: ^13.3.0
+  instabug_flutter: ^14.3.1
   nordic_dfu: ^6.1.4+hotfix
   mcumgr_flutter: ^0.4.2
   flutter_archive: ^6.0.3
@@ -120,11 +120,12 @@ dependency_overrides:
     git:
       url: https://github.com/mdmohsin7/opus_flutter.git
       path: opus_flutter_android
-    # flutter_blue_plus:
-    # git:
-    #   url: https://github.com/chipweinberger/flutter_blue_plus
-    #   ref: 1.32.13
-    #   version: ^1.32.13
+  geolocator_android: 4.6.1
+  # flutter_blue_plus:
+  # git:
+  #   url: https://github.com/chipweinberger/flutter_blue_plus
+  #   ref: 1.32.13
+  #   version: ^1.32.13
   manage_calendar_events:
     git:
       url: https://github.com/beastoin/manage_calendar_events
