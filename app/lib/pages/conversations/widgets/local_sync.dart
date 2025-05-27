@@ -48,7 +48,7 @@ class _LocalSyncWidgetState extends State<LocalSyncWidget> {
   Widget build(BuildContext context) {
     return Consumer2<ConversationProvider, CaptureProvider>(builder: (context, provider, captureProvider, child) {
       var previousStatus = _status;
-      if (provider.missingWalsInSeconds >= 120) {
+      if (provider.missingWalsInSeconds >= 30) {
         _status = LocalSyncStatus.flush;
       } else if (!captureProvider.isWalSupported) {
         _status = LocalSyncStatus.disabled;
