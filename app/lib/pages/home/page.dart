@@ -6,7 +6,6 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:gradient_borders/gradient_borders.dart';
-import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -36,6 +35,7 @@ import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 import '../conversations/sync_page.dart';
 import 'widgets/battery_info_widget.dart';
@@ -129,7 +129,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       return;
     }
     debugPrint(event);
-    InstabugLog.logInfo(event);
+    PlatformManager.instance.instabug.logInfo(event);
   }
 
   ///Screens with respect to subpage
@@ -215,6 +215,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       // Navigate
       switch (pageAlias) {
         case "chat":
+          print('inside chat alias $detailPageId');
           if (detailPageId != null && detailPageId.isNotEmpty) {
             var appId = detailPageId != "omi" ? detailPageId : ''; // omi ~ no select
             if (mounted) {
@@ -226,9 +227,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               }
               appProvider.setSelectedChatAppId(appId);
               await messageProvider.refreshMessages();
-              if (messageProvider.messages.isEmpty) {
-                messageProvider.sendInitialAppMessage(selectedApp);
-              }
+              // if (messageProvider.messages.isEmpty) {
+              //   messageProvider.sendInitialAppMessage(selectedApp);
+              // }
             }
           } else {
             if (mounted) {

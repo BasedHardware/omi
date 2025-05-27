@@ -43,8 +43,6 @@ import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
-import 'package:omi/utils/analytics/intercom.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/features/calendar.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -53,6 +51,8 @@ import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/utils/debugging/instabug_manager.dart';
 
 Future<bool> _init() async {
   // Service manager
@@ -65,16 +65,15 @@ Future<bool> _init() async {
     await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform, name: 'dev');
   }
 
-  await IntercomManager().initIntercom();
+  await PlatformManager.initializeServices();
   await NotificationService.instance.initialize();
   await SharedPreferencesUtil.init();
-  await MixpanelManager.init();
 
   // TODO: thinh, move to app start
   await ServiceManager.instance().start();
 
   bool isAuth = (await getIdToken()) != null;
-  if (isAuth) MixpanelManager().identify();
+  if (isAuth) PlatformManager.instance.mixpanel.identify();
   if (!Platform.isMacOS) initOpus(await opus_flutter.load());
 
   await GrowthbookUtil.init();
@@ -105,32 +104,28 @@ void main() async {
   // _setupAudioSession();
   bool isAuth = await _init();
   if (Env.instabugApiKey != null) {
-    if (Platform.isMacOS) {
-      runApp(const MyApp());
-    } else {
-      await Instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
-      runZonedGuarded(
-        () async {
-          Instabug.init(
-            token: Env.instabugApiKey!,
-            invocationEvents: [InvocationEvent.none],
+    await PlatformManager.instance.instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
+    runZonedGuarded(
+      () async {
+        await InstabugManager.init(
+          token: Env.instabugApiKey!,
+          invocationEvents: [InvocationEvent.none],
+        );
+        if (isAuth) {
+          PlatformManager.instance.instabug.identifyUser(
+            FirebaseAuth.instance.currentUser?.email ?? '',
+            SharedPreferencesUtil().fullName,
+            SharedPreferencesUtil().uid,
           );
-          if (isAuth) {
-            Instabug.identifyUser(
-              FirebaseAuth.instance.currentUser?.email ?? '',
-              SharedPreferencesUtil().fullName,
-              SharedPreferencesUtil().uid,
-            );
-          }
-          FlutterError.onError = (FlutterErrorDetails details) {
-            Zone.current.handleUncaughtError(details.exception, details.stack ?? StackTrace.empty);
-          };
-          Instabug.setColorTheme(ColorTheme.dark);
-          runApp(const MyApp());
-        },
-        CrashReporting.reportCrash,
-      );
-    }
+        }
+        FlutterError.onError = (FlutterErrorDetails details) {
+          Zone.current.handleUncaughtError(details.exception, details.stack ?? StackTrace.empty);
+        };
+        PlatformManager.instance.instabug.setColorTheme(ColorTheme.dark);
+        runApp(const MyApp());
+      },
+      CrashReporting.reportCrash,
+    );
   } else {
     runApp(const MyApp());
   }
@@ -224,7 +219,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           return WithForegroundTask(
             child: MaterialApp(
               navigatorObservers: [
-                if (Env.instabugApiKey != null) InstabugNavigatorObserver(),
+                if (Env.instabugApiKey != null && PlatformManager.instance.instabug.getNavigatorObserver() != null)
+                  PlatformManager.instance.instabug.getNavigatorObserver()!,
                 if (Env.posthogApiKey != null) PosthogObserver(),
               ],
               debugShowCheckedModeBanner: F.env == Environment.dev,
@@ -319,7 +315,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
       if (mounted) {
         var app = await context.read<AppProvider>().getAppFromId(uri.pathSegments[1]);
         if (app != null) {
-          MixpanelManager().track('App Opened From DeepLink', properties: {'appId': app.id});
+          PlatformManager.instance.mixpanel.track('App Opened From DeepLink', properties: {'appId': app.id});
           if (mounted) {
             Navigator.of(context).push(MaterialPageRoute(builder: (context) => AppDetailPage(app: app)));
           }
@@ -345,7 +341,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
         context.read<HomeProvider>().setupHasSpeakerProfile();
         context.read<HomeProvider>().setupUserPrimaryLanguage();
         try {
-          await IntercomManager.instance.intercom.loginIdentifiedUser(
+          await PlatformManager.instance.intercom.intercom.loginIdentifiedUser(
             userId: SharedPreferencesUtil().uid,
           );
         } catch (e) {
@@ -356,11 +352,11 @@ class _DeciderWidgetState extends State<DeciderWidget> {
         context.read<AppProvider>().setAppsFromCache();
         context.read<MessageProvider>().refreshMessages();
       } else {
-        if (!Platform.isMacOS) {
-          await IntercomManager.instance.intercom.loginUnidentifiedUser();
+        if (!PlatformManager.instance.isMacOS) {
+          await PlatformManager.instance.intercom.intercom.loginUnidentifiedUser();
         }
       }
-      IntercomManager.instance.setUserAttributes();
+      PlatformManager.instance.intercom.setUserAttributes();
     });
     super.initState();
   }
