@@ -1,11 +1,41 @@
-/*
- * Copyright (c) 2024 Nordic Semiconductor ASA
- *
- * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
- */
+&gpio1 {
+     status = "okay";
+     sdcard_power_default_on: sdcard_power_default_on {
+         gpio-hog;
+         gpios = <10 GPIO_ACTIVE_HIGH>; /* Corresponds to sdcard_en_pin P1.10 */
+         output-high; /* Set pin high as it's GPIO_ACTIVE_HIGH */
+         line-name = "sdcard-power-enable";
+     };
+};
+
+&spi3 {
+	compatible = "nordic,nrf-spim";
+	status = "okay";
+	pinctrl-0 = <&spi3_default>;
+	pinctrl-1 = <&spi3_sleep>;
+	pinctrl-names = "default", "sleep";
+	cs-gpios = <&gpio1 11 GPIO_ACTIVE_LOW>, <&gpio0 11 GPIO_ACTIVE_LOW>;
+	
+	spi_flash: p25q16h@1 {
+		compatible = "jedec,spi-nor";
+		reg = <1>;
+		spi-max-frequency = <125000>;
+		quad-enable-requirements = "S2B1v1";
+		wp-gpios = <&gpio0 19 GPIO_ACTIVE_LOW>;
+		hold-gpios= <&gpio0 10 GPIO_ACTIVE_LOW>;
+		jedec-id = [85 60 15];
+		sfdp-bfp = [
+		e5 20 f1 ff  ff ff ff 00  44 eb 08 6b  08 3b 80 bb
+		ee ff ff ff  ff ff 00 ff  ff ff 00 ff  0c 20 0f 52
+		10 d8 08 81
+		];
+		size = <DT_SIZE_M(16)>;
+	};
+};
 
 / {
 	chosen {
 		nordic,pm-ext-flash = &spi_flash;
 	};
 };
+
