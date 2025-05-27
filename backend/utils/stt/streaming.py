@@ -47,23 +47,30 @@ deepgram_multi_languages = ["multi", "en", "en-US", "en-AU", "en-GB", "en-NZ", "
 wyoming_supported_languages = ['multi', 'en', 'es', 'fr', 'de', 'it', 'pt', 'nl', 'ja', 'ko', 'zh']  # Add more as needed
 
 def get_stt_service_for_language(language: str):
+    print(f'🎯 get_stt_service_for_language called with: {language}')
+    
     # Wyoming's 'multi'
     if language in wyoming_supported_languages:
+        print(f'✅ Wyoming supports language: {language}')
         return STTService.wyoming, language, 'whisper'
 
     # Deepgram's 'multi', nova-3
     if language in deepgram_multi_languages:
+        print(f'✅ Deepgram nova-3 supports language: {language}')
         return STTService.deepgram, 'multi', 'nova-3'
 
     # Deepgram's 'multi', nova-2
     if language in deepgram_nova2_multi_languages:
+        print(f'✅ Deepgram nova-2 supports language: {language}')
         return STTService.deepgram, 'multi', 'nova-2-general'
 
     # Deepgram
     if language in deepgram_supported_languages:
+        print(f'✅ Deepgram general supports language: {language}')
         return STTService.deepgram, language, 'nova-2-general'
 
     # Fallback to Deepgram en
+    print(f'⚠️ No specific support found, falling back to Deepgram English')
     return STTService.deepgram, 'en', 'nova-2-general'
 
 
@@ -529,7 +536,10 @@ async def process_audio_speechmatics(stream_transcript, sample_rate: int, langua
         raise
 
 async def process_audio_wyoming(stream_transcript, language: str, sample_rate: int, channels: int, preseconds: int = 0):
-    """Process audio using Wyoming Whisper backend"""
+    """Process audio using Wyoming Whisper backend - Batch Processing Like Working Client"""
+    print(f'🐍 process_audio_wyoming START - Batch Processing Mode')
+    print(f'📋 Parameters: language={language}, sample_rate={sample_rate}, channels={channels}, preseconds={preseconds}')
+    
     from wyoming.asr import Transcribe, Transcript
     from wyoming.audio import AudioStart, AudioStop, AudioChunk
     from wyoming.client import AsyncTcpClient
@@ -537,54 +547,122 @@ async def process_audio_wyoming(stream_transcript, language: str, sample_rate: i
     WYOMING_HOST = os.getenv('WYOMING_HOST', 'localhost')
     WYOMING_PORT = int(os.getenv('WYOMING_PORT', '10300'))
 
-    try:
-        # Connect to Wyoming server
-        client = AsyncTcpClient(WYOMING_HOST, WYOMING_PORT)
-        await client.connect()
+    print(f'🔗 Wyoming connection details: {WYOMING_HOST}:{WYOMING_PORT}')
 
-        # Send transcription request
-        await client.write_event(Transcribe().event())
-        await client.write_event(AudioStart(rate=sample_rate, width=2, channels=channels).event())
+    # Audio buffering for batch processing
+    audio_buffer = bytearray()
+    buffer_duration_seconds = 3.0  # 3 second segments like working client
+    target_buffer_size = int(sample_rate * channels * 2 * buffer_duration_seconds)
+    
+    chunks_processed = 0
+    transcript_received = False
+    last_process_time = time.time()
+    
+    print(f'📊 Batch processing config: segment_size={target_buffer_size} bytes, duration={buffer_duration_seconds}s')
+    
+    async def send_audio(data):
+        """Buffer audio and process in batches"""
+        nonlocal audio_buffer, chunks_processed, transcript_received, last_process_time
+        
+        # Add incoming data to buffer
+        audio_buffer.extend(data)
+        current_time = time.time()
+        time_since_last_process = current_time - last_process_time
+        
+        # Process when buffer is full OR when enough time has passed
+        should_process = (len(audio_buffer) >= target_buffer_size) or (time_since_last_process >= 4.0)
+        
+        if should_process and len(audio_buffer) > 16000:  # At least 0.5 seconds of audio
+            chunks_processed += 1
+            chunk_duration = len(audio_buffer) / (sample_rate * channels * 2)
+            
+            print(f'🎤 Processing audio segment #{chunks_processed}: {len(audio_buffer)} bytes ({chunk_duration:.2f}s)')
+            
+            # Create a copy of the buffer for processing
+            audio_to_process = bytes(audio_buffer)
+            
+            # Clear buffer for next segment
+            audio_buffer = bytearray()
+            last_process_time = current_time
+            
+            # Process this segment in background (like working client)
+            asyncio.create_task(process_audio_segment(audio_to_process, chunks_processed))
 
-        async def send_audio(data):
-            """Send audio data to Wyoming server"""
-            chunk = AudioChunk(rate=sample_rate, width=2, channels=channels, audio=data)
-            await client.write_event(chunk.event())
-
-        async def receive_transcript():
-            """Receive and process transcriptions"""
-            try:
-                while True:
-                    event = await client.read_event()
+    async def process_audio_segment(audio_data, segment_number):
+        """Process a single audio segment - exactly like working client"""
+        try:
+            print(f'🔄 [Segment-{segment_number}] Starting transcription...')
+            
+            # Create new connection for this segment (like working client)
+            client = AsyncTcpClient(WYOMING_HOST, WYOMING_PORT) 
+            await asyncio.wait_for(client.connect(), timeout=5)
+            
+            # Send transcription request (exact pattern from working client)
+            await client.write_event(Transcribe().event())
+            await client.write_event(AudioStart(rate=sample_rate, width=2, channels=channels).event())
+            
+            # Send audio in chunks
+            chunk_size = 2048
+            for i in range(0, len(audio_data), chunk_size):
+                chunk_data = audio_data[i:i + chunk_size]
+                chunk = AudioChunk(rate=sample_rate, width=2, channels=channels, audio=chunk_data)
+                await client.write_event(chunk.event())
+                
+            # Send AudioStop to trigger processing (KEY DIFFERENCE!)
+            await client.write_event(AudioStop().event())
+            print(f'🛑 [Segment-{segment_number}] AudioStop sent - waiting for transcription...')
+            
+            # Get result with timeout handling (like working client)
+            timeout_count = 0
+            while timeout_count < 8:  # 8 second total timeout
+                try:
+                    event = await asyncio.wait_for(client.read_event(), timeout=1.0)
                     if event and Transcript.is_type(event.type):
                         transcript = Transcript.from_event(event)
                         text = transcript.text.strip()
                         if text:
-                            # Create a segment similar to other STT services
+                            duration = len(audio_data) / (sample_rate * channels * 2)
+                            print(f'🗣️  [Segment-{segment_number}] ({duration:.1f}s): "{text}"')
+                            
+                            # Create segment for UI
+                            current_time = time.time()
                             segment = {
-                                'speaker': "SPEAKER_1",  # Wyoming doesn't do diarization
-                                'start': 0,  # Wyoming doesn't provide timing
-                                'end': 0,
+                                'speaker': "SPEAKER_1",
+                                'start': max(0, current_time - duration),
+                                'end': current_time,
                                 'text': text,
                                 'is_user': True if preseconds > 0 else False,
                                 'person_id': None,
                             }
+                            
+                            print(f'📤 [Segment-{segment_number}] Sending to UI: {segment}')
                             stream_transcript([segment])
-            except Exception as e:
-                print(f"Wyoming transcription error: {e}")
-                raise
-
-        # Start transcript receiver
-        transcript_task = asyncio.create_task(receive_transcript())
-
-        # Return the send_audio function and cleanup
-        async def cleanup():
-            await client.write_event(AudioStop().event())
-            transcript_task.cancel()
+                        break
+                except asyncio.TimeoutError:
+                    timeout_count += 1
+                    continue
+                    
             await client.disconnect()
+            print(f'✅ [Segment-{segment_number}] Processing completed')
+            
+        except Exception as e:
+            print(f'❌ [Segment-{segment_number}] Transcription failed: {e}')
 
-        return send_audio, cleanup
+    # Cleanup function
+    async def cleanup():
+        try:
+            print(f'🧹 Wyoming batch processing cleanup...')
+            print(f'📊 Final stats: segments_processed={chunks_processed}')
+            
+            # Process any remaining buffered audio
+            if len(audio_buffer) > 16000:  # At least 0.5 seconds
+                print(f'🎤 Processing final audio buffer: {len(audio_buffer)} bytes')
+                audio_to_process = bytes(audio_buffer)
+                await process_audio_segment(audio_to_process, chunks_processed + 1)
+            
+            print(f'✅ Wyoming batch processing cleanup completed')
+        except Exception as e:
+            print(f'❌ Wyoming cleanup error: {e}')
 
-    except Exception as e:
-        print(f"Failed to connect to Wyoming server: {e}")
-        raise
+    print(f'✅ Wyoming batch processing setup completed successfully')
+    return send_audio, cleanup
