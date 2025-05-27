@@ -127,13 +127,13 @@
 };
 
 &gpio1 {
-     status = "okay";
-     sdcard_power_default_on: sdcard_power_default_on {
-         gpio-hog;
-         gpios = <10 GPIO_ACTIVE_HIGH>; /* Corresponds to sdcard_en_pin P1.10 */
-         output-high; /* Set pin high as it's GPIO_ACTIVE_HIGH */
-         line-name = "sdcard-power-enable";
-     };
+    status = "okay";
+    sdcard_power_default_on: sdcard_power_default_on {
+        gpio-hog;
+        gpios = <10 GPIO_ACTIVE_HIGH>; /* Corresponds to sdcard_en_pin P1.10 */
+        output-high; /* Set pin high as it's GPIO_ACTIVE_HIGH */
+        line-name = "sdcard-power-enable";
+    };
 };
 
 &gpiote {
