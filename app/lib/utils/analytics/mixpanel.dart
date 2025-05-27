@@ -4,6 +4,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 
 class MixpanelManager {
@@ -13,15 +14,19 @@ class MixpanelManager {
 
   static Future<void> init() async {
     if (Env.mixpanelProjectToken == null) return;
-    if (Platform.isMacOS) return;
-    if (_mixpanel == null) {
-      _mixpanel = await Mixpanel.init(
-        Env.mixpanelProjectToken!,
-        optOutTrackingDefault: false,
-        trackAutomaticEvents: true,
-      );
-      _mixpanel?.setLoggingEnabled(false);
-    }
+    return PlatformService.executeIfSupportedAsync(
+      PlatformService.isMixpanelSupported,
+      () async {
+        if (_mixpanel == null) {
+          _mixpanel = await Mixpanel.init(
+            Env.mixpanelProjectToken!,
+            optOutTrackingDefault: false,
+            trackAutomaticEvents: true,
+          );
+          _mixpanel?.setLoggingEnabled(false);
+        }
+      },
+    );
   }
 
   factory MixpanelManager() {
@@ -31,38 +36,66 @@ class MixpanelManager {
   MixpanelManager._internal();
 
   setPeopleValues() {
-    setUserProperty('Notifications Enabled', _preferences.notificationsEnabled);
-    setUserProperty('Location Enabled', _preferences.locationEnabled);
-    setUserProperty('Apps Enabled Count', _preferences.enabledAppsCount);
-    setUserProperty('Apps Integrations Enabled Count', _preferences.enabledAppsIntegrationsCount);
-    setUserProperty('Speaker Profile', _preferences.hasSpeakerProfile);
-    setUserProperty('Calendar Enabled', _preferences.calendarEnabled);
-    setUserProperty('Primary Language', _preferences.userPrimaryLanguage);
-    setUserProperty('Authorized Storing Recordings', _preferences.permissionStoreRecordingsEnabled);
+    PlatformService.executeIfSupported(
+      PlatformService.isMixpanelSupported,
+      () {
+        setUserProperty('Notifications Enabled', _preferences.notificationsEnabled);
+        setUserProperty('Location Enabled', _preferences.locationEnabled);
+        setUserProperty('Apps Enabled Count', _preferences.enabledAppsCount);
+        setUserProperty('Apps Integrations Enabled Count', _preferences.enabledAppsIntegrationsCount);
+        setUserProperty('Speaker Profile', _preferences.hasSpeakerProfile);
+        setUserProperty('Calendar Enabled', _preferences.calendarEnabled);
+        setUserProperty('Primary Language', _preferences.userPrimaryLanguage);
+        setUserProperty('Authorized Storing Recordings', _preferences.permissionStoreRecordingsEnabled);
+      },
+    );
   }
 
-  setUserProperty(String key, dynamic value) => _mixpanel?.getPeople().set(key, value);
+  setUserProperty(String key, dynamic value) => PlatformService.executeIfSupported(
+        PlatformService.isMixpanelSupported,
+        () => _mixpanel?.getPeople().set(key, value),
+      );
 
   void optInTracking() {
-    _mixpanel?.optInTracking();
-    identify();
+    PlatformService.executeIfSupported(
+      PlatformService.isMixpanelSupported,
+      () {
+        _mixpanel?.optInTracking();
+        identify();
+      },
+    );
   }
 
   void optOutTracking() {
-    _mixpanel?.optOutTracking();
-    _mixpanel?.reset();
+    PlatformService.executeIfSupported(
+      PlatformService.isMixpanelSupported,
+      () {
+        _mixpanel?.optOutTracking();
+        _mixpanel?.reset();
+      },
+    );
   }
 
   void identify() {
-    _mixpanel?.identify(_preferences.uid);
-    _instance.setPeopleValues();
-    setNameAndEmail();
+    PlatformService.executeIfSupported(
+      PlatformService.isMixpanelSupported,
+      () {
+        _mixpanel?.identify(_preferences.uid);
+        _instance.setPeopleValues();
+        setNameAndEmail();
+      },
+    );
   }
 
   void migrateUser(String newUid) {
-    _mixpanel?.alias(newUid, _preferences.uid);
-    _mixpanel?.identify(newUid);
-    setNameAndEmail();
+    PlatformService.executeIfSupported(
+      PlatformService.isMixpanelSupported,
+      () {
+        _mixpanel?.alias(newUid, _preferences.uid);
+        _mixpanel?.identify(newUid);
+        setNameAndEmail();
+      },
+    );
   }
 
   void setNameAndEmail() {
@@ -70,10 +103,15 @@ class MixpanelManager {
     setUserProperty('\$email', SharedPreferencesUtil().email);
   }
 
-  void track(String eventName, {Map<String, dynamic>? properties}) =>
-      _mixpanel?.track(eventName, properties: properties);
+  void track(String eventName, {Map<String, dynamic>? properties}) => PlatformService.executeIfSupported(
+        PlatformService.isMixpanelSupported,
+        () => _mixpanel?.track(eventName, properties: properties),
+      );
 
-  void startTimingEvent(String eventName) => _mixpanel?.timeEvent(eventName);
+  void startTimingEvent(String eventName) => PlatformService.executeIfSupported(
+        PlatformService.isMixpanelSupported,
+        () => _mixpanel?.timeEvent(eventName),
+      );
 
   void onboardingDeviceConnected() => track('Onboarding Device Connected');
 
@@ -376,7 +414,10 @@ class MixpanelManager {
 
   void deleteAccountCancelled() => track('Delete Account Cancelled');
 
-  void deleteUser() => _mixpanel?.getPeople().deleteUser();
+  void deleteUser() => PlatformService.executeIfSupported(
+        PlatformService.isMixpanelSupported,
+        () => _mixpanel?.getPeople().deleteUser(),
+      );
 
   // Apps Filter
   void appsFilterOpened() => track('Apps Filter Opened');

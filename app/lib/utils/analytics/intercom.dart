@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 
 class IntercomManager {
@@ -20,57 +21,81 @@ class IntercomManager {
 
   Future<void> initIntercom() async {
     if (Env.intercomAppId == null) return;
-    if (Platform.isMacOS) return;
-    await intercom.initialize(
-      Env.intercomAppId!,
-      iosApiKey: Env.intercomIOSApiKey,
-      androidApiKey: Env.intercomAndroidApiKey,
+    return PlatformService.executeIfSupportedAsync(
+      PlatformService.isIntercomSupported,
+      () => intercom.initialize(
+        Env.intercomAppId!,
+        iosApiKey: Env.intercomIOSApiKey,
+        androidApiKey: Env.intercomAndroidApiKey,
+      ),
     );
   }
 
   Future displayChargingArticle(String device) async {
-    if (device == 'Omi DevKit 2') {
-      return await intercom.displayArticle('10003257-how-to-charge-devkit2');
-    } else {
-      return await intercom.displayArticle('9907475-how-to-charge-the-device');
-    }
+    return PlatformService.executeIfSupportedAsync(
+      PlatformService.isIntercomSupported,
+      () async {
+        if (device == 'Omi DevKit 2') {
+          return await intercom.displayArticle('10003257-how-to-charge-devkit2');
+        } else {
+          return await intercom.displayArticle('9907475-how-to-charge-the-device');
+        }
+      },
+    );
   }
 
   Future displayEarnMoneyArticle() async {
-    return await intercom.displayArticle('10401566-build-publish-and-earn-with-omi-apps');
+    return PlatformService.executeIfSupportedAsync(
+      PlatformService.isIntercomSupported,
+      () => intercom.displayArticle('10401566-build-publish-and-earn-with-omi-apps'),
+    );
   }
 
   Future displayFirmwareUpdateArticle() async {
-    return await intercom.displayArticle('9995941-updating-your-devkit2-firmware');
+    return PlatformService.executeIfSupportedAsync(
+      PlatformService.isIntercomSupported,
+      () => intercom.displayArticle('9995941-updating-your-devkit2-firmware'),
+    );
   }
 
   Future logEvent(String eventName, {Map<String, dynamic>? metaData}) async {
-    return await intercom.logEvent(eventName, metaData);
+    return PlatformService.executeIfSupportedAsync(
+      PlatformService.isIntercomSupported,
+      () => intercom.logEvent(eventName, metaData),
+    );
   }
 
   Future updateCustomAttributes(Map<String, dynamic> attributes) async {
-    if (Platform.isMacOS) return;
-    return await intercom.updateUser(customAttributes: attributes);
+    return PlatformService.executeIfSupportedAsync(
+      PlatformService.isIntercomSupported,
+      () => intercom.updateUser(customAttributes: attributes),
+    );
   }
 
   Future updateUser(String? email, String? name, String? uid) async {
-    return await intercom.updateUser(
-      email: email,
-      name: name,
-      userId: uid,
+    return PlatformService.executeIfSupportedAsync(
+      PlatformService.isIntercomSupported,
+      () => intercom.updateUser(
+        email: email,
+        name: name,
+        userId: uid,
+      ),
     );
   }
 
   Future<void> setUserAttributes() async {
-    await updateCustomAttributes({
-      'Notifications Enabled': _preferences.notificationsEnabled,
-      'Location Enabled': _preferences.locationEnabled,
-      'Apps Enabled Count': _preferences.enabledAppsCount,
-      'Apps Integrations Enabled Count': _preferences.enabledAppsIntegrationsCount,
-      'Speaker Profile': _preferences.hasSpeakerProfile,
-      'Calendar Enabled': _preferences.calendarEnabled,
-      'Primary Language': _preferences.userPrimaryLanguage,
-      'Authorized Storing Recordings': _preferences.permissionStoreRecordingsEnabled,
-    });
+    return PlatformService.executeIfSupportedAsync(
+      PlatformService.isIntercomSupported,
+      () => updateCustomAttributes({
+        'Notifications Enabled': _preferences.notificationsEnabled,
+        'Location Enabled': _preferences.locationEnabled,
+        'Apps Enabled Count': _preferences.enabledAppsCount,
+        'Apps Integrations Enabled Count': _preferences.enabledAppsIntegrationsCount,
+        'Speaker Profile': _preferences.hasSpeakerProfile,
+        'Calendar Enabled': _preferences.calendarEnabled,
+        'Primary Language': _preferences.userPrimaryLanguage,
+        'Authorized Storing Recordings': _preferences.permissionStoreRecordingsEnabled,
+      }),
+    );
   }
 }
