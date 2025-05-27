@@ -14,7 +14,8 @@
         "group": "Get Started",
         "pages": [
           "docs/get_started/introduction",
-          "docs/get_started/Flash_device"
+          "docs/get_started/Flash_device",
+           "getstartedwithomi"
         ]
       },
       {
@@ -29,7 +30,8 @@
               "docs/developer/apps/AudioStreaming",
               "docs/developer/apps/Import",
               "docs/developer/apps/Submitting",
-              "docs/developer/apps/Oauth"
+              "docs/developer/apps/Oauth",
+              "docs/developer/apps/Notifications"
             ]
           },
           "docs/developer/AppSetup",

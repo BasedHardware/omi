@@ -7,13 +7,13 @@ from models.memories import Memory, MemoryCategory
 from models.transcript_segment import TranscriptSegment
 from utils.prompts import extract_memories_prompt, extract_learnings_prompt, extract_memories_text_content_prompt
 from utils.llms.memory import get_prompt_memories
-from .clients import llm_mini
+from .clients import llm_mini, llm_high
 
 
 class Memories(BaseModel):
     facts: List[Memory] = Field(
         min_items=0,
-        max_items=3,
+        max_items=4,
         description="List of **new** facts. If any",
         default=[],
     )
@@ -130,7 +130,7 @@ def new_learnings_extractor(
 
     try:
         parser = PydanticOutputParser(pydantic_object=Learnings)
-        chain = extract_learnings_prompt | llm_mini | parser
+        chain = extract_learnings_prompt | llm_high | parser
         response: Learnings = chain.invoke({
             'user_name': user_name,
             'conversation': content,

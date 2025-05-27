@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from models.app import App
 from models.conversation import Structured, Conversation, ActionItem, Event
-from .clients import llm_mini, llm_medium_experiment, parser
+from .clients import llm_mini, parser, llm_high, llm_medium_experiment
 
 
 class DiscardConversation(BaseModel):
@@ -67,19 +67,61 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
     prompt_text = '''You are an expert conversation analyzer. Your task is to analyze the conversation and provide structure and clarity to the recording transcription of a conversation.
     The conversation language is {language_code}. Use the same language {language_code} for your response.
 
-    For the title, use the main topic of the conversation.
-    For the overview, condense the conversation into a summary with the main topics discussed, make sure to capture the key points and important details from the conversation.
+    For the title, Write a clear, compelling headline (≤ 10 words) that captures the central topic and outcome. Use Title Case, avoid filler words, and include a key noun + verb where possible (e.g., "Team Finalizes Q2 Budget" or "Family Plans Weekend Road Trip")
+    For the overview, condense the conversation into a summary with the main topics discussed, making sure to capture the key points and important details from the conversation.
     For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the conversation. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
-    For the action items, include a list of commitments, specific tasks or actionable steps from the conversation that the user is planning to do or has to do on that specific day or in future. Remember the speaker is busy so this has to be very efficient and concise, otherwise they might miss some critical tasks. Specify which speaker is responsible for each action item.
+
+    For the action items, apply a strict filter and use the format below:  
+    • Include **only** tasks that have  
+      a) a clear owner (named speaker or implied "you"),  
+      b) a concrete next step **and** timing cue (date, "tomorrow", "next week", etc.),  
+      c) real importance (money, health/safety, hard deadline, or explicit stress if missed).  
+    • Exclude vague or trivial remarks ("We should grab lunch sometime").  
+    • Merge duplicates; order by due date → spoken urgency → alphabetical.  
+    • Format each as a single bullet with its own emoji from the whitelist 📞 📝 🏥 🚗 💻 🛠️ 📦 📊 📚 🔧 ⚠️ ⏳ 🎯 🔋 🎓 📢 💡.
+    • Use consistent timing format in parentheses:
+      - Specific dates: (due MM/DD) or (due Jan 15) or (due Friday)
+      - Relative timing: (today), (tomorrow), (this week), (next week)
+      - Urgency levels: (urgent) for ASAP/immediate, (high priority) for important, (when convenient) for flexible
+
+        Example format:  
+        - 🗓️ Submit Q2 budget (due 05/31)  
+        - 💻 Update project repo (tomorrow)
+        - 📞 Call dentist office (today)
+        - ⚠️ Fix server issue (urgent)
+        - 📝 Review quarterly report (when convenient)  
+
     For the category, classify the conversation into one of the available categories.
-    For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on {started_at}. {tz} is the user's timezone, convert it to UTC and respond in UTC.
+
+    For Calendar Events, apply strict filtering to include ONLY events that meet ALL these criteria:
+    • **Confirmed commitment**: Not suggestions or "maybe" - actual scheduled events
+    • **User involvement**: The user is expected to attend, participate, or take action
+    • **Specific timing**: Has concrete date/time, not vague references like "sometime" or "soon"
+    • **Important/actionable**: Missing it would have real consequences or impact
+    
+    INCLUDE these event types:
+    • Meetings & appointments (business meetings, doctor visits, interviews)
+    • Hard deadlines (project due dates, payment deadlines, submission dates)
+    • Personal commitments (family events, social gatherings user committed to)
+    • Travel & transportation (flights, trains, scheduled pickups)
+    • Recurring obligations (classes, regular meetings, scheduled calls)
+    
+    EXCLUDE these:
+    • Casual mentions ("we should meet sometime", "maybe next week")
+    • Historical references (past events being discussed)
+    • Other people's events (events user isn't involved in)
+    • Vague suggestions ("let's grab coffee soon")
+    • Hypothetical scenarios ("if we meet Tuesday...")
+    
+    For date context, this conversation happened on {started_at}. {tz} is the user's timezone; convert all event times to UTC and respond in UTC.
+
 
     Transcript: ```{transcript}```
 
     {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | llm_mini | parser # parser is imported from .clients
+    chain = prompt | llm_medium_experiment | parser # parser is imported from .clients
 
     response = chain.invoke({
         'transcript': transcript.strip(),
@@ -102,18 +144,59 @@ def get_reprocess_transcript_structure(transcript: str, started_at: datetime, la
     The conversation language is {language_code}. Use the same language {language_code} for your response.
 
     For the title, use ```{title}```, if it is empty, use the main topic of the conversation.
-    For the overview, condense the conversation into a summary with the main topics discussed, make sure to capture the key points and important details from the conversation.
+    For the overview, condense the conversation into a summary with the main topics discussed, making sure to capture the key points and important details from the conversation.
     For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the conversation. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
-    For the action items, include a list of commitments, specific tasks or actionable steps from the conversation that the user is planning to do or has to do on that specific day or in future. Remember the speaker is busy so this has to be very efficient and concise, otherwise they might miss some critical tasks. Specify which speaker is responsible for each action item.
+
+    For the action items, apply a strict filter and use the format below:  
+    • Include **only** tasks that have  
+      a) a clear owner (named speaker or implied "you"),  
+      b) a concrete next step **and** timing cue (date, "tomorrow", "next week", etc.),  
+      c) real importance (money, health/safety, hard deadline, or explicit stress if missed).  
+    • Exclude vague or trivial remarks ("We should grab lunch sometime").  
+    • Merge duplicates; order by due date → spoken urgency → alphabetical.  
+    • Format each as a single bullet with its own emoji from the whitelist 📞 📝 🏥 🚗 💻 🛠️ 📦 📊 📚 🔧 ⚠️ ⏳ 🎯 🔋 🎓 📢 💡.
+    • Use consistent timing format in parentheses:
+      - Specific dates: (due MM/DD) or (due Jan 15) or (due Friday)
+      - Relative timing: (today), (tomorrow), (this week), (next week)
+      - Urgency levels: (urgent) for ASAP/immediate, (high priority) for important, (when convenient) for flexible
+
+        Example format:  
+        - 🗓️ Submit Q2 budget (due 05/31)  
+        - 💻 Update project repo (tomorrow)
+        - 📞 Call dentist office (today)
+        - ⚠️ Fix server issue (urgent)
+        - 📝 Review quarterly report (when convenient)  
+
     For the category, classify the conversation into one of the available categories.
-    For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on {started_at}. {tz} is the user's timezone, convert it to UTC and respond in UTC.
+
+    For Calendar Events, apply strict filtering to include ONLY events that meet ALL these criteria:
+    • **Confirmed commitment**: Not suggestions or "maybe" - actual scheduled events
+    • **User involvement**: The user is expected to attend, participate, or take action
+    • **Specific timing**: Has concrete date/time, not vague references like "sometime" or "soon"
+    • **Important/actionable**: Missing it would have real consequences or impact
+    
+    INCLUDE these event types:
+    • Meetings & appointments (business meetings, doctor visits, interviews)
+    • Hard deadlines (project due dates, payment deadlines, submission dates)
+    • Personal commitments (family events, social gatherings user committed to)
+    • Travel & transportation (flights, trains, scheduled pickups)
+    • Recurring obligations (classes, regular meetings, scheduled calls)
+    
+    EXCLUDE these:
+    • Casual mentions ("we should meet sometime", "maybe next week")
+    • Historical references (past events being discussed)
+    • Other people's events (events user isn't involved in)
+    • Vague suggestions ("let's grab coffee soon")
+    • Hypothetical scenarios ("if we meet Tuesday...")
+    
+    For date context, this conversation happened on {started_at}. {tz} is the user's timezone; convert all event times to UTC and respond in UTC.
 
     Transcript: ```{transcript}```
 
     {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | llm_mini | parser # parser is imported from .clients
+    chain = prompt | llm_medium_experiment | parser # parser is imported from .clients
 
     response = chain.invoke({
         'transcript': transcript.strip(),
@@ -133,7 +216,7 @@ def get_reprocess_transcript_structure(transcript: str, started_at: datetime, la
 
 def get_app_result(transcript: str, app: App) -> str:
     prompt = f'''
-    Your are an AI with the following characteristics:
+    You are an AI with the following characteristics:
     Name: {app.name},
     Description: {app.description},
     Task: ${app.memory_prompt}
@@ -148,7 +231,7 @@ def get_app_result(transcript: str, app: App) -> str:
 
 def get_app_result_v1(transcript: str, app: App) -> str:
     prompt = f'''
-    Your are an AI with the following characteristics:
+    You are an AI with the following characteristics:
     Name: ${app.name},
     Description: ${app.description},
     Task: ${app.memory_prompt}
@@ -257,5 +340,5 @@ def generate_summary_with_prompt(conversation_text: str, prompt: str) -> str:
 
     You must output only the summary, no other text. Make sure to be concise and clear.
     """
-    response = llm_mini.invoke(prompt)
+    response = llm_medium_experiment.invoke(prompt)
     return response.content

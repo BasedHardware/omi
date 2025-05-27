@@ -55,4 +55,10 @@ config OMI_ENABLE_HAPTIC
         "Enable the haptic support."
     default n
 
+config OMI_ENABLE_RFSW_CTRL
+    bool "Enable RFSwitch Control"
+    help
+        "Enable RFSwitch Control support."
+    default y
+
 endmenu
