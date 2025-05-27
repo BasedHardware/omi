@@ -60,9 +60,6 @@ static void audio_ccc_config_changed_handler(const struct bt_gatt_attr *attr, ui
 static ssize_t audio_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
 static ssize_t audio_codec_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
 
-static void dfu_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
-static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
-
 // Forward declarations for update functions and callbacks
 static void update_phy(struct bt_conn *conn);
 static void update_data_length(struct bt_conn *conn);
@@ -101,19 +98,6 @@ static struct bt_gatt_attr audio_service_attr[] = {
 
 static struct bt_gatt_service audio_service = BT_GATT_SERVICE(audio_service_attr);
 
-// Nordic Legacy DFU service with UUID 00001530-1212-EFDE-1523-785FEABCD123
-// exposes following characteristics:
-// - Control point (UUID 00001531-1212-EFDE-1523-785FEABCD123) to start the OTA update process (write/notify)
-static struct bt_uuid_128 dfu_service_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00001530, 0x1212, 0xEFDE, 0x1523, 0x785FEABCD123));
-static struct bt_uuid_128 dfu_control_point_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00001531, 0x1212, 0xEFDE, 0x1523, 0x785FEABCD123));
-
-static struct bt_gatt_attr dfu_service_attr[] = {
-    BT_GATT_PRIMARY_SERVICE(&dfu_service_uuid),
-    BT_GATT_CHARACTERISTIC(&dfu_control_point_uuid.uuid, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_WRITE, NULL, dfu_control_point_write_handler, NULL),
-    BT_GATT_CCC(dfu_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
-};
-
-static struct bt_gatt_service dfu_service = BT_GATT_SERVICE(dfu_service_attr);
 
 // Advertisement data
 static const struct bt_data bt_ad[] = {
@@ -125,7 +109,6 @@ static const struct bt_data bt_ad[] = {
 // Scan response data
 static const struct bt_data bt_sd[] = {
     BT_DATA_BYTES(BT_DATA_UUID16_ALL, BT_UUID_16_ENCODE(BT_UUID_DIS_VAL)),
-    BT_DATA(BT_DATA_UUID128_ALL, dfu_service_uuid.val, sizeof(dfu_service_uuid.val)),
 };
 
 //
@@ -185,48 +168,6 @@ static void exchange_func(struct bt_conn *conn, uint8_t att_err, struct bt_gatt_
         current_mtu = mtu; // Store the full MTU size
     }
 }
-
-
-//
-// DFU Service Handlers
-//
-
-static void dfu_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value)
-{
-    if (value == BT_GATT_CCC_NOTIFY)
-    {
-        LOG_INF("Client subscribed for notifications");
-    }
-    else if (value == 0)
-    {
-        LOG_INF("Client unsubscribed from notifications");
-    }
-    else
-    {
-        LOG_INF("Invalid CCC value: %u", value);
-    }
-}
-
-static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
-{
-    LOG_INF("dfu_control_point_write_handler");
-    uint32_t val = 0xA8;
-    if (len == 1 && ((uint8_t *)buf)[0] == 0x06)
-    {
-        nrf_power_gpregret_set(NRF_POWER, 0, val);
-        NVIC_SystemReset();
-    }
-    else if (len == 2 && ((uint8_t *)buf)[0] == 0x01)
-    {
-        uint8_t notification_value = 0x10;
-        bt_gatt_notify(conn, attr, &notification_value, sizeof(notification_value));
-
-        nrf_power_gpregret_set(NRF_POWER, 0, val);
-        NVIC_SystemReset();
-    }
-    return len;
-}
-
 
 
 //
@@ -912,7 +853,6 @@ int transport_start()
 
     // Start advertising
     bt_gatt_service_register(&audio_service);
-    bt_gatt_service_register(&dfu_service);
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
     if (err)
     {
