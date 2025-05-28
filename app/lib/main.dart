@@ -53,6 +53,7 @@ import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
+import 'package:omi/providers/microphone_provider.dart';
 
 Future<bool> _init() async {
   // Service manager
@@ -179,10 +180,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             update: (BuildContext context, value, MessageProvider? previous) =>
                 (previous?..updateAppProvider(value)) ?? MessageProvider(),
           ),
-          ChangeNotifierProxyProvider2<ConversationProvider, MessageProvider, CaptureProvider>(
+          ChangeNotifierProxyProvider3<ConversationProvider, MessageProvider, MicrophoneProvider, CaptureProvider>(
             create: (context) => CaptureProvider(),
-            update: (BuildContext context, conversation, message, CaptureProvider? previous) =>
-                (previous?..updateProviderInstances(conversation, message)) ?? CaptureProvider(),
+            update: (BuildContext context, conversation, message, microphone, CaptureProvider? previous) =>
+                (previous?..updateProviderInstances(conversation, message, microphone)) ?? CaptureProvider(),
           ),
           ChangeNotifierProxyProvider<CaptureProvider, DeviceProvider>(
             create: (context) => DeviceProvider(),
@@ -215,6 +216,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => PaymentMethodProvider()),
           ChangeNotifierProvider(create: (context) => PersonaProvider()),
           ChangeNotifierProvider(create: (context) => MemoriesProvider()),
+          ChangeNotifierProvider(create: (context) => MicrophoneProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(

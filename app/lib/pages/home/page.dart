@@ -27,12 +27,14 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/microphone_provider.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
+import 'package:omi/widgets/microphone_mute_button.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
@@ -634,6 +636,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           ),
           Row(
             children: [
+              const MicrophoneMuteButton(iconSize: 20.0),
+              const SizedBox(width: 8),
               Container(
                 decoration: const BoxDecoration(
                   shape: BoxShape.circle,

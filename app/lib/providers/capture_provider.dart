@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -15,6 +17,7 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/microphone_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
@@ -33,6 +36,7 @@ class CaptureProvider extends ChangeNotifier
     implements ITransctipSegmentSocketServiceListener {
   ConversationProvider? conversationProvider;
   MessageProvider? messageProvider;
+  MicrophoneProvider? microphoneProvider;
   TranscriptSegmentSocketService? _socket;
   SdCardSocketService sdCardSocket = SdCardSocketService();
   Timer? _keepAliveTimer;
@@ -58,9 +62,10 @@ class CaptureProvider extends ChangeNotifier
     });
   }
 
-  void updateProviderInstances(ConversationProvider? cp, MessageProvider? p) {
+  void updateProviderInstances(ConversationProvider? cp, MessageProvider? p, MicrophoneProvider? mp) {
     conversationProvider = cp;
     messageProvider = p;
+    microphoneProvider = mp;
     notifyListeners();
   }
 
@@ -400,6 +405,12 @@ class CaptureProvider extends ChangeNotifier
 
     // record
     await ServiceManager.instance().mic.start(onByteReceived: (bytes) {
+      // Check if microphone is muted before sending audio
+      if (microphoneProvider?.isMuted == true) {
+        // Don't send audio bytes when muted
+        return;
+      }
+
       if (_socket?.state == SocketServiceState.connected) {
         _socket?.send(bytes);
       }
