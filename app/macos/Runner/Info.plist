@@ -37,12 +37,14 @@
 			<string>h.omi.me</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.208440318997-g4gicnlu2nt9dnnm9n98crgop5hpme2d</string>
+				<string>com.googleusercontent.apps.208440318997-ukinsq3sijhcetkhr26ssqp1terbq7as</string>
 			</array>
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
@@ -80,6 +82,7 @@
 	<key>keychain-access-groups</key>
 	<array>
 		<string>$(AppIdentifierPrefix)com.google.GIDSignIn</string>
+		<string>$(AppIdentifierPrefix)com.friend-app-with-wearable.ios12</string>
 	</array>
 </dict>
 </plist>

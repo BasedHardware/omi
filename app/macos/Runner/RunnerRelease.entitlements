@@ -14,5 +14,10 @@
 	<true/>
 	<key>com.apple.security.network.server</key>
 	<true/>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.google.GIDSignIn</string>
+		<string>$(AppIdentifierPrefix)com.friend-app-with-wearable.ios12</string>
+	</array>
 </dict>
 </plist>
