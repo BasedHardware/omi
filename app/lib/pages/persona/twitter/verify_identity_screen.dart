@@ -53,17 +53,18 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
     // username
     String? username = provider.twitterProfile['persona_username'];
     username ??= handle;
-    if (username.startsWith("@")) {
-      username = username.substring(1);
+    String finalUsername = username ?? 'user'; // Fallback to 'user' if both are null
+    if (finalUsername.startsWith("@")) {
+      finalUsername = finalUsername.substring(1);
     }
-    provider.updateUsername(username);
+    provider.updateUsername(finalUsername);
 
     final tweetText = Uri.encodeComponent('Verifying my clone($username): https://personas.omi.me/u/$username');
     final twitterUrl = 'https://twitter.com/intent/tweet?text=$tweetText';
     setPostTweetClicked(true);
     await Posthog().capture(eventName: 'post_tweet_clicked', properties: {
-      'x_handle': handle,
-      'persona_username': username,
+      'x_handle': handle ?? '',
+      'persona_username': finalUsername,
     });
     setState(() {
       _isLoading = false;
