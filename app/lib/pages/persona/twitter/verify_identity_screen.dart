@@ -40,7 +40,7 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
     }
   }
 
-  Future<void> _openTwitterToTweet(BuildContext context) async {
+  Future<void> _postTweet() async {
     setState(() {
       _isLoading = true;
     });
@@ -50,20 +50,25 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
       return;
     }
 
-    // username
+    // username - Add null safety checks
     String? username = provider.twitterProfile['persona_username'];
     username ??= handle;
-    if (username.startsWith("@")) {
+
+    // Ensure username is not null before calling startsWith
+    if (username != null && username.startsWith("@")) {
       username = username.substring(1);
     }
-    provider.updateUsername(username);
 
-    final tweetText = Uri.encodeComponent('Verifying my clone($username): https://personas.omi.me/u/$username');
+    // Provide fallback if username is still null
+    final safeUsername = username ?? 'user';
+    provider.updateUsername(safeUsername);
+
+    final tweetText = Uri.encodeComponent('Verifying my clone($safeUsername): https://personas.omi.me/u/$safeUsername');
     final twitterUrl = 'https://twitter.com/intent/tweet?text=$tweetText';
     setPostTweetClicked(true);
     await Posthog().capture(eventName: 'post_tweet_clicked', properties: {
       'x_handle': handle,
-      'persona_username': username,
+      'persona_username': safeUsername,
     });
     setState(() {
       _isLoading = false;
@@ -86,7 +91,7 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
       final isVerified = await context.read<PersonaProvider>().verifyTweet();
       if (isVerified) {
         final message = await getPersonaInitialMessage(username);
-        await Posthog().capture(eventName: 'tweet_verified', properties: {'x_handle': handle});
+        await Posthog().capture(eventName: 'tweet_verified', properties: {'x_handle': handle ?? 'unknown'});
         SharedPreferencesUtil().hasPersonaCreated = true;
         routeToPage(
             context,
@@ -266,7 +271,7 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
                               if (postTweetClicked) {
                                 _verifyTweet();
                               } else {
-                                _openTwitterToTweet(context);
+                                _postTweet();
                               }
                             }
                           },
@@ -299,7 +304,7 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
                         postTweetClicked
                             ? TextButton(
                                 onPressed: () async {
-                                  await _openTwitterToTweet(context);
+                                  await _postTweet();
                                 },
                                 child: Text(
                                   "Didn't post the tweet? click here",
