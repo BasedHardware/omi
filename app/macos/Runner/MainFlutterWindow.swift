@@ -4,6 +4,7 @@ import ScreenCaptureKit
 import AVFoundation
 import CoreBluetooth
 import CoreLocation
+import UserNotifications
 
 class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralManagerDelegate, CLLocationManagerDelegate {
 
@@ -40,6 +41,7 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
     private var locationManager: CLLocationManager?
     private var bluetoothPermissionCompletion: ((Bool) -> Void)?
     private var locationPermissionCompletion: ((Bool) -> Void)?
+    private var notificationPermissionCompletion: ((Bool) -> Void)?
 
     // Manual resampling function to avoid AVAudioConverter OSStatus errors
     private func resampleAudio(input: [Float], fromRate: Double, toRate: Double) -> [Float] {
@@ -154,7 +156,7 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
     func requestBluetoothPermission() async -> Bool {
         if #available(macOS 10.15, *) {
             guard CBCentralManager.authorization != .allowedAlways else {
-                return true // Already granted
+                return true
             }
             
             // If explicitly denied or restricted, can't request again
@@ -203,7 +205,7 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
             }
         } else {
             print("Bluetooth permission handling not available on macOS < 10.15, assuming granted")
-            return true // Assume granted on older macOS versions
+            return true
         }
     }
     
@@ -227,10 +229,11 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
     func requestLocationPermission() async -> Bool {
         let currentStatus = CLLocationManager.authorizationStatus()
         guard currentStatus != .authorizedAlways && currentStatus != .authorized else {
-            return true
+            return true // Already granted
         }
         
         guard currentStatus == .notDetermined else {
+            // If denied or restricted, open system preferences
             print("Location permission is \(currentStatus.rawValue), opening System Preferences")
             await MainActor.run {
                 NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices")!)
@@ -259,7 +262,7 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
             
             locationPermissionCompletion = { granted in
                 continuation.resume(returning: granted)
-                self.locationPermissionCompletion = nil
+                self.locationPermissionCompletion = nil // Clear to prevent multiple calls
             }
             
             if locationManager == nil {
@@ -268,6 +271,55 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
             }
             
             locationManager?.requestWhenInUseAuthorization()
+        }
+    }
+    
+    // MARK: - Notification Permission Management
+    
+    func checkNotificationPermission() async -> String {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        
+        switch settings.authorizationStatus {
+        case .authorized:
+            return "granted"
+        case .denied:
+            return "denied"
+        case .notDetermined:
+            return "undetermined"
+        case .provisional:
+            return "provisional"
+        case .ephemeral:
+            return "ephemeral"
+        @unknown default:
+            return "unknown"
+        }
+    }
+    
+    func requestNotificationPermission() async -> Bool {
+        let center = UNUserNotificationCenter.current()
+        let currentSettings = await center.notificationSettings()
+        
+        guard currentSettings.authorizationStatus != .authorized else {
+            return true
+        }
+        
+        guard currentSettings.authorizationStatus == .notDetermined else {
+            // If denied, open system preferences
+            print("Notification permission is \(currentSettings.authorizationStatus.rawValue), opening System Preferences")
+            await MainActor.run {
+                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.notifications")!)
+            }
+            return false
+        }
+        
+        do {
+            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+            print("Notification permission request result: \(granted)")
+            return granted
+        } catch {
+            print("Error requesting notification permission: \(error.localizedDescription)")
+            return false
         }
     }
     
@@ -436,6 +488,18 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
                     result(granted)
                 }
                 
+            case "checkNotificationPermission":
+                Task {
+                    let status = await self.checkNotificationPermission()
+                    result(status)
+                }
+                
+            case "requestNotificationPermission":
+                Task {
+                    let granted = await self.requestNotificationPermission()
+                    result(granted)
+                }
+                
             case "start":
                 Task {
                     // Check permissions before starting
@@ -458,7 +522,7 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
                     }
 
                     self.audioFormatSentToFlutter = false
-                    self.scStreamSourceFormat = nil
+                    self.scStreamSourceFormat = nil   // Reset for new stream
 
                 SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: true) { content, error in
                     if let error = error {
@@ -468,6 +532,7 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
                         self.availableContent = content
                         
                         // outputAudioFormat for Flutter (e.g., 16kHz or 44.1kHz Mono Int16)
+                        // Let's target 16kHz for Flutter as a common speech rate.
                         let flutterOutputSampleRate = 16000.0 
                         let flutterOutputChannels: AVAudioChannelCount = 1
                         self.updateAudioSettings(sampleRate: flutterOutputSampleRate, channels: flutterOutputChannels)
@@ -546,7 +611,7 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
         audioEngine.attach(systemAudioPlayerNode)
         audioEngine.attach(mixerNode)
 
-        // Set systemAudioPlayerNode to full volume to ensure system audio
+        // Set systemAudioPlayerNode to full volume to ensure system audio is captured properly
         systemAudioPlayerNode.volume = 4.0
 
         print("DEBUG: Mic native format: \(self.micNodeFormat!))")
@@ -563,6 +628,7 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
         // Mixer tap is at engineProcessingFormat
         mixerNode.installTap(onBus: 0, bufferSize: 1024, format: self.engineProcessingFormat) { [weak self] (buffer, time) in
             guard let self = self, let finalConverter = self.audioConverter, let finalOutputFormat = self.outputAudioFormat else {
+                // print("Mixer tap: finalConverter or finalOutputFormat is nil")
                 return
             }
 
@@ -571,6 +637,7 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
                 print("Failed to create output PCM buffer for final converter.")
                 return
             }
+            // outputPCMBuffer.frameLength = outputPCMBuffer.frameCapacity // Set frameLength after conversion
 
             var error: NSError?
             let status = finalConverter.convert(to: outputPCMBuffer, error: &error) { inNumPackets, outStatus in
@@ -584,7 +651,8 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
             }
             
             if status == .haveData && outputPCMBuffer.frameLength > 0 {
-                 outputPCMBuffer.frameLength = outputPCMBuffer.frameCapacity
+                 outputPCMBuffer.frameLength = outputPCMBuffer.frameCapacity // THIS WAS IN THE WRONG PLACE - set it before checking data size if using frameCapacity
+                                                                            // Actually, the converter sets the frameLength of outputPCMBuffer.
 
                 if finalOutputFormat.commonFormat == .pcmFormatInt16 && finalOutputFormat.isInterleaved {
                     let dataSize = Int(outputPCMBuffer.frameLength) * Int(finalOutputFormat.streamDescription.pointee.mBytesPerFrame)
@@ -624,6 +692,7 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
     }
 
     func startAudioEngineAndCapture() throws {
+        // REMOVED AVAudioSession configuration lines that are unavailable/problematic on macOS
         
         if !audioEngine.isRunning {
             try audioEngine.start()
@@ -671,7 +740,7 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
         // Stop SCStream first
     if stream != nil {
             Task {
-                try? await stream.stopCapture()
+                try? await stream.stopCapture() // Errors handled in delegate or ignored for stop
                 self.stream = nil
             }
         }
@@ -690,13 +759,13 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
         self.scStreamSourceFormat = nil
 
         // Notify Flutter
-        if audioFormatSentToFlutter {
+        if audioFormatSentToFlutter { // Only send if start was successful enough to send format
             self.screenCaptureChannel.invokeMethod("audioStreamEnded", arguments: nil)
             print("Recording stopped (engine & SCStream), Flutter notified.")
         } else {
             print("Recording stopped (engine & SCStream), but Flutter was not fully initialized for audio.")
         }
-        audioFormatSentToFlutter = false
+        audioFormatSentToFlutter = false // Reset for next session
     }
 
     // Modified to accept parameters
@@ -717,6 +786,7 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
             scStreamSourceFormat = pcmBufferFromSCStream.format
             print("DEBUG: SCStream actual source format: \(scStreamSourceFormat!)")
             
+            // Detailed format logging
             let sourceDesc = scStreamSourceFormat!.streamDescription.pointee
             print("DEBUG: SCStream format details - SR: \(sourceDesc.mSampleRate), CH: \(sourceDesc.mChannelsPerFrame), BitsPerCh: \(sourceDesc.mBitsPerChannel), BytesPerFrame: \(sourceDesc.mBytesPerFrame), BytesPerPacket: \(sourceDesc.mBytesPerPacket)")
             
@@ -765,10 +835,11 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
                 } else {
                     monoResampled = sourceArray
                 }
+                print("DEBUG: Manual conversion: SCStream Mono \(inputSampleRate)Hz -> Engine Mono \(outputSampleRate)Hz")
             } else if currentSCStreamFormat.channelCount >= 2 {
                 // Input is stereo (or more channels, take first two) deinterleaved float
                 let leftChannelPtr = floatDataPointers[0]
-                    let rightChannelPtr = floatDataPointers[1] // Safe due to channelCount >= 2
+                let rightChannelPtr = floatDataPointers[1] // Safe due to channelCount >= 2
 
                 let leftArray = Array(UnsafeBufferPointer(start: leftChannelPtr, count: inputFrameCount))
                 let rightArray = Array(UnsafeBufferPointer(start: rightChannelPtr, count: inputFrameCount))
