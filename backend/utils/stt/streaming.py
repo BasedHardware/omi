@@ -46,8 +46,9 @@ def get_stt_service_for_language(language: str):
     #     return STTService.soniox, 'multi', 'stt-rt-preview'
 
     # Deepgram's 'multi', nova-3
-    if language in deepgram_multi_languages:
-        return STTService.deepgram, 'multi', 'nova-3'
+    if os.getenv('DEEPGRAM_NOVA3_BETA', 'false').lower() == 'true':
+        if language in deepgram_multi_languages:
+            return STTService.deepgram, 'multi', 'nova-3'
 
     # Deepgram's 'multi', nova-2
     if language in deepgram_nova2_multi_languages:
