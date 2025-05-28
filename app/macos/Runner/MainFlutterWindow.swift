@@ -2,8 +2,10 @@ import Cocoa
 import FlutterMacOS
 import ScreenCaptureKit
 import AVFoundation
+import CoreBluetooth
+import CoreLocation
 
-class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
+class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralManagerDelegate, CLLocationManagerDelegate {
 
     enum AudioQuality: Int {
         case normal = 128, good = 192, high = 256, extreme = 320
@@ -32,6 +34,12 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
     // Two-step conversion: intermediate format and second converter
     private var scStreamIntermediateFormat: AVAudioFormat?
     private var scStreamSecondConverter: AVAudioConverter?
+
+    // Bluetooth and Location managers
+    private var bluetoothManager: CBCentralManager?
+    private var locationManager: CLLocationManager?
+    private var bluetoothPermissionCompletion: ((Bool) -> Void)?
+    private var locationPermissionCompletion: ((Bool) -> Void)?
 
     // Manual resampling function to avoid AVAudioConverter OSStatus errors
     private func resampleAudio(input: [Float], fromRate: Double, toRate: Double) -> [Float] {
@@ -67,28 +75,275 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
     }
 
     @available(macOS 14.0, *)
-    func checkAndRequestMicrophonePermission() async -> Bool {
+    func checkMicrophonePermission() -> String {
         switch AVAudioApplication.shared.recordPermission {
         case .granted:
-            return true
+            return "granted"
         case .denied:
-            print("Microphone permission denied.")
-            // Optionally, guide user to System Settings
-            // NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!)
-            return false
+            return "denied"
         case .undetermined:
-            print("Microphone permission undetermined. Requesting...")
-            let granted = await AVAudioApplication.requestRecordPermission()
-            if granted {
-                print("Microphone permission granted after request.")
-            } else {
-                print("Microphone permission denied after request.")
-            }
-            return granted
+            return "undetermined"
         @unknown default:
-            print("Unknown microphone permission state.")
+            return "unknown"
+        }
+    }
+    
+    @available(macOS 14.0, *)
+    func requestMicrophonePermission() async -> Bool {
+        guard AVAudioApplication.shared.recordPermission != .granted else {
+            return true // Already granted
+        }
+        
+        let granted = await AVAudioApplication.requestRecordPermission()
+        print("Microphone permission request result: \(granted)")
+        return granted
+    }
+    
+    func checkScreenCapturePermission() async -> String {
+        do {
+            // Try to get shareable content to check if we have permission
+            let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
+            return content.displays.isEmpty ? "denied" : "granted"
+        } catch {
+            if case SCStreamError.userDeclined = error {
+                return "denied"
+            }
+            return "undetermined"
+        }
+    }
+    
+    func requestScreenCapturePermission() async -> Bool {
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
+            return !content.displays.isEmpty
+        } catch {
+            if case SCStreamError.userDeclined = error {
+                // Open system preferences for user to grant permission
+                await MainActor.run {
+                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
+                }
+                return false
+            }
+            print("Error checking screen capture permission: \(error)")
             return false
         }
+    }
+
+    // MARK: - Bluetooth Permission Management
+    
+    func checkBluetoothPermission() -> String {
+        if #available(macOS 10.15, *) {
+            switch CBCentralManager.authorization {
+            case .allowedAlways:
+                return "granted"
+            case .denied:
+                return "denied"
+            case .restricted:
+                return "restricted"
+            case .notDetermined:
+                return "undetermined"
+            @unknown default:
+                return "unknown"
+            }
+        } else {
+            // For older macOS versions, assume granted if Bluetooth is available
+            return "granted"
+        }
+    }
+    
+    func requestBluetoothPermission() async -> Bool {
+        if #available(macOS 10.15, *) {
+            guard CBCentralManager.authorization != .allowedAlways else {
+                return true // Already granted
+            }
+            
+            // If explicitly denied or restricted, can't request again
+            if CBCentralManager.authorization == .denied || CBCentralManager.authorization == .restricted {
+                print("Bluetooth permission is \(CBCentralManager.authorization.rawValue), cannot request again")
+                return false
+            }
+            
+            // Check if Bluetooth service is available first
+            let tempManager = CBCentralManager()
+            if tempManager.state == .poweredOff {
+                print("Bluetooth is powered off. User needs to enable Bluetooth in System Settings.")
+                await MainActor.run {
+                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.bluetooth")!)
+                }
+                return false
+            } else if tempManager.state == .unsupported {
+                print("Bluetooth is not supported on this device.")
+                return false
+            }
+            
+            return await withCheckedContinuation { continuation in
+                // Set up timeout to prevent continuation leak
+                Task {
+                    try? await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds timeout for Bluetooth
+                    if bluetoothPermissionCompletion != nil {
+                        print("Bluetooth permission request timed out")
+                        bluetoothPermissionCompletion?(false)
+                    }
+                }
+                
+                bluetoothPermissionCompletion = { granted in
+                    continuation.resume(returning: granted)
+                    self.bluetoothPermissionCompletion = nil // Clear to prevent multiple calls
+                }
+                
+                // Initialize CBCentralManager to trigger permission request
+                if bluetoothManager == nil {
+                    print("Initializing Bluetooth central manager...")
+                    bluetoothManager = CBCentralManager(delegate: self, queue: nil)
+                } else {
+                    // If manager already exists, check current state
+                    print("Bluetooth manager exists, checking current state...")
+                    centralManagerDidUpdateState(bluetoothManager!)
+                }
+            }
+        } else {
+            print("Bluetooth permission handling not available on macOS < 10.15, assuming granted")
+            return true // Assume granted on older macOS versions
+        }
+    }
+    
+    // MARK: - Location Permission Management
+    
+    func checkLocationPermission() -> String {
+        switch CLLocationManager.authorizationStatus() {
+        case .authorizedAlways, .authorized:
+            return "granted"
+        case .denied:
+            return "denied"
+        case .restricted:
+            return "restricted"
+        case .notDetermined:
+            return "undetermined"
+        @unknown default:
+            return "unknown"
+        }
+    }
+    
+    func requestLocationPermission() async -> Bool {
+        let currentStatus = CLLocationManager.authorizationStatus()
+        guard currentStatus != .authorizedAlways && currentStatus != .authorized else {
+            return true
+        }
+        
+        guard currentStatus == .notDetermined else {
+            print("Location permission is \(currentStatus.rawValue), opening System Preferences")
+            await MainActor.run {
+                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices")!)
+            }
+            return false
+        }
+        
+        // Check if location services are enabled before requesting
+        guard CLLocationManager.locationServicesEnabled() else {
+            print("Location services are disabled system-wide, opening System Preferences")
+            await MainActor.run {
+                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices")!)
+            }
+            return false
+        }
+        
+        return await withCheckedContinuation { continuation in
+            // Set up timeout to prevent continuation leak
+            Task {
+                try? await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds timeout
+                if locationPermissionCompletion != nil {
+                    print("Location permission request timed out")
+                    locationPermissionCompletion?(false)
+                }
+            }
+            
+            locationPermissionCompletion = { granted in
+                continuation.resume(returning: granted)
+                self.locationPermissionCompletion = nil
+            }
+            
+            if locationManager == nil {
+                locationManager = CLLocationManager()
+                locationManager?.delegate = self
+            }
+            
+            locationManager?.requestWhenInUseAuthorization()
+        }
+    }
+    
+    // MARK: - CBCentralManagerDelegate
+    
+    func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        print("Bluetooth central manager state updated to: \(central.state.rawValue)")
+        
+        // Handle different Bluetooth states
+        switch central.state {
+        case .poweredOff:
+            print("Bluetooth is powered off. Permission cannot be granted until Bluetooth is enabled.")
+            bluetoothPermissionCompletion?(false)
+            bluetoothPermissionCompletion = nil
+            return
+        case .unsupported:
+            print("Bluetooth is not supported on this device.")
+            bluetoothPermissionCompletion?(false)
+            bluetoothPermissionCompletion = nil
+            return
+        case .unauthorized:
+            print("Bluetooth access is not authorized for this app.")
+            bluetoothPermissionCompletion?(false)
+            bluetoothPermissionCompletion = nil
+            return
+        case .poweredOn:
+            break
+        case .unknown, .resetting:
+            print("Bluetooth state is \(central.state). Waiting for definitive state...")
+            return
+        @unknown default:
+            print("Unknown Bluetooth state: \(central.state)")
+            return
+        }
+        
+        if #available(macOS 10.15, *) {
+            let granted: Bool
+            switch CBCentralManager.authorization {
+            case .allowedAlways:
+                granted = true
+            case .denied, .restricted:
+                granted = false
+            case .notDetermined:
+                granted = (central.state == .poweredOn)
+            @unknown default:
+                granted = false
+            }
+            
+            print("Bluetooth permission resolved: granted=\(granted)")
+            bluetoothPermissionCompletion?(granted)
+            bluetoothPermissionCompletion = nil
+        } else {
+            let granted = (central.state == .poweredOn)
+            bluetoothPermissionCompletion?(granted)
+            bluetoothPermissionCompletion = nil
+        }
+    }
+    
+    // MARK: - CLLocationManagerDelegate
+    
+    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
+        print("Location authorization changed to: \(status.rawValue)")
+        
+        guard let completion = locationPermissionCompletion else {
+            print("Location permission completion is nil, ignoring delegate call")
+            return
+        }
+        
+        let granted = (status == .authorizedAlways || status == .authorized)
+        print("Location permission resolved: granted=\(granted)")
+        completion(granted)
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        print("Location manager failed with error: \(error.localizedDescription)")
+        locationPermissionCompletion?(false)
     }
 
     override func awakeFromNib() {
@@ -108,7 +363,7 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
 
         // Attempt to enable voice processing for AEC
         // This should be done before the engine is started or the graph is fully configured.
-        if #available(macOS 10.15, *) { // setVoiceProcessingEnabled is available macOS 10.15+
+        if #available(macOS 10.15, *) {
             do {
                 try self.micNode.setVoiceProcessingEnabled(true)
                 print("DEBUG: Successfully enabled voice processing on microphone input node. This may help reduce echo.")
@@ -131,20 +386,79 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
         screenCaptureChannel.setMethodCallHandler { [weak self] (call, result) in
             guard let self = self else { return }
             switch call.method {
+            case "checkMicrophonePermission":
+                if #available(macOS 14.0, *) {
+                    let status = self.checkMicrophonePermission()
+                    result(status)
+                } else {
+                    result("unavailable")
+                }
+                
+            case "requestMicrophonePermission":
+                if #available(macOS 14.0, *) {
+                    Task {
+                        let granted = await self.requestMicrophonePermission()
+                        result(granted)
+                    }
+                } else {
+                    result(false)
+                }
+                
+            case "checkScreenCapturePermission":
+                Task {
+                    let status = await self.checkScreenCapturePermission()
+                    result(status)
+                }
+                
+            case "requestScreenCapturePermission":
+                Task {
+                    let granted = await self.requestScreenCapturePermission()
+                    result(granted)
+                }
+                
+            case "checkBluetoothPermission":
+                let status = self.checkBluetoothPermission()
+                result(status)
+                
+            case "requestBluetoothPermission":
+                Task {
+                    let granted = await self.requestBluetoothPermission()
+                    result(granted)
+                }
+                
+            case "checkLocationPermission":
+                let status = self.checkLocationPermission()
+                result(status)
+                
+            case "requestLocationPermission":
+                Task {
+                    let granted = await self.requestLocationPermission()
+                    result(granted)
+                }
+                
             case "start":
                 Task {
+                    // Check permissions before starting
                     if #available(macOS 14.0, *) {
-                        let micPermissionGranted = await self.checkAndRequestMicrophonePermission()
-                        guard micPermissionGranted else {
-                            result(FlutterError(code: "MIC_PERMISSION_DENIED", message: "Microphone permission was not granted.", details: nil))
+                        let micStatus = self.checkMicrophonePermission()
+                        if micStatus != "granted" {
+                            result(FlutterError(code: "MIC_PERMISSION_REQUIRED", 
+                                              message: "Microphone permission is required. Current status: \(micStatus)", 
+                                              details: nil))
                             return
                         }
-                    } else {
-                        print("Warning: Microphone permission check is for macOS 14+. On older versions, proceeding without explicit check.")
+                    }
+                    
+                    let screenStatus = await self.checkScreenCapturePermission()
+                    if screenStatus != "granted" {
+                        result(FlutterError(code: "SCREEN_PERMISSION_REQUIRED", 
+                                          message: "Screen capture permission is required. Current status: \(screenStatus)", 
+                                          details: nil))
+                        return
                     }
 
                     self.audioFormatSentToFlutter = false
-                    self.scStreamSourceFormat = nil   // Reset for new stream
+                    self.scStreamSourceFormat = nil
 
                 SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: true) { content, error in
                     if let error = error {
@@ -154,7 +468,6 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
                         self.availableContent = content
                         
                         // outputAudioFormat for Flutter (e.g., 16kHz or 44.1kHz Mono Int16)
-                        // Let's target 16kHz for Flutter as a common speech rate.
                         let flutterOutputSampleRate = 16000.0 
                         let flutterOutputChannels: AVAudioChannelCount = 1
                         self.updateAudioSettings(sampleRate: flutterOutputSampleRate, channels: flutterOutputChannels)
@@ -234,9 +547,7 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
         audioEngine.attach(mixerNode)
 
         // Set systemAudioPlayerNode to full volume to ensure system audio
-        // is captured at proper levels for recording
         systemAudioPlayerNode.volume = 4.0
-        print("DEBUG: systemAudioPlayerNode volume set to 1.0 for proper system audio capture.")
 
         print("DEBUG: Mic native format: \(self.micNodeFormat!))")
         print("DEBUG: Engine processing format: \(self.engineProcessingFormat!))")
@@ -248,12 +559,10 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
 
         // Set mixer output volume to ensure proper levels
         mixerNode.outputVolume = 4.0
-        print("DEBUG: Mixer output volume set to 1.0 for proper audio levels.")
 
         // Mixer tap is at engineProcessingFormat
         mixerNode.installTap(onBus: 0, bufferSize: 1024, format: self.engineProcessingFormat) { [weak self] (buffer, time) in
             guard let self = self, let finalConverter = self.audioConverter, let finalOutputFormat = self.outputAudioFormat else {
-                // print("Mixer tap: finalConverter or finalOutputFormat is nil")
                 return
             }
 
@@ -262,7 +571,6 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
                 print("Failed to create output PCM buffer for final converter.")
                 return
             }
-            // outputPCMBuffer.frameLength = outputPCMBuffer.frameCapacity // Set frameLength after conversion
 
             var error: NSError?
             let status = finalConverter.convert(to: outputPCMBuffer, error: &error) { inNumPackets, outStatus in
@@ -276,8 +584,7 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
             }
             
             if status == .haveData && outputPCMBuffer.frameLength > 0 {
-                 outputPCMBuffer.frameLength = outputPCMBuffer.frameCapacity // THIS WAS IN THE WRONG PLACE - set it before checking data size if using frameCapacity
-                                                                            // Actually, the converter sets the frameLength of outputPCMBuffer.
+                 outputPCMBuffer.frameLength = outputPCMBuffer.frameCapacity
 
                 if finalOutputFormat.commonFormat == .pcmFormatInt16 && finalOutputFormat.isInterleaved {
                     let dataSize = Int(outputPCMBuffer.frameLength) * Int(finalOutputFormat.streamDescription.pointee.mBytesPerFrame)
@@ -294,6 +601,7 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
         }
 
         // REMOVED: The connection from mixerNode to outputNode was causing echo feedback.
+        // Keeping it in comment so that everyone can see it and understand why it was removed.
         // The mixerNode was routing the combined audio (including microphone) back to system output,
         // which SCStream would then capture, creating a circular feedback loop.
         // We only need the mixer for combining sources and tapping for recording, not for playback.
@@ -316,7 +624,6 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
     }
 
     func startAudioEngineAndCapture() throws {
-        // REMOVED AVAudioSession configuration lines that are unavailable/problematic on macOS
         
         if !audioEngine.isRunning {
             try audioEngine.start()
@@ -345,8 +652,8 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
         // DO NOT explicitly set conf.sampleRate or conf.channelCount here.
         // Let SCStream use its default/preferred audio format.
         // We will convert it if necessary.
-        // conf.sampleRate = Int(self.engineProcessingFormat.sampleRate) // REMOVED
-        // conf.channelCount = Int(self.engineProcessingFormat.channelCount) // REMOVED
+        // conf.sampleRate = Int(self.engineProcessingFormat.sampleRate)
+        // conf.channelCount = Int(self.engineProcessingFormat.channelCount)
 
     stream = SCStream(filter: filter, configuration: conf, delegate: self)
     do {
@@ -364,7 +671,7 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
         // Stop SCStream first
     if stream != nil {
             Task {
-                try? await stream.stopCapture() // Errors handled in delegate or ignored for stop
+                try? await stream.stopCapture()
                 self.stream = nil
             }
         }
@@ -383,13 +690,13 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
         self.scStreamSourceFormat = nil
 
         // Notify Flutter
-        if audioFormatSentToFlutter { // Only send if start was successful enough to send format
+        if audioFormatSentToFlutter {
             self.screenCaptureChannel.invokeMethod("audioStreamEnded", arguments: nil)
             print("Recording stopped (engine & SCStream), Flutter notified.")
         } else {
             print("Recording stopped (engine & SCStream), but Flutter was not fully initialized for audio.")
         }
-        audioFormatSentToFlutter = false // Reset for next session
+        audioFormatSentToFlutter = false
     }
 
     // Modified to accept parameters
@@ -410,7 +717,6 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
             scStreamSourceFormat = pcmBufferFromSCStream.format
             print("DEBUG: SCStream actual source format: \(scStreamSourceFormat!)")
             
-            // Detailed format logging
             let sourceDesc = scStreamSourceFormat!.streamDescription.pointee
             print("DEBUG: SCStream format details - SR: \(sourceDesc.mSampleRate), CH: \(sourceDesc.mChannelsPerFrame), BitsPerCh: \(sourceDesc.mBitsPerChannel), BytesPerFrame: \(sourceDesc.mBytesPerFrame), BytesPerPacket: \(sourceDesc.mBytesPerPacket)")
             
@@ -428,7 +734,6 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
         var bufferToSchedule: AVAudioPCMBuffer = pcmBufferFromSCStream
 
         // Manual conversion if formats differ (avoiding AVAudioConverter OSStatus errors)
-        // First, ensure scStreamSourceFormat is not nil before checking its properties or comparing it.
         guard let currentSCStreamFormat = self.scStreamSourceFormat else {
             print("ERROR: scStreamSourceFormat is nil. Cannot process SCStream audio buffer. Buffer skipped.")
             return
@@ -436,7 +741,6 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
 
         if currentSCStreamFormat != self.engineProcessingFormat {
             // This block is for when SCStream's format differs from our desired engineProcessingFormat (mono, float, specific SR).
-            // The original crash happened here due to assumptions about floatChannelData.
             // We need to ensure the input is deinterleaved float to use floatChannelData directly.
             
             guard currentSCStreamFormat.commonFormat == .pcmFormatFloat32,
@@ -461,11 +765,10 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
                 } else {
                     monoResampled = sourceArray
                 }
-                print("DEBUG: Manual conversion: SCStream Mono \(inputSampleRate)Hz -> Engine Mono \(outputSampleRate)Hz")
             } else if currentSCStreamFormat.channelCount >= 2 {
                 // Input is stereo (or more channels, take first two) deinterleaved float
                 let leftChannelPtr = floatDataPointers[0]
-                let rightChannelPtr = floatDataPointers[1] // Safe due to channelCount >= 2
+                    let rightChannelPtr = floatDataPointers[1] // Safe due to channelCount >= 2
 
                 let leftArray = Array(UnsafeBufferPointer(start: leftChannelPtr, count: inputFrameCount))
                 let rightArray = Array(UnsafeBufferPointer(start: rightChannelPtr, count: inputFrameCount))
@@ -481,7 +784,6 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
                     rightResampled = rightArray
                 }
                 monoResampled = stereoToMono(leftChannel: leftResampled, rightChannel: rightResampled)
-                print("DEBUG: Manual conversion: SCStream \(currentSCStreamFormat.channelCount)-channel \(inputSampleRate)Hz -> Engine Mono \(outputSampleRate)Hz")
             } else {
                 print("ERROR: SCStream buffer has \(currentSCStreamFormat.channelCount) channels (e.g., 0), which is not supported for manual conversion. Buffer skipped.")
                 return
@@ -502,7 +804,6 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
             }
             
             bufferToSchedule = manuallyConvertedBuffer
-            // Original debug log: print("DEBUG: Manual conversion complete: \(inputFrameCount) → \(outputFrameCount) frames (stereo \(inputSampleRate)Hz → mono \(outputSampleRate)Hz)")
         }
 
         if systemAudioPlayerNode.engine != nil && audioEngine.isRunning {
@@ -513,12 +814,6 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
                 systemAudioPlayerNode.play()
                 systemAudioPlayerNode.scheduleBuffer(bufferToSchedule, completionHandler: nil)
             }
-        } else {
-             // This log can be noisy if it happens after stop has been called.
-             // Only log if we expect to be running.
-             // if self.stream != nil { // A proxy for "capture is supposed to be active"
-             //    print("Debug: systemAudioPlayerNode.engine is nil or audioEngine is not running. SCStream Buffer not scheduled.")
-             // }
         }
     }
 
@@ -528,10 +823,8 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput {
              self.screenCaptureChannel.invokeMethod("captureError", arguments: "SCStream stopped: \(error.localizedDescription)")
         }
     self.stream = nil
-        // Consider if a full stopAudioEngineAndCapture is needed or if it's handled by the main stop call.
         // If SCStream stops unexpectedly, it might be good to tear down the whole engine.
         // However, the Flutter 'stop' call is the primary trigger for full shutdown.
-        // For now, just log and nil out the stream. The 'stop' call will do full cleanup.
 }
 }
 
