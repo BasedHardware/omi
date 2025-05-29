@@ -47,6 +47,26 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                     checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   )
                 : const SizedBox.shrink(),
+            Platform.isMacOS
+                ? CheckboxListTile(
+                    value: provider.hasBluetoothPermission,
+                    onChanged: (s) async {
+                      if (s != null) {
+                        if (s) {
+                          await provider.askForBluetoothPermissions();
+                        } else {
+                          provider.updateBluetoothPermission(false);
+                        }
+                      }
+                    },
+                    title: const Text(
+                      'Enable Bluetooth to connect to your device',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                    ),
+                    contentPadding: const EdgeInsets.only(left: 8),
+                    checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  )
+                : const SizedBox.shrink(),
             CheckboxListTile(
               value: provider.hasLocationPermission,
               onChanged: (s) async {
@@ -162,6 +182,24 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                             padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                             onPressed: () async {
                               if (Platform.isMacOS) {
+                                provider.setLoading(true);
+
+                                // Request Bluetooth permission if not granted
+                                if (!provider.hasBluetoothPermission) {
+                                  await provider.askForBluetoothPermissions();
+                                }
+
+                                // Request Location permission if not granted
+                                if (!provider.hasLocationPermission) {
+                                  await provider.askForLocationPermissions();
+                                }
+
+                                // Request Notification permission if not granted
+                                if (!provider.hasNotificationPermission) {
+                                  await provider.askForNotificationPermissions();
+                                }
+
+                                provider.setLoading(false);
                                 widget.goNext();
                                 return;
                               }
