@@ -202,8 +202,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       _initiateApps();
 
       // ForegroundUtil.requestPermissions();
-      await ForegroundUtil.initializeForegroundService();
-      ForegroundUtil.startForegroundTask();
+      if(!Platform.isMacOS){
+        await ForegroundUtil.initializeForegroundService();
+        ForegroundUtil.startForegroundTask();
+      }
       if (mounted) {
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }

@@ -5,6 +5,7 @@ import 'dart:ui';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/http/api/conversations.dart';
@@ -24,6 +25,7 @@ import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/sdcard_socket.dart';
 import 'package:omi/services/sockets/transcription_connection.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
@@ -38,6 +40,9 @@ class CaptureProvider extends ChangeNotifier
   TranscriptSegmentSocketService? _socket;
   SdCardSocketService sdCardSocket = SdCardSocketService();
   Timer? _keepAliveTimer;
+
+  // Method channel for system audio permissions
+  static const MethodChannel _screenCaptureChannel = MethodChannel('screenCapturePlatform');
 
   IWalService get _wal => ServiceManager.instance().wal;
 
@@ -452,31 +457,71 @@ class CaptureProvider extends ChangeNotifier
       notifyError('System audio recording is only available on macOS.');
       return;
     }
-    // await Permission.microphone.request();
-    await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
+
     updateRecordingState(RecordingState.initialising);
 
-    await ServiceManager.instance().systemAudio.start(onFormatReceived: (Map<String, dynamic> format) async {
-      debugPrint("System audio format received: $format");
-      final int sampleRate = format['sampleRate'] as int? ?? 16000;
-      final int channels = format['channels'] as int? ?? 1;
-      BleAudioCodec determinedCodec = BleAudioCodec.pcm16;
-    }, onByteReceived: (bytes) {
-      debugPrint('socket state: ${_socket?.state}');
-      if (_socket?.state == SocketServiceState.connected) {
-        debugPrint("Sending system audio bytes to socket: ${bytes.length}");
-        _socket?.send(bytes);
+    try {
+      // Check microphone permission first
+      String micStatus = await _screenCaptureChannel.invokeMethod('checkMicrophonePermission');
+      if (micStatus != 'granted') {
+        debugPrint('Microphone permission not granted: $micStatus');
+        if (micStatus == 'undetermined') {
+          bool micGranted = await _screenCaptureChannel.invokeMethod('requestMicrophonePermission');
+          if (!micGranted) {
+            AppSnackbar.showSnackbarError('Microphone permission is required for system audio recording.');
+            updateRecordingState(RecordingState.stop);
+            return;
+          }
+        } else if (micStatus == 'denied') {
+          AppSnackbar.showSnackbarError('Microphone permission denied. Please grant permission in System Preferences.');
+          updateRecordingState(RecordingState.stop);
+          return;
+        }
       }
-    }, onRecording: () {
-      updateRecordingState(RecordingState.systemAudioRecord);
-    }, onStop: () {
+
+      // Check screen capture permission
+      String screenStatus = await _screenCaptureChannel.invokeMethod('checkScreenCapturePermission');
+      if (screenStatus != 'granted') {
+        debugPrint('Screen capture permission not granted: $screenStatus');
+        if (screenStatus == 'undetermined' || screenStatus == 'denied') {
+          bool screenGranted = await _screenCaptureChannel.invokeMethod('requestScreenCapturePermission');
+          if (!screenGranted) {
+            notifyError('Screen capture permission is required for system audio recording.');
+            updateRecordingState(RecordingState.stop);
+            return;
+          }
+        }
+      }
+
+      // Both permissions granted, proceed with setup
+      await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
+
+      await ServiceManager.instance().systemAudio.start(onFormatReceived: (Map<String, dynamic> format) async {
+        debugPrint("System audio format received: $format");
+        final int sampleRate = format['sampleRate'] as int? ?? 16000;
+        final int channels = format['channels'] as int? ?? 1;
+        BleAudioCodec determinedCodec = BleAudioCodec.pcm16;
+      }, onByteReceived: (bytes) {
+        debugPrint('socket state: ${_socket?.state}');
+        if (_socket?.state == SocketServiceState.connected) {
+          debugPrint("Sending system audio bytes to socket: ${bytes.length}");
+          _socket?.send(bytes);
+        }
+      }, onRecording: () {
+        updateRecordingState(RecordingState.systemAudioRecord);
+      }, onStop: () {
+        updateRecordingState(RecordingState.stop);
+        _socket?.stop(reason: 'system audio stream ended from native');
+      }, onError: (error) {
+        notifyError('System Audio Error: $error');
+        updateRecordingState(RecordingState.stop);
+        _socket?.stop(reason: 'system audio stream error: $error');
+      });
+    } catch (e) {
+      debugPrint('Error checking/requesting permissions: $e');
+      notifyError('Failed to check permissions: $e');
       updateRecordingState(RecordingState.stop);
-      _socket?.stop(reason: 'system audio stream ended from native');
-    }, onError: (error) {
-      notifyError('System Audio Error: $error');
-      updateRecordingState(RecordingState.stop);
-      _socket?.stop(reason: 'system audio stream error: $error');
-    });
+    }
   }
 
   Future<void> stopSystemAudioRecording() async {
