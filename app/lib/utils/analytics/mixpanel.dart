@@ -114,6 +114,8 @@ class MixpanelManager {
 
   void phoneMicRecordingStopped() => track('Phone Mic Recording Stopped');
 
+  void deviceRecordingStarted() => track('Device Recording Started');
+
   void appResultExpanded(ServerConversation conversation, String appId) {
     track('App Result Expanded', properties: getConversationEventProperties(conversation)..['app_id'] = appId);
   }
