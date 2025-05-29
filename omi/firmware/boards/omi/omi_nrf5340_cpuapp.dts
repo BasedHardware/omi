@@ -110,7 +110,7 @@
 		nordic,802154-spinel-ipc = &ipc0;
 		zephyr,ieee802154 = &ieee802154;
 		zephyr,wifi = &wlan0;
-        nordic,pm-ext-flash = &spi_flash;
+		nordic,pm-ext-flash = &spi_flash;
 	};
 	aliases {
 		dmic0 = &pdm0;
@@ -213,7 +213,7 @@
 		compatible = "jedec,spi-nor";
 		status = "okay";
 		reg = <1>;
-		spi-max-frequency = <125000>;
+		spi-max-frequency = <10000000>;
 		quad-enable-requirements = "S2B1v1";
 		wp-gpios = <&gpio0 19 GPIO_ACTIVE_LOW>;
 		hold-gpios= <&gpio0 10 GPIO_ACTIVE_LOW>;
