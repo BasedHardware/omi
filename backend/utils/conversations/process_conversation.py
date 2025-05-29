@@ -27,7 +27,7 @@ from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps, update_personas_async, sync_update_persona_prompt
 from utils.llm.conversation_processing import get_transcript_structure, \
     get_app_result, should_discard_conversation, select_best_app_for_conversation, \
-    get_reprocess_transcript_structure
+    get_reprocess_transcript_structure, get_combined_transcript_and_photos_structure
 from utils.llm.memories import extract_memories_from_text, new_memories_extractor
 from utils.llm.external_integrations import summarize_experience_text
 from utils.llm.openglass import summarize_open_glass
@@ -66,7 +66,40 @@ def _get_structured(
 
         # from OpenGlass
         if conversation.photos:
-            return summarize_open_glass(conversation.photos), False
+            # Check if this is a combined conversation (has both transcript and photos)
+            transcript = conversation.get_transcript(False) if hasattr(conversation, 'get_transcript') else ""
+            
+            if transcript and transcript.strip():
+                # Combined conversation: transcript + photos
+                print(f"🔄 Processing combined conversation with {len(conversation.photos)} photos and transcript")
+                structured = get_combined_transcript_and_photos_structure(
+                    transcript, conversation.photos, conversation.started_at, language_code, tz
+                )
+                
+                # **FIX: Never discard conversations with photos - visual content is always valuable**
+                # The should_discard_conversation function is designed for pure audio transcripts
+                # and doesn't understand the value of visual context from photos
+                print(f"📸 Combined conversation with photos - not applying discard criteria (visual content is valuable)")
+                
+                return structured, False
+            else:
+                # Photos-only conversation - **FIX: Use full structured processing instead of basic summary**
+                print(f"🔄 Processing photos-only conversation with {len(conversation.photos)} photos using full structured processing")
+                
+                # Create pseudo-transcript from photo descriptions for full processing
+                photos_as_transcript = "Visual Experience Description:\n" + "\n".join([
+                    f"Scene {i+1}: {photo.description}" for i, photo in enumerate(conversation.photos)
+                ])
+                
+                print(f"📝 Created pseudo-transcript from {len(conversation.photos)} photo descriptions")
+                
+                # Use full transcript structure processing to extract action items, events, etc.
+                structured = get_transcript_structure(photos_as_transcript, conversation.started_at, language_code, tz)
+                
+                # **Don't apply discard criteria to photo-only conversations - visual content is valuable**
+                print(f"📸 Photos-only conversation processed with full structured analysis")
+                
+                return structured, False
 
         # from Omi
         if force_process:
@@ -134,6 +167,13 @@ def get_default_conversation_summarized_apps():
     return default_apps
 
 def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = False, app_id: Optional[str] = None):
+    # **REMOVED: Skip app execution for photos-only conversations**
+    # Photos-only conversations should also be processed by apps using photo descriptions
+    # if conversation.photos and not conversation.get_transcript(False).strip():
+    #     print(f"📸 Skipping app execution for photos-only conversation - already has OpenGlass summary")
+    #     conversation.apps_results = []
+    #     return
+    
     apps: List[App] = get_available_apps(uid)
     conversation_apps = [app for app in apps if app.works_with_memories() and app.enabled]
     filtered_apps = []
@@ -144,7 +184,7 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
     else:
         filtered_apps = conversation_apps
 
-        # Extend with default apps
+        # Extend with default apps (only if they exist)
         default_apps = get_default_conversation_summarized_apps()
         filtered_apps.extend(default_apps)
 
@@ -161,7 +201,7 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
                 print(f"Selected best app for conversation: {best_app.name}")
 
                 # enabled
-                user_enabled = set(redis_db.get_enabled_apps(uid))
+                user_enabled = set(redis_db.get_enabled_plugins(uid))
                 if best_app.id not in user_enabled:
                     redis_db.enable_app(uid, best_app.id)
 
@@ -169,6 +209,84 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
 
     if len(filtered_apps) == 0:
         print("All apps had got filtered out", uid)
+        
+        # **FALLBACK: Generate basic summary when no apps are available**
+        print("🔄 Using fallback summary generation since no apps are available")
+        try:
+            from utils.llm.conversation_processing import get_transcript_structure, get_combined_transcript_and_photos_structure
+            import database.notifications as notification_db
+            
+            transcript = conversation.get_transcript(False)
+            
+            # **FIX: Handle combined conversations (transcript + photos) in fallback**
+            if conversation.photos and transcript.strip():
+                # Combined conversation: use the same logic as _get_structured
+                print(f"🔄 Generating fallback combined summary with {len(conversation.photos)} photos and transcript")
+                tz = notification_db.get_user_time_zone(uid)
+                
+                basic_summary = get_combined_transcript_and_photos_structure(
+                    transcript, conversation.photos, conversation.started_at, 'en', tz
+                )
+                
+                # Create a fallback app result that includes both transcript and photo context
+                fallback_result = AppResult(
+                    app_id='fallback_combined_summary',
+                    content=f"**Summary:** {basic_summary.overview}\n\n**Key Points:** Generated from combined conversation and visual analysis."
+                )
+                
+                conversation.apps_results = [fallback_result]
+                print(f"✅ Generated fallback combined summary: {basic_summary.title}")
+                return
+                
+            elif transcript.strip():  # Only transcript, no photos
+                # Get user timezone for proper processing
+                tz = notification_db.get_user_time_zone(uid)
+                
+                # Generate basic summary using existing LLM structure
+                # This ensures consistent formatting with other summaries
+                basic_summary = get_transcript_structure(transcript, conversation.started_at, 'en', tz)
+                
+                # Create a fallback app result
+                fallback_result = AppResult(
+                    app_id='fallback_summary',
+                    content=f"**Summary:** {basic_summary.overview}\n\n**Key Points:** Generated from conversation analysis."
+                )
+                
+                conversation.apps_results = [fallback_result]
+                print(f"✅ Generated fallback summary: {basic_summary.title}")
+                return
+            elif conversation.photos:
+                # **FIX: Photos-only conversation fallback with full structured processing**
+                print(f"🔄 Generating fallback photos-only summary with {len(conversation.photos)} photos using full structured processing")
+                
+                # Create pseudo-transcript from photo descriptions for full processing
+                photos_as_transcript = "Visual Experience Description:\n" + "\n".join([
+                    f"Scene {i+1}: {photo.description}" for i, photo in enumerate(conversation.photos)
+                ])
+                
+                # Get user timezone for proper processing
+                tz = notification_db.get_user_time_zone(uid)
+                
+                # Use full transcript structure processing to extract action items, events, etc.
+                basic_summary = get_transcript_structure(photos_as_transcript, conversation.started_at, 'en', tz)
+                
+                # Create a fallback app result for photos-only with full structured content
+                fallback_result = AppResult(
+                    app_id='fallback_photos_structured_summary',
+                    content=f"**Summary:** {basic_summary.overview}\n\n**Key Points:** Generated from visual analysis with action items and events extracted."
+                )
+                
+                conversation.apps_results = [fallback_result]
+                print(f"✅ Generated fallback photos-only structured summary: {basic_summary.title}")
+                return
+            else:
+                print("⚠️ No transcript or photos available for fallback summary generation")
+        except Exception as e:
+            print(f"❌ Error generating fallback summary: {e}")
+        
+        # If fallback fails, ensure empty results
+        conversation.apps_results = []
+        return
 
     # Clear existing app results
     conversation.apps_results = []
@@ -176,8 +294,31 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
     threads = []
 
     def execute_app(app):
-        # allow empty
-        result = get_app_result(conversation.get_transcript(False), app).strip()
+        # **FIX: Handle both transcript and photo descriptions**
+        transcript = conversation.get_transcript(False)
+        
+        # Determine what content to pass to the app
+        if transcript.strip():
+            # Has transcript (with or without photos)
+            if conversation.photos:
+                # Combined: transcript + photo descriptions
+                photos_text = "\n\nVisual Context:\n" + "\n".join([f"- {photo.description}" for photo in conversation.photos])
+                content_for_app = transcript + photos_text
+                print(f"📱 Processing app {app.name} with combined transcript and {len(conversation.photos)} photo descriptions")
+            else:
+                # Transcript only
+                content_for_app = transcript
+                print(f"📱 Processing app {app.name} with transcript only")
+        elif conversation.photos:
+            # Photos only - create text from photo descriptions
+            content_for_app = "Visual Descriptions:\n" + "\n".join([f"- {photo.description}" for photo in conversation.photos])
+            print(f"📱 Processing app {app.name} with {len(conversation.photos)} photo descriptions only")
+        else:
+            # No content
+            content_for_app = ""
+            print(f"📱 Processing app {app.name} with no content")
+        
+        result = get_app_result(content_for_app, app).strip()
         conversation.apps_results.append(AppResult(app_id=app.id, content=result))
         if not is_reprocess:
             record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, conversation_id=conversation.id)
@@ -195,15 +336,47 @@ def _extract_memories(uid: str, conversation: Conversation):
 
     new_memories: List[Memory] = []
 
-    # Extract memories based on conversation source
+    # Extract memories based on conversation source and content
     if conversation.source == ConversationSource.external_integration:
         text_content = conversation.external_data.get('text')
         if text_content and len(text_content) > 0:
             text_source = conversation.external_data.get('text_source', 'other')
             new_memories = extract_memories_from_text(uid, text_content, text_source)
     else:
-        # For regular conversations with transcript segments
-        new_memories = new_memories_extractor(uid, conversation.transcript_segments)
+        # For regular conversations - handle transcript, photos, or both
+        transcript = conversation.get_transcript(False) if hasattr(conversation, 'get_transcript') else ""
+        
+        # **NEW: Support image-only and combined conversations**
+        if conversation.photos and len(conversation.photos) > 0:
+            # Create text content from photo descriptions for memory extraction
+            photos_text = "Visual Experience Analysis:\n" + "\n".join([
+                f"Scene {i+1}: {photo.description}" for i, photo in enumerate(conversation.photos) 
+                if photo.description and photo.description.strip()
+            ])
+            
+            if transcript.strip():
+                # **Combined conversation: transcript + photos**
+                print(f"🧠 Extracting memories from combined conversation with transcript and {len(conversation.photos)} photos")
+                
+                # Extract memories from transcript segments (traditional way)
+                transcript_memories = new_memories_extractor(uid, conversation.transcript_segments)
+                
+                # Extract additional memories from photo descriptions
+                photo_memories = extract_memories_from_text(uid, photos_text, "visual_experience")
+                
+                # Combine both sources
+                new_memories = transcript_memories + photo_memories
+                print(f"🧠 Found {len(transcript_memories)} transcript memories + {len(photo_memories)} photo memories")
+                
+            else:
+                # **Photos-only conversation**
+                print(f"🧠 Extracting memories from photos-only conversation with {len(conversation.photos)} photo descriptions")
+                new_memories = extract_memories_from_text(uid, photos_text, "visual_experience")
+                print(f"🧠 Found {len(new_memories)} memories from photo descriptions")
+        else:
+            # **Transcript-only conversation (traditional)**
+            print(f"🧠 Extracting memories from transcript-only conversation")
+            new_memories = new_memories_extractor(uid, conversation.transcript_segments)
 
     parsed_memories = []
     for memory in new_memories:
@@ -479,4 +652,34 @@ def retrieve_in_progress_conversation(uid):
 
     if not existing:
         existing = conversations_db.get_in_progress_conversation(uid)
+    
+    # ENHANCEMENT: Also check for active WebSocket recording sessions
+    # When phone mic is recording, there's no database conversation yet,
+    # but we want to add OpenGlass images to the active recording session
+    if not existing:
+        # Check if user has an active transcription WebSocket session
+        active_session_key = f"active_transcription_session:{uid}"
+        session_data = redis_db.r.get(active_session_key)
+        
+        if session_data:
+            # User has active recording session, create a temporary conversation object
+            # This will be used to signal that images should be held for the active session
+            import json
+            try:
+                session_info = json.loads(session_data)
+                print(f"🎙️ Found active recording session for user {uid}: {session_info}")
+                
+                # Return a temporary conversation object to indicate active session
+                # The actual conversation will be created when recording stops
+                existing = {
+                    'id': f'active_session_{uid}',
+                    'status': 'in_progress',
+                    'is_active_session': True,  # Flag to indicate this is a live session
+                    'started_at': session_info.get('started_at', datetime.now(timezone.utc).isoformat()),
+                    'uid': uid
+                }
+                print(f"🔗 Will add OpenGlass images to active recording session")
+            except Exception as e:
+                print(f"Error parsing active session data: {e}")
+    
     return existing

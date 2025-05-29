@@ -73,6 +73,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   bool showUnassignedFloatingButton = true;
 
+  Timer? _photoRefreshTimer;
+
   void toggleEditSegmentLoading(bool value) {
     editSegmentLoading = value;
     notifyListeners();
@@ -85,11 +87,18 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   Future populatePhotosData() async {
     if (photos.isEmpty) return;
-    // photosData = await compute<List<MemoryPhoto>, List<Tuple2<String, String>>>(
-    //   (photos) => photos.map((e) => Tuple2(e.base64, e.description)).toList(),
-    //   photos,
-    // );
-    photosData = photos.map((e) => Tuple2(e.base64, e.description)).toList();
+    
+    List<Tuple2<String, String>> tempData = [];
+    for (ConversationPhoto photo in photos) {
+      // Only include photos that have base64 data
+      if (photo.base64 != null && photo.base64!.isNotEmpty) {
+        String base64Data = photo.base64!; // Safe to use ! because we checked above
+        String description = photo.description; // description is non-nullable
+        tempData.add(Tuple2<String, String>(base64Data, description));
+      }
+    }
+    
+    photosData = tempData;
     notifyListeners();
   }
 
@@ -198,11 +207,18 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     setShowRatingUi(false);
   }
 
+  @override
+  void dispose() {
+    _photoRefreshTimer?.cancel();
+    super.dispose();
+  }
+
   Future initConversation() async {
     // updateLoadingState(true);
     titleController?.dispose();
     titleFocusNode?.dispose();
     _ratingTimer?.cancel();
+    _photoRefreshTimer?.cancel(); // Cancel any existing photo refresh timer
     showRatingUI = false;
     hasConversationSummaryRatingSet = false;
 
@@ -222,12 +238,14 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
     photos = [];
     canDisplaySeconds = TranscriptSegment.canDisplaySeconds(conversation.transcriptSegments);
-    if (conversation.source == ConversationSource.openglass) {
-      await getConversationPhotos(conversation.id).then((value) async {
-        photos = value;
-        await populatePhotosData();
-      });
-    }
+    
+    // Load photos for any conversation that might have them (not just OpenGlass)
+    // This supports multi-device scenarios like phone mic + OpenGlass
+    await loadPhotosData();
+
+    // Start auto-refresh for photos to catch new descriptions as they arrive
+    _startPhotoRefreshTimer();
+
     if (!conversation.discarded) {
       getHasConversationSummaryRating(conversation.id).then((value) {
         hasConversationSummaryRatingSet = value;
@@ -244,6 +262,40 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
     // updateLoadingState(false);
     notifyListeners();
+  }
+
+  Future<void> loadPhotosData() async {
+    await getConversationPhotos(conversation.id).then((value) async {
+      if (value.isNotEmpty) {
+        photos = value;
+        await populatePhotosData();
+        debugPrint('📸 Loaded ${photos.length} photos for conversation ${conversation.id}');
+      }
+    }).catchError((error) {
+      debugPrint('❌ Error loading photos for conversation ${conversation.id}: $error');
+      // If error loading photos, continue without them
+    });
+  }
+
+  void _startPhotoRefreshTimer() {
+    // Check for new photos with descriptions every 5 seconds
+    _photoRefreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      try {
+        final currentPhotoCount = photos.length;
+        await loadPhotosData();
+        
+        // If we got new photos or descriptions, notify listeners
+        if (photos.length != currentPhotoCount || 
+            photos.any((photo) => photo.description.isNotEmpty)) {
+          debugPrint('🔄 Photo refresh detected ${photos.length} photos (was $currentPhotoCount)');
+          notifyListeners();
+        }
+      } catch (e) {
+        debugPrint('❌ Error in photo refresh timer: $e');
+      }
+    });
+    
+    debugPrint('⏰ Started photo refresh timer for conversation ${conversation.id}');
   }
 
   Future<bool> reprocessConversation({String? appId}) async {

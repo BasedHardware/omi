@@ -29,7 +29,7 @@ dependencies:
   visibility_detector: ^0.4.0+2
   flutter_rating_bar: ^4.0.1
   dotted_border: ^2.1.0
-  skeletonizer: ^1.4.2
+  skeletonizer: ^2.0.0
   shimmer: ^3.0.0
 
   # Firebase
@@ -48,7 +48,7 @@ dependencies:
   flutter_blue_plus: 1.33.6
   http: ^1.2.1
   pdf: ^3.11.0
-  intl: ^0.19.0
+  intl: ^0.20.2
   permission_handler: ^11.3.1
   share_plus: 10.0.1
   shared_preferences: ^2.2.3
@@ -61,7 +61,7 @@ dependencies:
   envied: ^0.5.4+1
   awesome_notifications_core: ^0.9.3
   awesome_notifications: any
-  instabug_flutter: ^14.3.1
+  instabug_flutter: ^13.3.0
   nordic_dfu: ^6.1.4+hotfix
   mcumgr_flutter: ^0.4.2
   flutter_archive: ^6.0.3
@@ -69,7 +69,7 @@ dependencies:
   json_serializable: 6.8.0
   package_info_plus: ^8.0.1
   path_provider: any
-  flutter_foreground_task: 8.13.0
+  flutter_foreground_task: ^8.13.0
   upgrader: ^10.3.0
   crypto: ^3.0.3
   flutter_markdown: ^0.7.2+1
@@ -120,12 +120,11 @@ dependency_overrides:
     git:
       url: https://github.com/mdmohsin7/opus_flutter.git
       path: opus_flutter_android
-  geolocator_android: 4.6.1
-  # flutter_blue_plus:
-  # git:
-  #   url: https://github.com/chipweinberger/flutter_blue_plus
-  #   ref: 1.32.13
-  #   version: ^1.32.13
+    # flutter_blue_plus:
+    # git:
+    #   url: https://github.com/chipweinberger/flutter_blue_plus
+    #   ref: 1.32.13
+    #   version: ^1.32.13
   manage_calendar_events:
     git:
       url: https://github.com/beastoin/manage_calendar_events

@@ -1,8 +1,9 @@
 import asyncio
 import json
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Tuple, Optional
+import threading
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -14,6 +15,10 @@ from models.transcript_segment import TranscriptSegment
 from ._client import db
 
 conversations_collection = 'conversations'
+
+# **OPTIMIZATION: Debouncing for conversation reprocessing**
+_reprocessing_timers = {}
+_reprocessing_lock = threading.Lock()
 
 
 # *****************************
@@ -295,6 +300,188 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
 # ********** OPENGLASS **************
 # ***********************************
 
+def add_photos_to_conversation(uid: str, conversation_id: str, photos: List[ConversationPhoto]):
+    """
+    Add photos to an existing conversation (for multi-device scenarios).
+    This allows OpenGlass images to be added to ongoing Omi/phone mic conversations.
+    After adding photos, triggers debounced reprocessing to generate combined summary.
+    """
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    
+    # Get current conversation
+    conversation_doc = conversation_ref.get()
+    if not conversation_doc.exists:
+        raise Exception(f"Conversation {conversation_id} not found")
+    
+    # Store photos in subcollection
+    photos_ref = conversation_ref.collection('photos')
+    batch = db.batch()
+    
+    for photo in photos:
+        photo_id = str(uuid.uuid4())
+        photo_ref = photos_ref.document(photo_id)
+        data = photo.dict()
+        data['id'] = photo_id
+        data['added_at'] = datetime.now(timezone.utc)  # Store as datetime object, not ISO string
+        batch.set(photo_ref, data)
+    
+    batch.commit()
+    print(f"Added {len(photos)} photos to conversation {conversation_id}")
+    
+    # **OPTIMIZATION: Use debounced reprocessing instead of immediate reprocessing**
+    _schedule_debounced_reprocessing(uid, conversation_id, conversation_doc)
+
+
+def _schedule_debounced_reprocessing(uid: str, conversation_id: str, conversation_doc, debounce_seconds: int = 5):
+    """
+    Schedule debounced conversation reprocessing to avoid excessive reprocessing
+    when multiple photos are added in quick succession.
+    """
+    global _reprocessing_timers, _reprocessing_lock
+    
+    with _reprocessing_lock:
+        # Cancel existing timer if one exists
+        if conversation_id in _reprocessing_timers:
+            _reprocessing_timers[conversation_id].cancel()
+            print(f"🔄 Cancelled previous reprocessing timer for conversation {conversation_id}")
+        
+        # Schedule new debounced reprocessing
+        def _delayed_reprocessing():
+            try:
+                print(f"🔄 Executing debounced reprocessing for conversation {conversation_id}")
+                _execute_conversation_reprocessing(uid, conversation_id, conversation_doc)
+            except Exception as e:
+                print(f"❌ Error in debounced reprocessing: {e}")
+            finally:
+                # Clean up timer reference
+                with _reprocessing_lock:
+                    if conversation_id in _reprocessing_timers:
+                        del _reprocessing_timers[conversation_id]
+        
+        # Create and start timer
+        timer = threading.Timer(debounce_seconds, _delayed_reprocessing)
+        _reprocessing_timers[conversation_id] = timer
+        timer.start()
+        print(f"⏱️ Scheduled debounced reprocessing for conversation {conversation_id} in {debounce_seconds}s")
+
+
+def _execute_conversation_reprocessing(uid: str, conversation_id: str, conversation_doc):
+    """
+    Execute the actual conversation reprocessing logic.
+    """
+    try:
+        print(f"🔄 Triggering reprocessing for conversation {conversation_id} after adding photos")
+        
+        # Import here to avoid circular imports
+        from utils.conversations.process_conversation import process_conversation
+        from models.conversation import Conversation, ConversationPhoto
+        
+        # Get the full conversation data
+        conversation_data = conversation_doc.to_dict()
+        
+        # **FIX: Convert datetime fields properly before creating Conversation object**
+        # Handle all potential datetime fields that might be timestamps
+        datetime_fields = ['created_at', 'started_at', 'finished_at', 'updated_at']
+        for field in datetime_fields:
+            if field in conversation_data and conversation_data[field]:
+                field_value = conversation_data[field]
+                
+                if isinstance(field_value, datetime):
+                    # Already a datetime object, no conversion needed
+                    continue
+                elif isinstance(field_value, (int, float)):
+                    conversation_data[field] = datetime.fromtimestamp(field_value, tz=timezone.utc)
+                elif isinstance(field_value, str):
+                    try:
+                        conversation_data[field] = datetime.fromisoformat(field_value.replace('Z', '+00:00'))
+                    except ValueError:
+                        # If parsing fails, set to None to avoid errors
+                        print(f"⚠️ Failed to parse datetime field {field}: {field_value}")
+                        conversation_data[field] = None
+        
+        # **FIX: Ensure transcript_segments are included in conversation_data**
+        # The conversation_data from Firestore might not include transcript_segments
+        # if they're stored separately, so we need to make sure they're loaded
+        if 'transcript_segments' not in conversation_data or not conversation_data['transcript_segments']:
+            # transcript_segments should be in the main document, but let's ensure it's there
+            print(f"⚠️ transcript_segments not found in conversation data, checking if they exist...")
+            if 'transcript_segments' not in conversation_data:
+                conversation_data['transcript_segments'] = []
+                print(f"⚠️ Set empty transcript_segments for conversation {conversation_id}")
+        
+        # **DEBUG: Print conversation data structure**
+        print(f"🔍 Conversation data keys: {list(conversation_data.keys())}")
+        if 'transcript_segments' in conversation_data:
+            segments_count = len(conversation_data['transcript_segments']) if conversation_data['transcript_segments'] else 0
+            print(f"🔍 Found {segments_count} transcript_segments in conversation data")
+            if segments_count > 0:
+                # Print first segment for debugging
+                first_segment = conversation_data['transcript_segments'][0]
+                print(f"🔍 First segment: {first_segment.get('text', 'No text')[:50]}...")
+        else:
+            print(f"🔍 No transcript_segments key in conversation data")
+        
+        # Load ALL photos from subcollection (existing + newly added)
+        all_photos_data = get_conversation_photos(uid, conversation_id)
+        conversation_photos = [ConversationPhoto(**photo_data) for photo_data in all_photos_data]
+        
+        # Add photos to conversation data for reprocessing
+        conversation_data['photos'] = [photo.dict() for photo in conversation_photos]
+        
+        # **FIX: Ensure required fields have default values**
+        if 'uid' not in conversation_data:
+            conversation_data['uid'] = uid
+        if 'discarded' not in conversation_data:
+            conversation_data['discarded'] = False
+        if 'deleted' not in conversation_data:
+            conversation_data['deleted'] = False
+        if 'status' not in conversation_data:
+            conversation_data['status'] = 'completed'
+        
+        try:
+            conversation = Conversation(**conversation_data)
+        except Exception as e:
+            print(f"❌ Error creating Conversation object: {e}")
+            print(f"🔍 Conversation data keys: {list(conversation_data.keys())}")
+            # Print field types for debugging
+            for key, value in conversation_data.items():
+                if value is not None:
+                    print(f"🔍 {key}: {type(value)} = {str(value)[:100]}")
+            raise e
+        
+        print(f"📸 Loaded {len(conversation_photos)} total photos for reprocessing conversation {conversation_id}")
+        
+        # **DEBUG: Check if conversation has transcript content**
+        transcript_content = conversation.get_transcript(False) if hasattr(conversation, 'get_transcript') else ""
+        print(f"🔍 Transcript content length: {len(transcript_content)}")
+        if transcript_content and transcript_content.strip():
+            print(f"🔍 Transcript preview: {transcript_content[:100]}...")
+            print(f"🔄 Processing combined conversation with {len(conversation_photos)} photos and transcript")
+        else:
+            print(f"🔍 No transcript content found")
+            print(f"📸 Processing photos-only conversation with {len(conversation_photos)} photos")
+        
+        # Set conversation language, defaulting to 'en' if not set
+        language_code = conversation.language or 'en'
+        
+        # Reprocess the conversation with force_process=True and is_reprocess=True
+        updated_conversation = process_conversation(
+            uid, language_code, conversation, 
+            force_process=True, is_reprocess=True
+        )
+        
+        print(f"✅ Successfully reprocessed conversation {conversation_id} with combined content")
+        return updated_conversation
+        
+    except Exception as e:
+        print(f"❌ Error reprocessing conversation {conversation_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        # Don't fail the photo addition if reprocessing fails
+        pass
+
+
 def store_conversation_photos(uid: str, conversation_id: str, photos: List[ConversationPhoto]):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
@@ -302,18 +489,49 @@ def store_conversation_photos(uid: str, conversation_id: str, photos: List[Conve
     batch = db.batch()
     for photo in photos:
         photo_id = str(uuid.uuid4())
-        photo_ref = photos_ref.document(str(uuid.uuid4()))
+        photo_ref = photos_ref.document(photo_id)
         data = photo.dict()
         data['id'] = photo_id
+        data['added_at'] = datetime.now(timezone.utc)  # Add consistent timestamp
         batch.set(photo_ref, data)
     batch.commit()
 
 
 def get_conversation_photos(uid: str, conversation_id: str):
-    user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    photos_ref = conversation_ref.collection('photos')
-    return [doc.to_dict() for doc in photos_ref.stream()]
+    try:
+        user_ref = db.collection('users').document(uid)
+        conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+        photos_ref = conversation_ref.collection('photos')
+        
+        print(f"🔍 Getting photos for conversation {conversation_id}, user {uid}")
+        
+        photos_docs = list(photos_ref.stream())
+        photos_data = []
+        
+        for doc in photos_docs:
+            photo_data = doc.to_dict()
+            photo_data['id'] = doc.id  # Ensure document ID is included
+            
+            # **FIX: Convert datetime fields to ISO strings for ConversationPhoto model compatibility**
+            datetime_fields = ['created_at', 'added_at']
+            for field in datetime_fields:
+                if field in photo_data and photo_data[field]:
+                    field_value = photo_data[field]
+                    if hasattr(field_value, 'isoformat'):  # Is a datetime-like object
+                        photo_data[field] = field_value.isoformat()
+                    elif isinstance(field_value, (int, float)):  # Is a timestamp
+                        dt = datetime.fromtimestamp(field_value, tz=timezone.utc)
+                        photo_data[field] = dt.isoformat()
+            
+            photos_data.append(photo_data)
+            print(f"📸 Found photo: {photo_data.get('id', 'unknown')} - {photo_data.get('description', 'no description')[:50]}...")
+        
+        print(f"🔍 Retrieved {len(photos_data)} photos for conversation {conversation_id}")
+        return photos_data
+        
+    except Exception as e:
+        print(f"❌ Error getting conversation photos for {conversation_id}: {e}")
+        return []
 
 
 # ********************************
@@ -371,3 +589,49 @@ def get_last_completed_conversation(uid: str) -> Optional[dict]:
     )
     conversations = [doc.to_dict() for doc in query.stream()]
     return conversations[0] if conversations else None
+
+
+def get_recent_conversations(uid: str, limit: int = 5, source: str = None) -> List[dict]:
+    """
+    Get recent conversations for a user, optionally filtered by source.
+    Used for intelligent conversation grouping (e.g., OpenGlass images).
+    """
+    try:
+        user_ref = db.collection('users').document(uid)
+        # Use created_at for ordering since finished_at might be null for ongoing conversations
+        query = user_ref.collection(conversations_collection).order_by('created_at', direction=firestore.Query.DESCENDING)
+        
+        # Filter by source if specified
+        if source:
+            query = query.where('source', '==', source)
+        
+        # Limit results
+        query = query.limit(limit)
+        
+        # Execute query
+        docs = query.stream()
+        conversations = []
+        
+        for doc in docs:
+            conversation_data = doc.to_dict()
+            conversation_data['id'] = doc.id
+            
+            # Parse datetime fields
+            if 'finished_at' in conversation_data and conversation_data['finished_at']:
+                if isinstance(conversation_data['finished_at'], (int, float)):
+                    conversation_data['finished_at'] = datetime.fromtimestamp(conversation_data['finished_at'], tz=timezone.utc)
+            if 'created_at' in conversation_data and conversation_data['created_at']:
+                if isinstance(conversation_data['created_at'], (int, float)):
+                    conversation_data['created_at'] = datetime.fromtimestamp(conversation_data['created_at'], tz=timezone.utc)
+            if 'started_at' in conversation_data and conversation_data['started_at']:
+                if isinstance(conversation_data['started_at'], (int, float)):
+                    conversation_data['started_at'] = datetime.fromtimestamp(conversation_data['started_at'], tz=timezone.utc)
+                
+            conversations.append(conversation_data)
+        
+        print(f"Found {len(conversations)} recent conversations for {uid} with source={source}")
+        return conversations
+        
+    except Exception as e:
+        print(f"Error getting recent conversations for {uid}: {e}")
+        return []
