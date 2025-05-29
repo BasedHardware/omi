@@ -110,6 +110,7 @@
 		nordic,802154-spinel-ipc = &ipc0;
 		zephyr,ieee802154 = &ieee802154;
 		zephyr,wifi = &wlan0;
+        nordic,pm-ext-flash = &spi_flash;
 	};
 	aliases {
 		dmic0 = &pdm0;
