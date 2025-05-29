@@ -18,6 +18,7 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/mute_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
@@ -37,6 +38,7 @@ class CaptureProvider extends ChangeNotifier
     implements ITransctipSegmentSocketServiceListener {
   ConversationProvider? conversationProvider;
   MessageProvider? messageProvider;
+  MuteProvider? muteProvider;
   TranscriptSegmentSocketService? _socket;
   SdCardSocketService sdCardSocket = SdCardSocketService();
   Timer? _keepAliveTimer;
@@ -65,9 +67,10 @@ class CaptureProvider extends ChangeNotifier
     });
   }
 
-  void updateProviderInstances(ConversationProvider? cp, MessageProvider? p) {
+  void updateProviderInstances(ConversationProvider? cp, MessageProvider? p, {MuteProvider? mp}) {
     conversationProvider = cp;
     messageProvider = p;
+    if (mp != null) muteProvider = mp;
     notifyListeners();
   }
 
@@ -272,15 +275,22 @@ class CaptureProvider extends ChangeNotifier
         _wal.getSyncs().phone.onByteStream(snapshot);
       }
 
-      // send ws
-      if (_socket?.state == SocketServiceState.connected) {
-        final trimmedValue = value.sublist(3);
-        _socket?.send(trimmedValue);
+      // Check if microphone is muted before sending to WebSocket
+      final isMuted = muteProvider?.isMuted ?? false;
+      if (!isMuted) {
+        // send ws
+        if (_socket?.state == SocketServiceState.connected) {
+          final trimmedValue = value.sublist(3);
+          _socket?.send(trimmedValue);
 
-        // synced
-        if (_isWalSupported) {
-          _wal.getSyncs().phone.onBytesSync(value);
+          // synced
+          if (_isWalSupported) {
+            _wal.getSyncs().phone.onBytesSync(value);
+          }
         }
+      } else {
+        // If muted, we can optionally send silence or just skip sending
+        debugPrint('Audio muted - not sending to WebSocket');
       }
     });
     notifyListeners();
@@ -417,6 +427,12 @@ class CaptureProvider extends ChangeNotifier
 
     // record
     await ServiceManager.instance().mic.start(onByteReceived: (bytes) {
+      // Check if microphone is muted before sending audio
+      if (muteProvider?.isMuted == true) {
+        // Don't send audio bytes when muted
+        return;
+      }
+
       if (_socket?.state == SocketServiceState.connected) {
         _socket?.send(bytes);
       }

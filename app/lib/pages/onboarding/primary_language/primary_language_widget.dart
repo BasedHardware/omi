@@ -22,13 +22,13 @@ class LanguageSelectorWidget extends StatefulWidget {
   final Function(String?, String?) onLanguageSelected;
 
   const LanguageSelectorWidget({
-    Key? key,
+    super.key,
     required this.availableLanguages,
     this.selectedLanguage,
     this.selectedLanguageName,
     required this.languageScrollController,
     required this.onLanguageSelected,
-  }) : super(key: key);
+  });
 
   @override
   State<LanguageSelectorWidget> createState() => _LanguageSelectorWidgetState();
@@ -108,8 +108,7 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
                 child: Text(
                   'Done',
                   style: TextStyle(
-                    color:
-                        currentSelectedLanguage == null ? null : Colors.white,
+                    color: currentSelectedLanguage == null ? null : Colors.white,
                   ),
                 ),
               ),
@@ -215,7 +214,8 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
           // Find the language name for the saved language code
           final homeProvider = Provider.of<HomeProvider>(context, listen: false);
           try {
-            selectedLanguageName = homeProvider.availableLanguages.entries.firstWhere((entry) => entry.value == savedLanguage).key;
+            selectedLanguageName =
+                homeProvider.availableLanguages.entries.firstWhere((entry) => entry.value == savedLanguage).key;
           } catch (e) {
             // If language not found in the map, just use the code
             selectedLanguageName = savedLanguage;
@@ -255,13 +255,13 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
+        mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(
             'Tell us your Primary Language',
             style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-            textAlign: TextAlign.start,
+            textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
           InkWell(
@@ -274,8 +274,8 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
               padding: const EdgeInsets.symmetric(vertical: 18),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(8),
-                border: GradientBoxBorder(
-                  gradient: const LinearGradient(
+                border: const GradientBoxBorder(
+                  gradient: LinearGradient(
                     colors: <Color>[
                       Color.fromARGB(255, 202, 201, 201),
                       Color.fromARGB(255, 159, 158, 158),
@@ -306,7 +306,12 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
                   width: double.infinity,
                   decoration: BoxDecoration(
                     border: const GradientBoxBorder(
-                      gradient: LinearGradient(colors: [Color.fromARGB(127, 208, 208, 208), Color.fromARGB(127, 188, 99, 121), Color.fromARGB(127, 86, 101, 182), Color.fromARGB(127, 126, 190, 236)]),
+                      gradient: LinearGradient(colors: [
+                        Color.fromARGB(127, 208, 208, 208),
+                        Color.fromARGB(127, 188, 99, 121),
+                        Color.fromARGB(127, 86, 101, 182),
+                        Color.fromARGB(127, 126, 190, 236)
+                      ]),
                       width: 2,
                     ),
                     borderRadius: BorderRadius.circular(12),
@@ -339,9 +344,7 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
               )
             ],
           ),
-          const SizedBox(
-            height: 12,
-          ),
+          const SizedBox(height: 12),
           InkWell(
             child: Text(
               'Need Help?',

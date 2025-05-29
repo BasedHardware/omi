@@ -380,6 +380,12 @@ class SharedPreferencesUtil {
     return Wal.fromJsonList(value.map((e) => jsonDecode(e)).toList());
   }
 
+  //--------------------------------- Audio/Microphone Settings ---------------//
+
+  bool get microphoneMuted => getBool('microphoneMuted') ?? false;
+
+  set microphoneMuted(bool value) => saveBool('microphoneMuted', value);
+
   //--------------------------- Setters & Getters -----------------------------//
 
   Future<bool> saveString(String key, String value) async {
