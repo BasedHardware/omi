@@ -307,7 +307,7 @@ getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb,
       text = 'Stop System Audio';
       icon = const Icon(Icons.stop, color: Colors.red, size: 12);
     } else {
-      text = 'Record System + Mic Audio';
+      text = 'Start Recording';
       icon = const Icon(Icons.mic, size: 18);
     }
   } else {
