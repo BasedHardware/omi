@@ -1,6 +1,8 @@
 import struct
 import asyncio
 import json
+import hashlib
+import time
 
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
@@ -10,6 +12,7 @@ from utils.apps import is_audio_bytes_app_enabled
 from utils.app_integrations import trigger_realtime_integrations, trigger_realtime_audio_bytes
 from utils.webhooks import send_audio_bytes_developer_webhook, realtime_transcript_webhook, \
     get_audio_bytes_webhook_seconds
+import database.redis_db as redis_db
 
 router = APIRouter()
 
@@ -54,6 +57,31 @@ async def _websocket_util_trigger(
                     res = json.loads(bytes(data[4:]).decode("utf-8"))
                     segments = res.get('segments')
                     memory_id = res.get('memory_id')
+                    
+                    # **DEDUPLICATION: Prevent multiple calls for the same transcript data**
+                    # Generate a unique hash for this transcript event
+                    event_data = f"{uid}:{memory_id}:{len(segments)}"
+                    for segment in segments:
+                        event_data += f":{segment.get('id', '')}:{segment.get('start', 0)}"
+                    
+                    event_hash = hashlib.md5(event_data.encode()).hexdigest()
+                    dedup_key = f"transcript_event:{event_hash}"
+                    
+                    # Check if this event was already processed recently (within 5 seconds)
+                    try:
+                        if redis_db.r.get(dedup_key):
+                            print(f"🛑 Skipping duplicate transcript webhook call for user {uid} (hash: {event_hash[:8]})")
+                            continue
+                        
+                        # Mark this event as processed for 5 seconds
+                        redis_db.r.setex(dedup_key, 5, "processed")
+                        print(f"✅ Processing unique transcript webhook call for user {uid} (hash: {event_hash[:8]})")
+                        
+                    except Exception as e:
+                        print(f"Error with deduplication cache: {e}")
+                        # Continue processing if Redis fails
+                    
+                    # Process the transcript webhooks
                     asyncio.run_coroutine_threadsafe(trigger_realtime_integrations(uid, segments, memory_id), loop)
                     asyncio.run_coroutine_threadsafe(realtime_transcript_webhook(uid, segments), loop)
                     continue

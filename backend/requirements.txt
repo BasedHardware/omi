@@ -97,7 +97,7 @@ langchain-community==0.3.3
 langchain-core==0.3.12
 langchain-groq==0.2.0
 langchain-openai==0.2.3
-langchain-pinecone==0.2.0
+langchain-pinecone==0.2.6
 langchain-text-splitters==0.3.0
 langgraph==0.2.39
 langgraph-checkpoint==2.0.1

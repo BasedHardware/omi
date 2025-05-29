@@ -151,7 +151,7 @@ class SharedPreferencesUtil {
 
   set showFirmwareUpdateDialog(bool value) => saveBool('v2/showFirmwareUpdateDialog', value);
 
-  String get transcriptionModel => getString('transcriptionModel3') ?? 'soniox';
+  String get transcriptionModel => getString('transcriptionModel3') ?? 'deepgram';
 
   set transcriptionModel(String value) => saveString('transcriptionModel3', value);
 
