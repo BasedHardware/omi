@@ -18,15 +18,71 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>h.omi.me</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>https</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>h.omi.me</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.208440318997-ukinsq3sijhcetkhr26ssqp1terbq7as</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Bluetooth permission is required to connect with your Omi.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Bluetooth permission is required to connect with your Omi.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Access most functions for calendar viewing and editing.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Access most functions for calendar viewing and editing.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Camera access is required to report issues</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Access contacts for event attendee editing.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>$(PRODUCT_COPYRIGHT)</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>When creating your memories, we use your location for determining where they were created.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>When creating your memories, we use your location for determining where they were created.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>When creating your memories, we use your location for determining where they were created.</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>We need access to your microphone so you can share audio explanations of Bugs you find.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>We need access to your photo library to allow you to upload and share photos through Instabug.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>PermissionGroupNotification</key>
+	<string>You need to enable notifications to receive your pro-active feedback.</string>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.google.GIDSignIn</string>
+		<string>$(AppIdentifierPrefix)com.friend-app-with-wearable.ios12</string>
+	</array>
 </dict>
 </plist>

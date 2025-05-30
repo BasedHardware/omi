@@ -82,7 +82,7 @@ dependencies:
   manage_calendar_events: ^2.0.3
   flutter_timezone: ^2.0.0
   sign_in_with_apple: ^6.1.1
-  google_sign_in: 6.2.1
+  google_sign_in: 6.2.2
   location: ^7.0.0
   cached_network_image: 3.4.1
   map_launcher: ^3.3.1
