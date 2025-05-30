@@ -18,10 +18,12 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/widgets/animated_gradient_border.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -337,259 +339,264 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                             left: 28,
                             right: 28,
                             bottom: widget.isPivotBottom ? 40 : (home.isChatFieldFocused ? 40 : 120)),
-                        decoration: const BoxDecoration(
-                          color: Colors.black,
-                          borderRadius: BorderRadius.all(Radius.circular(16)),
-                          border: GradientBoxBorder(
-                            gradient: LinearGradient(colors: [
-                              Color.fromARGB(127, 208, 208, 208),
-                              Color.fromARGB(127, 188, 99, 121),
-                              Color.fromARGB(127, 86, 101, 182),
-                              Color.fromARGB(127, 126, 190, 236)
-                            ]),
-                            width: 1,
-                          ),
-                          shape: BoxShape.rectangle,
-                        ),
-                        child: Column(
-                          children: [
-                            Consumer<MessageProvider>(builder: (context, provider, child) {
-                              if (provider.selectedFiles.isNotEmpty) {
-                                return Stack(
-                                  children: [
-                                    Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: SizedBox(
-                                        height: MediaQuery.sizeOf(context).height * 0.118,
-                                        child: ListView.builder(
-                                          itemCount: provider.selectedFiles.length,
-                                          scrollDirection: Axis.horizontal,
-                                          shrinkWrap: true,
-                                          itemBuilder: (ctx, idx) {
-                                            return Container(
-                                              margin: const EdgeInsets.only(bottom: 10, top: 10, left: 10),
-                                              height: MediaQuery.sizeOf(context).width * 0.2,
-                                              width: MediaQuery.sizeOf(context).width * 0.2,
-                                              decoration: BoxDecoration(
-                                                color: Colors.grey[800],
-                                                image: provider.selectedFileTypes[idx] == 'image'
-                                                    ? DecorationImage(
-                                                        image: FileImage(provider.selectedFiles[idx]),
-                                                        fit: BoxFit.cover,
-                                                      )
-                                                    : null,
-                                                borderRadius: BorderRadius.circular(10),
-                                              ),
-                                              child: Stack(
-                                                children: [
-                                                  provider.selectedFileTypes[idx] != 'image'
-                                                      ? const Center(
-                                                          child: Icon(
-                                                            Icons.insert_drive_file,
-                                                            color: Colors.white,
-                                                            size: 30,
+                        child: AnimatedGradientBorder(
+                          gradientColors: const [
+                            Color.fromARGB(127, 208, 208, 208),
+                            Color.fromARGB(127, 188, 99, 121),
+                            Color.fromARGB(127, 86, 101, 182),
+                            Color.fromARGB(127, 126, 190, 236)
+                          ],
+                          borderWidth: 1,
+                          borderRadius: const BorderRadius.all(Radius.circular(16)),
+                          animationDuration: const Duration(milliseconds: 2000),
+                          pulseIntensity: 0.2,
+                          child: Container(
+                            width: double.maxFinite,
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            child: Column(
+                              children: [
+                                Consumer<MessageProvider>(builder: (context, provider, child) {
+                                  if (provider.selectedFiles.isNotEmpty) {
+                                    return Stack(
+                                      children: [
+                                        Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: SizedBox(
+                                            height: MediaQuery.sizeOf(context).height * 0.118,
+                                            child: ListView.builder(
+                                              itemCount: provider.selectedFiles.length,
+                                              scrollDirection: Axis.horizontal,
+                                              shrinkWrap: true,
+                                              itemBuilder: (ctx, idx) {
+                                                return Container(
+                                                  margin: const EdgeInsets.only(bottom: 10, top: 10, left: 10),
+                                                  height: MediaQuery.sizeOf(context).width * 0.2,
+                                                  width: MediaQuery.sizeOf(context).width * 0.2,
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.grey[800],
+                                                    image: provider.selectedFileTypes[idx] == 'image'
+                                                        ? DecorationImage(
+                                                            image: FileImage(provider.selectedFiles[idx]),
+                                                            fit: BoxFit.cover,
+                                                          )
+                                                        : null,
+                                                    borderRadius: BorderRadius.circular(10),
+                                                  ),
+                                                  child: Stack(
+                                                    children: [
+                                                      provider.selectedFileTypes[idx] != 'image'
+                                                          ? const Center(
+                                                              child: Icon(
+                                                                Icons.insert_drive_file,
+                                                                color: Colors.white,
+                                                                size: 30,
+                                                              ),
+                                                            )
+                                                          : Container(),
+                                                      if (provider.isFileUploading(provider.selectedFiles[idx].path))
+                                                        Container(
+                                                          color: Colors.black.withOpacity(0.5),
+                                                          child: const Center(
+                                                            child: SizedBox(
+                                                              width: 20,
+                                                              height: 20,
+                                                              child: CircularProgressIndicator(
+                                                                valueColor:
+                                                                    AlwaysStoppedAnimation<Color>(Colors.white70),
+                                                              ),
+                                                            ),
                                                           ),
-                                                        )
-                                                      : Container(),
-                                                  if (provider.isFileUploading(provider.selectedFiles[idx].path))
-                                                    Container(
-                                                      color: Colors.black.withOpacity(0.5),
-                                                      child: const Center(
-                                                        child: SizedBox(
-                                                          width: 20,
-                                                          height: 20,
-                                                          child: CircularProgressIndicator(
-                                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
+                                                        ),
+                                                      Positioned(
+                                                        top: 4,
+                                                        right: 4,
+                                                        child: GestureDetector(
+                                                          onTap: () {
+                                                            provider.clearSelectedFile(idx);
+                                                          },
+                                                          child: CircleAvatar(
+                                                            radius: 12,
+                                                            backgroundColor: Colors.grey[700],
+                                                            child:
+                                                                const Icon(Icons.close, size: 16, color: Colors.white),
                                                           ),
                                                         ),
                                                       ),
-                                                    ),
-                                                  Positioned(
-                                                    top: 4,
-                                                    right: 4,
-                                                    child: GestureDetector(
-                                                      onTap: () {
-                                                        provider.clearSelectedFile(idx);
-                                                      },
-                                                      child: CircleAvatar(
-                                                        radius: 12,
-                                                        backgroundColor: Colors.grey[700],
-                                                        child: const Icon(Icons.close, size: 16, color: Colors.white),
-                                                      ),
-                                                    ),
+                                                    ],
                                                   ),
-                                                ],
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  } else {
+                                    return Container();
+                                  }
+                                }),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    if (shouldShowMenuButton())
+                                      IconButton(
+                                        icon: Icon(
+                                          Icons.add,
+                                          color:
+                                              provider.selectedFiles.length > 3 ? Colors.grey : const Color(0xFFF7F4F4),
+                                          size: 24.0,
+                                        ),
+                                        onPressed: () {
+                                          if (provider.selectedFiles.length > 3) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(
+                                                content: Text('You can only upload 4 files at a time'),
+                                                duration: Duration(seconds: 2),
                                               ),
                                             );
-                                          },
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              } else {
-                                return Container();
-                              }
-                            }),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                if (shouldShowMenuButton())
-                                  IconButton(
-                                    icon: Icon(
-                                      Icons.add,
-                                      color: provider.selectedFiles.length > 3 ? Colors.grey : const Color(0xFFF7F4F4),
-                                      size: 24.0,
-                                    ),
-                                    onPressed: () {
-                                      if (provider.selectedFiles.length > 3) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(
-                                            content: Text('You can only upload 4 files at a time'),
-                                            duration: Duration(seconds: 2),
-                                          ),
-                                        );
-                                        return;
-                                      }
-                                      showModalBottomSheet(
-                                        context: context,
-                                        backgroundColor: Colors.grey[850],
-                                        shape: const RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
-                                        ),
-                                        builder: (BuildContext context) {
-                                          return Padding(
-                                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 40),
-                                            child: Wrap(
-                                              children: [
-                                                ListTile(
-                                                  leading: const Icon(Icons.camera_alt, color: Colors.white),
-                                                  title:
-                                                      const Text("Take a Photo", style: TextStyle(color: Colors.white)),
-                                                  onTap: () {
-                                                    Navigator.pop(context);
-                                                    context.read<MessageProvider>().captureImage();
-                                                  },
-                                                ),
-                                                ListTile(
-                                                  leading: const Icon(Icons.photo, color: Colors.white),
-                                                  title: const Text("Select a Photo",
-                                                      style: TextStyle(color: Colors.white)),
-                                                  onTap: () {
-                                                    Navigator.pop(context);
-                                                    context.read<MessageProvider>().selectImage();
-                                                  },
-                                                ),
-                                                ListTile(
-                                                  leading: const Icon(Icons.insert_drive_file, color: Colors.white),
-                                                  title: const Text("Select a File",
-                                                      style: TextStyle(color: Colors.white)),
-                                                  onTap: () {
-                                                    Navigator.pop(context);
-                                                    context.read<MessageProvider>().selectFile();
-                                                  },
-                                                ),
-                                              ],
+                                            return;
+                                          }
+                                          showModalBottomSheet(
+                                            context: context,
+                                            backgroundColor: Colors.grey[850],
+                                            shape: const RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
                                             ),
+                                            builder: (BuildContext context) {
+                                              return Padding(
+                                                padding: const EdgeInsets.fromLTRB(12, 12, 12, 40),
+                                                child: Wrap(
+                                                  children: [
+                                                    ListTile(
+                                                      leading: const Icon(Icons.camera_alt, color: Colors.white),
+                                                      title: const Text("Take a Photo",
+                                                          style: TextStyle(color: Colors.white)),
+                                                      onTap: () {
+                                                        Navigator.pop(context);
+                                                        context.read<MessageProvider>().captureImage();
+                                                      },
+                                                    ),
+                                                    ListTile(
+                                                      leading: const Icon(Icons.photo, color: Colors.white),
+                                                      title: const Text("Select a Photo",
+                                                          style: TextStyle(color: Colors.white)),
+                                                      onTap: () {
+                                                        Navigator.pop(context);
+                                                        context.read<MessageProvider>().selectImage();
+                                                      },
+                                                    ),
+                                                    ListTile(
+                                                      leading: const Icon(Icons.insert_drive_file, color: Colors.white),
+                                                      title: const Text("Select a File",
+                                                          style: TextStyle(color: Colors.white)),
+                                                      onTap: () {
+                                                        Navigator.pop(context);
+                                                        context.read<MessageProvider>().selectFile();
+                                                      },
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                            },
                                           );
                                         },
-                                      );
-                                    },
-                                  ),
-                                Expanded(
-                                  child: _showVoiceRecorder
-                                      ? VoiceRecorderWidget(
-                                          onTranscriptReady: (transcript) {
-                                            setState(() {
-                                              textController.text = transcript;
-                                              _showVoiceRecorder = false;
-                                              context.read<MessageProvider>().setNextMessageOriginIsVoice(true);
-                                            });
-                                          },
-                                          onClose: () {
-                                            setState(() {
-                                              _showVoiceRecorder = false;
-                                            });
-                                          },
-                                        )
-                                      : ConstrainedBox(
-                                          constraints: const BoxConstraints(
-                                            maxHeight: 150,
-                                          ),
-                                          child: TextField(
-                                            enabled: true,
-                                            controller: textController,
-                                            obscureText: false,
-                                            focusNode: home.chatFieldFocusNode,
-                                            textAlign: TextAlign.start,
-                                            textAlignVertical: TextAlignVertical.top,
-                                            decoration: const InputDecoration(
-                                              hintText: 'Message',
-                                              hintStyle: TextStyle(fontSize: 14.0, color: Colors.grey),
-                                              focusedBorder: InputBorder.none,
-                                              enabledBorder: InputBorder.none,
-                                              contentPadding: EdgeInsets.only(top: 8, bottom: 10),
-                                            ),
-                                            maxLines: null,
-                                            keyboardType: TextInputType.multiline,
-                                            style:
-                                                TextStyle(fontSize: 14.0, color: Colors.grey.shade200, height: 24 / 14),
-                                          ),
-                                        ),
-                                ),
-                                if (shouldShowVoiceRecorderButton())
-                                  GestureDetector(
-                                    child: Container(
-                                      padding: const EdgeInsets.only(top: 14, bottom: 14, left: 14, right: 14),
-                                      child: const Icon(
-                                        Icons.mic_outlined,
-                                        color: Color(0xFFF7F4F4),
-                                        size: 20.0,
                                       ),
-                                    ),
-                                    onTap: () {
-                                      setState(() {
-                                        _showVoiceRecorder = true;
-                                      });
-                                    },
-                                  ),
-                                !shouldShowSendButton(provider)
-                                    ? const SizedBox.shrink()
-                                    : GestureDetector(
-                                        onTap: provider.sendingMessage || provider.isUploadingFiles
-                                            ? null
-                                            : () {
-                                                String message = textController.text;
-                                                if (message.isEmpty) return;
-                                                if (connectivityProvider.isConnected) {
-                                                  _sendMessageUtil(message);
-                                                } else {
-                                                  ScaffoldMessenger.of(context).showSnackBar(
-                                                    const SnackBar(
-                                                      content:
-                                                          Text('Please check your internet connection and try again'),
-                                                      duration: Duration(seconds: 2),
-                                                    ),
-                                                  );
-                                                }
+                                    Expanded(
+                                      child: _showVoiceRecorder
+                                          ? VoiceRecorderWidget(
+                                              onTranscriptReady: (transcript) {
+                                                setState(() {
+                                                  textController.text = transcript;
+                                                  _showVoiceRecorder = false;
+                                                  context.read<MessageProvider>().setNextMessageOriginIsVoice(true);
+                                                });
                                               },
+                                              onClose: () {
+                                                setState(() {
+                                                  _showVoiceRecorder = false;
+                                                });
+                                              },
+                                            )
+                                          : ConstrainedBox(
+                                              constraints: const BoxConstraints(
+                                                maxHeight: 150,
+                                              ),
+                                              child: TextField(
+                                                enabled: true,
+                                                controller: textController,
+                                                obscureText: false,
+                                                focusNode: home.chatFieldFocusNode,
+                                                textAlign: TextAlign.start,
+                                                textAlignVertical: TextAlignVertical.top,
+                                                decoration: const InputDecoration(
+                                                  hintText: 'Message',
+                                                  hintStyle: TextStyle(fontSize: 14.0, color: Colors.grey),
+                                                  focusedBorder: InputBorder.none,
+                                                  enabledBorder: InputBorder.none,
+                                                  contentPadding: EdgeInsets.only(top: 8, bottom: 10),
+                                                ),
+                                                maxLines: null,
+                                                keyboardType: TextInputType.multiline,
+                                                style: TextStyle(
+                                                    fontSize: 14.0, color: Colors.grey.shade200, height: 24 / 14),
+                                              ),
+                                            ),
+                                    ),
+                                    if (shouldShowVoiceRecorderButton())
+                                      GestureDetector(
                                         child: Container(
-                                          padding: const EdgeInsets.all(4),
-                                          margin: const EdgeInsets.only(top: 10, bottom: 10, right: 6),
-                                          decoration: const BoxDecoration(
-                                            color: Colors.white,
-                                            shape: BoxShape.circle,
-                                          ),
+                                          padding: const EdgeInsets.only(top: 14, bottom: 14, left: 14, right: 14),
                                           child: const Icon(
-                                            Icons.arrow_upward_outlined,
-                                            color: Colors.black,
+                                            Icons.mic_outlined,
+                                            color: Color(0xFFF7F4F4),
                                             size: 20.0,
                                           ),
                                         ),
+                                        onTap: () {
+                                          setState(() {
+                                            _showVoiceRecorder = true;
+                                          });
+                                        },
                                       ),
+                                    !shouldShowSendButton(provider)
+                                        ? const SizedBox.shrink()
+                                        : GestureDetector(
+                                            onTap: provider.sendingMessage || provider.isUploadingFiles
+                                                ? null
+                                                : () {
+                                                    String message = textController.text;
+                                                    if (message.isEmpty) return;
+                                                    if (connectivityProvider.isConnected) {
+                                                      _sendMessageUtil(message);
+                                                    } else {
+                                                      ScaffoldMessenger.of(context).showSnackBar(
+                                                        const SnackBar(
+                                                          content: Text(
+                                                              'Please check your internet connection and try again'),
+                                                          duration: Duration(seconds: 2),
+                                                        ),
+                                                      );
+                                                    }
+                                                  },
+                                            child: Container(
+                                              padding: const EdgeInsets.all(4),
+                                              margin: const EdgeInsets.only(top: 10, bottom: 10, right: 6),
+                                              decoration: const BoxDecoration(
+                                                color: Colors.white,
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: const Icon(
+                                                Icons.arrow_upward_outlined,
+                                                color: Colors.black,
+                                                size: 20.0,
+                                              ),
+                                            ),
+                                          ),
+                                  ],
+                                ),
                               ],
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ],
