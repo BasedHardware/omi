@@ -96,15 +96,15 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
                 ),
               ),
               TextButton(
-                onPressed: currentSelectedLanguage == null
-                    ? null
-                    : () {
-                        widget.onLanguageSelected(
-                          currentSelectedLanguage,
-                          currentSelectedLanguageName,
-                        );
-                        Navigator.pop(context);
-                      },
+                onPressed: () {
+                  if (currentSelectedLanguage != null) {
+                    widget.onLanguageSelected(
+                      currentSelectedLanguage,
+                      currentSelectedLanguageName,
+                    );
+                  }
+                  Navigator.pop(context);
+                },
                 child: Text(
                   'Done',
                   style: TextStyle(
@@ -225,29 +225,61 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
     });
   }
 
+  @override
+  void dispose() {
+    _languageScrollController.dispose();
+    super.dispose();
+  }
+
   void _showLanguageSelector(BuildContext context, Map<String, String> availableLanguages) {
-    showModalBottomSheet(
+    try {
+      showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1A1A1A),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       isScrollControlled: true,
+      isDismissible: true,
+      enableDrag: true,
+      barrierColor: Colors.black.withOpacity(0.5)
       builder: (context) {
-        return LanguageSelectorWidget(
-          availableLanguages: availableLanguages,
-          selectedLanguage: selectedLanguage,
-          selectedLanguageName: selectedLanguageName,
-          languageScrollController: _languageScrollController,
-          onLanguageSelected: (language, name) {
-            setState(() {
-              selectedLanguage = language;
-              selectedLanguageName = name;
-            });
+        return WillPopScope(
+          onWillPop: () async {
+            Navigator.pop(context);
+            return true;
           },
+          child: LanguageSelectorWidget(
+            availableLanguages: availableLanguages,
+            selectedLanguage: selectedLanguage,
+            selectedLanguageName: selectedLanguageName,
+            languageScrollController: _languageScrollController,
+            onLanguageSelected: (language, name) {
+              setState(() {
+                selectedLanguage = language;
+                selectedLanguageName = name;
+              });
+              Navigator.pop(context);
+            },
+          ),
         );
       },
-    );
+    ).catchError((error) {
+      debugPrint('Error showing language selector: $error');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error showing language selector. Please try again.'),
+        ),
+        );
+      });
+    } catch (e) {
+      debugPrint('Error in _showLanguageSelector: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('An error occurred. Please try again.'),
+        ),
+      );
+    }
   }
 
   @override
@@ -258,6 +290,13 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
         mainAxisAlignment: MainAxisAlignment.end,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          Align(
+            alignment: Alignment.topRight,
+            child: IconButton(
+              icon: const Icon(Icons.close, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
           Text(
             'Tell us your Primary Language',
             style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
