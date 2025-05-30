@@ -3,12 +3,12 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/env/env.dart';
 import 'package:http/http.dart' as http;
-import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:path/path.dart';
 
 Future<CreateConversationResponse?> processInProgressConversation() async {
@@ -24,14 +24,8 @@ Future<CreateConversationResponse?> processInProgressConversation() async {
     return CreateConversationResponse.fromJson(jsonDecode(response.body));
   } else {
     // TODO: Server returns 304 doesn't recover
-    CrashReporting.reportHandledCrash(
-      Exception('Failed to create conversation'),
-      StackTrace.current,
-      level: NonFatalExceptionLevel.info,
-      userAttributes: {
-        'response': response.body,
-      },
-    );
+    PlatformManager.instance.instabug.reportCrash(Exception('Failed to create conversation'), StackTrace.current,
+        userAttributes: {'response': response.body});
   }
   return null;
 }
@@ -283,6 +277,23 @@ Future<bool> setConversationActionItemState(
   return response.statusCode == 200;
 }
 
+Future<bool> updateActionItemDescription(
+    String conversationId, String oldDescription, String newDescription, int idx) async {
+  var body = {
+    'old_description': oldDescription,
+    'description': newDescription,
+  };
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/action-items/$idx',
+    headers: {},
+    method: 'PATCH',
+    body: jsonEncode(body),
+  );
+  if (response == null) return false;
+  debugPrint('updateActionItemDescription: ${response.body}');
+  return response.statusCode == 200;
+}
+
 Future<bool> deleteConversationActionItem(String conversationId, ActionItem item) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId/action-items',
@@ -381,7 +392,6 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
   return (<ServerConversation>[], 0, 0);
 }
 
-
 Future<String> testConversationPrompt(String prompt, String conversationId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId/test-prompt',
@@ -392,9 +402,9 @@ Future<String> testConversationPrompt(String prompt, String conversationId) asyn
     }),
   );
   if (response == null) return '';
-  if (response.statusCode == 200){
+  if (response.statusCode == 200) {
     return jsonDecode(response.body)['summary'];
-  }else {
+  } else {
     return '';
   }
 }

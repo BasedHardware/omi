@@ -1,0 +1,176 @@
+{{- if and .Values.rbac.create .Values.rbac.clusterScoped -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+{{ include "cluster-autoscaler.labels" . | indent 4 }}
+  name: {{ template "cluster-autoscaler.fullname" . }}
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - events
+      - endpoints
+    verbs:
+      - create
+      - patch
+  - apiGroups:
+    - ""
+    resources:
+    - pods/eviction
+    verbs:
+    - create
+  - apiGroups:
+      - ""
+    resources:
+      - pods/status
+    verbs:
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - endpoints
+    resourceNames:
+      - cluster-autoscaler
+    verbs:
+      - get
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+    - watch
+    - list
+    - create
+    - delete
+    - get
+    - update
+  - apiGroups:
+    - ""
+    resources:
+      - namespaces
+      - pods
+      - services
+      - replicationcontrollers
+      - persistentvolumeclaims
+      - persistentvolumes
+    verbs:
+      - watch
+      - list
+      - get
+  - apiGroups:
+    - batch
+    resources:
+      - jobs
+      - cronjobs
+    verbs:
+      - watch
+      - list
+      - get
+  - apiGroups:
+    - batch
+    - extensions
+    resources:
+    - jobs
+    verbs:
+    - get
+    - list
+    - patch
+    - watch
+  - apiGroups:
+      - extensions
+    resources:
+      - replicasets
+      - daemonsets
+    verbs:
+      - watch
+      - list
+      - get
+  - apiGroups:
+      - policy
+    resources:
+      - poddisruptionbudgets
+    verbs:
+      - watch
+      - list
+  - apiGroups:
+    - apps
+    resources:
+    - daemonsets
+    - replicasets
+    - statefulsets
+    verbs:
+    - watch
+    - list
+    - get
+  - apiGroups:
+    - storage.k8s.io
+    resources:
+    - storageclasses
+    - csinodes
+    - csidrivers
+    - csistoragecapacities
+    - volumeattachments
+    verbs:
+    - watch
+    - list
+    - get
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - list
+      - watch
+      - get
+  - apiGroups:
+    - coordination.k8s.io
+    resources:
+    - leases
+    verbs:
+    - create
+  - apiGroups:
+    - coordination.k8s.io
+    resourceNames:
+    - cluster-autoscaler
+    resources:
+    - leases
+    verbs:
+    - get
+    - update
+{{- if .Values.rbac.pspEnabled }}
+  - apiGroups:
+    - extensions
+    - policy
+    resources:
+    - podsecuritypolicies
+    resourceNames:
+    - {{ template "cluster-autoscaler.fullname" . }}
+    verbs:
+    - use
+{{- end -}}
+{{- if and ( and ( eq .Values.cloudProvider "clusterapi" ) ( .Values.rbac.clusterScoped ) ( or ( eq .Values.clusterAPIMode "incluster-incluster" ) ( eq .Values.clusterAPIMode "kubeconfig-incluster" ) ))}}
+  - apiGroups:
+    - cluster.x-k8s.io
+    resources:
+    - machinedeployments
+    - machinepools
+    - machines
+    - machinesets
+    verbs:
+    - get
+    - list
+    - update
+    - watch
+  - apiGroups:
+    - cluster.x-k8s.io
+    resources:
+    - machinedeployments/scale
+    - machinepools/scale
+    verbs:
+    - get
+    - patch
+    - update
+{{- end }}
+{{- end -}}

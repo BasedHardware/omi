@@ -2,42 +2,41 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/gen/assets.gen.dart';
-import 'package:omi/pages/persona/persona_provider.dart';
+import 'package:gradient_borders/gradient_borders.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/geolocation.dart';
+import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/main.dart';
+import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/apps/page.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
-import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/home/widgets/chat_apps_dropdown_widget.dart';
-import 'package:omi/pages/persona/persona_profile.dart';
-import 'package:omi/pages/home/widgets/speech_language_sheet.dart';
+import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/settings/page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
-import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
-import 'package:gradient_borders/gradient_borders.dart';
-import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 import '../conversations/sync_page.dart';
 import 'widgets/battery_info_widget.dart';
@@ -120,8 +119,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
       // Reload convos
       if (mounted) {
-        debugPrint('Reload convos');
-        Provider.of<ConversationProvider>(context, listen: false).fetchNewConversations();
+        Provider.of<ConversationProvider>(context, listen: false).refreshConversations();
+        Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
       }
     } else if (state == AppLifecycleState.hidden) {
       event = 'App is hidden';
@@ -131,7 +130,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       return;
     }
     debugPrint(event);
-    InstabugLog.logInfo(event);
+    PlatformManager.instance.instabug.logInfo(event);
   }
 
   ///Screens with respect to subpage
@@ -204,8 +203,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       _initiateApps();
 
       // ForegroundUtil.requestPermissions();
-      await ForegroundUtil.initializeForegroundService();
-      ForegroundUtil.startForegroundTask();
+      if (!Platform.isMacOS) {
+        await ForegroundUtil.initializeForegroundService();
+        ForegroundUtil.startForegroundTask();
+      }
       if (mounted) {
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
@@ -217,6 +218,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       // Navigate
       switch (pageAlias) {
         case "chat":
+          print('inside chat alias $detailPageId');
           if (detailPageId != null && detailPageId.isNotEmpty) {
             var appId = detailPageId != "omi" ? detailPageId : ''; // omi ~ no select
             if (mounted) {
@@ -359,9 +361,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           builder: (context, homeProvider, _) {
             return Scaffold(
               backgroundColor: Theme.of(context).colorScheme.primary,
-              appBar: homeProvider.selectedIndex == 4 ? null : _buildAppBar(context),
+              appBar: homeProvider.selectedIndex == 5 ? null : _buildAppBar(context),
               body: DefaultTabController(
-                length: 4,
+                length: 5,
                 initialIndex: _controller?.initialPage ?? 0,
                 child: GestureDetector(
                   onTap: () {
@@ -379,6 +381,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                             ConversationsPage(),
                             ChatPage(isPivotBottom: false),
                             MemoriesPage(),
+                            ActionItemsPage(),
                             AppsPage(),
                           ],
                         ),
@@ -414,8 +417,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   labelPadding: const EdgeInsets.symmetric(vertical: 10),
                                   indicatorPadding: EdgeInsets.zero,
                                   onTap: (index) {
-                                    MixpanelManager()
-                                        .bottomNavigationTabClicked(['Memories', 'Chat', 'Facts', 'Explore'][index]);
+                                    MixpanelManager().bottomNavigationTabClicked(
+                                        ['Memories', 'Chat', 'Facts', 'Action Items', 'Explore'][index]);
                                     primaryFocus?.unfocus();
                                     if (home.selectedIndex == index) {
                                       return;
@@ -491,15 +494,35 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           Icon(
-                                            FontAwesomeIcons.search,
+                                            FontAwesomeIcons.listCheck,
                                             color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
+                                            size: 18,
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            'Actions',
+                                            style: TextStyle(
+                                              color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Tab(
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            FontAwesomeIcons.search,
+                                            color: home.selectedIndex == 4 ? Colors.white : Colors.grey,
                                             size: 18,
                                           ),
                                           const SizedBox(height: 6),
                                           Text(
                                             'Explore',
                                             style: TextStyle(
-                                              color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
+                                              color: home.selectedIndex == 4 ? Colors.white : Colors.grey,
                                               fontSize: 12,
                                             ),
                                           ),
@@ -528,6 +551,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     return AppBar(
       automaticallyImplyLeading: false,
       backgroundColor: Theme.of(context).colorScheme.surface,
+      toolbarHeight: Platform.isMacOS ? 80 : null,
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -573,6 +597,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   ),
                 );
               } else if (provider.selectedIndex == 3) {
+                return const Expanded(
+                  child: Center(
+                    child: Text(
+                      'Actions',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                );
+              } else if (provider.selectedIndex == 4) {
                 return Center(
                   child: Padding(
                     padding: EdgeInsets.only(right: MediaQuery.sizeOf(context).width * 0.10),

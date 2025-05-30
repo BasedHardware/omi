@@ -9,6 +9,7 @@ import ast
 
 from database.redis_db import get_generic_cache, set_generic_cache
 
+
 class DeviceModel(int, Enum):
     OMI_DEVKIT_1 = 1
     OMI_DEVKIT_2 = 2
@@ -33,8 +34,14 @@ def _get_device_by_model_number(device_model: str):
         return DeviceModel.OPEN_GLASS
     if device_model in ['Omi CV 1']:
         return DeviceModel.OMI_CV1
+    # TODO: remove
+    if device_model in ['OMI_shell']:
+        return DeviceModel.OMI_CV1
+    if device_model in ['nrf5340']:
+        return DeviceModel.OMI_CV1
 
     return None
+
 
 async def get_omi_github_releases(cache_key: str) -> Optional[list]:
     """Fetch releases from GitHub API with caching"""
@@ -144,68 +151,6 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
     }
 
 
-@router.get("/v1/firmware/latest")
-async def get_latest_version_v1(device: int):
-    # if device = 1 : Friend
-    # if device = 2 : OpenGlass
-    if device != 1 and device != 2:
-        raise HTTPException(status_code=404, detail="Device not found")
-    async with httpx.AsyncClient() as client:
-        url = "https://api.github.com/repos/basedhardware/omi/releases"
-        headers = {
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "Authorization": f"Bearer {os.getenv('GITHUB_TOKEN')}",
-        }
-        response = await client.get(url, headers=headers)
-        if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail="Failed to fetch latest release")
-        releases = response.json()
-        latest_release = None
-        device_type = "friend" if device == 1 else "openglass"
-        for release in releases:
-            if (
-                release.get("published_at")
-                and release.get("tag_name")
-                and (device_type in release.get("tag_name", "").lower() or device_type in release.get("name", "").lower())
-                and "firmware" in release.get("tag_name", "").lower()
-                and not release.get("draft")
-            ):
-                if not latest_release:
-                    latest_release = release
-                else:
-                    if release.get("published_at") > latest_release.get("published_at"):
-                        latest_release = release
-        if not latest_release:
-            raise HTTPException(status_code=404, detail="No latest release found for the device")
-        release_data = latest_release
-        kv = extract_key_value_pairs(release_data.get("body"))
-        assets = release_data.get("assets")
-        asset = None
-        for a in assets:
-            if "ota" in a.get("name", "").lower():
-                asset = a
-                break
-        if not asset:
-            raise HTTPException(status_code=500, detail="No OTA zip found in the release")
-        return {
-            "version": kv.get("release_firmware_version"),
-            "min_version": kv.get("minimum_firmware_required"),
-            "min_app_version": kv.get("minimum_app_version"),
-            "min_app_version_code": kv.get("minimum_app_version_code"),
-            "device_type": kv.get("device_type"),
-            "id": release_data.get("id"),
-            "tag_name": release_data.get("tag_name"),
-            "published_at": release_data.get("published_at"),
-            "draft": release_data.get("draft"),
-            "prerelease": release_data.get("prerelease"),
-            "zip_url": asset.get("browser_download_url"),
-            "zip_name": asset.get("name"),
-            "zip_size": asset.get("size"),
-            "release_name": release_data.get("name"),
-        }
-
-
 def extract_key_value_pairs(markdown_content):
     if not markdown_content:
         return {}
@@ -235,7 +180,7 @@ def extract_key_value_pairs(markdown_content):
                 # Split by comma, filter empty strings
                 key_value_map[key] = [step.strip() for step in value.split(',') if step.strip()]
             elif key == 'changelog':
-                 # Split by pipe, filter empty strings
+                # Split by pipe, filter empty strings
                 key_value_map[key] = [item.strip() for item in value.split('|') if item.strip()]
             else:
                 key_value_map[key] = value

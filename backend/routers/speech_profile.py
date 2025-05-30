@@ -36,15 +36,6 @@ def get_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
 # Consist of bytes (for initiating deepgram)
 # and audio itself, which we use on post-processing to use speechbrain model
 
-@router.post('/v3/upload-bytes', tags=['v3'])
-def upload_profile(data: UploadProfile, uid: str = Depends(auth.get_current_user_uid)):
-    if data.duration < 10:
-        raise HTTPException(status_code=400, detail="Audio duration is too short")
-    if data.duration > 120:
-        raise HTTPException(status_code=400, detail="Audio duration is too long")
-
-    return {'status': 'ok'}
-
 
 @router.post('/v3/upload-audio', tags=['v3'])
 def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_uid)):
@@ -69,51 +60,6 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
 # ******************************************************
 # ********** SPEECH SAMPLES FROM CONVERSATION **********
 # ******************************************************
-
-
-def expand_speech_profile(
-        conversation_id: str, uid: str, segment_idx: int, assign_type: str, person_id: Optional[str] = None
-):
-    print('expand_speech_profile', conversation_id, uid, segment_idx, assign_type, person_id)
-    if assign_type == 'is_user':
-        profile_path = get_profile_audio_if_exists(uid)
-        if not profile_path:  # TODO: validate this in front
-            raise HTTPException(status_code=404, detail="Speech profile not found")
-        os.remove(profile_path)
-    else:
-        if not get_person(uid, person_id):
-            raise HTTPException(status_code=404, detail="Person not found")
-
-    conversation_recording_path = get_conversation_recording_if_exists(uid, conversation_id)
-    if not conversation_recording_path:
-        raise HTTPException(status_code=404, detail="Conversation recording not found")
-
-    conversation = get_conversation(uid, conversation_id)
-    if not conversation:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-
-    conversation = Conversation(**conversation)
-    segment = conversation.transcript_segments[segment_idx]
-    print('expand_speech_profile', segment)
-    aseg = AudioSegment.from_wav(conversation_recording_path)
-    segment_aseg = aseg[segment.start * 1000:segment.end * 1000]
-    os.remove(conversation_recording_path)
-
-    segment_recording_path = f'_temp/{conversation_id}_segment_{segment_idx}.wav'
-    segment_aseg.export(segment_recording_path, format='wav')
-
-    apply_vad_for_speech_profile(segment_recording_path)
-
-    # remove file in all people + user profile
-    delete_additional_profile_audio(uid, segment_recording_path.split('/')[-1])
-    delete_speech_sample_for_people(uid, segment_recording_path.split('/')[-1])
-
-    if assign_type == 'person_id':
-        upload_user_person_speech_sample(segment_recording_path, uid, person_id)
-    else:
-        upload_additional_profile_audio(segment_recording_path, uid)
-    return {"status": 'ok'}
-
 
 @router.delete('/v3/speech-profile/expand', tags=['v3'])
 def delete_extra_speech_profile_sample(

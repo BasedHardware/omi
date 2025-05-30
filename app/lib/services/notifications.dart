@@ -135,6 +135,7 @@ class NotificationService {
     if (Platform.isIOS) {
       await _firebaseMessaging.getAPNSToken();
     }
+    if (Platform.isMacOS) return;
     String? token = await _firebaseMessaging.getToken();
     await saveFcmToken(token);
     _firebaseMessaging.onTokenRefresh.listen(saveFcmToken);

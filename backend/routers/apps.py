@@ -25,12 +25,11 @@ from utils.apps import get_available_apps, get_available_app_by_id, get_approved
 
 from database.memories import migrate_memories
 
-from utils.llm import generate_description, generate_persona_intro_message
-
+from utils.llm.persona import generate_persona_intro_message, generate_description
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
 from models.app import App, ActionType, AppCreate, AppUpdate
-from utils.other.storage import upload_plugin_logo, delete_plugin_logo, upload_app_thumbnail, get_app_thumbnail_url
+from utils.other.storage import upload_app_logo, delete_app_logo, upload_app_thumbnail, get_app_thumbnail_url
 from utils.social import get_twitter_profile, verify_latest_tweet, \
     upsert_persona_from_twitter_profile, add_twitter_to_persona
 
@@ -102,11 +101,11 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
                 if action.get('action') not in [action_type.value for action_type in ActionType]:
                     raise HTTPException(status_code=422,
                                         detail=f'Unsupported action type. Supported types: {", ".join([action_type.value for action_type in ActionType])}')
-    os.makedirs(f'_temp/plugins', exist_ok=True)
-    file_path = f"_temp/plugins/{file.filename}"
+    os.makedirs(f'_temp/apps', exist_ok=True)
+    file_path = f"_temp/apps/{file.filename}"
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
-    img_url = upload_plugin_logo(file_path, data['id'])
+    img_url = upload_app_logo(file_path, data['id'])
     data['image'] = img_url
     data['created_at'] = datetime.now(timezone.utc)
 
@@ -156,11 +155,11 @@ async def create_persona(persona_data: str = Form(...), file: UploadFile = File(
         data['connected_accounts'] = ['omi']
     data['persona_prompt'] = await generate_persona_prompt(uid, data)
     data['description'] = generate_persona_desc(uid, data['name'])
-    os.makedirs(f'_temp/plugins', exist_ok=True)
-    file_path = f"_temp/plugins/{file.filename}"
+    os.makedirs(f'_temp/apps', exist_ok=True)
+    file_path = f"_temp/apps/{file.filename}"
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
-    img_url = upload_plugin_logo(file_path, data['id'])
+    img_url = upload_app_logo(file_path, data['id'])
     data['image'] = img_url
     data['created_at'] = datetime.now(timezone.utc)
 
@@ -188,12 +187,12 @@ async def update_persona(persona_id: str, persona_data: str = Form(...), file: U
     if file:
         if 'image' in persona and len(persona['image']) > 0 and \
                 persona['image'].startswith('https://storage.googleapis.com/'):
-            delete_plugin_logo(persona['image'])
-        os.makedirs(f'_temp/plugins', exist_ok=True)
-        file_path = f"_temp/plugins/{file.filename}"
+            delete_app_logo(persona['image'])
+        os.makedirs(f'_temp/apps', exist_ok=True)
+        file_path = f"_temp/apps/{file.filename}"
         with open(file_path, 'wb') as f:
             f.write(file.file.read())
-        img_url = upload_plugin_logo(file_path, persona_id)
+        img_url = upload_app_logo(file_path, persona_id)
         data['image'] = img_url
 
     save_username(data['username'], uid)
@@ -307,20 +306,20 @@ def generate_username(handle: str, uid: str = Depends(auth.get_current_user_uid)
 def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(None),
                uid=Depends(auth.get_current_user_uid)):
     data = json.loads(app_data)
-    plugin = get_available_app_by_id(app_id, uid)
-    if not plugin:
+    app = get_available_app_by_id(app_id, uid)
+    if not app:
         raise HTTPException(status_code=404, detail='App not found')
-    if plugin['uid'] != uid:
+    if app['uid'] != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if file:
-        if 'image' in plugin and len(plugin['image']) > 0 and \
-                plugin['image'].startswith('https://storage.googleapis.com/'):
-            delete_plugin_logo(plugin['image'])
-        os.makedirs(f'_temp/plugins', exist_ok=True)
-        file_path = f"_temp/plugins/{file.filename}"
+        if 'image' in app and len(app['image']) > 0 and \
+                app['image'].startswith('https://storage.googleapis.com/'):
+            delete_app_logo(app['image'])
+        os.makedirs(f'_temp/apps', exist_ok=True)
+        file_path = f"_temp/apps/{file.filename}"
         with open(file_path, 'wb') as f:
             f.write(file.file.read())
-        img_url = upload_plugin_logo(file_path, app_id)
+        img_url = upload_app_logo(file_path, app_id)
         data['image'] = img_url
     data['updated_at'] = datetime.now(timezone.utc)
 
@@ -342,9 +341,9 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
     # payment link
     upsert_app_payment_link(data.get('id'), data.get('is_paid', False), data.get('price'), data.get('payment_plan'),
                             data.get('uid'),
-                            previous_price=plugin.get("price", 0))
+                            previous_price=app.get("price", 0))
 
-    if plugin['approved'] and (plugin['private'] is None or plugin['private'] is False):
+    if app['approved'] and (app['private'] is None or app['private'] is False):
         delete_generic_cache('get_public_approved_apps_data')
     delete_app_cache_by_id(app_id)
     return {'status': 'ok'}
@@ -352,13 +351,13 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
 
 @router.delete('/v1/apps/{app_id}', tags=['v1'])
 def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    plugin = get_available_app_by_id(app_id, uid)
-    if not plugin:
+    app = get_available_app_by_id(app_id, uid)
+    if not app:
         raise HTTPException(status_code=404, detail='App not found')
-    if plugin['uid'] != uid:
+    if app['uid'] != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     delete_app_from_db(app_id)
-    if plugin['approved']:
+    if app['approved']:
         delete_generic_cache('get_public_approved_apps_data')
     delete_app_cache_by_id(app_id)
     return {'status': 'ok'}
@@ -530,7 +529,7 @@ def get_notification_scopes():
 
 
 @router.get('/v1/app-capabilities', tags=['v1'])
-def get_plugin_capabilities():
+def get_app_capabilities():
     return [
         {'title': 'Chat', 'id': 'chat'},
         {'title': 'Conversations', 'id': 'memories'},
@@ -853,7 +852,7 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
     app = get_available_app_by_id(app_id, uid)
     token = get_token_only(uid)
     if token:
-        # TODO: Add reason for rejection in payload and also redirect to the plugin page
+        # TODO: Add reason for rejection in payload and also redirect to the app page
         send_notification(token, 'App Rejected 😔',
                           f'Your app {app["name"]} has been rejected. Please make the necessary changes and resubmit for approval.')
     return {'status': 'ok'}

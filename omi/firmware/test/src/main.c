@@ -1,5 +1,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/shell/shell.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/dt-bindings/gpio/nordic-nrf-gpio.h>
 #include <zephyr/pm/device_runtime.h>
 #include "mic.h"
 #include "spi_flash.h"
@@ -8,7 +10,7 @@
 #include "battery.h"
 
 static const struct device *const buttons = DEVICE_DT_GET(DT_ALIAS(buttons));
-
+static const struct gpio_dt_spec rfsw_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rfsw_en_pin), gpios, {0});
 static int init_module(void)
 {
 	int ret;
@@ -35,6 +37,9 @@ static int init_module(void)
 	{
 		printk("Failed to initialize battery module (%d)\n", ret);
 	}
+
+	gpio_pin_configure_dt(&rfsw_en, (GPIO_OUTPUT | NRF_GPIO_DRIVE_S0H1));
+	gpio_pin_set_dt(&rfsw_en, 1);
 	return 0;
 }
 
@@ -53,7 +58,7 @@ int main(void)
 
 	ret = pm_device_runtime_get(buttons);
 	if (ret < 0) {
-		printk("Failed to get device (%d)", ret);
+		printk("Failed to get device (%d)", ret);	
 		shell_execute_cmd(NULL, "sys off");
 		return 0;
 	}
@@ -64,8 +69,8 @@ int main(void)
 
 		ret = k_msgq_get(&input_button, &evt, K_SECONDS(60));
 		if (ret == -EAGAIN) {
-			if (!button_pressed && !is_charging)
-				shell_execute_cmd(NULL, "sys off");
+			// if (!button_pressed && !is_charging)
+			// 	shell_execute_cmd(NULL, "sys off");
             continue;
 		}
 

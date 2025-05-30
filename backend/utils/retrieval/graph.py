@@ -19,10 +19,9 @@ import database.notifications as notification_db
 from models.app import App
 from models.chat import ChatSession, Message
 from models.conversation import Conversation
-from utils.llm import (
+from utils.llm.chat import (
     answer_omi_question,
     answer_omi_question_stream,
-    answer_persona_question_stream,
     requires_context,
     answer_simple_message,
     answer_simple_message_stream,
@@ -34,6 +33,7 @@ from utils.llm import (
     select_structured_filters,
     extract_question_from_conversation,
 )
+from utils.llm.persona import answer_persona_question_stream
 from utils.other.chat_file import FileChatTool
 from utils.other.endpoints import timeit
 from utils.app_integrations import get_github_docs_content
@@ -419,27 +419,27 @@ graph_stream = workflow.compile()
 
 @timeit
 def execute_graph_chat(
-        uid: str, messages: List[Message], plugin: Optional[App] = None, cited: Optional[bool] = False
+        uid: str, messages: List[Message], app: Optional[App] = None, cited: Optional[bool] = False
 ) -> Tuple[str, bool, List[Conversation]]:
-    print('execute_graph_chat plugin    :', plugin.id if plugin else '<none>')
+    print('execute_graph_chat app    :', app.id if app else '<none>')
     tz = notification_db.get_user_time_zone(uid)
     result = graph.invoke(
-        {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": plugin},
+        {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": app},
         {"configurable": {"thread_id": str(uuid.uuid4())}},
     )
     return result.get("answer"), result.get('ask_for_nps', False), result.get("memories_found", [])
 
 
 async def execute_graph_chat_stream(
-        uid: str, messages: List[Message], plugin: Optional[App] = None, cited: Optional[bool] = False,
+        uid: str, messages: List[Message], app: Optional[App] = None, cited: Optional[bool] = False,
         callback_data: dict = {}, chat_session: Optional[ChatSession] = None
 ) -> AsyncGenerator[str, None]:
-    print('execute_graph_chat_stream plugin: ', plugin.id if plugin else '<none>')
+    print('execute_graph_chat_stream app: ', app.id if app else '<none>')
     tz = notification_db.get_user_time_zone(uid)
     callback = AsyncStreamingCallback()
 
     task = asyncio.create_task(graph_stream.ainvoke(
-        {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": plugin,
+        {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": app,
          "streaming": True, "callback": callback, "chat_session": chat_session, },
         {"configurable": {"thread_id": str(uuid.uuid4())}},
     ))

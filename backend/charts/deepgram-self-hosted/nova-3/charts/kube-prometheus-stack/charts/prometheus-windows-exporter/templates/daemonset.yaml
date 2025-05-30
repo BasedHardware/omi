@@ -1,0 +1,192 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "prometheus-windows-exporter.fullname" . }}
+  namespace: {{ include "prometheus-windows-exporter.namespace" . }}
+  labels:
+    {{- include "prometheus-windows-exporter.labels" . | nindent 4 }}
+  {{- with .Values.daemonsetAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "prometheus-windows-exporter.selectorLabels" . | nindent 6 }}
+  {{- with .Values.updateStrategy }}
+  updateStrategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "prometheus-windows-exporter.labels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      {{- with .Values.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      initContainers:
+        - name: configure-firewall
+          image: {{ include "prometheus-windows-exporter.image" . }}
+          command: [ "powershell" ]
+          args: [ "New-NetFirewallRule", "-DisplayName", "'windows-exporter'", "-Direction", "inbound", "-Profile", "Any", "-Action", "Allow", "-LocalPort", "{{ .Values.service.port }}", "-Protocol", "TCP" ]
+        {{- with .Values.extraInitContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      serviceAccountName: {{ include "prometheus-windows-exporter.serviceAccountName" . }}
+      containers:
+        - name: windows-exporter
+          image: {{ include "prometheus-windows-exporter.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --config.file=%CONTAINER_SANDBOX_MOUNT_POINT%/config.yml
+            - --collector.textfile.directories=%CONTAINER_SANDBOX_MOUNT_POINT%
+            - --web.listen-address=:{{ .Values.service.port }}
+            {{- with .Values.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          ports:
+            - name: {{ .Values.service.portName }}
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          livenessProbe:
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+            httpGet:
+              httpHeaders:
+              {{- range $_, $header := .Values.livenessProbe.httpGet.httpHeaders }}
+              - name: {{ $header.name }}
+                value: {{ $header.value }}
+              {{- end }}
+              path: /
+              port: {{ .Values.service.port }}
+              scheme: {{ upper .Values.livenessProbe.httpGet.scheme }}
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            successThreshold: {{ .Values.livenessProbe.successThreshold }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          readinessProbe:
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+            httpGet:
+              httpHeaders:
+              {{- range $_, $header := .Values.readinessProbe.httpGet.httpHeaders }}
+              - name: {{ $header.name }}
+                value: {{ $header.value }}
+              {{- end }}
+              path: /
+              port: {{ .Values.service.port }}
+              scheme: {{ upper .Values.readinessProbe.httpGet.scheme }}
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            successThreshold: {{ .Values.readinessProbe.successThreshold }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /config.yml
+              subPath: config.yml
+            {{- range $_, $mount := .Values.extraHostVolumeMounts }}
+            - name: {{ $mount.name }}
+              mountPath: {{ $mount.mountPath }}
+              readOnly: {{ $mount.readOnly }}
+            {{- end }}
+            {{- range $_, $mount := .Values.sidecarVolumeMount }}
+            - name: {{ $mount.name }}
+              mountPath: {{ $mount.mountPath }}
+              readOnly: true
+            {{- end }}
+            {{- range $_, $mount := .Values.configmaps }}
+            - name: {{ $mount.name }}
+              mountPath: {{ $mount.mountPath }}
+            {{- end }}
+            {{- range $_, $mount := .Values.secrets }}
+            - name: {{ .name }}
+              mountPath: {{ .mountPath }}
+            {{- end }}
+        {{- with .Values.sidecars }}
+        {{- toYaml . | nindent 8 }}
+          {{- if or .Values.sidecarVolumeMount .Values.sidecarHostVolumeMounts }}
+          volumeMounts:
+            {{- range $_, $mount := .Values.sidecarVolumeMount }}
+            - name: {{ $mount.name }}
+              mountPath: {{ $mount.mountPath }}
+              readOnly: {{ $mount.readOnly }}
+            {{- end }}
+            {{- range $_, $mount := .Values.sidecarHostVolumeMounts }}
+            - name: {{ $mount.name }}
+              mountPath: {{ $mount.mountPath }}
+              readOnly: {{ $mount.readOnly }}
+            {{- end }}
+          {{- end }}
+        {{- end }}
+      {{- if or .Values.imagePullSecrets .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- include "prometheus-windows-exporter.imagePullSecrets" (dict "Values" .Values "imagePullSecrets" .Values.imagePullSecrets) | indent 8 }}
+      {{- end }}
+      hostNetwork: {{ .Values.hostNetwork }}
+      hostPID: {{ .Values.hostPID }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.dnsConfig }}
+      dnsConfig:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "prometheus-windows-exporter.fullname" . }}
+        {{- range $_, $mount := .Values.extraHostVolumeMounts }}
+        - name: {{ $mount.name }}
+          hostPath:
+            path: {{ $mount.hostPath }}
+        {{- end }}
+        {{- range $_, $mount := .Values.sidecarVolumeMount }}
+        - name: {{ $mount.name }}
+          emptyDir:
+            medium: Memory
+        {{- end }}
+        {{- range $_, $mount := .Values.sidecarHostVolumeMounts }}
+        - name: {{ $mount.name }}
+          hostPath:
+            path: {{ $mount.hostPath }}
+        {{- end }}
+        {{- range $_, $mount := .Values.configmaps }}
+        - name: {{ $mount.name }}
+          configMap:
+            name: {{ $mount.name }}
+        {{- end }}
+        {{- range $_, $mount := .Values.secrets }}
+        - name: {{ $mount.name }}
+          secret:
+            secretName: {{ $mount.name }}
+        {{- end }}

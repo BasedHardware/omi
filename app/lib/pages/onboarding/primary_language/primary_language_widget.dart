@@ -58,8 +58,7 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
         filteredLanguages = List.from(languages);
       } else {
         filteredLanguages = languages.where((lang) {
-          return lang.key.toLowerCase().contains(searchQuery) ||
-              lang.value.toLowerCase().contains(searchQuery);
+          return lang.key.toLowerCase().contains(searchQuery) || lang.value.toLowerCase().contains(searchQuery);
         }).toList();
       }
 
@@ -81,17 +80,19 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            textBaseline: TextBaseline.alphabetic,
             children: [
-              IconButton(
-                icon: const Icon(Icons.close, color: Colors.white),
-                onPressed: () => Navigator.pop(context),
-              ),
-              const Text(
-                'Select your primary language',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+              const Flexible(
+                child: Text(
+                  'Select your primary language',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: true,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
               ),
               TextButton(
@@ -107,7 +108,8 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
                 child: Text(
                   'Done',
                   style: TextStyle(
-                    color: currentSelectedLanguage == null ? null : Colors.white,
+                    color:
+                        currentSelectedLanguage == null ? null : Colors.white,
                   ),
                 ),
               ),
@@ -213,8 +215,7 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
           // Find the language name for the saved language code
           final homeProvider = Provider.of<HomeProvider>(context, listen: false);
           try {
-            selectedLanguageName =
-                homeProvider.availableLanguages.entries.firstWhere((entry) => entry.value == savedLanguage).key;
+            selectedLanguageName = homeProvider.availableLanguages.entries.firstWhere((entry) => entry.value == savedLanguage).key;
           } catch (e) {
             // If language not found in the map, just use the code
             selectedLanguageName = savedLanguage;
@@ -305,12 +306,7 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
                   width: double.infinity,
                   decoration: BoxDecoration(
                     border: const GradientBoxBorder(
-                      gradient: LinearGradient(colors: [
-                        Color.fromARGB(127, 208, 208, 208),
-                        Color.fromARGB(127, 188, 99, 121),
-                        Color.fromARGB(127, 86, 101, 182),
-                        Color.fromARGB(127, 126, 190, 236)
-                      ]),
+                      gradient: LinearGradient(colors: [Color.fromARGB(127, 208, 208, 208), Color.fromARGB(127, 188, 99, 121), Color.fromARGB(127, 86, 101, 182), Color.fromARGB(127, 126, 190, 236)]),
                       width: 2,
                     ),
                     borderRadius: BorderRadius.circular(12),

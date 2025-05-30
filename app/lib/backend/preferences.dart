@@ -213,6 +213,10 @@ class SharedPreferencesUtil {
 
   set showConversationDeleteConfirmation(bool value) => saveBool("showConversationDeleteConfirmation", value);
 
+  bool get showActionItemDeleteConfirmation => getBool('showActionItemDeleteConfirmation') ?? true;
+
+  set showActionItemDeleteConfirmation(bool value) => saveBool('showActionItemDeleteConfirmation', value);
+
   List<App> get appsList {
     final List<String> apps = getStringList('appsList') ?? [];
     return App.fromJsonList(apps.map((e) => jsonDecode(e)).toList());

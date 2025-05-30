@@ -10,13 +10,14 @@
 #include <zephyr/shell/shell.h>
 #include <zephyr/drivers/wifi/nrf_wifi/bus/rpu_hw_if.h>
 static const struct gpio_dt_spec usr_btn = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(usr_btn), gpios, {0});
-
+static const struct gpio_dt_spec rfsw_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rfsw_en_pin), gpios, {0});
  static int cmd_sys_off(const struct shell *sh, size_t argc, char **argv)
  {
      int rc;
 #if defined(CONFIG_CONSOLE)
      const struct device *const cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 
+     gpio_pin_set_dt(&rfsw_en, 0);
      if (!device_is_ready(cons))
      {
          shell_error(sh, "%s: device not ready.\n", cons->name);

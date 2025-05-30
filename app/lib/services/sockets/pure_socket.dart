@@ -3,12 +3,12 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/status.dart' as socket_channel_status;
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 enum PureSocketStatus { notConnected, connecting, connected, disconnected }
 
@@ -122,7 +122,7 @@ class PureSocket implements IPureSocket {
         'Authorization': await getAuthHeader(),
       },
       pingInterval: const Duration(seconds: 20),
-      connectTimeout: const Duration(seconds: 10),
+      connectTimeout: const Duration(seconds: 15),
     );
     if (_channel?.ready == null) {
       return false;
@@ -208,8 +208,7 @@ class PureSocket implements IPureSocket {
     debugPrintStack(stackTrace: trace);
 
     _listener?.onError(err, trace);
-
-    CrashReporting.reportHandledCrash(err, trace, level: NonFatalExceptionLevel.error);
+    PlatformManager.instance.instabug.reportCrash(err, trace);
   }
 
   @override

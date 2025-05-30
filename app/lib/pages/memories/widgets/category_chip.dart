@@ -21,47 +21,19 @@ class CategoryChip extends StatelessWidget {
 
   Color _getCategoryColor() {
     switch (category) {
-      case MemoryCategory.core:
+      case MemoryCategory.interesting:
         return Colors.blue;
-      case MemoryCategory.lifestyle:
-        return Colors.purple;
-      case MemoryCategory.interests:
-        return Colors.green;
-      case MemoryCategory.work:
-        return Colors.orange;
-      case MemoryCategory.skills:
-        return Colors.red;
-      case MemoryCategory.hobbies:
-        return Colors.amber;
-      case MemoryCategory.habits:
-        return Colors.teal;
-      case MemoryCategory.learnings:
-        return Colors.indigo;
-      case MemoryCategory.other:
+      case MemoryCategory.system:
         return Colors.grey;
     }
   }
 
   IconData _getCategoryIcon() {
     switch (category) {
-      case MemoryCategory.core:
-        return Icons.info_outline;
-      case MemoryCategory.lifestyle:
-        return Icons.home_outlined;
-      case MemoryCategory.interests:
+      case MemoryCategory.interesting:
         return Icons.star_outline;
-      case MemoryCategory.work:
-        return Icons.work_outline;
-      case MemoryCategory.skills:
-        return Icons.psychology_outlined;
-      case MemoryCategory.hobbies:
-        return Icons.sports_esports_outlined;
-      case MemoryCategory.habits:
-        return Icons.repeat_outlined;
-      case MemoryCategory.learnings:
-        return Icons.school_outlined;
-      case MemoryCategory.other:
-        return Icons.label_outline;
+      case MemoryCategory.system:
+        return Icons.settings_outlined;
     }
   }
 
@@ -71,32 +43,11 @@ class CategoryChip extends StatelessWidget {
     // Use shorter display names for categories
     String displayName;
     switch (category) {
-      case MemoryCategory.core:
-        displayName = "Core";
+      case MemoryCategory.interesting:
+        displayName = "Interesting";
         break;
-      case MemoryCategory.lifestyle:
-        displayName = "Life";
-        break;
-      case MemoryCategory.interests:
-        displayName = "Interest";
-        break;
-      case MemoryCategory.work:
-        displayName = "Work";
-        break;
-      case MemoryCategory.skills:
-        displayName = "Skills";
-        break;
-      case MemoryCategory.hobbies:
-        displayName = "Hobby";
-        break;
-      case MemoryCategory.habits:
-        displayName = "Habit";
-        break;
-      case MemoryCategory.learnings:
-        displayName = "Learn";
-        break;
-      case MemoryCategory.other:
-        displayName = "Other";
+      case MemoryCategory.system:
+        displayName = "System";
         break;
     }
 

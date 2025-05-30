@@ -11,10 +11,11 @@ import database.conversations as conversations_db
 # from database.redis_db import get_filter_category_items
 # from database.vector_db import query_vectors_by_metadata
 from models.memories import MemoryDB, Memory, MemoryCategory
-from models.memory import CategoryEnum
+from models.conversation import CategoryEnum
 from utils.apps import update_personas_async
-from utils.llm import identify_category_for_memory
 from firebase_admin import auth
+
+from utils.llm.memories import identify_category_for_memory
 
 router = APIRouter()
 

@@ -8,7 +8,7 @@ import database.notifications as notification_db
 from database import mem_db
 from database import redis_db
 from database.apps import record_app_usage
-from database.chat import add_plugin_message, get_plugin_messages
+from database.chat import add_app_message, get_app_messages
 from database.redis_db import get_generic_cache, set_generic_cache
 from models.app import App, UsageHistoryType
 from models.chat import Message
@@ -16,10 +16,8 @@ from models.conversation import Conversation, ConversationSource
 from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps
 from utils.notifications import send_notification
-from utils.llm import (
-    generate_embedding,
-    get_proactive_message
-)
+from utils.llm.clients import generate_embedding
+from utils.llm.proactive_notification import get_proactive_message
 from database.vector_db import query_vectors_by_metadata
 import database.conversations as conversations_db
 
@@ -133,7 +131,7 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
     for key, message in results.items():
         if not message:
             continue
-        messages.append(add_plugin_message(message, key, uid, conversation.id))
+        messages.append(add_app_message(message, key, uid, conversation.id))
     return messages
 
 
@@ -174,18 +172,18 @@ def _retrieve_contextual_memories(uid: str, user_context):
     return conversations_db.get_conversations_by_id(uid, memories_id)
 
 
-def _hit_proactive_notification_rate_limits(uid: str, plugin: App):
-    sent_at = mem_db.get_proactive_noti_sent_at(uid, plugin.id)
+def _hit_proactive_notification_rate_limits(uid: str, app: App):
+    sent_at = mem_db.get_proactive_noti_sent_at(uid, app.id)
     if sent_at and time.time() - sent_at < PROACTIVE_NOTI_LIMIT_SECONDS:
         return True
 
     # remote
-    sent_at = redis_db.get_proactive_noti_sent_at(uid, plugin.id)
+    sent_at = redis_db.get_proactive_noti_sent_at(uid, app.id)
     if not sent_at:
         return False
-    ttl = redis_db.get_proactive_noti_sent_at_ttl(uid, plugin.id)
+    ttl = redis_db.get_proactive_noti_sent_at_ttl(uid, app.id)
     if ttl > 0:
-        mem_db.set_proactive_noti_sent_at(uid, plugin.id, int(time.time() + ttl), ttl=ttl)
+        mem_db.set_proactive_noti_sent_at(uid, app.id, int(time.time() + ttl), ttl=ttl)
 
     return time.time() - sent_at < PROACTIVE_NOTI_LIMIT_SECONDS
 
@@ -196,14 +194,14 @@ def _set_proactive_noti_sent_at(uid: str, app: App):
     redis_db.set_proactive_noti_sent_at(uid, app.id, int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
 
 
-def _process_proactive_notification(uid: str, token: str, plugin: App, data):
-    if not plugin.has_capability("proactive_notification") or not data:
-        print(f"Plugins {plugin.id} is not proactive_notification or data invalid", uid)
+def _process_proactive_notification(uid: str, token: str, app: App, data):
+    if not app.has_capability("proactive_notification") or not data:
+        print(f"App {app.id} is not proactive_notification or data invalid", uid)
         return None
 
     # rate limits
-    if _hit_proactive_notification_rate_limits(uid, plugin):
-        print(f"Plugins {plugin.id} is reach rate limits 1 noti per user per {PROACTIVE_NOTI_LIMIT_SECONDS}s", uid)
+    if _hit_proactive_notification_rate_limits(uid, app):
+        print(f"App {app.id} is reach rate limits 1 noti per user per {PROACTIVE_NOTI_LIMIT_SECONDS}s", uid)
         return None
 
     max_prompt_char_limit = 128000
@@ -211,12 +209,12 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
 
     prompt = data.get('prompt', '')
     if len(prompt) > max_prompt_char_limit:
-        send_app_notification(token, plugin.name, plugin.id,
+        send_app_notification(token, app.name, app.id,
                                  f"Prompt too long: {len(prompt)}/{max_prompt_char_limit} characters. Please shorten.")
-        print(f"Plugin {plugin.id}, prompt too long, length: {len(prompt)}/{max_prompt_char_limit}", uid)
+        print(f"App {app.id}, prompt too long, length: {len(prompt)}/{max_prompt_char_limit}", uid)
         return None
 
-    filter_scopes = plugin.filter_proactive_notification_scopes(data.get('params', []))
+    filter_scopes = app.filter_proactive_notification_scopes(data.get('params', []))
 
     # context
     context = None
@@ -228,21 +226,21 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
     # messages
     messages = []
     if 'user_chat' in filter_scopes:
-        messages = list(reversed([Message(**msg) for msg in get_plugin_messages(uid, plugin.id, limit=10)]))
+        messages = list(reversed([Message(**msg) for msg in get_app_messages(uid, app.id, limit=10)]))
 
     # print(f'_process_proactive_notification context {context[:100] if context else "empty"}')
 
     # retrive message
     message = get_proactive_message(uid, prompt, filter_scopes, context, messages)
     if not message or len(message) < min_message_char_limit:
-        print(f"Plugins {plugin.id}, message too short", uid)
+        print(f"Plugins {app.id}, message too short", uid)
         return None
 
     # send notification
-    send_app_notification(token, plugin.name, plugin.id, message)
+    send_app_notification(token, app.name, app.id, message)
 
     # set rate
-    _set_proactive_noti_sent_at(uid, plugin)
+    _set_proactive_noti_sent_at(uid, app)
     return message
 
 
@@ -344,7 +342,7 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], c
     for key, message in results.items():
         if not message:
             continue
-        messages.append(add_plugin_message(message, key, uid))
+        messages.append(add_app_message(message, key, uid))
 
     return messages
 
@@ -352,7 +350,7 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], c
 def send_app_notification(token: str, app_name: str, app_id: str, message: str):
     ai_message = NotificationMessage(
         text=message,
-        plugin_id=app_id,
+        app_id=app_id,
         from_integration='true',
         type='text',
         notification_type='plugin',
