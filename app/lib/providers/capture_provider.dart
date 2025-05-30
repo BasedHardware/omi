@@ -486,7 +486,7 @@ class CaptureProvider extends ChangeNotifier
         if (screenStatus == 'undetermined' || screenStatus == 'denied') {
           bool screenGranted = await _screenCaptureChannel.invokeMethod('requestScreenCapturePermission');
           if (!screenGranted) {
-            notifyError('Screen capture permission is required for system audio recording.');
+            AppSnackbar.showSnackbarError('Screen capture permission is required for system audio recording.');
             updateRecordingState(RecordingState.stop);
             return;
           }
@@ -501,7 +501,6 @@ class CaptureProvider extends ChangeNotifier
         BleAudioCodec determinedCodec = BleAudioCodec.pcm16;
       }, onByteReceived: (bytes) {
         if (_socket?.state == SocketServiceState.connected) {
-          debugPrint("Sending system audio bytes to socket: ${bytes.length}");
           _socket?.send(bytes);
         }
       }, onRecording: () {
@@ -528,8 +527,6 @@ class CaptureProvider extends ChangeNotifier
     await _socket?.stop(reason: 'stop system audio recording from Flutter');
     await _cleanupCurrentState();
   }
-
-  // Socket handling
 
   @override
   void onClosed() {
