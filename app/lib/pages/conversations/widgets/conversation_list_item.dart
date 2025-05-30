@@ -10,6 +10,7 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
@@ -83,8 +84,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
           }
         },
         child: Padding(
-          padding:
-              EdgeInsets.only(top: 12, left: widget.isFromOnboarding ? 0 : 16, right: widget.isFromOnboarding ? 0 : 16),
+          padding: EdgeInsets.only(top: 12, left: widget.isFromOnboarding ? 0 : 16, right: widget.isFromOnboarding ? 0 : 16),
           child: Container(
             width: double.maxFinite,
             decoration: BoxDecoration(
@@ -114,8 +114,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                             builder: (context, setState) {
                               return ConfirmationDialog(
                                 title: "Delete Conversation?",
-                                description:
-                                    "Are you sure you want to delete this conversation? This action cannot be undone.",
+                                description: "Are you sure you want to delete this conversation? This action cannot be undone.",
                                 checkboxValue: !showDeleteConfirmation,
                                 checkboxText: "Don't ask me again",
                                 onCheckboxChanged: (value) {
@@ -134,9 +133,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                         });
                   } else {
                     return showDialog(
-                      builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context),
-                          'Unable to Delete Conversation', 'Please check your internet connection and try again.',
-                          singleButton: true, okButtonText: 'OK'),
+                      builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context), 'Unable to Delete Conversation', 'Please check your internet connection and try again.', singleButton: true, okButtonText: 'OK'),
                       context: context,
                     );
                   }
@@ -166,19 +163,13 @@ class _ConversationListItemState extends State<ConversationListItem> {
                           ? const SizedBox.shrink()
                           : Text(
                               structured.overview.decodeString,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium!
-                                  .copyWith(color: Colors.grey.shade300, height: 1.3),
+                              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
                               maxLines: 2,
                             ),
                       widget.conversation.discarded
                           ? Text(
                               widget.conversation.getTranscript(maxCount: 100),
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium!
-                                  .copyWith(color: Colors.grey.shade300, height: 1.3),
+                              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
                             )
                           : const SizedBox(height: 8),
                     ],
@@ -196,49 +187,90 @@ class _ConversationListItemState extends State<ConversationListItem> {
     return Padding(
       padding: const EdgeInsets.only(left: 4.0, right: 12),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          widget.conversation.discarded
-              ? const SizedBox.shrink()
-              : Text(widget.conversation.structured.getEmoji(),
-                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500)),
-          widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded
-              ? const SizedBox(width: 12)
-              : const SizedBox.shrink(),
-          widget.conversation.structured.category.isNotEmpty
-              ? Container(
-                  decoration: BoxDecoration(
-                    color: widget.conversation.getTagColor(),
-                    borderRadius: BorderRadius.circular(16),
+          // 🧠 Emoji + Tag
+          Flexible(
+            fit: FlexFit.tight,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!widget.conversation.discarded)
+                  Text(
+                    widget.conversation.structured.getEmoji(),
+                    style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  child: Text(
-                    widget.conversation.getTag(),
-                    style:
-                        Theme.of(context).textTheme.bodyMedium!.copyWith(color: widget.conversation.getTagTextColor()),
-                    maxLines: 1,
+                if (widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded) const SizedBox(width: 8),
+                if (widget.conversation.structured.category.isNotEmpty)
+                  Flexible(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: widget.conversation.getTagColor(),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      child: Text(
+                        widget.conversation.getTag(),
+                        style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: widget.conversation.getTagTextColor()),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
                   ),
-                )
-              : const SizedBox.shrink(),
-          const SizedBox(
-            width: 16,
+              ],
+            ),
           ),
-          Expanded(
+
+          const SizedBox(width: 12),
+
+          // 🕒 Timestamp + Duration or New
+          FittedBox(
+            fit: BoxFit.scaleDown,
             child: isNew
-                ? const Align(
-                    alignment: Alignment.centerRight,
-                    child: ConversationNewStatusIndicator(text: "New 🚀"),
-                  )
-                : Text(
-                    dateTimeFormat('MMM d, h:mm a', widget.conversation.startedAt ?? widget.conversation.createdAt),
-                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                    maxLines: 1,
-                    textAlign: TextAlign.end,
+                ? const ConversationNewStatusIndicator(text: "New 🚀")
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        dateTimeFormat(
+                          'MMM d, h:mm a',
+                          widget.conversation.startedAt ?? widget.conversation.createdAt,
+                        ),
+                        style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                        maxLines: 1,
+                      ),
+                      if (widget.conversation.transcriptSegments.isNotEmpty && _getConversationDuration().isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8.0),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade800,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              _getConversationDuration(),
+                              style: TextStyle(color: Colors.grey.shade300, fontSize: 11),
+                              maxLines: 1,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-          )
+          ),
         ],
       ),
     );
+  }
+
+  String _getConversationDuration() {
+    if (widget.conversation.transcriptSegments.isEmpty) return '';
+
+    // Get the total duration in seconds
+    int durationSeconds = widget.conversation.getDurationInSeconds();
+    if (durationSeconds <= 0) return '';
+
+    return secondsToCompactDuration(durationSeconds);
   }
 }
 
@@ -251,8 +283,7 @@ class ConversationNewStatusIndicator extends StatefulWidget {
   State<ConversationNewStatusIndicator> createState() => _ConversationNewStatusIndicatorState();
 }
 
-class _ConversationNewStatusIndicatorState extends State<ConversationNewStatusIndicator>
-    with SingleTickerProviderStateMixin {
+class _ConversationNewStatusIndicatorState extends State<ConversationNewStatusIndicator> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _opacityAnim;
 

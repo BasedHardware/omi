@@ -32,6 +32,10 @@ class CloneChatPageState extends State<CloneChatPage> {
       if (provider.userPersona != null) {
         App selectedApp = provider.userPersona!;
 
+        if (!mounted){
+          return;
+        }
+
         var appProvider = Provider.of<AppProvider>(context, listen: false);
         SharedPreferencesUtil().appsList = [selectedApp];
         appProvider.setApps();

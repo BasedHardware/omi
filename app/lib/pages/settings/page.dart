@@ -56,23 +56,19 @@ class _SettingsPageState extends State<SettingsPage> {
   bool loadingExportMemories = false;
 
   Widget _buildOmiModeContent(BuildContext context) {
+    // Group settings by category: Account, Device, Support, Info, Actions
     return Column(
       children: [
-        const SizedBox(height: 32.0),
-        getItemAddOn2(
-          'Need Help? Chat with us',
-          () async {
-            await Intercom.instance.displayMessenger();
-          },
-          icon: Icons.chat,
-        ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 24.0),
+        // Account Settings
         getItemAddOn2(
           'Profile',
           () => routeToPage(context, const ProfilePage()),
-          icon: Icons.person,
+          icon: const Icon(Icons.person, color: Colors.white, size: 22),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 12),
+
+        // Device Settings
         getItemAddOn2(
           'Device Settings',
           () {
@@ -82,56 +78,82 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             );
           },
-          icon: Icons.bluetooth_connected_sharp,
+          icon: const Icon(Icons.bluetooth_connected_sharp, color: Colors.white, size: 22),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
+
+        // Advanced Settings
+        getItemAddOn2(
+          'Developer Mode',
+          () async {
+            await routeToPage(context, const DeveloperSettingsPage());
+            setState(() {});
+          },
+          icon: const Icon(Icons.code, color: Colors.white, size: 22),
+        ),
+        const SizedBox(height: 12),
+
+        // Help & Support
         getItemAddOn2(
           'Guides & Tutorials',
           () async {
             await Intercom.instance.displayHelpCenter();
           },
-          icon: Icons.help_outline_outlined,
+          icon: const Icon(Icons.help_outline_outlined, color: Colors.white, size: 22),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 12),
+        getItemAddOn2(
+          'Need Help? Chat with us',
+          () async {
+            await Intercom.instance.displayMessenger();
+          },
+          icon: const Icon(Icons.chat, color: Colors.white, size: 22),
+        ),
+        const SizedBox(height: 12),
+
+        // Information
         getItemAddOn2(
           'About Omi',
           () => routeToPage(context, const AboutOmiPage()),
-          icon: Icons.workspace_premium_sharp,
+          icon: const Icon(Icons.info_outline, color: Colors.white, size: 22),
         ),
-        const SizedBox(height: 8),
-        getItemAddOn2('Developer Mode', () async {
-          await routeToPage(context, const DeveloperSettingsPage());
-          setState(() {});
-        }, icon: Icons.code),
-        const SizedBox(height: 32),
-        getItemAddOn2('Sign Out', () async {
-          await showDialog(
-            context: context,
-            builder: (ctx) {
-              return getDialog(context, () {
-                Navigator.of(context).pop();
-              }, () async {
-                await SharedPreferencesUtil().clearUserPreferences();
-                Provider.of<PersonaProvider>(context, listen: false).setRouting(PersonaProfileRouting.no_device);
-                await signOut();
-                Navigator.of(context).pop();
-                routeToPage(context, const DeciderWidget(), replace: true);
-              }, "Sign Out?", "Are you sure you want to sign out?");
-            },
-          );
-        }, icon: Icons.logout),
         const SizedBox(height: 24),
+
+        // Actions
+        getItemAddOn2(
+          'Sign Out',
+          () async {
+            await showDialog(
+              context: context,
+              builder: (ctx) {
+                return getDialog(context, () {
+                  Navigator.of(context).pop();
+                }, () async {
+                  await SharedPreferencesUtil().clearUserPreferences();
+                  Provider.of<PersonaProvider>(context, listen: false).setRouting(PersonaProfileRouting.no_device);
+                  await signOut();
+                  Navigator.of(context).pop();
+                  routeToPage(context, const DeciderWidget(), replace: true);
+                }, "Sign Out?", "Are you sure you want to sign out?");
+              },
+            );
+          },
+          icon: const Icon(Icons.logout, color: Colors.white, size: 22),
+        ),
+        const SizedBox(height: 20),
+
+        // Version Info
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0),
           child: Align(
             alignment: Alignment.center,
             child: Text(
               'Version: $version+$buildVersion',
-              style: const TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+              style: const TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 14),
             ),
           ),
         ),
-        const SizedBox(height: 32),
+        const SizedBox(height: 24),
       ],
     );
   }
@@ -139,15 +161,19 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _buildNoDeviceModeContent(BuildContext context) {
     return Column(
       children: [
-        const SizedBox(height: 32.0),
+        const SizedBox(height: 24.0),
+
+        // Help & Support
         getItemAddOn2(
           'Need Help? Chat with us',
           () async {
             await Intercom.instance.displayMessenger();
           },
-          icon: Icons.chat,
+          icon: const Icon(Icons.chat, color: Colors.white, size: 22),
         ),
-        const SizedBox(height: 32),
+        const SizedBox(height: 24),
+
+        // Actions
         getItemAddOn2('Sign Out', () async {
           await showDialog(
             context: context,
@@ -164,19 +190,21 @@ class _SettingsPageState extends State<SettingsPage> {
               }, "Sign Out?", "Are you sure you want to sign out?");
             },
           );
-        }, icon: Icons.logout),
-        const SizedBox(height: 24),
+        }, icon: const Icon(Icons.logout, color: Colors.white, size: 22)),
+        const SizedBox(height: 20),
+
+        // Version Info
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0),
           child: Align(
             alignment: Alignment.center,
             child: Text(
               'Version: $version+$buildVersion',
-              style: const TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+              style: const TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 14),
             ),
           ),
         ),
-        const SizedBox(height: 32),
+        const SizedBox(height: 24),
       ],
     );
   }
@@ -190,8 +218,14 @@ class _SettingsPageState extends State<SettingsPage> {
           appBar: AppBar(
             backgroundColor: Theme.of(context).colorScheme.primary,
             automaticallyImplyLeading: true,
-            title: const Text('Settings'),
-            centerTitle: false,
+            title: const Text(
+              'Settings',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            centerTitle: true,
             leading: IconButton(
               icon: const Icon(Icons.arrow_back_ios_new),
               onPressed: () {

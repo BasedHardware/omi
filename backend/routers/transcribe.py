@@ -97,6 +97,8 @@ async def _listen(
     started_at = time.time()
     timeout_seconds = 420  # 7m # Soft timeout, should < MODAL_TIME_OUT - 3m
     has_timeout = os.getenv('NO_SOCKET_TIMEOUT') is None
+    inactivity_timeout_seconds = 30
+    last_audio_received_time = None
 
     # Send pong every 10s then handle it in the app \
     # since Starlette is not support pong automatically
@@ -105,6 +107,7 @@ async def _listen(
         nonlocal websocket_active
         nonlocal websocket_close_code
         nonlocal started_at
+        nonlocal last_audio_received_time
 
         try:
             while websocket_active:
@@ -117,6 +120,13 @@ async def _listen(
                 # timeout
                 if has_timeout and time.time() - started_at >= timeout_seconds:
                     print(f"Session timeout is hit by soft timeout {timeout_seconds}", uid)
+                    websocket_close_code = 1001
+                    websocket_active = False
+                    break
+
+                # Inactivity timeout
+                if last_audio_received_time and time.time() - last_audio_received_time > inactivity_timeout_seconds:
+                    print(f"Session timeout due to inactivity ({inactivity_timeout_seconds}s)", uid)
                     websocket_close_code = 1001
                     websocket_active = False
                     break
@@ -180,16 +190,21 @@ async def _listen(
 
         _send_message_event(ConversationEvent(event_type="memory_created", memory=conversation, messages=messages))
 
-    async def finalize_processing_conversations(processing: List[dict]):
+    async def finalize_processing_conversations():
         # handle edge case of conversation was actually processing? maybe later, doesn't hurt really anyway.
         # also fix from getMemories endpoint?
+        processing = conversations_db.get_processing_conversations(uid)
         print('finalize_processing_conversations len(processing):', len(processing), uid)
+        if not processing or len(processing) == 0:
+            return
+
+        # sleep for 1 second to yeld the network for ws accepted.
+        await asyncio.sleep(1)
         for conversation in processing:
             await _create_conversation(conversation)
 
     # Process processing conversations
-    processing = conversations_db.get_processing_conversations(uid)
-    asyncio.create_task(finalize_processing_conversations(processing))
+    asyncio.create_task(finalize_processing_conversations())
 
     # Send last completed conversation to client
     async def send_last_conversation():
@@ -298,7 +313,6 @@ async def _listen(
         return
 
     # Process STT
-    _send_message_event(MessageServiceStatusEvent(status="stt_initiating", status_text="STT Service Starting"))
     soniox_socket = None
     soniox_socket2 = None
     speechmatics_socket = None
@@ -380,8 +394,6 @@ async def _listen(
             websocket_close_code = 1011
             await websocket.close(code=websocket_close_code)
             return
-
-    await _process_stt()
 
     # Pusher
     #
@@ -495,9 +507,8 @@ async def _listen(
     transcript_consume = None
     audio_bytes_send = None
     audio_bytes_consume = None
-    pusher_connect, pusher_close, \
-        transcript_send, transcript_consume, \
-        audio_bytes_send, audio_bytes_consume = create_pusher_task_handler()
+    pusher_close = None
+    pusher_connect = None
 
     # Transcripts
     #
@@ -678,11 +689,14 @@ async def _listen(
     async def receive_audio(dg_socket1, dg_socket2, soniox_socket, soniox_socket2, speechmatics_socket1):
         nonlocal websocket_active
         nonlocal websocket_close_code
+        nonlocal last_audio_received_time
 
         timer_start = time.time()
+        last_audio_received_time = timer_start
         try:
             while websocket_active:
                 data = await websocket.receive_bytes()
+                last_audio_received_time = time.time()
                 if codec == 'opus' and sample_rate == 16000:
                     data = decoder.decode(bytes(data), frame_size=frame_size)
                     # audio_data.extend(data)
@@ -733,26 +747,26 @@ async def _listen(
             websocket_close_code = 1011
         finally:
             websocket_active = False
-            if dg_socket1:
-                dg_socket1.finish()
-            if dg_socket2:
-                dg_socket2.finish()
-            if soniox_socket:
-                await soniox_socket.close()
-            if soniox_socket2:
-                await soniox_socket2.close()
-            if speechmatics_socket:
-                await speechmatics_socket.close()
 
     # Start
     #
     try:
+        # Init STT
+        _send_message_event(MessageServiceStatusEvent(status="stt_initiating", status_text="STT Service Starting"))
+        await _process_stt()
+
+        # Init pusher
+        pusher_connect, pusher_close, \
+            transcript_send, transcript_consume, \
+            audio_bytes_send, audio_bytes_consume = create_pusher_task_handler()
+
+        # Tasks
         audio_process_task = asyncio.create_task(
             receive_audio(deepgram_socket, deepgram_socket2, soniox_socket, soniox_socket2, speechmatics_socket)
         )
         stream_transcript_task = asyncio.create_task(stream_transcript_process())
 
-        # Pusher
+        # Pusher tasks
         pusher_tasks = [asyncio.create_task(pusher_connect())]
         if transcript_consume is not None:
             pusher_tasks.append(asyncio.create_task(transcript_consume()))
@@ -768,16 +782,36 @@ async def _listen(
         print(f"Error during WebSocket operation: {e}", uid)
     finally:
         websocket_active = False
+
+        # STT sockets
+        try:
+            if deepgram_socket:
+                deepgram_socket.finish()
+            if deepgram_socket2:
+                deepgram_socket2.finish()
+            if soniox_socket:
+                await soniox_socket.close()
+            if soniox_socket2:
+                await soniox_socket2.close()
+            if speechmatics_socket:
+                await speechmatics_socket.close()
+        except Exception as e:
+            print(f"Error closing STT sockets: {e}", uid)
+
+        # Client sockets
         if websocket.client_state == WebSocketState.CONNECTED:
             try:
                 await websocket.close(code=websocket_close_code)
             except Exception as e:
-                print(f"Error closing WebSocket: {e}", uid)
+                print(f"Error closing Client WebSocket: {e}", uid)
+
+        # Pusher sockets
         if pusher_close is not None:
             try:
                 await pusher_close()
             except Exception as e:
                 print(f"Error closing Pusher: {e}", uid)
+    print("_listen ended", uid)
 
 @router.websocket("/v3/listen")
 async def listen_handler_v3(
