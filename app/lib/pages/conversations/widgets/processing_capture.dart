@@ -304,7 +304,7 @@ getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb,
         ),
       );
     } else if (currentActualState == RecordingState.systemAudioRecord) {
-      text = 'Stop System Audio';
+      text = 'Stop Recording';
       icon = const Icon(Icons.stop, color: Colors.red, size: 12);
     } else {
       text = 'Start Recording';
