@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
@@ -10,14 +11,22 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/validators.dart';
 
 class DeveloperModeProvider extends BaseProvider {
-  final TextEditingController webhookOnConversationCreated = TextEditingController();
-  final TextEditingController webhookOnTranscriptReceived = TextEditingController();
+  final TextEditingController webhookOnConversationCreated =
+      TextEditingController();
+  final TextEditingController webhookOnTranscriptReceived =
+      TextEditingController();
   final TextEditingController webhookAudioBytes = TextEditingController();
   final TextEditingController webhookAudioBytesDelay = TextEditingController();
   final TextEditingController webhookWsAudioBytes = TextEditingController();
   final TextEditingController webhookDaySummary = TextEditingController();
   final TextEditingController customApiUrlController = TextEditingController();
   final TextEditingController newServerUrlController = TextEditingController();
+
+  // STT Server Settings
+  final TextEditingController wyomingServerIpController =
+      TextEditingController();
+  String _sttServerType = 'traditional'; // 'traditional' or 'wyoming'
+  bool _wyomingConnectionTested = false;
 
   bool conversationEventsToggled = false;
   bool transcriptsToggled = false;
@@ -39,6 +48,10 @@ class DeveloperModeProvider extends BaseProvider {
   String currentCustomApiUrl = '';
   String originalApiUrl = '';
 
+  // STT Server Settings Getters
+  String get sttServerType => _sttServerType;
+  bool get wyomingConnectionTested => _wyomingConnectionTested;
+
   // Get the default API base URL from the Env class
   String get defaultApiBaseUrl => Env.apiBaseUrl ?? '';
 
@@ -59,6 +72,188 @@ class DeveloperModeProvider extends BaseProvider {
       url = '$url/';
     }
     return url;
+  }
+
+  // STT Server Methods
+  void onSttServerTypeChanged(String newType) {
+    _sttServerType = newType;
+    notifyListeners();
+    // Auto-save STT settings when changed
+    _saveSttSettings();
+  }
+
+  Future<bool> testWyomingConnection(String ipAddress) async {
+    if (ipAddress.trim().isEmpty) return false;
+
+    try {
+      // Parse IP address and port
+      String host = 'localhost';
+      int port = 10300;
+
+      if (ipAddress.contains(':')) {
+        final parts = ipAddress.split(':');
+        host = parts[0];
+        port = int.tryParse(parts[1]) ?? 10300;
+      } else {
+        host = ipAddress;
+      }
+
+      print('Testing Wyoming connection to $host:$port');
+
+      // Test TCP connection to Wyoming server
+      final socket =
+          await Socket.connect(host, port, timeout: const Duration(seconds: 5));
+      await socket.close();
+
+      _wyomingConnectionTested = true;
+      notifyListeners();
+
+      print('Wyoming connection successful');
+      return true;
+    } catch (e) {
+      print('Wyoming connection test failed: $e');
+      _wyomingConnectionTested = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+// Save STT settings to SharedPreferences
+  Future<void> _saveSttSettings() async {
+    try {
+      final prefs = SharedPreferencesUtil();
+      prefs.sttServerType = _sttServerType;
+      prefs.wyomingServerIp = wyomingServerIpController.text;
+      print(
+          'STT settings saved: $_sttServerType, ${wyomingServerIpController.text}');
+    } catch (e) {
+      print('Failed to save STT settings: $e');
+    }
+  }
+
+// Load STT settings from SharedPreferences
+  Future<void> _loadSttSettings() async {
+    try {
+      final prefs = SharedPreferencesUtil();
+      _sttServerType = prefs.sttServerType;
+      wyomingServerIpController.text = prefs.wyomingServerIp;
+      print(
+          'STT settings loaded: $_sttServerType, ${wyomingServerIpController.text}');
+      notifyListeners();
+    } catch (e) {
+      print('Failed to load STT settings: $e');
+    }
+  }
+
+// Also update your saveSettings method to include STT settings
+  void saveSettings() async {
+    if (savingSettingsLoading) return;
+    setIsLoading(true);
+    final prefs = SharedPreferencesUtil();
+
+    try {
+      final customApiUrl = customApiUrlController.text.trim();
+      if (customApiUrl.isNotEmpty && !isValidUrl(customApiUrl)) {
+        AppSnackbar.showSnackbarError('Invalid Custom Backend URL');
+        return;
+      }
+
+      if (webhookAudioBytes.text.isNotEmpty &&
+          !isValidUrl(webhookAudioBytes.text)) {
+        AppSnackbar.showSnackbarError('Invalid audio bytes webhook URL');
+        return;
+      }
+      if (webhookAudioBytes.text.isNotEmpty &&
+          webhookAudioBytesDelay.text.isEmpty) {
+        webhookAudioBytesDelay.text = '5';
+      }
+      if (webhookOnTranscriptReceived.text.isNotEmpty &&
+          !isValidUrl(webhookOnTranscriptReceived.text)) {
+        AppSnackbar.showSnackbarError(
+            'Invalid realtime transcript webhook URL');
+        return;
+      }
+      if (webhookOnConversationCreated.text.isNotEmpty &&
+          !isValidUrl(webhookOnConversationCreated.text)) {
+        AppSnackbar.showSnackbarError(
+            'Invalid conversation created webhook URL');
+        return;
+      }
+      if (webhookDaySummary.text.isNotEmpty &&
+          !isValidUrl(webhookDaySummary.text)) {
+        AppSnackbar.showSnackbarError('Invalid day summary webhook URL');
+        return;
+      }
+
+      // Validate Wyoming IP if Wyoming is selected
+      if (_sttServerType == 'wyoming' &&
+          wyomingServerIpController.text.trim().isEmpty) {
+        AppSnackbar.showSnackbarError(
+            'Wyoming server IP address is required when Wyoming is selected');
+        return;
+      }
+
+      // Update webhook URLs
+      await Future.wait([
+        setUserWebhookUrl(
+          type: 'audio_bytes',
+          url:
+              '${webhookAudioBytes.text.trim()},${webhookAudioBytesDelay.text.trim()}',
+        ),
+        setUserWebhookUrl(
+          type: 'realtime_transcript',
+          url: webhookOnTranscriptReceived.text.trim(),
+        ),
+        setUserWebhookUrl(
+          type: 'memory_created',
+          url: webhookOnConversationCreated.text.trim(),
+        ),
+        setUserWebhookUrl(
+          type: 'day_summary',
+          url: webhookDaySummary.text.trim(),
+        ),
+      ]);
+
+      // Save webhook URLs to preferences
+      prefs.webhookAudioBytes = webhookAudioBytes.text;
+      prefs.webhookAudioBytesDelay = webhookAudioBytesDelay.text;
+      prefs.webhookOnTranscriptReceived = webhookOnTranscriptReceived.text;
+      prefs.webhookOnConversationCreated = webhookOnConversationCreated.text;
+      prefs.webhookDaySummary = webhookDaySummary.text;
+
+      // Save new custom API URL and add to list if not empty
+      await Env.setCustomApiBaseUrl(customApiUrl);
+      currentCustomApiUrl = customApiUrl;
+      if (customApiUrl.isNotEmpty) {
+        await addNewCustomApiUrl(customApiUrl);
+      }
+
+      await _saveSttSettings();
+
+      prefs.localSyncEnabled = localSyncEnabled;
+      prefs.devModeJoanFollowUpEnabled = followUpQuestionEnabled;
+      prefs.transcriptionDiagnosticEnabled = transcriptionDiagnosticEnabled;
+
+      MixpanelManager().settingsSaved(
+        hasWebhookConversationCreated: conversationEventsToggled,
+        hasWebhookTranscriptReceived: transcriptsToggled,
+      );
+
+      AppDialog.show(
+        title: 'Settings Saved',
+        content:
+            'Your settings have been saved. Please restart the app for changes to take effect.',
+        singleButton: true,
+        okButtonText: 'OK',
+      );
+    } catch (e) {
+      Logger.error('Error occurred while saving settings: $e');
+      AppSnackbar.showSnackbarError(
+          'Failed to save settings. Please try again.');
+    } finally {
+      setIsLoading(false);
+      notifyListeners();
+    }
   }
 
   void onConversationEventsToggled(bool value) {
@@ -114,7 +309,8 @@ class DeveloperModeProvider extends BaseProvider {
       audioBytesToggled = res['audio_bytes'];
       daySummaryToggled = res['day_summary'];
     }
-    SharedPreferencesUtil().conversationEventsToggled = conversationEventsToggled;
+    SharedPreferencesUtil().conversationEventsToggled =
+        conversationEventsToggled;
     SharedPreferencesUtil().transcriptsToggled = transcriptsToggled;
     SharedPreferencesUtil().audioBytesToggled = audioBytesToggled;
     SharedPreferencesUtil().daySummaryToggled = daySummaryToggled;
@@ -122,58 +318,111 @@ class DeveloperModeProvider extends BaseProvider {
   }
 
   Future initialize() async {
+    if (savingSettingsLoading) return;
     setIsLoading(true);
-    localSyncEnabled = SharedPreferencesUtil().localSyncEnabled;
-    webhookOnConversationCreated.text = SharedPreferencesUtil().webhookOnConversationCreated;
-    webhookOnTranscriptReceived.text = SharedPreferencesUtil().webhookOnTranscriptReceived;
-    webhookAudioBytes.text = SharedPreferencesUtil().webhookAudioBytes;
-    webhookAudioBytesDelay.text = SharedPreferencesUtil().webhookAudioBytesDelay;
-    followUpQuestionEnabled = SharedPreferencesUtil().devModeJoanFollowUpEnabled;
-    transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
-    conversationEventsToggled = SharedPreferencesUtil().conversationEventsToggled;
-    transcriptsToggled = SharedPreferencesUtil().transcriptsToggled;
-    audioBytesToggled = SharedPreferencesUtil().audioBytesToggled;
-    daySummaryToggled = SharedPreferencesUtil().daySummaryToggled;
 
-    final prefs = SharedPreferencesUtil();
+    try {
+      // Only load from SharedPreferences if values are empty
+      if (webhookOnConversationCreated.text.isEmpty) {
+        webhookOnConversationCreated.text =
+            SharedPreferencesUtil().webhookOnConversationCreated;
+      }
+      if (webhookOnTranscriptReceived.text.isEmpty) {
+        webhookOnTranscriptReceived.text =
+            SharedPreferencesUtil().webhookOnTranscriptReceived;
+      }
+      if (webhookAudioBytes.text.isEmpty) {
+        webhookAudioBytes.text = SharedPreferencesUtil().webhookAudioBytes;
+      }
+      if (webhookAudioBytesDelay.text.isEmpty) {
+        webhookAudioBytesDelay.text =
+            SharedPreferencesUtil().webhookAudioBytesDelay;
+      }
 
-    // Initialize server URL management
-    originalApiUrl = defaultApiBaseUrl;
-    currentCustomApiUrl = prefs.getString(Env.customApiBaseUrlKey) ?? '';
-    customApiUrlController.text = currentCustomApiUrl;
+      // Load other settings only if not already set
+      if (!followUpQuestionEnabled) {
+        followUpQuestionEnabled =
+            SharedPreferencesUtil().devModeJoanFollowUpEnabled;
+      }
+      if (!transcriptionDiagnosticEnabled) {
+        transcriptionDiagnosticEnabled =
+            SharedPreferencesUtil().transcriptionDiagnosticEnabled;
+      }
+      if (!localSyncEnabled) {
+        localSyncEnabled = SharedPreferencesUtil().localSyncEnabled;
+      }
 
-    // Load saved custom API URLs
-    loadCustomApiUrls();
+      final prefs = SharedPreferencesUtil();
 
-    await Future.wait([
-      getWebhooksStatus(),
-      getUserWebhookUrl(type: 'audio_bytes').then((url) {
-        List<dynamic> parts = url.split(',');
-        if (parts.length == 2) {
-          webhookAudioBytes.text = parts[0].toString();
-          webhookAudioBytesDelay.text = parts[1].toString();
-        } else {
-          webhookAudioBytes.text = url;
-          webhookAudioBytesDelay.text = '5';
-        }
-        SharedPreferencesUtil().webhookAudioBytes = webhookAudioBytes.text;
-        SharedPreferencesUtil().webhookAudioBytesDelay = webhookAudioBytesDelay.text;
-      }),
-      getUserWebhookUrl(type: 'realtime_transcript').then((url) {
-        webhookOnTranscriptReceived.text = url;
-        SharedPreferencesUtil().webhookOnTranscriptReceived = url;
-      }),
-      getUserWebhookUrl(type: 'memory_created').then((url) {
-        webhookOnConversationCreated.text = url;
-        SharedPreferencesUtil().webhookOnConversationCreated = url;
-      }),
-      getUserWebhookUrl(type: 'day_summary').then((url) {
-        webhookDaySummary.text = url;
-        SharedPreferencesUtil().webhookDaySummary = url;
-      }),
-    ]);
-    setIsLoading(false);
-    notifyListeners();
+      if (originalApiUrl.isEmpty) {
+        originalApiUrl = defaultApiBaseUrl;
+      }
+      if (currentCustomApiUrl.isEmpty) {
+        currentCustomApiUrl = prefs.getString(Env.customApiBaseUrlKey) ?? '';
+        customApiUrlController.text = currentCustomApiUrl;
+      }
+
+      // Load saved custom API URLs
+      loadCustomApiUrls();
+
+      await _loadSttSettings();
+
+      // Only fetch webhook status if toggles are not set
+      if (!conversationEventsToggled &&
+          !transcriptsToggled &&
+          !audioBytesToggled &&
+          !daySummaryToggled) {
+        await getWebhooksStatus();
+      }
+
+      // Only fetch webhook URLs if they're empty
+      if (webhookAudioBytes.text.isEmpty ||
+          webhookOnTranscriptReceived.text.isEmpty ||
+          webhookOnConversationCreated.text.isEmpty ||
+          webhookDaySummary.text.isEmpty) {
+        await Future.wait([
+          getUserWebhookUrl(type: 'audio_bytes').then((url) {
+            if (webhookAudioBytes.text.isEmpty) {
+              List<dynamic> parts = url.split(',');
+              if (parts.length == 2) {
+                webhookAudioBytes.text = parts[0].toString();
+                webhookAudioBytesDelay.text = parts[1].toString();
+              } else {
+                webhookAudioBytes.text = url;
+                webhookAudioBytesDelay.text = '5';
+              }
+              SharedPreferencesUtil().webhookAudioBytes =
+                  webhookAudioBytes.text;
+              SharedPreferencesUtil().webhookAudioBytesDelay =
+                  webhookAudioBytesDelay.text;
+            }
+          }),
+          getUserWebhookUrl(type: 'realtime_transcript').then((url) {
+            if (webhookOnTranscriptReceived.text.isEmpty) {
+              webhookOnTranscriptReceived.text = url;
+              SharedPreferencesUtil().webhookOnTranscriptReceived = url;
+            }
+          }),
+          getUserWebhookUrl(type: 'memory_created').then((url) {
+            if (webhookOnConversationCreated.text.isEmpty) {
+              webhookOnConversationCreated.text = url;
+              SharedPreferencesUtil().webhookOnConversationCreated = url;
+            }
+          }),
+          getUserWebhookUrl(type: 'day_summary').then((url) {
+            if (webhookDaySummary.text.isEmpty) {
+              webhookDaySummary.text = url;
+              SharedPreferencesUtil().webhookDaySummary = url;
+            }
+          }),
+        ]);
+      }
+    } catch (e) {
+      Logger.error('Error occurred while initializing settings: $e');
+    } finally {
+      setIsLoading(false);
+      notifyListeners();
+    }
   }
 
   void loadCustomApiUrls() {
@@ -182,7 +431,8 @@ class DeveloperModeProvider extends BaseProvider {
     customApiUrls = savedUrls.toSet().toList(); // Remove duplicates
 
     // Add current URL if it's not in the list and it's not empty
-    if (currentCustomApiUrl.isNotEmpty && !customApiUrls.contains(currentCustomApiUrl)) {
+    if (currentCustomApiUrl.isNotEmpty &&
+        !customApiUrls.contains(currentCustomApiUrl)) {
       customApiUrls.add(currentCustomApiUrl);
       saveCustomApiUrls();
     }
@@ -264,84 +514,6 @@ class DeveloperModeProvider extends BaseProvider {
     return "Omi Official Server";
   }
 
-  void saveSettings() async {
-    if (savingSettingsLoading) return;
-    setIsLoading(true);
-    final prefs = SharedPreferencesUtil();
-
-    final customApiUrl = customApiUrlController.text.trim();
-    if (customApiUrl.isNotEmpty && !isValidUrl(customApiUrl)) {
-      AppSnackbar.showSnackbarError('Invalid Custom Backend URL');
-      setIsLoading(false);
-      return;
-    }
-
-    if (webhookAudioBytes.text.isNotEmpty && !isValidUrl(webhookAudioBytes.text)) {
-      AppSnackbar.showSnackbarError('Invalid audio bytes webhook URL');
-      setIsLoading(false);
-      return;
-    }
-    if (webhookAudioBytes.text.isNotEmpty && webhookAudioBytesDelay.text.isEmpty) {
-      webhookAudioBytesDelay.text = '5';
-    }
-    if (webhookOnTranscriptReceived.text.isNotEmpty && !isValidUrl(webhookOnTranscriptReceived.text)) {
-      AppSnackbar.showSnackbarError('Invalid realtime transcript webhook URL');
-      setIsLoading(false);
-      return;
-    }
-    if (webhookOnConversationCreated.text.isNotEmpty && !isValidUrl(webhookOnConversationCreated.text)) {
-      AppSnackbar.showSnackbarError('Invalid conversation created webhook URL');
-      setIsLoading(false);
-      return;
-    }
-    if (webhookDaySummary.text.isNotEmpty && !isValidUrl(webhookDaySummary.text)) {
-      AppSnackbar.showSnackbarError('Invalid day summary webhook URL');
-      setIsLoading(false);
-      return;
-    }
-
-    var w1 = setUserWebhookUrl(
-      type: 'audio_bytes',
-      url: '${webhookAudioBytes.text.trim()},${webhookAudioBytesDelay.text.trim()}',
-    );
-    var w2 = setUserWebhookUrl(type: 'realtime_transcript', url: webhookOnTranscriptReceived.text.trim());
-    var w3 = setUserWebhookUrl(type: 'memory_created', url: webhookOnConversationCreated.text.trim());
-    var w4 = setUserWebhookUrl(type: 'day_summary', url: webhookDaySummary.text.trim());
-    try {
-      Future.wait([w1, w2, w3, w4]);
-      prefs.webhookAudioBytes = webhookAudioBytes.text;
-      prefs.webhookAudioBytesDelay = webhookAudioBytesDelay.text;
-      prefs.webhookOnTranscriptReceived = webhookOnTranscriptReceived.text;
-      prefs.webhookOnConversationCreated = webhookOnConversationCreated.text;
-      prefs.webhookDaySummary = webhookDaySummary.text;
-
-      // Save new custom API URL and add to list if not empty
-      await Env.setCustomApiBaseUrl(customApiUrl);
-      currentCustomApiUrl = customApiUrl;
-      if (customApiUrl.isNotEmpty) {
-        await addNewCustomApiUrl(customApiUrl);
-      }
-    } catch (e) {
-      Logger.error('Error occurred while updating endpoints: $e');
-    }
-    prefs.localSyncEnabled = localSyncEnabled;
-    prefs.devModeJoanFollowUpEnabled = followUpQuestionEnabled;
-    prefs.transcriptionDiagnosticEnabled = transcriptionDiagnosticEnabled;
-
-    MixpanelManager().settingsSaved(
-      hasWebhookConversationCreated: conversationEventsToggled,
-      hasWebhookTranscriptReceived: transcriptsToggled,
-    );
-    setIsLoading(false);
-    notifyListeners();
-    AppDialog.show(
-      title: 'Settings Saved',
-      content: 'Your settings have been saved. Please restart the app for the backend URL change to take effect.',
-      singleButton: true,
-      okButtonText: 'OK',
-    );
-  }
-
   void setIsLoading(bool value) {
     savingSettingsLoading = value;
     notifyListeners();
@@ -360,5 +532,19 @@ class DeveloperModeProvider extends BaseProvider {
   void onTranscriptionDiagnosticChanged(var value) {
     transcriptionDiagnosticEnabled = value;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    webhookOnConversationCreated.dispose();
+    webhookOnTranscriptReceived.dispose();
+    webhookAudioBytes.dispose();
+    webhookAudioBytesDelay.dispose();
+    webhookWsAudioBytes.dispose();
+    webhookDaySummary.dispose();
+    customApiUrlController.dispose();
+    newServerUrlController.dispose();
+    wyomingServerIpController.dispose();
+    super.dispose();
   }
 }

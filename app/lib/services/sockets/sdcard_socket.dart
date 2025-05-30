@@ -8,16 +8,24 @@ import 'package:omi/env/env.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:web_socket_channel/io.dart';
 
-enum WebsocketConnectionStatus { notConnected, connected, failed, closed, error }
+enum WebsocketConnectionStatus {
+  notConnected,
+  connected,
+  failed,
+  closed,
+  error
+}
 
 // TODO: Implement from pure socket
 class SdCardSocketService {
   IOWebSocketChannel? sdCardChannel;
-  WebsocketConnectionStatus sdCardConnectionState = WebsocketConnectionStatus.notConnected;
+  WebsocketConnectionStatus sdCardConnectionState =
+      WebsocketConnectionStatus.notConnected;
   Timer? _reconnectionTimer;
   SdCardSocketService();
 
-  Future<void> setupSdCardWebSocket({required Function onMessageReceived, String? btConnectedTime}) async {
+  Future<void> setupSdCardWebSocket(
+      {required Function onMessageReceived, String? btConnectedTime}) async {
     //    IOWebSocketChannel? sdCardChannel;
     try {
       sdCardChannel = await openSdCardStream(
@@ -36,7 +44,8 @@ class SdCardSocketService {
         onWebsocketConnectionClosed: (int? closeCode, String? closeReason) {
           sdCardConnectionState = WebsocketConnectionStatus.closed;
           //    //reconnectSdCardWebSocket(onMessageReceived: onMessageReceived);
-          debugPrint('WebSocket connection closed2 sd: code ~ $closeCode, reason ~ $closeReason');
+          debugPrint(
+              'WebSocket connection closed2 sd: code ~ $closeCode, reason ~ $closeReason');
           //    notifyListeners();
         },
         onWebsocketConnectionError: (err) {
@@ -54,7 +63,8 @@ class SdCardSocketService {
     }
   }
 
-  Future<void> attemptReconnection({required Function onMessageReceived, String? btConnectedTime}) async {
+  Future<void> attemptReconnection(
+      {required Function onMessageReceived, String? btConnectedTime}) async {
     _reconnectionTimer?.cancel();
     debugPrint('Attempting reconnection');
     _reconnectionTimer = Timer(const Duration(seconds: 5), () {
@@ -75,12 +85,12 @@ class SdCardSocketService {
   }) async {
     debugPrint('Websocket Opening sd card');
     final recordingsLanguage = SharedPreferencesUtil().userPrimaryLanguage;
-    // var params = '?language=$recordingsLanguage&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
-    //     '&include_speech_profile=$includeSpeechProfile&new_memory_watch=$newMemoryWatch&stt_service=${SharedPreferencesUtil().transcriptionModel}';
-    var params = '?uid=${SharedPreferencesUtil().uid}&bt_connected_time=$btConnectedTime';
+    var params =
+        '?uid=${SharedPreferencesUtil().uid}&bt_connected_time=$btConnectedTime';
     debugPrint('btConnectedTime: $btConnectedTime');
     IOWebSocketChannel channel = IOWebSocketChannel.connect(
-      Uri.parse('${Env.apiBaseUrl!.replaceAll('https', 'wss')}sdcard_stream$params'),
+      Uri.parse(
+          '${Env.apiBaseUrl!.replaceAll('https', 'wss')}sdcard_stream$params'),
       // headers: {'Authorization': await getAuthHeader()},
     );
 
@@ -116,7 +126,8 @@ class SdCardSocketService {
         },
         onError: (err, stackTrace) {
           onWebsocketConnectionError(err); // error during connection
-          CrashReporting.reportHandledCrash(err!, stackTrace, level: NonFatalExceptionLevel.warning);
+          CrashReporting.reportHandledCrash(err!, stackTrace,
+              level: NonFatalExceptionLevel.warning);
         },
         onDone: (() {
           debugPrint('Websocket connection onDone sd'); // FIXME
@@ -128,7 +139,8 @@ class SdCardSocketService {
       // no closing reason or code
       print(err);
       debugPrint('Websocket connection failed sd: $err');
-      CrashReporting.reportHandledCrash(err!, stackTrace, level: NonFatalExceptionLevel.warning);
+      CrashReporting.reportHandledCrash(err!, stackTrace,
+          level: NonFatalExceptionLevel.warning);
       onWebsocketConnectionFailed(err); // initial connection failed
     });
 
