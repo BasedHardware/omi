@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from modal import Image, App, asgi_app, Secret
 from routers import workflow, chat, firmware, plugins, transcribe, notifications, \
     speech_profile, agents, users, trends, sync, apps, custom_auth, \
-    payment, integration, conversations, memories, mcp, oauth # Added oauth
+    payment, integration, conversations, memories, mcp, oauth, pusher # Added oauth and pusher
 
 from utils.other.timeout import TimeoutMiddleware
 
@@ -42,6 +42,7 @@ app.include_router(oauth.router) # Added oauth router
 
 app.include_router(payment.router)
 app.include_router(mcp.router)
+app.include_router(pusher.router)
 
 
 methods_timeout = {

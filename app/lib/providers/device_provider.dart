@@ -1,19 +1,27 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/http/api/device.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:http/http.dart' as http;
+import 'package:omi/utils/logger.dart';
+import 'package:http/http.dart' show MediaType;
+import 'package:omi/backend/http/shared.dart';
 
 class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption {
   CaptureProvider? captureProvider;
@@ -40,6 +48,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   Timer? _disconnectNotificationTimer;
 
+  // Image stream listener
+  StreamSubscription? _bleImageBytesListener;
+
   DeviceProvider() {
     ServiceManager.instance().device.subscribe(this, this);
   }
@@ -53,6 +64,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     connectedDevice = device;
     pairedDevice = device;
     await getDeviceInfo();
+    
+    // CRITICAL FIX: Update connectedDevice with the corrected device info from getDeviceInfo()
+    if (pairedDevice != null && connectedDevice != null) {
+      connectedDevice = pairedDevice!.copyWith();
+    }
+    
     print('setConnectedDevice: $device');
     notifyListeners();
   }
@@ -232,6 +249,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void dispose() {
     _bleBatteryLevelListener?.cancel();
     _reconnectionTimer?.cancel();
+    _bleImageBytesListener?.cancel(); // Cancel image listener on dispose
     ServiceManager.instance().device.unsubscribe(this);
     super.dispose();
   }
@@ -296,7 +314,47 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       _hasLowBatteryAlerted = false;
     }
     updateConnectingStatus(false);
-    await captureProvider?.streamDeviceRecording(device: device);
+
+    // Check if the connected device is an Omi device before starting image listener
+    var connection = await ServiceManager.instance().device.ensureConnection(device.id);
+    if (connection is OmiDeviceConnection) {
+      _bleImageBytesListener?.cancel(); // Cancel previous listener if exists
+      _bleImageBytesListener = await (connection as OmiDeviceConnection).getBleImageBytesListener(
+        onImageReceived: (Uint8List imageData) async {
+          debugPrint('Received complete image from BLE, size: ${imageData.length}');
+          
+          // ** IMMEDIATE LOCAL DISPLAY **
+          // Create a local image object for immediate display
+          final timestamp = DateTime.now();
+          final timestampString = timestamp.millisecondsSinceEpoch.toString();
+          final localImage = {
+            'id': 'openglass_$timestampString',  // **FIX: Use openglass_ prefix to match backend expectations**
+            'data': imageData,
+            'timestamp': timestamp,
+            'uploaded': false,
+            'thumbnail_url': null,
+          };
+          
+          // Notify listeners immediately for local display
+          // TODO: Add this to a local images list in CaptureProvider
+          captureProvider?.addLocalImage(localImage);
+          
+          // ** BACKGROUND CLOUD UPLOAD **
+          // Upload to cloud in background without blocking UI - **FIX: Pass original timestamp**
+          _uploadImageToCloud(imageData, originalTimestamp: timestampString);
+        },
+      );
+    }
+
+    // Only start device recording for audio-capable devices (skip OpenGlass)
+    if (device.type != DeviceType.openglass) {
+      await captureProvider?.streamDeviceRecording(device: device);
+      debugPrint('🎙️ Started device recording for ${device.name} (audio-capable device)');
+    } else {
+      debugPrint('📷 Skipped device recording for ${device.name} (camera-only OpenGlass device)');
+      // For OpenGlass, just ensure it's registered but don't start audio recording
+      captureProvider?.updateRecordingDevice(device);
+    }
 
     await getDeviceInfo();
     SharedPreferencesUtil().deviceName = device.name;
@@ -424,5 +482,181 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
     _bleDisconnectDevice(connectedDevice!);
     _reconnectAt = DateTime.now().add(Duration(seconds: 30));
+  }
+
+  Future _uploadImageToCloud(Uint8List imageData, {String? originalTimestamp}) async {
+    // **FIX: Define timestamp at method level to avoid scope issues**
+    final timestamp = originalTimestamp ?? DateTime.now().millisecondsSinceEpoch.toString();
+    
+    // Upload to cloud in background without blocking UI
+    try {
+      // Properly construct URL - ensure no double slashes
+      String baseUrl = Env.apiBaseUrl ?? 'http://127.0.0.1:8000';
+      if (baseUrl.endsWith('/')) {
+        baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+      }
+      final url = Uri.parse('$baseUrl/v2/files');
+      debugPrint('Background uploading image to: $url');
+      
+      var request = http.MultipartRequest('POST', url);
+      
+      // Add authorization header
+      request.headers.addAll({'Authorization': await getAuthHeader()});
+      
+      request.files.add(http.MultipartFile.fromBytes(
+        'files', // The field name the backend expects for the file
+        imageData,
+        filename: 'openglass_image_$timestamp.jpg',
+      ));
+      
+      // Send request with 60 second timeout (increased from default)
+      var response = await request.send().timeout(
+        const Duration(seconds: 60),
+        onTimeout: () {
+          debugPrint('Background image upload timed out after 60 seconds');
+          throw TimeoutException('Background image upload timed out', const Duration(seconds: 60));
+        },
+      );
+      
+      if (response.statusCode == 200) {
+        debugPrint('Background image upload successful');
+        var responseBody = await response.stream.bytesToString();
+        debugPrint('Upload response: $responseBody');
+        
+        // **NEW: Parse response and handle complete image data with description**
+        try {
+          final List<dynamic> responseData = json.decode(responseBody);
+          
+          if (responseData.isNotEmpty) {
+            final imageData = responseData[0];
+            final imageId = imageData['id'];
+            final description = imageData['description'];
+            final thumbnailUrl = imageData['thumbnail'];
+            final isInteresting = imageData['is_interesting'] ?? true;
+            
+            debugPrint('✅ Received complete image data: ID=$imageId');
+            debugPrint('🎨 Description: ${description?.toString().substring(0, 50)}...');
+            debugPrint('🎯 Is interesting: $isInteresting');
+            
+            // **UPDATE CAPTURE PROVIDER WITH COMPLETE IMAGE DATA**
+            if (captureProvider != null) {
+              final completeImage = {
+                'id': imageId,
+                'description': description,
+                'thumbnail_url': thumbnailUrl,
+                'url': imageData['url'],
+                'mime_type': imageData['mime_type'],
+                'created_at': imageData['created_at'],
+                'is_interesting': isInteresting,
+              };
+              
+              // Add to cloud images with description ready for immediate display
+              captureProvider!.onImageReceived(completeImage);
+              debugPrint('📸 Updated capture provider with complete image data');
+            }
+          }
+        } catch (e) {
+          debugPrint('❌ Error parsing image upload response: $e');
+        }
+      } else {
+        debugPrint('Background image upload failed. Status code: ${response.statusCode}');
+        var responseBody = await response.stream.bytesToString();
+        debugPrint('Error response: $responseBody');
+        
+        // Retry once for 5xx server errors
+        if (response.statusCode >= 500 && response.statusCode < 600) {
+          debugPrint('Retrying background image upload due to server error...');
+          await Future.delayed(const Duration(seconds: 5));
+          return _uploadImageToCloudRetry(imageData, originalTimestamp: timestamp);
+        }
+      }
+    } on TimeoutException catch (e) {
+      debugPrint('Background image upload timeout: $e');
+      // Retry once for timeout
+      debugPrint('Retrying background image upload due to timeout...');
+      await Future.delayed(const Duration(seconds: 5));
+      return _uploadImageToCloudRetry(imageData, originalTimestamp: timestamp);
+    } catch (e) {
+      debugPrint('Background image upload error: $e');
+    }
+  }
+
+  Future _uploadImageToCloudRetry(Uint8List imageData, {String? originalTimestamp}) async {
+    // Retry upload with shorter timeout
+    try {
+      String baseUrl = Env.apiBaseUrl ?? 'http://127.0.0.1:8000';
+      if (baseUrl.endsWith('/')) {
+        baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+      }
+      final url = Uri.parse('$baseUrl/v2/files');
+      debugPrint('Retrying background image upload to: $url');
+      
+      var request = http.MultipartRequest('POST', url);
+      request.headers.addAll({'Authorization': await getAuthHeader()});
+      
+      // **FIX: Use original timestamp if provided, otherwise generate new one for retry**
+      final timestamp = originalTimestamp ?? DateTime.now().millisecondsSinceEpoch.toString();
+      
+      request.files.add(http.MultipartFile.fromBytes(
+        'files',
+        imageData,
+        filename: 'openglass_image_${timestamp}_retry.jpg',
+      ));
+      
+      // Shorter timeout for retry
+      var response = await request.send().timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          debugPrint('Background image upload retry timed out after 30 seconds');
+          throw TimeoutException('Background image upload retry timed out', const Duration(seconds: 30));
+        },
+      );
+      
+      if (response.statusCode == 200) {
+        debugPrint('Background image upload retry successful');
+        var responseBody = await response.stream.bytesToString();
+        debugPrint('Retry upload response: $responseBody');
+        
+        // **Handle complete image data with description (same as main upload)**
+        try {
+          final List<dynamic> responseData = json.decode(responseBody);
+          
+          if (responseData.isNotEmpty) {
+            final imageData = responseData[0];
+            final imageId = imageData['id'];
+            final description = imageData['description'];
+            final thumbnailUrl = imageData['thumbnail'];
+            final isInteresting = imageData['is_interesting'] ?? true;
+            
+            debugPrint('✅ Retry: Received complete image data: ID=$imageId');
+            debugPrint('🎨 Retry: Description: ${description?.toString().substring(0, 50)}...');
+            
+            // **UPDATE CAPTURE PROVIDER WITH COMPLETE IMAGE DATA**
+            if (captureProvider != null) {
+              final completeImage = {
+                'id': imageId,
+                'description': description,
+                'thumbnail_url': thumbnailUrl,
+                'url': imageData['url'],
+                'mime_type': imageData['mime_type'],
+                'created_at': imageData['created_at'],
+                'is_interesting': isInteresting,
+              };
+              
+              captureProvider!.onImageReceived(completeImage);
+              debugPrint('📸 Retry: Updated capture provider with complete image data');
+            }
+          }
+        } catch (e) {
+          debugPrint('❌ Retry: Error parsing image upload response: $e');
+        }
+      } else {
+        debugPrint('Background image upload retry failed. Status code: ${response.statusCode}');
+        var responseBody = await response.stream.bytesToString();
+        debugPrint('Retry error response: $responseBody');
+      }
+    } catch (e) {
+      debugPrint('Background image upload retry error: $e');
+    }
   }
 }

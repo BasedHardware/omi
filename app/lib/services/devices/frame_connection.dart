@@ -253,13 +253,13 @@ class FrameDeviceConnection extends DeviceConnection {
   }
 
   @override
-  Future<BleAudioCodec> performGetAudioCodec() {
-    return Future.value(BleAudioCodec.pcm8);
+  Future<BleAudioCodec> performGetAudioCodec() async {
+    return BleAudioCodec.pcm8;
   }
 
   @override
   Future<List<int>> performGetButtonState() async {
-    return Future.value(<int>[]);
+    return <int>[];
   }
 
   @override
@@ -332,8 +332,8 @@ class FrameDeviceConnection extends DeviceConnection {
   }
 
   @override
-  Future<bool> performHasPhotoStreamingCharacteristic() {
-    return Future.value(true);
+  Future<bool> performHasPhotoStreamingCharacteristic() async {
+    return true;
   }
 
   Future<void> init() async {
@@ -439,24 +439,19 @@ class FrameDeviceConnection extends DeviceConnection {
   }
 
   @override
-  Future<List<int>> performGetStorageList() {
-    return Future.value(<int>[]);
+  Future<List<int>> performGetStorageList() async {
+    return <int>[];
   }
 
-  // @override
-  //  Future<List<int>> performGetStorageList() {
-
-  //   return <int>[];
-  //  }
   @override
   Future<StreamSubscription?> performGetBleStorageBytesListener({
     required void Function(List<int>) onStorageBytesReceived,
-  }) {
-    return Future.value(null);
+  }) async {
+    return null;
   }
 
   @override
-  Future<bool> performWriteToStorage(int numFile, int command, int offset) {
-    return Future.value(false);
+  Future<bool> performWriteToStorage(int numFile, int command, int offset) async {
+    return false;
   }
 }

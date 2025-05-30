@@ -23,17 +23,21 @@ class File:
         self.purpose = "assistants"
 
     def generate_thumbnail(self, size=(128, 128)):
-        with Image.open(self.file_path) as img:
-            file_name = Path(self.file_path).stem  # File name without extension
-            file_format = img.format.lower()
+        try:
+            with Image.open(self.file_path) as img:
+                file_name = Path(self.file_path).stem  # File name without extension
+                file_format = img.format.lower()
 
-            img.thumbnail(size)
-            self.thumbnail_name = self._to_snake_case(f"{file_name}_thumbnail.{file_format}")
+                img.thumbnail(size)
+                self.thumbnail_name = self._to_snake_case(f"{file_name}_thumbnail.{file_format}")
 
-            thumb_path = self.file_path.parent / self.thumbnail_name
+                thumb_path = self.file_path.parent / self.thumbnail_name
 
-            img.save(thumb_path, format=img.format)
-            self.thumbnail_path = str(thumb_path)
+                img.save(thumb_path, format=img.format)
+                self.thumbnail_path = str(thumb_path)
+                print(f"Thumbnail generated: {self.thumbnail_path}") # Log thumbnail path
+        except Exception as e:
+            print(f"Error generating thumbnail for {self.file_path}: {e}") # Log thumbnail generation errors
 
     def get_mime_type(self):
         mime_type , _ = mimetypes.guess_type(self.file_path)
@@ -77,7 +81,7 @@ class FileChatTool:
                 result["file_id"] = response.id
                 result["mime_type"] = file.mime_type
                 if file.is_image():
-                    result["thumbnail"] = file.thumbnail_path
+                    result["thumbnail_path"] = file.thumbnail_path
                     result["thumbnail_name"] = file.thumbnail_name
         return result
 

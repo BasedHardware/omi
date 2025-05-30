@@ -19,6 +19,7 @@ import 'package:omi/widgets/photos_grid.dart';
 import 'package:omi/widgets/transcript.dart';
 import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
+import 'dart:math' as math;
 
 import 'conversation_detail_provider.dart';
 import 'widgets/name_speaker_sheet.dart';
@@ -193,10 +194,56 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                             Selector<ConversationDetailProvider, ConversationSource?>(
                               selector: (context, provider) => provider.conversation?.source,
                               builder: (context, source, child) {
-                                return source == ConversationSource.openglass
-                                    ? ListView(
-                                        shrinkWrap: true, children: const [PhotosGridComponent(), SizedBox(height: 32)])
-                                    : const TranscriptWidgets();
+                                return Consumer<ConversationDetailProvider>(
+                                  builder: (context, provider, child) {
+                                    // Always show an integrated timeline of transcripts and photos
+                                    // This supports all scenarios: photos-only, transcripts-only, and combined
+                                    bool hasPhotos = provider.photos.isNotEmpty;
+                                    bool hasTranscripts = provider.conversation.transcriptSegments.isNotEmpty;
+                                    
+                                    if (!hasPhotos && !hasTranscripts) {
+                                      // No content at all
+                                      return const Center(
+                                        child: Padding(
+                                          padding: EdgeInsets.all(32.0),
+                                          child: Text(
+                                            'No transcript or photos available.',
+                                            style: TextStyle(color: Colors.grey),
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                    
+                                    // Convert photos to ImageSegment format that TranscriptWidget expects
+                                    final images = provider.photos.map((photo) {
+                                      debugPrint('📸 Converting photo: ID=${photo.id}, PhotoID=${photo.photoId}, HasBase64=${photo.base64 != null}, HasThumbnail=${photo.thumbnailUrl != null}');
+                                      debugPrint('📸 Description: ${photo.description.substring(0, math.min(50, photo.description.length))}...');
+                                      
+                                      // Use the new createdAtDateTime getter which handles parsing and fallback
+                                      DateTime createdAt = photo.createdAtDateTime;
+                                      
+                                      // Consistent ID - prefer photoId, fallback to numeric id
+                                      String imageId = photo.photoId?.isNotEmpty == true 
+                                          ? photo.photoId! 
+                                          : photo.id.toString();
+                                      
+                                      final displayUrl = photo.getDisplayUrl() ?? '';
+                                      debugPrint('📸 Final ImageSegment: ID=$imageId, URL=${displayUrl.substring(0, math.min(50, displayUrl.length))}...');
+                                      
+                                      return ImageSegment(
+                                        id: imageId,
+                                        thumbnailUrl: displayUrl, // Use helper method for display URL
+                                        mimeType: 'image/jpeg',
+                                        createdAt: createdAt,
+                                      );
+                                    }).toList();
+                                    
+                                    debugPrint('🔥 Conversation Detail: Created ${images.length} ImageSegments for TranscriptWidget');
+                                    
+                                    // Show integrated timeline with both transcripts and images
+                                    return TranscriptWidgets(images: images);
+                                  },
+                                );
                               },
                             ),
                             const SummaryTab(),
@@ -391,7 +438,9 @@ class SummaryTab extends StatelessWidget {
 }
 
 class TranscriptWidgets extends StatelessWidget {
-  const TranscriptWidgets({super.key});
+  final List<ImageSegment> images;
+
+  const TranscriptWidgets({super.key, this.images = const []});
 
   @override
   Widget build(BuildContext context) {
@@ -399,7 +448,7 @@ class TranscriptWidgets extends StatelessWidget {
       builder: (context, provider, child) {
         final segments = provider.conversation.transcriptSegments;
 
-        if (segments.isEmpty) {
+        if (segments.isEmpty && images.isEmpty) {
           return Padding(
             padding: const EdgeInsets.only(top: 32),
             child: ExpandableTextWidget(
@@ -415,9 +464,10 @@ class TranscriptWidgets extends StatelessWidget {
           );
         }
 
-        // Use a Container with fixed height for large lists to enable proper scrolling
+        // Pass both segments and images to TranscriptWidget for integrated timeline
         return TranscriptWidget(
           segments: segments,
+          images: images, // Pass images for integrated timeline
           horizontalMargin: false,
           topMargin: false,
           canDisplaySeconds: provider.canDisplaySeconds,

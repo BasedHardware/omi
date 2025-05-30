@@ -20,6 +20,10 @@ abstract interface class ITransctipSegmentSocketServiceListener {
   void onConnected();
 
   void onClosed();
+
+  void onImageReceived(dynamic imageData);
+
+  void onClearLiveImages(dynamic clearData);
 }
 
 class SpeechProfileTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
@@ -119,6 +123,56 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     }
     if (jsonEvent == null) {
       debugPrint("Can not decode message event json $event");
+      return;
+    }
+
+    // **DEBUG: Log all message types**
+    if (jsonEvent is Map<String, dynamic>) {
+      debugPrint('🌍 WebSocket message type: ${jsonEvent['type']}');
+    }
+
+    // Handle image data
+    if (jsonEvent is Map<String, dynamic> && jsonEvent['type'] == 'image') {
+      var imageData = jsonEvent['data'];
+      debugPrint('WebSocket received image data: $imageData');
+      debugPrint('Description in image data: ${imageData?['description']}');
+      debugPrint('📊 Number of listeners for IMAGE: ${_listeners.length}');
+      _listeners.forEach((k, v) {
+        if (v is ITransctipSegmentSocketServiceListener) {
+          v.onImageReceived(imageData);
+        }
+      });
+      return;
+    }
+
+    // Handle image description data (OpenGlass images with AI descriptions)
+    if (jsonEvent is Map<String, dynamic> && jsonEvent['type'] == 'image_description') {
+      var imageData = jsonEvent['image_data'];
+      debugPrint('🔥 WebSocket received image_description: $imageData');
+      debugPrint('🔥 AI Description: ${imageData?['description']}');
+      debugPrint('🔥 Number of listeners to notify: ${_listeners.length}');
+      
+      int listenerCount = 0;
+      _listeners.forEach((k, v) {
+        listenerCount++;
+        debugPrint('🔥 Notifying listener $listenerCount: ${v.runtimeType}');
+        if (v is ITransctipSegmentSocketServiceListener) {
+          v.onImageReceived(imageData);
+        }
+      });
+      debugPrint('🔥 Notified $listenerCount listeners of image_description');
+      return;
+    }
+
+    // Handle clear live images notification
+    if (jsonEvent is Map<String, dynamic> && jsonEvent['type'] == 'clear_live_images') {
+      var clearData = jsonEvent['data'];
+      debugPrint('WebSocket received clear_live_images: $clearData');
+      _listeners.forEach((k, v) {
+        if (v is ITransctipSegmentSocketServiceListener) {
+          v.onClearLiveImages(clearData);
+        }
+      });
       return;
     }
 

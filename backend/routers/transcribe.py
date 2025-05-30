@@ -16,9 +16,10 @@ import database.conversations as conversations_db
 import database.users as user_db
 from database import redis_db
 from database.redis_db import get_cached_user_geolocation
-from models.conversation import Conversation, TranscriptSegment, ConversationStatus, Structured, Geolocation
+from models.conversation import Conversation, TranscriptSegment, ConversationStatus, Structured, Geolocation, ConversationPhoto
 from models.message_event import ConversationEvent, MessageEvent, MessageServiceStatusEvent, LastConversationEvent, \
     TranslationEvent
+from models.chat import Message
 from models.transcript_segment import Translation
 from utils.apps import is_audio_bytes_app_enabled
 from utils.conversations.location import get_google_maps_location
@@ -37,6 +38,10 @@ from utils.translation_cache import TranscriptSegmentLanguageCache
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists
 
+import database.chat as chat_db
+import json
+import redis.asyncio as aioredis
+
 router = APIRouter()
 
 
@@ -45,6 +50,22 @@ async def _listen(
         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = None,
         including_combined_segments: bool = False,
 ):
+    # Start session tracking for multi-device integration
+    session_key = f"active_transcription_session:{uid}"
+    session_data = {
+        'started_at': datetime.now(timezone.utc).isoformat(),
+        'sample_rate': sample_rate,
+        'codec': codec,
+        'language': language
+    }
+    
+    try:
+        # Set session data in Redis with 1 hour expiration
+        redis_db.r.setex(session_key, 3600, json.dumps(session_data))
+        print(f"🎙️ Started recording session tracking for user {uid}")
+    except Exception as e:
+        print(f"Error setting session tracking: {e}")
+
     print('_listen', uid, language, sample_rate, codec, include_speech_profile, stt_service)
 
     if not uid or len(uid) <= 0:
@@ -154,6 +175,156 @@ async def _listen(
         websocket_active = False
         await websocket.close(code=1008, reason="Bad user")
         return
+
+    # Capture the main event loop before starting the Redis listener thread
+    main_loop = asyncio.get_event_loop()
+
+    def redis_listener():
+        import json  # Import json here to ensure it's in scope
+        print(f"Starting Redis listener for user {uid}")
+        
+        # **PREVENT MULTIPLE LISTENERS: Check if a listener is already active for this user**
+        listener_key = f"redis_listener_active:{uid}"
+        try:
+            if redis_db.r.get(listener_key):
+                print(f"❌ Redis listener already active for user {uid}, skipping duplicate listener")
+                return
+            
+            # Mark this listener as active with 30 second timeout
+            redis_db.r.setex(listener_key, 30, "active")
+            print(f"✅ Created Redis listener for user {uid}")
+            
+        except Exception as e:
+            print(f"Error checking listener status: {e}")
+            # Continue if Redis check fails
+        
+        try:
+            redis_client = redis_db.r
+            pubsub = redis_client.pubsub()
+            channel = f'user_messages:{uid}'
+            pubsub.subscribe(channel)
+            print(f"Subscribed to Redis channel: {channel}")
+
+            # Handle Redis message function
+            def handle_redis_message(message_data: dict):
+                try:
+                    if message_data.get('type') == 'image':
+                        image_data = message_data.get('data')
+                        if image_data:
+                            # Check if websocket is still active before sending
+                            if websocket_active and websocket.client_state == WebSocketState.CONNECTED:
+                                # Schedule the coroutine in a thread-safe way using the main loop
+                                try:
+                                    # Use the captured main event loop
+                                    future = asyncio.run_coroutine_threadsafe(
+                                        websocket.send_json({
+                                            'type': 'image',
+                                            'data': image_data
+                                        }), main_loop
+                                    )
+                                    # Optionally wait for completion with a timeout
+                                    future.result(timeout=5.0)
+                                    print(f"✅ Sent image data to websocket for user {uid}: {image_data.get('id', 'unknown')}")
+                                except Exception as send_error:
+                                    print(f"Error sending to websocket: {send_error}")
+                            else:
+                                print(f"Websocket not active for user {uid}, could not send image data")
+                    elif message_data.get('type') == 'image_description':
+                        image_data = message_data.get('image_data')
+                        if image_data:
+                            # Check if websocket is still active before sending
+                            if websocket_active and websocket.client_state == WebSocketState.CONNECTED:
+                                # Schedule the coroutine in a thread-safe way using the main loop
+                                try:
+                                    # Use the captured main event loop
+                                    future = asyncio.run_coroutine_threadsafe(
+                                        websocket.send_json({
+                                            'type': 'image_description',
+                                            'image_data': image_data
+                                        }), main_loop
+                                    )
+                                    # Optionally wait for completion with a timeout
+                                    future.result(timeout=5.0)
+                                    print(f"✅ Sent image_description to websocket for user {uid}: {image_data.get('id', 'unknown')}")
+                                except Exception as send_error:
+                                    print(f"Error sending image_description to websocket: {send_error}")
+                            else:
+                                print(f"Websocket not active for user {uid}, could not send image_description")
+                    elif message_data.get('type') == 'clear_live_images':
+                        clear_data = message_data.get('data')
+                        if clear_data:
+                            # Check if websocket is still active before sending
+                            if websocket_active and websocket.client_state == WebSocketState.CONNECTED:
+                                # Schedule the coroutine in a thread-safe way using the main loop
+                                try:
+                                    # Use the captured main event loop
+                                    future = asyncio.run_coroutine_threadsafe(
+                                        websocket.send_json({
+                                            'type': 'clear_live_images',
+                                            'data': clear_data
+                                        }), main_loop
+                                    )
+                                    # Optionally wait for completion with a timeout
+                                    future.result(timeout=5.0)
+                                    print(f"✅ Sent clear_live_images notification to websocket for user {uid}: {clear_data.get('conversation_id', 'unknown')}")
+                                except Exception as send_error:
+                                    print(f"Error sending clear_live_images to websocket: {send_error}")
+                            else:
+                                print(f"Websocket not active for user {uid}, could not send clear_live_images")
+                except Exception as e:
+                    print(f"Error handling Redis message: {e}")
+
+            # Listen for messages
+            for message in pubsub.listen():
+                if not websocket_active:
+                    break
+                if message['type'] == 'message':
+                    try:
+                        data = message['data'].decode('utf-8')
+                        print(f"Received Redis message on {channel}: {data}")
+                        payload = json.loads(data)
+                        if payload.get('type') == 'image':
+                            handle_redis_message(payload)
+                        elif payload.get('type') == 'image_description':
+                            handle_redis_message(payload)
+                        elif payload.get('type') == 'clear_live_images':
+                            handle_redis_message(payload)
+                        elif payload.get('message_id'):
+                            # Handle existing message notifications
+                            message_id = payload.get('message_id')
+                            fetched_message, _ = chat_db.get_message(uid, message_id)
+                            if fetched_message:
+                                message_obj = Message(**fetched_message)
+                                # Use asyncio to send the message event using the main loop
+                                asyncio.run_coroutine_threadsafe(
+                                    _asend_message_event(ConversationEvent(event_type="new_chat_message", memory=None, messages=[message_obj])),
+                                    main_loop
+                                )
+                    except json.JSONDecodeError:
+                        print(f"Failed to decode JSON from Redis message: {data}")
+                    except Exception as e:
+                        print(f"Error processing Redis message: {e}")
+        except Exception as e:
+            print(f"Redis listener error for user {uid}: {e}")
+        finally:
+            try:
+                pubsub.unsubscribe(channel)
+                pubsub.close()
+                print(f"Unsubscribed from Redis channel: {channel}")
+            except Exception as e:
+                print(f"Error closing Redis pubsub: {e}")
+            
+            # **CLEANUP: Remove listener active flag**
+            try:
+                redis_db.r.delete(listener_key)
+                print(f"🧹 Cleaned up Redis listener flag for user {uid}")
+            except Exception as e:
+                print(f"Error cleaning up listener flag: {e}")
+
+    # Start the Redis listener in a separate thread
+    import threading
+    redis_listener_thread = threading.Thread(target=redis_listener, daemon=True)
+    redis_listener_thread.start()
 
     # Stream transcript
     async def _trigger_create_conversation_with_delay(delay_seconds: int, finished_at: datetime):
@@ -411,6 +582,9 @@ async def _listen(
     #
     def create_pusher_task_handler():
         nonlocal websocket_active
+        
+        # Import json here to ensure it's in scope
+        import json
 
         pusher_ws = None
         pusher_connect_lock = asyncio.Lock()
@@ -801,6 +975,50 @@ async def _listen(
         print(f"Error during WebSocket operation: {e}", uid)
     finally:
         websocket_active = False
+
+        # Session cleanup and image integration for multi-device support
+        try:
+            # Remove session tracking
+            redis_db.r.delete(session_key)
+            print(f"🛑 Ended recording session tracking for user {uid}")
+            
+            # Check for stored session images and integrate them
+            session_images_key = f"session_images:{uid}"
+            stored_images_data = redis_db.r.get(session_images_key)
+            
+            if stored_images_data and current_conversation_id:
+                import json
+                from models.conversation import ConversationPhoto
+                
+                try:
+                    stored_images = json.loads(stored_images_data)
+                    if stored_images:
+                        print(f"📸 Found {len(stored_images)} stored session images to integrate")
+                        
+                        # Convert stored image data back to ConversationPhoto objects
+                        photos = []
+                        for img_data in stored_images:
+                            photo = ConversationPhoto(
+                                id=img_data['id'],
+                                base64=img_data['base64'],
+                                description=img_data['description'],
+                                thumbnail_url=img_data['thumbnail_url']
+                            )
+                            photos.append(photo)
+                        
+                        # Add photos to the final conversation
+                        conversations_db.add_photos_to_conversation(uid, current_conversation_id, photos)
+                        print(f"✅ Integrated {len(photos)} OpenGlass images into conversation {current_conversation_id}")
+                        
+                        # Clear stored session images
+                        redis_db.r.delete(session_images_key)
+                        print(f"🧹 Cleared session image cache")
+                        
+                except Exception as e:
+                    print(f"Error integrating session images: {e}")
+            
+        except Exception as e:
+            print(f"Error in session cleanup: {e}")
 
         # STT sockets
         try:

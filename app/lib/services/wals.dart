@@ -248,7 +248,7 @@ class SDCardWalSync implements IWalSync {
   Future<bool> _writeToStorage(String deviceId, int numFile, int command, int offset) async {
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
-      return Future.value(false);
+      return false;
     }
     return connection.writeToStorage(numFile, command, offset);
   }
@@ -259,7 +259,7 @@ class SDCardWalSync implements IWalSync {
   }) async {
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
-      return Future.value(null);
+      return null;
     }
     return connection.getBleStorageBytesListener(onStorageBytesReceived: onStorageBytesReceived);
   }

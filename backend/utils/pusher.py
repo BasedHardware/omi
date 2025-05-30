@@ -3,7 +3,7 @@ import random
 import asyncio
 import websockets
 
-PusherAPI = os.getenv('HOSTED_PUSHER_API_URL')
+PusherAPI = "https://merry-annually-pangolin.ngrok-free.app"
 
 async def connect_to_trigger_pusher(uid: str, sample_rate: int = 8000, retries: int = 3):
     print("connect_to_trigger_pusher", uid)

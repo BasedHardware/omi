@@ -55,7 +55,6 @@ Future<UserCredential?> signInWithApple() async {
     final oauthCredential = OAuthProvider("apple.com").credential(
       idToken: appleCredential.identityToken,
       rawNonce: rawNonce,
-      accessToken: appleCredential.authorizationCode
     );
 
     debugPrint('OAuth Credential created.');
