@@ -1,9 +1,3 @@
-/**
- * @fileoverview Header Component for OMI Personas
- * @description Renders the application header with logo and CTA button
- * @author HarshithSunku
- * @license MIT
- */
 import Link from 'next/link';
 
 // Define props interface
@@ -11,17 +5,7 @@ interface HeaderProps {
   uid: string | null;
 }
 
-/**
- * Header Component
- * 
- * @component
- * @description Renders the main navigation header with OMI logo and call-to-action button
- * @param {HeaderProps} props - Component props
- * @param {string | null} props.uid - The current user ID, or null if not available.
- * @returns {JSX.Element} Rendered Header component
- */
 export const Header = ({ uid }: HeaderProps) => {
-  const addToolsUrl = uid ? `https://veyrax.com/user/omi/auth?omi_user_id=${encodeURIComponent(uid)}` : '#';
 
   return (
     <div className="p-4 border-b border-zinc-800">

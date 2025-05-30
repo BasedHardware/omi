@@ -1,9 +1,3 @@
-/**
- * @fileoverview ChatbotList Component for OMI Personas
- * @description Renders a searchable list of chatbot personas created from social media profiles
- * @author HarshithSunku
- * @license MIT
- */
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { BadgeCheck, Search } from 'lucide-react';
@@ -20,13 +14,6 @@ interface ChatbotListProps {
   ref: RefObject<HTMLDivElement> | ((node?: Element | null) => void);
 }
 
-/**
- * ChatbotList Component
- * 
- * @component
- * @param {ChatbotListProps} props - Component props
- * @returns {JSX.Element} Rendered ChatbotList component
- */
 export const ChatbotList = ({ chatbots, searchQuery, setSearchQuery, handleChatbotClick, hasMore, ref }: ChatbotListProps) => (
   <div className="w-full max-w-3xl">
     <div className="relative mb-6">

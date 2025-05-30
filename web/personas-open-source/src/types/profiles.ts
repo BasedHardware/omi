@@ -1,11 +1,4 @@
 /**
- * @fileoverview Type definitions for social media profiles and chatbots
- * @description Contains type interfaces for Twitter profiles, LinkedIn profiles, and chatbot data
- * @author HarshithSunku
- * @license MIT
- */
-
-/**
  * Chatbot type definition
  * @description Represents a chatbot persona created from social media profiles
  */

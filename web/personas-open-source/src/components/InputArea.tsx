@@ -1,11 +1,3 @@
-/**
- * @fileoverview InputArea Component for OMI Personas
- * @description Renders the input field and button for creating new AI personas
- * @author HarshithSunku
- * @license MIT
- */
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import Image from 'next/image';
 
 interface InputAreaProps {
