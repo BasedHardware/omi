@@ -55,7 +55,7 @@ Future<UserCredential?> signInWithApple() async {
     final oauthCredential = OAuthProvider("apple.com").credential(
       idToken: appleCredential.identityToken,
       rawNonce: rawNonce,
-      accessToken: appleCredential.authorizationCode
+      accessToken: appleCredential.authorizationCode,
     );
 
     debugPrint('OAuth Credential created.');
@@ -111,7 +111,9 @@ Future<UserCredential?> signInWithGoogle() async {
   try {
     debugPrint('Signing in with Google');
     // Trigger the authentication flow
-    final GoogleSignInAccount? googleUser = await GoogleSignIn(scopes: ['profile', 'email']).signIn();
+    final GoogleSignInAccount? googleUser = await GoogleSignIn(
+      scopes: ['profile', 'email'],
+    ).signIn();
     debugPrint('Google User: $googleUser');
 
     // Obtain the auth details from the request

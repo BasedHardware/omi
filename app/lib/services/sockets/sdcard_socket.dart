@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/env/env.dart';
-import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:web_socket_channel/io.dart';
 
 enum WebsocketConnectionStatus { notConnected, connected, failed, closed, error }
@@ -116,7 +116,7 @@ class SdCardSocketService {
         },
         onError: (err, stackTrace) {
           onWebsocketConnectionError(err); // error during connection
-          CrashReporting.reportHandledCrash(err!, stackTrace, level: NonFatalExceptionLevel.warning);
+          PlatformManager.instance.instabug.reportCrash(err!, stackTrace);
         },
         onDone: (() {
           debugPrint('Websocket connection onDone sd'); // FIXME
@@ -128,7 +128,7 @@ class SdCardSocketService {
       // no closing reason or code
       print(err);
       debugPrint('Websocket connection failed sd: $err');
-      CrashReporting.reportHandledCrash(err!, stackTrace, level: NonFatalExceptionLevel.warning);
+      PlatformManager.instance.instabug.reportCrash(err!, stackTrace);
       onWebsocketConnectionFailed(err); // initial connection failed
     });
 

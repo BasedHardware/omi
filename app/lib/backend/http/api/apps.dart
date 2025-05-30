@@ -7,10 +7,10 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/env/env.dart';
-import 'package:instabug_flutter/instabug_flutter.dart';
 
 import 'package:http/http.dart' as http;
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:path/path.dart';
 
 Future<List<App>> retrieveApps() async {
@@ -29,7 +29,7 @@ Future<List<App>> retrieveApps() async {
       return apps;
     } catch (e, stackTrace) {
       debugPrint(e.toString());
-      CrashReporting.reportHandledCrash(e, stackTrace);
+      PlatformManager.instance.instabug.reportCrash(e, stackTrace);
       return SharedPreferencesUtil().appsList;
     }
   }
@@ -52,7 +52,7 @@ Future<List<App>> retrievePopularApps() async {
       return apps;
     } catch (e, stackTrace) {
       debugPrint(e.toString());
-      CrashReporting.reportHandledCrash(e, stackTrace);
+      PlatformManager.instance.instabug.reportCrash(e, stackTrace);
       return SharedPreferencesUtil().appsList;
     }
   }
@@ -287,7 +287,7 @@ Future<List<Category>> getAppCategories() async {
     return Category.fromJsonList(res);
   } catch (e, stackTrace) {
     debugPrint(e.toString());
-    CrashReporting.reportHandledCrash(e, stackTrace);
+    PlatformManager.instance.instabug.reportCrash(e, stackTrace);
     return [];
   }
 }
@@ -306,7 +306,7 @@ Future<List<AppCapability>> getAppCapabilitiesServer() async {
     return AppCapability.fromJsonList(res);
   } catch (e, stackTrace) {
     debugPrint(e.toString());
-    CrashReporting.reportHandledCrash(e, stackTrace);
+    PlatformManager.instance.instabug.reportCrash(e, stackTrace);
     return [];
   }
 }
@@ -325,7 +325,7 @@ Future<List<NotificationScope>> getNotificationScopesServer() async {
     return NotificationScope.fromJsonList(res);
   } catch (e, stackTrace) {
     debugPrint(e.toString());
-    CrashReporting.reportHandledCrash(e, stackTrace);
+    PlatformManager.instance.instabug.reportCrash(e, stackTrace);
     return [];
   }
 }
@@ -343,7 +343,7 @@ Future changeAppVisibilityServer(String appId, bool makePublic) async {
     return true;
   } catch (e, stackTrace) {
     debugPrint(e.toString());
-    CrashReporting.reportHandledCrash(e, stackTrace);
+    PlatformManager.instance.instabug.reportCrash(e, stackTrace);
     return false;
   }
 }
@@ -361,7 +361,7 @@ Future deleteAppServer(String appId) async {
     return true;
   } catch (e, stackTrace) {
     debugPrint(e.toString());
-    CrashReporting.reportHandledCrash(e, stackTrace);
+    PlatformManager.instance.instabug.reportCrash(e, stackTrace);
     return false;
   }
 }
@@ -379,7 +379,7 @@ Future<Map<String, dynamic>?> getAppDetailsServer(String appId) async {
     return jsonDecode(response.body);
   } catch (e, stackTrace) {
     debugPrint(e.toString());
-    CrashReporting.reportHandledCrash(e, stackTrace);
+    PlatformManager.instance.instabug.reportCrash(e, stackTrace);
     return null;
   }
 }
@@ -397,7 +397,7 @@ Future<List<PaymentPlan>> getPaymentPlansServer() async {
     return PaymentPlan.fromJsonList(jsonDecode(response.body));
   } catch (e, stackTrace) {
     debugPrint(e.toString());
-    CrashReporting.reportHandledCrash(e, stackTrace);
+    PlatformManager.instance.instabug.reportCrash(e, stackTrace);
     return [];
   }
 }
@@ -415,7 +415,7 @@ Future<String> getGenratedDescription(String name, String description) async {
     return jsonDecode(response.body)['description'];
   } catch (e, stackTrace) {
     debugPrint(e.toString());
-    CrashReporting.reportHandledCrash(e, stackTrace);
+    PlatformManager.instance.instabug.reportCrash(e, stackTrace);
     return '';
   }
 }
@@ -434,7 +434,7 @@ Future<List<AppApiKey>> listApiKeysServer(String appId) async {
     return AppApiKey.fromJsonList(jsonDecode(response.body));
   } catch (e, stackTrace) {
     debugPrint(e.toString());
-    CrashReporting.reportHandledCrash(e, stackTrace);
+    PlatformManager.instance.instabug.reportCrash(e, stackTrace);
     return [];
   }
 }
@@ -454,7 +454,7 @@ Future<Map<String, dynamic>> createApiKeyServer(String appId) async {
     return jsonDecode(response.body);
   } catch (e, stackTrace) {
     debugPrint(e.toString());
-    CrashReporting.reportHandledCrash(e, stackTrace);
+    PlatformManager.instance.instabug.reportCrash(e, stackTrace);
     throw Exception('Failed to create API key: ${e.toString()}');
   }
 }
@@ -474,7 +474,7 @@ Future<bool> deleteApiKeyServer(String appId, String keyId) async {
     return true;
   } catch (e, stackTrace) {
     debugPrint(e.toString());
-    CrashReporting.reportHandledCrash(e, stackTrace);
+    PlatformManager.instance.instabug.reportCrash(e, stackTrace);
     throw Exception('Failed to delete API key: ${e.toString()}');
   }
 }
@@ -546,7 +546,7 @@ Future<bool> checkPersonaUsername(String username) async {
     return jsonDecode(response.body)['is_taken'];
   } catch (e, stackTrace) {
     debugPrint(e.toString());
-    CrashReporting.reportHandledCrash(e, stackTrace);
+    PlatformManager.instance.instabug.reportCrash(e, stackTrace);
     return true;
   }
 }
@@ -564,7 +564,7 @@ Future<Map?> getTwitterProfileData(String handle) async {
     return jsonDecode(response.body);
   } catch (e, stackTrace) {
     debugPrint(e.toString());
-    CrashReporting.reportHandledCrash(e, stackTrace);
+    PlatformManager.instance.instabug.reportCrash(e, stackTrace);
     return null;
   }
 }
@@ -590,7 +590,7 @@ Future<(bool, String?)> verifyTwitterOwnership(String username, String handle, S
     );
   } catch (e, stackTrace) {
     debugPrint(e.toString());
-    CrashReporting.reportHandledCrash(e, stackTrace);
+    PlatformManager.instance.instabug.reportCrash(e, stackTrace);
     return (false, null);
   }
 }
@@ -608,7 +608,7 @@ Future<String> getPersonaInitialMessage(String username) async {
     return jsonDecode(response.body)['message'];
   } catch (e, stackTrace) {
     debugPrint(e.toString());
-    CrashReporting.reportHandledCrash(e, stackTrace);
+    PlatformManager.instance.instabug.reportCrash(e, stackTrace);
     return '';
   }
 }
@@ -627,7 +627,7 @@ Future<App?> getUserPersonaServer() async {
     return App.fromJson(res);
   } catch (e, stackTrace) {
     debugPrint(e.toString());
-    CrashReporting.reportHandledCrash(e, stackTrace);
+    PlatformManager.instance.instabug.reportCrash(e, stackTrace);
     return null;
   }
 }
@@ -646,7 +646,7 @@ Future<String?> generateUsername(String handle) async {
     return res['username'];
   } catch (e, stackTrace) {
     debugPrint(e.toString());
-    CrashReporting.reportHandledCrash(e, stackTrace);
+    PlatformManager.instance.instabug.reportCrash(e, stackTrace);
     return null;
   }
 }
@@ -664,7 +664,7 @@ Future<bool> migrateAppOwnerId(String oldId) async {
     return true;
   } catch (e, stackTrace) {
     debugPrint(e.toString());
-    CrashReporting.reportHandledCrash(e, stackTrace);
+    PlatformManager.instance.instabug.reportCrash(e, stackTrace);
     return false;
   }
 }
@@ -682,7 +682,7 @@ Future<Map<String, dynamic>?> getUpsertUserPersonaServer() async {
     return jsonDecode(response.body);
   } catch (e, stackTrace) {
     debugPrint(e.toString());
-    CrashReporting.reportHandledCrash(e, stackTrace);
+    PlatformManager.instance.instabug.reportCrash(e, stackTrace);
     return null;
   }
 }
