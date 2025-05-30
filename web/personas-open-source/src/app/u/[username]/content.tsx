@@ -8,7 +8,7 @@ import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
-interface ContentProps {
+type ContentProps = {
   username: string
 }
 
