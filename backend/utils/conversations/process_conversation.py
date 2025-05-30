@@ -165,7 +165,7 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
                 if best_app.id not in user_enabled:
                     redis_db.enable_app(uid, best_app.id)
 
-                filtered_apps = [best_app]
+                # filtered_apps = [best_app]
 
     if len(filtered_apps) == 0:
         print("All apps had got filtered out", uid)
@@ -174,6 +174,7 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
     conversation.apps_results = []
 
     threads = []
+
 
     def execute_app(app):
         # allow empty
