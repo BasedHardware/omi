@@ -121,7 +121,6 @@ dependency_overrides:
     git:
       url: https://github.com/mdmohsin7/opus_flutter.git
       path: opus_flutter_android
-  geolocator_android: 4.6.1
   # flutter_blue_plus:
   # git:
   #   url: https://github.com/chipweinberger/flutter_blue_plus
