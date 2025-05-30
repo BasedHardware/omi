@@ -845,7 +845,6 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
                 } else {
                     monoResampled = sourceArray
                 }
-                print("DEBUG: Manual conversion: SCStream Mono \(inputSampleRate)Hz -> Engine Mono \(outputSampleRate)Hz")
             } else if currentSCStreamFormat.channelCount >= 2 {
                 // Input is stereo (or more channels, take first two) deinterleaved float
                 let leftChannelPtr = floatDataPointers[0]
