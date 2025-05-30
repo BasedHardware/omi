@@ -493,16 +493,13 @@ class CaptureProvider extends ChangeNotifier
         }
       }
 
-      // Both permissions granted, proceed with setup
       await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
 
       await ServiceManager.instance().systemAudio.start(onFormatReceived: (Map<String, dynamic> format) async {
-        debugPrint("System audio format received: $format");
         final int sampleRate = format['sampleRate'] as int? ?? 16000;
         final int channels = format['channels'] as int? ?? 1;
         BleAudioCodec determinedCodec = BleAudioCodec.pcm16;
       }, onByteReceived: (bytes) {
-        debugPrint('socket state: ${_socket?.state}');
         if (_socket?.state == SocketServiceState.connected) {
           debugPrint("Sending system audio bytes to socket: ${bytes.length}");
           _socket?.send(bytes);

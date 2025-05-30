@@ -418,6 +418,16 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
         if #available(macOS 10.15, *) {
             do {
                 try self.micNode.setVoiceProcessingEnabled(true)
+                 // Configure ducking to minimum level to keep system audio audible
+                if #available(macOS 14.0, *) {
+                    var duckingConfig = AVAudioVoiceProcessingOtherAudioDuckingConfiguration()
+                    duckingConfig.enableAdvancedDucking = false
+                    duckingConfig.duckingLevel = .min
+                    self.micNode.voiceProcessingOtherAudioDuckingConfiguration = duckingConfig
+                    print("DEBUG: Configured voice processing ducking to minimum level to preserve system audio volume.")
+                } else {
+                    print("INFO: Voice processing ducking configuration requires macOS 14.0+. System audio may be ducked on older OS versions.")
+                }
                 print("DEBUG: Successfully enabled voice processing on microphone input node. This may help reduce echo.")
             } catch {
                 print("ERROR: Could not enable voice processing on microphone input node: \(error.localizedDescription). Echo might persist.")
