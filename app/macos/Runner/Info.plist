@@ -62,11 +62,11 @@
 	<key>NSHumanReadableCopyright</key>
 	<string>$(PRODUCT_COPYRIGHT)</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>When creating your memories, we use your location for determining where they were created.</string>
+	<string>Your location is used to tag where conversations were created. This is optional.</string>
 	<key>NSLocationUsageDescription</key>
-	<string>When creating your memories, we use your location for determining where they were created.</string>
+	<string>Your location is used to tag where conversations were created. This is optional.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>When creating your memories, we use your location for determining where they were created.</string>
+	<string>Your location is used to tag where conversations were created. This is optional.</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
 	<key>NSMicrophoneUsageDescription</key>
