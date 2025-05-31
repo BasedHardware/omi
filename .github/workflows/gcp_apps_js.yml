@@ -43,6 +43,5 @@ jobs:
           region: ${{ env.REGION }}
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
 
-      # If required, use the Cloud Run url output in later steps
       - name: Show Output
         run: echo ${{ steps.deploy.outputs.url }}
