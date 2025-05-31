@@ -1,7 +1,7 @@
 {
-  "name": "friend-lite-react-native",
-  "version": "1.0.2",
-  "description": "React Native SDK for certain devices",
+  "name": "@omiai/omi-react-native",
+  "version": "1.0.1",
+  "description": "React Native SDK for Omi devices",
   "main": "lib/commonjs/index",
   "module": "lib/module/index",
   "types": "lib/typescript/index.d.ts",
@@ -80,7 +80,8 @@
   },
   "dependencies": {
     "base-64": "^1.0.0",
-    "react-native-ble-plx": "^3.4.2"
+    "react-native-ble-plx": "^3.4.2",
+    "expo": "^53.0.0"
   },
   "engines": {
     "node": ">= 16.0.0"
