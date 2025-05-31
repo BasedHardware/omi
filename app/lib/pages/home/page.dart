@@ -72,9 +72,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
       if (mounted) {
         await context.read<ConversationProvider>().getInitialConversations();
       }
-      if (mounted) {
-        context.read<AppProvider>().setSelectedChatAppId(null);
-      }
     });
     _navigateToRoute = widget.navigateToRoute;
     super.initState();
