@@ -22,13 +22,17 @@ abstract interface class ITransctipSegmentSocketServiceListener {
   void onClosed();
 }
 
-class SpeechProfileTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
-  SpeechProfileTranscriptSegmentSocketService.create(super.sampleRate, super.codec, super.language)
+class SpeechProfileTranscriptSegmentSocketService
+    extends TranscriptSegmentSocketService {
+  SpeechProfileTranscriptSegmentSocketService.create(
+      super.sampleRate, super.codec, super.language)
       : super.create(includeSpeechProfile: false);
 }
 
-class ConversationTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
-  ConversationTranscriptSegmentSocketService.create(super.sampleRate, super.codec, super.language)
+class ConversationTranscriptSegmentSocketService
+    extends TranscriptSegmentSocketService {
+  ConversationTranscriptSegmentSocketService.create(
+      super.sampleRate, super.codec, super.language)
       : super.create(includeSpeechProfile: true);
 }
 
@@ -41,8 +45,9 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   late PureSocket _socket;
   final Map<Object, ITransctipSegmentSocketServiceListener> _listeners = {};
 
-  SocketServiceState get state =>
-      _socket.status == PureSocketStatus.connected ? SocketServiceState.connected : SocketServiceState.disconnected;
+  SocketServiceState get state => _socket.status == PureSocketStatus.connected
+      ? SocketServiceState.connected
+      : SocketServiceState.disconnected;
 
   int sampleRate;
   BleAudioCodec codec;
@@ -55,16 +60,27 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.language, {
     this.includeSpeechProfile = false,
   }) {
-    var params = '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
+    var params =
+        '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
         '&include_speech_profile=$includeSpeechProfile&stt_service=${SharedPreferencesUtil().transcriptionModel}';
 
-    String url = '${Env.apiBaseUrl!.replaceAll('https', 'wss')}v4/listen$params';
+    // String url =
+    //     '${Env.apiBaseUrl!.replaceAll('https', 'wss')}v4/listen$params';
+    String url = 'ws://10.0.0.92:8000/v4/listen$params';
+
+    debugPrint('🔧 Flutter WebSocket Debug:');
+    debugPrint('🌐 Original API Base URL: ${Env.apiBaseUrl}');
+    debugPrint('🔗 WebSocket URL: $url');
+    debugPrint('👤 UID: ${SharedPreferencesUtil().uid}');
+    debugPrint(
+        '🎛️ STT Service: ${SharedPreferencesUtil().transcriptionModel}');
 
     _socket = PureSocket(url);
     _socket.setListener(this);
   }
 
-  void subscribe(Object context, ITransctipSegmentSocketServiceListener listener) {
+  void subscribe(
+      Object context, ITransctipSegmentSocketServiceListener listener) {
     _listeners.remove(context.hashCode);
     _listeners.putIfAbsent(context.hashCode, () => listener);
   }
@@ -129,7 +145,8 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
         return;
       }
       _listeners.forEach((k, v) {
-        v.onSegmentReceived(segments.map((e) => TranscriptSegment.fromJson(e)).toList());
+        v.onSegmentReceived(
+            segments.map((e) => TranscriptSegment.fromJson(e)).toList());
       });
       return;
     }
@@ -155,7 +172,8 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     NotificationService.instance.createNotification(
       notificationId: 3,
       title: 'Internet Connection Lost',
-      body: 'Your device is offline. Transcription is paused until connection is restored.',
+      body:
+          'Your device is offline. Transcription is paused until connection is restored.',
     );
   }
 

@@ -11,7 +11,10 @@ from database import redis_db
 
 torch.set_num_threads(1)
 torch.hub.set_dir('pretrained_models')
-model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
+model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', trust_repo=True,
+    force_reload=True,
+    skip_validation=True
+)
 (get_speech_timestamps, save_audio, read_audio, VADIterator, collect_chunks) = utils
 
 

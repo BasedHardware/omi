@@ -113,24 +113,25 @@ function setup_keystore_android() {
 # Build
 # #####
 function build() {
-  flutter pub get \
-    && dart run build_runner build
+  fvm flutter pub get \
+    && fvm dart pub run build_runner clean \
+    && fvm dart pub run build_runner build
 }
 
 # #########
 # Build iOS
 # #########
 function build_ios() {
-  flutter pub get \
+  fvm flutter pub get \
     && pushd ios && pod install --repo-update && popd \
-    && dart run build_runner build
+    && fvm dart pub run build_runner build
 }
 
 # #######
 # Run dev
 # #######
 function run_dev() {
-  flutter run --flavor dev
+  fvm flutter run --flavor dev
 }
 
 case "${1}" in
