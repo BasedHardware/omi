@@ -5,6 +5,16 @@ on:
     branches: [ "main", "development" ]
     paths:
       - 'plugins/apps-js/**'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Select the environment to deploy to'
+        required: true
+        default: 'development'
+      branch:
+        description: 'Branch to deploy from'
+        required: true
+        default: 'main'
 
 env:
   SERVICE: apps-js
