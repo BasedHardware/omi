@@ -70,7 +70,7 @@
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>We need access to your microphone so you can share audio explanations of Bugs you find.</string>
+	<string>Omi records your microphone audio as part of conversation recording feature and transcribes in real-time</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>We need access to your photo library to allow you to upload and share photos through Instabug.</string>
 	<key>NSPrincipalClass</key>
