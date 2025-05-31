@@ -1,0 +1,47 @@
+name: Deploy Apps-Js to Cloud RUN
+
+on:
+  push:
+    branches: [ "main", "development" ]
+    paths:
+      - 'plugins/apps-js/**'
+
+env:
+  SERVICE: apps-js
+  REGION: us-central1
+
+jobs:
+  deploy:
+    environment: ${{ (github.ref == 'refs/heads/development' && 'development') || (github.ref == 'refs/heads/main' && 'prod') }}
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Google Auth
+        id: auth
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - run: gcloud auth configure-docker
+
+      - name: Build and Push Docker image
+        run: |
+          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} -f plugins/apps-js/Dockerfile.datadog .
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+
+      - name: Show Output
+        run: echo ${{ steps.deploy.outputs.url }}
