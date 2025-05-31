@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import List
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
-from opuslib import Decoder
+# from opuslib import Decoder
 from pydub import AudioSegment
 
 from database.conversations import get_closest_conversation_to_timestamps, update_conversation_segments
