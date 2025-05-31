@@ -24,7 +24,7 @@ const emailRouter = require('./email/src/routes/email');
 const deckRouter = require('./deck/src/routes/deck');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
 // Validate required environment variables
 for (const envVar of REQUIRED_ENV_VARS) {
