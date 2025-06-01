@@ -3,6 +3,7 @@ import 'package:gradient_borders/gradient_borders.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:provider/provider.dart';
 
 class PrimaryLanguageWidget extends StatefulWidget {
@@ -108,8 +109,7 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
                 child: Text(
                   'Done',
                   style: TextStyle(
-                    color:
-                        currentSelectedLanguage == null ? null : Colors.white,
+                    color: currentSelectedLanguage == null ? null : Colors.white,
                   ),
                 ),
               ),
@@ -215,7 +215,8 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
           // Find the language name for the saved language code
           final homeProvider = Provider.of<HomeProvider>(context, listen: false);
           try {
-            selectedLanguageName = homeProvider.availableLanguages.entries.firstWhere((entry) => entry.value == savedLanguage).key;
+            selectedLanguageName =
+                homeProvider.availableLanguages.entries.firstWhere((entry) => entry.value == savedLanguage).key;
           } catch (e) {
             // If language not found in the map, just use the code
             selectedLanguageName = savedLanguage;
@@ -306,7 +307,12 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
                   width: double.infinity,
                   decoration: BoxDecoration(
                     border: const GradientBoxBorder(
-                      gradient: LinearGradient(colors: [Color.fromARGB(127, 208, 208, 208), Color.fromARGB(127, 188, 99, 121), Color.fromARGB(127, 86, 101, 182), Color.fromARGB(127, 126, 190, 236)]),
+                      gradient: LinearGradient(colors: [
+                        Color.fromARGB(127, 208, 208, 208),
+                        Color.fromARGB(127, 188, 99, 121),
+                        Color.fromARGB(127, 86, 101, 182),
+                        Color.fromARGB(127, 126, 190, 236)
+                      ]),
                       width: 2,
                     ),
                     borderRadius: BorderRadius.circular(12),
@@ -342,18 +348,20 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
           const SizedBox(
             height: 12,
           ),
-          InkWell(
-            child: Text(
-              'Need Help?',
-              style: TextStyle(
-                color: Colors.grey.shade300,
-                decoration: TextDecoration.underline,
-              ),
-            ),
-            onTap: () {
-              Intercom.instance.displayMessenger();
-            },
-          ),
+          PlatformService.isIntercomSupported
+              ? InkWell(
+                  child: Text(
+                    'Need Help?',
+                    style: TextStyle(
+                      color: Colors.grey.shade300,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                  onTap: () {
+                    Intercom.instance.displayMessenger();
+                  },
+                )
+              : const SizedBox.shrink(),
         ],
       ),
     );
