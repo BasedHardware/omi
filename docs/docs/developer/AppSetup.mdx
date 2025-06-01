@@ -34,10 +34,11 @@ This is the best way to get started, make changes to the app, and build apps on 
 
 Alternatively, you can [build the app manually (see below)](#build-the-app-manually) - which allows you to use your own backend, etc.
 
-**1. Fvm Setup:**
+### 1. FVM Setup
+
 Ensure Flutter is installed via [FVM](https://fvm.app/docs/getting_started/installation). Do not use global Flutter or upgrade it.
 
-```
+```bash
 dart pub global activate fvm
 
 # install flutter 3.24.1
@@ -45,51 +46,50 @@ fvm install 3.24.1
 
 # use flutter 3.24.1
 fvm use 3.24.1
-
-
-**2. Navigate to the  directory:**
-
 ```
+
+### 2. Navigate to the directory
+
+```bash
 cd app
 ```
 
-**3. Build the app for iOS:**
+### 3. Build the app for iOS
 
-```
+```bash
 bash setup.sh ios
 ```
 
-Note: This works great for iOS simulators\! 🎉 Want to run on your real device? Ping us on [Discord](https://discord.omi.me) - we'd love to help\! (Apple limits us to 100 dev devices)
+> **Note:** This works great for iOS simulators! 🎉 Want to run on your real device? Ping us on [Discord](https://discord.omi.me) - we'd love to help! (Apple limits us to 100 dev devices)
 
-**4. Build the app for Android:**
+### 4. Build the app for Android
 
-```
+```bash
 bash setup.sh android
 ```
 
-**If you use windows run the following commands**
+> **Windows Users:** Run the following command instead:
+> ```powershell
+> .\setup\scripts\setup.ps1
+> ```
 
-```
-.\setup\scripts\setup.ps1
-```
+### 5. Run app in simulator
 
-
-**4. Run app in simulator:**
-
-Now that we've built the app, we can run it in the simulator. Open the app in Xcode (open folder `app/ios`) or Android Studio (open folder `app/android`) - then just hit the run button\!
+Now that we've built the app, we can run it in the simulator. Open the app in Xcode (open folder `app/ios`) or Android Studio (open folder `app/android`) - then just hit the run button!
 
 Alternatively, run `flutter run --flavor dev` in terminal
 
-## Build the app manually:[​](#build-the-app-manually)
+## Build the app manually
 
 Manual setup is useful if you want to build the app with your own backend.
 
 ### 1. Flutter Setup
+
 Ensure Flutter is installed via [FVM](https://fvm.app/docs/getting_started/installation) as shown in step 1.
 
 Run the following to verify setup:
 
-```
+```bash
 fvm flutter doctor -v
 ```
 
@@ -152,48 +152,46 @@ fvm flutter doctor -v
 
 **Notes:**
 - Flutter version must be 3.24.1 on the stable channel, do not use global Flutter or upgrade it.
-
 - Android SDK platform tools must be 35.0.0
-
 - Ensure JDK version is 17 for Android builds. Set it explicitly:
 
-- (On macos you can use the following command to set the jdk version)
-```
+On macOS you can use the following command to set the JDK version:
+```bash
 fvm flutter config --jdk-dir /Library/Java/JavaVirtualMachines/jdk-17.jdk/Contents/Home
 ```
 
 - CocoaPods must be installed to run on iOS/macOS
 - Android Studio and VS Code versions do not matter as long as fvm flutter is used for all commands
 
-### 2. Get Flutter Dependencies[​](#2-get-flutter-dependencies)
+### 2. Get Flutter Dependencies
 
 From within `app` directory, install flutter packages:
 
-```
+```bash
 cd app 
 fvm flutter pub get
 ```
 
-### 3. Install iOS Pods[​](#3-install-ios-pods)
+### 3. Install iOS Pods
 
 Navigate to the iOS directory and install the CocoaPods dependencies:
 
-```
+```bash
 cd ios
 pod install 
 pod repo update
 ```
 
-### 4. Environment Configuration[​](#4-environment-configuration)
+### 4. Environment Configuration
 
 Create `.env` using template `.env.template`, the env template has OPENAI_API_KEY, GOOGLE_MAPS_API_KEY which are optional.
 
-```
+```bash
 cd ..
 cat .env.template > .dev.env
 ```
 
-### 5. API Keys[​](#5-api-keys)
+### 5. API Keys
 
 Add your API keys to the `.env` file. (Sentry is not needed)
 
@@ -201,34 +199,38 @@ Add your API keys to the `.env` file. (Sentry is not needed)
 - Be sure to include the trailing '/' or you'll get malformed URL's
 - If you want to update this later on, you will need to delete the builds folder, and recreate the runner using dart.
 
-### 6. Run Build Runner[​](#6-run-build-runner)
+### 6. Run Build Runner
 
 Generate necessary files with Build Runner:
 
-```
+```bash
 fvm dart pub run build_runner clean
 fvm dart pub run build_runner build
 ```
 
-### 7. Setup Firebase[​](#7-setup-firebase)
+### 7. Setup Firebase
+
 - This step is mandatory for running the app, otherwise firebase related code needs to be removed from the app.
 - Follow official [Firebase Docs](https://firebase.google.com/docs/flutter/setup) till Step 1
 - If you want to use Apple login, first go and [create an identifier on the apple developer website](https://developer.apple.com/account/resources/identifiers/list)
 - Run the following command to register the prod flavor of the app. The command will prompt you to select `configuration type`; under it, select `Target` and then `Runner`
-  - substitute your apple identifier with the IOS_BUNDLE_ID in the command below 
-  ```
-  flutterfire config --out=lib/firebase_options_prod.dart --ios-bundle-id=IOS_BUNDLE_ID --android-app-id=com.friend.ios --android-out=android/app/src/prod/  --ios-out=ios/Config/Prod/
-  ```
-- Similarly for dev environment
 
-  ```
-  flutterfire config --out=lib/firebase_options_dev.dart --ios-bundle-id=com.friend-app-with-wearable.ios12.develop --android-app-id=com.friend.ios.dev --android-out=android/app/src/dev/  --ios-out=ios/Config/Dev/
-  ```
+```bash
+# substitute your apple identifier with the IOS_BUNDLE_ID in the command below 
+flutterfire config --out=lib/firebase_options_prod.dart --ios-bundle-id=IOS_BUNDLE_ID --android-app-id=com.friend.ios --android-out=android/app/src/prod/  --ios-out=ios/Config/Prod/
+```
+
+- Similarly for dev environment:
+
+```bash
+flutterfire config --out=lib/firebase_options_dev.dart --ios-bundle-id=com.friend-app-with-wearable.ios12.develop --android-app-id=com.friend.ios.dev --android-out=android/app/src/dev/  --ios-out=ios/Config/Dev/
+```
+
 - Generate SHA1/SHA256 Keys for your Keystore and add them to Firebase. Follow the steps mentioned in this [StackOverflow answer](https://stackoverflow.com/a/56091158) or the [Official Docs](https://support.google.com/firebase/answer/9137403?hl=en). This is required for Firebase Auth through Google OAuth to work.
 
 If you're facing auth issues running the app, enable Google/Apple sign-in in Firebase. Go to the Firebase console and select your project. In the left-hand menu, click on "Authentication." On the "Sign-in method" tab, scroll down to the "Sign-in providers" section. Click on the "Google" sign-in provider. Click the "Enable" switch to enable Google Sign-In for your Firebase project.
 
-### 8. Run the App[​](#8-run-the-app)
+### 8. Run the App
 
 - Select your target device in Xcode or Android Studio.
 - Run the app using `fvm flutter run -v --flavor dev`
