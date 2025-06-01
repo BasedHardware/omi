@@ -6,7 +6,7 @@ import 'package:omi/providers/base_provider.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:omi/backend/http/api/apps.dart' as apps_api;
@@ -88,8 +88,7 @@ class AuthenticationProvider extends BaseProvider {
       return token;
     } catch (e, stackTrace) {
       AppSnackbar.showSnackbarError('Failed to retrieve firebase token, please try again.');
-
-      CrashReporting.reportHandledCrash(e, stackTrace, level: NonFatalExceptionLevel.error);
+      PlatformManager.instance.instabug.reportCrash(e, stackTrace);
 
       return null;
     }
@@ -105,7 +104,7 @@ class AuthenticationProvider extends BaseProvider {
       } catch (e, stackTrace) {
         AppSnackbar.showSnackbarError('Unexpected error signing in, Firebase error, please try again.');
 
-        CrashReporting.reportHandledCrash(e, stackTrace, level: NonFatalExceptionLevel.error);
+        PlatformManager.instance.instabug.reportCrash(e, stackTrace);
         return;
       }
       String newUid = user.uid;

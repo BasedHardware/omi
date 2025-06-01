@@ -6,7 +6,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:http/http.dart' as http;
-import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 Future<String> getAuthHeader() async {
   DateTime? expiry = DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
@@ -81,12 +81,7 @@ Future<http.Response?> makeApiCall({
   } catch (e, stackTrace) {
     Logger.error('HTTP request failed: $e');
     debugPrint('HTTP request failed: $e, $stackTrace');
-    CrashReporting.reportHandledCrash(
-      e,
-      stackTrace,
-      userAttributes: {'url': url, 'method': method},
-      level: NonFatalExceptionLevel.warning,
-    );
+    PlatformManager.instance.instabug.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
     return null;
   } finally {}
 }
@@ -140,17 +135,13 @@ dynamic extractContentFromResponse(
   } else {
     debugPrint('Error fetching data: ${response?.statusCode}');
     // TODO: handle error, better specially for script migration
-    CrashReporting.reportHandledCrash(
-      Exception('Error fetching data: ${response?.statusCode}'),
-      StackTrace.current,
-      userAttributes: {
-        'response_null': (response == null).toString(),
-        'response_status_code': response?.statusCode.toString() ?? '',
-        'is_embedding': isEmbedding.toString(),
-        'is_function_calling': isFunctionCalling.toString(),
-      },
-      level: NonFatalExceptionLevel.warning,
-    );
+    PlatformManager.instance.instabug
+        .reportCrash(Exception('Error fetching data: ${response?.statusCode}'), StackTrace.current, userAttributes: {
+      'response_null': (response == null).toString(),
+      'response_status_code': response?.statusCode.toString() ?? '',
+      'is_embedding': isEmbedding.toString(),
+      'is_function_calling': isFunctionCalling.toString(),
+    });
     return null;
   }
 }

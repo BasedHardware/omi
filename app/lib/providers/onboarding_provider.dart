@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
@@ -40,10 +41,35 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   bool hasBackgroundPermission = false; // Android only
   bool isLoading = false;
 
+  // Method channel for macOS permissions
+  static const MethodChannel _screenCaptureChannel = MethodChannel('screenCapturePlatform');
+
   Future updatePermissions() async {
-    hasBluetoothPermission = await Permission.bluetooth.isGranted;
-    hasLocationPermission = await Permission.location.isGranted;
-    hasNotificationPermission = await Permission.notification.isGranted;
+    if (Platform.isMacOS) {
+      try {
+        // Use macOS-specific permission checking
+        String bluetoothStatus = await _screenCaptureChannel.invokeMethod('checkBluetoothPermission');
+        hasBluetoothPermission = bluetoothStatus == 'granted';
+
+        String locationStatus = await _screenCaptureChannel.invokeMethod('checkLocationPermission');
+        hasLocationPermission = locationStatus == 'granted';
+
+        // Use macOS-specific notification permission checking
+        String notificationStatus = await _screenCaptureChannel.invokeMethod('checkNotificationPermission');
+        hasNotificationPermission = notificationStatus == 'granted' || notificationStatus == 'provisional';
+      } catch (e) {
+        debugPrint('Error updating permissions on macOS: $e');
+        // Fallback to standard permission checking
+        hasBluetoothPermission = await Permission.bluetooth.isGranted;
+        hasLocationPermission = await Permission.location.isGranted;
+        hasNotificationPermission = await Permission.notification.isGranted;
+      }
+    } else {
+      hasBluetoothPermission = await Permission.bluetooth.isGranted;
+      hasLocationPermission = await Permission.location.isGranted;
+      hasNotificationPermission = await Permission.notification.isGranted;
+    }
+
     SharedPreferencesUtil().notificationsEnabled = hasNotificationPermission;
     SharedPreferencesUtil().locationEnabled = hasLocationPermission;
     notifyListeners();
@@ -81,7 +107,36 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
   Future askForBluetoothPermissions() async {
     FlutterBluePlus.setLogLevel(LogLevel.info, color: true);
-    if (Platform.isIOS) {
+
+    if (Platform.isMacOS) {
+      try {
+        // Use macOS-specific permission handling
+        String bluetoothStatus = await _screenCaptureChannel.invokeMethod('checkBluetoothPermission');
+        if (bluetoothStatus == 'granted') {
+          updateBluetoothPermission(true);
+          return;
+        }
+
+        if (bluetoothStatus == 'undetermined') {
+          bool granted = await _screenCaptureChannel.invokeMethod('requestBluetoothPermission');
+          updateBluetoothPermission(granted);
+          if (!granted) {
+            AppSnackbar.showSnackbarError('Bluetooth permission is required to connect to your device.');
+          }
+        } else if (bluetoothStatus == 'denied' || bluetoothStatus == 'restricted') {
+          updateBluetoothPermission(false);
+          AppSnackbar.showSnackbarError('Bluetooth permission denied. Please grant permission in System Preferences.');
+        } else {
+          updateBluetoothPermission(false);
+          AppSnackbar.showSnackbarError(
+              'Bluetooth permission status: $bluetoothStatus. Please check System Preferences.');
+        }
+      } catch (e) {
+        debugPrint('Error checking/requesting Bluetooth permission on macOS: $e');
+        AppSnackbar.showSnackbarError('Failed to check Bluetooth permission: $e');
+        updateBluetoothPermission(false);
+      }
+    } else if (Platform.isIOS) {
       PermissionStatus bleStatus = await Permission.bluetooth.request();
       debugPrint('bleStatus: $bleStatus');
       updateBluetoothPermission(bleStatus.isGranted);
@@ -108,8 +163,44 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   Future askForNotificationPermissions() async {
-    var isAllowed = await NotificationService.instance.requestNotificationPermissions();
-    updateNotificationPermission(isAllowed);
+    if (Platform.isMacOS) {
+      try {
+        // Use macOS-specific permission handling
+        String notificationStatus = await _screenCaptureChannel.invokeMethod('checkNotificationPermission');
+        if (notificationStatus == 'granted') {
+          updateNotificationPermission(true);
+          return;
+        }
+
+        if (notificationStatus == 'undetermined') {
+          bool granted = await _screenCaptureChannel.invokeMethod('requestNotificationPermission');
+          updateNotificationPermission(granted);
+          if (!granted) {
+            AppSnackbar.showSnackbarError(
+                'Notification permission is required to stay informed about your conversations.');
+          }
+        } else if (notificationStatus == 'denied') {
+          updateNotificationPermission(false);
+          AppSnackbar.showSnackbarError(
+              'Notification permission denied. Please grant permission in System Preferences.');
+        } else if (notificationStatus == 'provisional') {
+          updateNotificationPermission(true); // Provisional permissions are still functional
+          debugPrint('Notification permission is provisional - notifications will be delivered quietly');
+        } else {
+          updateNotificationPermission(false);
+          AppSnackbar.showSnackbarError(
+              'Notification permission status: $notificationStatus. Please check System Preferences.');
+        }
+      } catch (e) {
+        debugPrint('Error checking/requesting Notification permission on macOS: $e');
+        AppSnackbar.showSnackbarError('Failed to check Notification permission: $e');
+        updateNotificationPermission(false);
+      }
+    } else {
+      // Existing logic for iOS/Android
+      var isAllowed = await NotificationService.instance.requestNotificationPermissions();
+      updateNotificationPermission(isAllowed);
+    }
     notifyListeners();
   }
 
@@ -121,20 +212,63 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   Future<(bool, PermissionStatus)> askForLocationPermissions() async {
-    if (await Permission.location.serviceStatus.isDisabled) {
-      debugPrint('Location service is disabled');
-      return (false, PermissionStatus.permanentlyDenied);
+    if (Platform.isMacOS) {
+      try {
+        // Use macOS-specific permission handling
+        String locationStatus = await _screenCaptureChannel.invokeMethod('checkLocationPermission');
+        if (locationStatus == 'granted') {
+          updateLocationPermission(true);
+          return (true, PermissionStatus.granted);
+        }
+
+        if (locationStatus == 'undetermined') {
+          bool granted = await _screenCaptureChannel.invokeMethod('requestLocationPermission');
+          updateLocationPermission(granted);
+          return (true, granted ? PermissionStatus.granted : PermissionStatus.denied);
+        } else if (locationStatus == 'denied' || locationStatus == 'restricted') {
+          updateLocationPermission(false);
+          return (true, PermissionStatus.permanentlyDenied);
+        } else {
+          updateLocationPermission(false);
+          return (true, PermissionStatus.denied);
+        }
+      } catch (e) {
+        debugPrint('Error checking/requesting Location permission on macOS: $e');
+        updateLocationPermission(false);
+        return (false, PermissionStatus.denied);
+      }
     } else {
-      var res = await Permission.locationWhenInUse.request();
-      return (true, res);
+      // Existing logic for iOS/Android
+      if (await Permission.location.serviceStatus.isDisabled) {
+        debugPrint('Location service is disabled');
+        return (false, PermissionStatus.permanentlyDenied);
+      } else {
+        var res = await Permission.locationWhenInUse.request();
+        return (true, res);
+      }
     }
   }
 
   Future<bool> alwaysAllowLocation() async {
-    PermissionStatus locationStatus = await Permission.locationAlways.request();
-    debugPrint('alwaysAllowLocation permission status: $locationStatus');
-    updateLocationPermission(locationStatus.isGranted);
-    return locationStatus.isGranted;
+    if (Platform.isMacOS) {
+      // On macOS, the location permission request already handles the full permission
+      // Just check the current status
+      try {
+        String locationStatus = await _screenCaptureChannel.invokeMethod('checkLocationPermission');
+        bool granted = locationStatus == 'granted';
+        updateLocationPermission(granted);
+        return granted;
+      } catch (e) {
+        debugPrint('Error checking location permission on macOS: $e');
+        updateLocationPermission(false);
+        return false;
+      }
+    } else {
+      PermissionStatus locationStatus = await Permission.locationAlways.request();
+      debugPrint('alwaysAllowLocation permission status: $locationStatus');
+      updateLocationPermission(locationStatus.isGranted);
+      return locationStatus.isGranted;
+    }
   }
   //----------------- Onboarding Permissions -----------------
 
