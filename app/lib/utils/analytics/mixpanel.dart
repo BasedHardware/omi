@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 
 class MixpanelManager {
@@ -11,14 +14,19 @@ class MixpanelManager {
 
   static Future<void> init() async {
     if (Env.mixpanelProjectToken == null) return;
-    if (_mixpanel == null) {
-      _mixpanel = await Mixpanel.init(
-        Env.mixpanelProjectToken!,
-        optOutTrackingDefault: false,
-        trackAutomaticEvents: true,
-      );
-      _mixpanel?.setLoggingEnabled(false);
-    }
+    return PlatformService.executeIfSupportedAsync(
+      PlatformService.isMixpanelSupported,
+      () async {
+        if (_mixpanel == null) {
+          _mixpanel = await Mixpanel.init(
+            Env.mixpanelProjectToken!,
+            optOutTrackingDefault: false,
+            trackAutomaticEvents: true,
+          );
+          _mixpanel?.setLoggingEnabled(false);
+        }
+      },
+    );
   }
 
   factory MixpanelManager() {
@@ -28,38 +36,66 @@ class MixpanelManager {
   MixpanelManager._internal();
 
   setPeopleValues() {
-    setUserProperty('Notifications Enabled', _preferences.notificationsEnabled);
-    setUserProperty('Location Enabled', _preferences.locationEnabled);
-    setUserProperty('Apps Enabled Count', _preferences.enabledAppsCount);
-    setUserProperty('Apps Integrations Enabled Count', _preferences.enabledAppsIntegrationsCount);
-    setUserProperty('Speaker Profile', _preferences.hasSpeakerProfile);
-    setUserProperty('Calendar Enabled', _preferences.calendarEnabled);
-    setUserProperty('Primary Language', _preferences.userPrimaryLanguage);
-    setUserProperty('Authorized Storing Recordings', _preferences.permissionStoreRecordingsEnabled);
+    PlatformService.executeIfSupported(
+      PlatformService.isMixpanelSupported,
+      () {
+        setUserProperty('Notifications Enabled', _preferences.notificationsEnabled);
+        setUserProperty('Location Enabled', _preferences.locationEnabled);
+        setUserProperty('Apps Enabled Count', _preferences.enabledAppsCount);
+        setUserProperty('Apps Integrations Enabled Count', _preferences.enabledAppsIntegrationsCount);
+        setUserProperty('Speaker Profile', _preferences.hasSpeakerProfile);
+        setUserProperty('Calendar Enabled', _preferences.calendarEnabled);
+        setUserProperty('Primary Language', _preferences.userPrimaryLanguage);
+        setUserProperty('Authorized Storing Recordings', _preferences.permissionStoreRecordingsEnabled);
+      },
+    );
   }
 
-  setUserProperty(String key, dynamic value) => _mixpanel?.getPeople().set(key, value);
+  setUserProperty(String key, dynamic value) => PlatformService.executeIfSupported(
+        PlatformService.isMixpanelSupported,
+        () => _mixpanel?.getPeople().set(key, value),
+      );
 
   void optInTracking() {
-    _mixpanel?.optInTracking();
-    identify();
+    PlatformService.executeIfSupported(
+      PlatformService.isMixpanelSupported,
+      () {
+        _mixpanel?.optInTracking();
+        identify();
+      },
+    );
   }
 
   void optOutTracking() {
-    _mixpanel?.optOutTracking();
-    _mixpanel?.reset();
+    PlatformService.executeIfSupported(
+      PlatformService.isMixpanelSupported,
+      () {
+        _mixpanel?.optOutTracking();
+        _mixpanel?.reset();
+      },
+    );
   }
 
   void identify() {
-    _mixpanel?.identify(_preferences.uid);
-    _instance.setPeopleValues();
-    setNameAndEmail();
+    PlatformService.executeIfSupported(
+      PlatformService.isMixpanelSupported,
+      () {
+        _mixpanel?.identify(_preferences.uid);
+        _instance.setPeopleValues();
+        setNameAndEmail();
+      },
+    );
   }
 
   void migrateUser(String newUid) {
-    _mixpanel?.alias(newUid, _preferences.uid);
-    _mixpanel?.identify(newUid);
-    setNameAndEmail();
+    PlatformService.executeIfSupported(
+      PlatformService.isMixpanelSupported,
+      () {
+        _mixpanel?.alias(newUid, _preferences.uid);
+        _mixpanel?.identify(newUid);
+        setNameAndEmail();
+      },
+    );
   }
 
   void setNameAndEmail() {
@@ -67,9 +103,15 @@ class MixpanelManager {
     setUserProperty('\$email', SharedPreferencesUtil().email);
   }
 
-  void track(String eventName, {Map<String, dynamic>? properties}) => _mixpanel?.track(eventName, properties: properties);
+  void track(String eventName, {Map<String, dynamic>? properties}) => PlatformService.executeIfSupported(
+        PlatformService.isMixpanelSupported,
+        () => _mixpanel?.track(eventName, properties: properties),
+      );
 
-  void startTimingEvent(String eventName) => _mixpanel?.timeEvent(eventName);
+  void startTimingEvent(String eventName) => PlatformService.executeIfSupported(
+        PlatformService.isMixpanelSupported,
+        () => _mixpanel?.timeEvent(eventName),
+      );
 
   void onboardingDeviceConnected() => track('Onboarding Device Connected');
 
@@ -147,7 +189,8 @@ class MixpanelManager {
 
   void deviceDisconnected() => track('Device Disconnected');
 
-  void memoriesPageCategoryOpened(MemoryCategory category) => track('Fact Page Category Opened', properties: {'category': category.toString().split('.').last});
+  void memoriesPageCategoryOpened(MemoryCategory category) =>
+      track('Fact Page Category Opened', properties: {'category': category.toString().split('.').last});
 
   void memoriesPageDeletedMemory(Memory memory) => track(
         'Fact Page Deleted Fact',
@@ -162,7 +205,8 @@ class MixpanelManager {
 
   void memoriesPageReviewBtn() => track('Fact page Review Button Pressed');
 
-  void memoriesPageCreatedMemory(MemoryCategory category) => track('Fact Page Created Fact', properties: {'fact_category': category.toString().split('.').last});
+  void memoriesPageCreatedMemory(MemoryCategory category) =>
+      track('Fact Page Created Fact', properties: {'fact_category': category.toString().split('.').last});
 
   void memorySearched(String query, int resultsCount) {
     track('Fact Searched', properties: {
@@ -248,11 +292,14 @@ class MixpanelManager {
     track('Memory Created', properties: properties);
   }
 
-  void conversationListItemClicked(ServerConversation conversation, int idx) => track('Memory List Item Clicked', properties: getConversationEventProperties(conversation));
+  void conversationListItemClicked(ServerConversation conversation, int idx) =>
+      track('Memory List Item Clicked', properties: getConversationEventProperties(conversation));
 
-  void conversationShareButtonClick(ServerConversation conversation) => track('Memory Share Button Clicked', properties: getConversationEventProperties(conversation));
+  void conversationShareButtonClick(ServerConversation conversation) =>
+      track('Memory Share Button Clicked', properties: getConversationEventProperties(conversation));
 
-  void conversationDeleted(ServerConversation conversation) => track('Memory Deleted', properties: getConversationEventProperties(conversation));
+  void conversationDeleted(ServerConversation conversation) =>
+      track('Memory Deleted', properties: getConversationEventProperties(conversation));
 
   void chatMessageSent({
     required String message,
@@ -281,13 +328,16 @@ class MixpanelManager {
 
   void speechProfileCapturePageClicked() => track('Speech Profile Capture Page Clicked');
 
-  void showDiscardedMemoriesToggled(bool showDiscarded) => track('Show Discarded Memories Toggled', properties: {'show_discarded': showDiscarded});
+  void showDiscardedMemoriesToggled(bool showDiscarded) =>
+      track('Show Discarded Memories Toggled', properties: {'show_discarded': showDiscarded});
 
-  void chatMessageConversationClicked(ServerConversation conversation) => track('Chat Message Memory Clicked', properties: getConversationEventProperties(conversation));
+  void chatMessageConversationClicked(ServerConversation conversation) =>
+      track('Chat Message Memory Clicked', properties: getConversationEventProperties(conversation));
 
   void addManualConversationClicked() => track('Add Manual Memory Clicked');
 
-  void manualConversationCreated(ServerConversation conversation) => track('Manual Memory Created', properties: getConversationEventProperties(conversation));
+  void manualConversationCreated(ServerConversation conversation) =>
+      track('Manual Memory Created', properties: getConversationEventProperties(conversation));
 
   void setUserProperties(String whatDoYouDo, String whereDoYouPlanToUseYourFriend, String ageRange) {
     setUserProperty('What the user does', whatDoYouDo);
@@ -295,7 +345,8 @@ class MixpanelManager {
     setUserProperty('Age Range', ageRange);
   }
 
-  void reProcessConversation(ServerConversation conversation) => track('Re-process Memory', properties: getConversationEventProperties(conversation));
+  void reProcessConversation(ServerConversation conversation) =>
+      track('Re-process Memory', properties: getConversationEventProperties(conversation));
 
   void developerModeEnabled() {
     track('Developer Mode Enabled');
@@ -317,13 +368,17 @@ class MixpanelManager {
 
   void supportContacted() => track('Support Contacted');
 
-  void copiedConversationDetails(ServerConversation conversation, {String source = ''}) => track('Copied Memory Detail $source'.trim(), properties: getConversationEventProperties(conversation));
+  void copiedConversationDetails(ServerConversation conversation, {String source = ''}) =>
+      track('Copied Memory Detail $source'.trim(), properties: getConversationEventProperties(conversation));
 
-  void checkedActionItem(ServerConversation conversation, int idx) => track('Checked Action Item', properties: getConversationEventProperties(conversation));
+  void checkedActionItem(ServerConversation conversation, int idx) =>
+      track('Checked Action Item', properties: getConversationEventProperties(conversation));
 
-  void uncheckedActionItem(ServerConversation conversation, int idx) => track('Unchecked Action Item', properties: getConversationEventProperties(conversation));
+  void uncheckedActionItem(ServerConversation conversation, int idx) =>
+      track('Unchecked Action Item', properties: getConversationEventProperties(conversation));
 
-  void deletedActionItem(ServerConversation conversation) => track('Deleted Action Item', properties: getConversationEventProperties(conversation));
+  void deletedActionItem(ServerConversation conversation) =>
+      track('Deleted Action Item', properties: getConversationEventProperties(conversation));
 
   void upgradeModalDismissed() => track('Upgrade Modal Dismissed');
 
@@ -359,7 +414,10 @@ class MixpanelManager {
 
   void deleteAccountCancelled() => track('Delete Account Cancelled');
 
-  void deleteUser() => _mixpanel?.getPeople().deleteUser();
+  void deleteUser() => PlatformService.executeIfSupported(
+        PlatformService.isMixpanelSupported,
+        () => _mixpanel?.getPeople().deleteUser(),
+      );
 
   // Apps Filter
   void appsFilterOpened() => track('Apps Filter Opened');

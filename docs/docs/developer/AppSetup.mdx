@@ -85,7 +85,23 @@ Manual setup is useful if you want to build the app with your own backend.
 
 ### 1. Flutter Setup
 
-Ensure Flutter is installed via [FVM](https://fvm.app/docs/getting_started/installation) as shown in step 1.
+Ensure Flutter is installed via [FVM](https://fvm.app/docs/getting_started/installation) as shown in step 1. Do not use global Flutter or upgrade it.
+
+
+fvm setup (tested on macos):
+
+```
+dart pub global activate fvm
+
+# install flutter 3.24.1
+fvm install 3.24.1
+
+# use flutter 3.24.1
+fvm use 3.24.1
+
+# check flutter version
+fvm flutter --version
+```
 
 Run the following to verify setup:
 
@@ -208,7 +224,8 @@ fvm dart pub run build_runner clean
 fvm dart pub run build_runner build
 ```
 
-### 7. Setup Firebase
+
+### 7. Setup Firebase[](#7-setup-firebase)
 
 - This step is mandatory for running the app, otherwise firebase related code needs to be removed from the app.
 - Follow official [Firebase Docs](https://firebase.google.com/docs/flutter/setup) till Step 1
