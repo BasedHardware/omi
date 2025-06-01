@@ -117,7 +117,7 @@ class AuthenticationProvider extends BaseProvider {
   }
 
   void openTermsOfService() {
-    _launchUrl('https://basedhardware.com/terms');
+    _launchUrl('https://www.omi.me/pages/terms-of-service');
   }
 
   void openPrivacyPolicy() {
