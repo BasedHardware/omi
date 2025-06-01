@@ -62,11 +62,11 @@
 	<key>NSHumanReadableCopyright</key>
 	<string>$(PRODUCT_COPYRIGHT)</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Your location is used to tag where conversations were created. This is optional.</string>
+	<string>Your location is used to tag where conversations take place, helping provide context in omi memory. This is optional, and your exact location is never stored or shared.</string>
 	<key>NSLocationUsageDescription</key>
-	<string>Your location is used to tag where conversations were created. This is optional.</string>
+	<string>Your location is used to tag where conversations take place, helping provide context in omi memory. This is optional, and your exact location is never stored or shared..</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Your location is used to tag where conversations were created. This is optional.</string>
+	<string>Your location is used to tag where conversations take place, helping provide context in omi memory. This is optional, and your exact location is never stored or shared.</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
 	<key>NSMicrophoneUsageDescription</key>
