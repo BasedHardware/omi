@@ -44,6 +44,13 @@ class IntercomManager {
     );
   }
 
+  Future loginIdentifiedUser(String uid) async {
+    return PlatformService.executeIfSupportedAsync(
+      PlatformService.isIntercomSupported,
+      () => intercom.loginIdentifiedUser(userId: uid),
+    );
+  }
+
   Future displayEarnMoneyArticle() async {
     return PlatformService.executeIfSupportedAsync(
       PlatformService.isIntercomSupported,

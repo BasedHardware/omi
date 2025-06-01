@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
@@ -43,27 +44,6 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                       style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                     ),
                     contentPadding: const EdgeInsets.only(left: 8),
-                    // controlAffinity: ListTileControlAffinity.leading,
-                    checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  )
-                : const SizedBox.shrink(),
-            Platform.isMacOS
-                ? CheckboxListTile(
-                    value: provider.hasBluetoothPermission,
-                    onChanged: (s) async {
-                      if (s != null) {
-                        if (s) {
-                          await provider.askForBluetoothPermissions();
-                        } else {
-                          provider.updateBluetoothPermission(false);
-                        }
-                      }
-                    },
-                    title: const Text(
-                      'Enable Bluetooth to connect to your device',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                    ),
-                    contentPadding: const EdgeInsets.only(left: 8),
                     checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   )
                 : const SizedBox.shrink(),
@@ -101,6 +81,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                                 'Background Location Access Denied',
                                 'Please go to device settings and set location permission to "Always Allow"',
                                 singleButton: true,
+                                okButtonText: 'Continue',
                               );
                             },
                           );
@@ -119,6 +100,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                               'Background Location Access Denied',
                               'Please go to device settings and set location permission to "Always Allow"',
                               singleButton: true,
+                              okButtonText: 'Continue',
                             );
                           },
                         );
@@ -134,7 +116,6 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
               ),
               contentPadding: const EdgeInsets.only(left: 8),
-              // controlAffinity: ListTileControlAffinity.leading,
               checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             ),
             CheckboxListTile(
@@ -153,7 +134,6 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
               ),
               contentPadding: const EdgeInsets.only(left: 8),
-              // controlAffinity: ListTileControlAffinity.leading,
               checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             ),
             const SizedBox(height: 16),
@@ -181,28 +161,6 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                           child: MaterialButton(
                             padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                             onPressed: () async {
-                              if (Platform.isMacOS) {
-                                provider.setLoading(true);
-
-                                // Request Bluetooth permission if not granted
-                                if (!provider.hasBluetoothPermission) {
-                                  await provider.askForBluetoothPermissions();
-                                }
-
-                                // Request Location permission if not granted
-                                if (!provider.hasLocationPermission) {
-                                  await provider.askForLocationPermissions();
-                                }
-
-                                // Request Notification permission if not granted
-                                if (!provider.hasNotificationPermission) {
-                                  await provider.askForNotificationPermissions();
-                                }
-
-                                provider.setLoading(false);
-                                widget.goNext();
-                                return;
-                              }
                               provider.setLoading(true);
                               if (Platform.isAndroid) {
                                 if (!provider.hasBackgroundPermission) {
@@ -262,18 +220,20 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
             const SizedBox(
               height: 12,
             ),
-            InkWell(
-              child: Text(
-                'Need Help?',
-                style: TextStyle(
-                  color: Colors.grey.shade300,
-                  decoration: TextDecoration.underline,
-                ),
-              ),
-              onTap: () {
-                Intercom.instance.displayMessenger();
-              },
-            ),
+            PlatformService.isIntercomSupported
+                ? InkWell(
+                    child: Text(
+                      'Need Help?',
+                      style: TextStyle(
+                        color: Colors.grey.shade300,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                    onTap: () {
+                      Intercom.instance.displayMessenger();
+                    },
+                  )
+                : const SizedBox.shrink(),
           ],
         ),
       );
