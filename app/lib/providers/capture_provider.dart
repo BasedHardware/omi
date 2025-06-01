@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:ui';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/http/api/conversations.dart';
@@ -22,6 +25,7 @@ import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/sdcard_socket.dart';
 import 'package:omi/services/sockets/transcription_connection.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
@@ -36,6 +40,9 @@ class CaptureProvider extends ChangeNotifier
   TranscriptSegmentSocketService? _socket;
   SdCardSocketService sdCardSocket = SdCardSocketService();
   Timer? _keepAliveTimer;
+
+  // Method channel for system audio permissions
+  static const MethodChannel _screenCaptureChannel = MethodChannel('screenCapturePlatform');
 
   IWalService get _wal => ServiceManager.instance().wal;
 
@@ -88,7 +95,10 @@ class CaptureProvider extends ChangeNotifier
   bool get transcriptServiceReady => _transcriptServiceReady && _internetStatus == InternetStatus.connected;
 
   // having a connected device or using the phone's mic for recording
-  bool get recordingDeviceServiceReady => _recordingDevice != null || recordingState == RecordingState.record;
+  bool get recordingDeviceServiceReady =>
+      _recordingDevice != null ||
+      recordingState == RecordingState.record ||
+      recordingState == RecordingState.systemAudioRecord;
 
   bool get havingRecordingDevice => _recordingDevice != null;
 
@@ -126,30 +136,37 @@ class CaptureProvider extends ChangeNotifier
   Future<void> changeAudioRecordProfile({
     required BleAudioCodec audioCodec,
     int? sampleRate,
+    int? channels,
+    bool? isPcm,
   }) async {
-    debugPrint("changeAudioRecordProfile");
+    print("changeAudioRecordProfile");
     await _resetState();
-    await _initiateWebsocket(audioCodec: audioCodec, sampleRate: sampleRate);
+    await _initiateWebsocket(audioCodec: audioCodec, sampleRate: sampleRate, channels: channels, isPcm: isPcm);
   }
 
   Future<void> _initiateWebsocket({
     required BleAudioCodec audioCodec,
     int? sampleRate,
+    int? channels,
+    bool? isPcm,
     bool force = false,
   }) async {
-    debugPrint('initiateWebsocket in capture_provider');
+    print('initiateWebsocket in capture_provider');
 
     BleAudioCodec codec = audioCodec;
-    sampleRate ??= (codec.isOpusSupported() ? 16000 : 8000);
+    sampleRate ??= mapCodecToSampleRate(codec);
+    channels ??= (codec == BleAudioCodec.pcm16 || codec == BleAudioCodec.pcm8) ? 1 : 2;
 
     debugPrint('is ws null: ${_socket == null}');
+    print('Initiating WebSocket with: codec=$codec, sampleRate=$sampleRate, channels=$channels, isPcm=$isPcm');
 
     // Connect to the transcript socket
     String language =
         SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
+
     _socket = await ServiceManager.instance()
         .socket
-        .conversation(codec: codec, sampleRate: sampleRate, language: language, force: force);
+        .conversation(codec: codec, sampleRate: sampleRate!, language: language, force: force);
     if (_socket == null) {
       _startKeepAliveServices();
       debugPrint("Can not create new conversation socket");
@@ -415,6 +432,7 @@ class CaptureProvider extends ChangeNotifier
   stopStreamRecording() async {
     await _cleanupCurrentState();
     ServiceManager.instance().mic.stop();
+    updateRecordingState(RecordingState.stop);
     await _socket?.stop(reason: 'stop stream recording');
   }
 
@@ -430,10 +448,85 @@ class CaptureProvider extends ChangeNotifier
       _updateRecordingDevice(null);
     }
     await _cleanupCurrentState();
+    updateRecordingState(RecordingState.stop);
     await _socket?.stop(reason: 'stop stream device recording');
   }
 
-  // Socket handling
+  Future<void> streamSystemAudioRecording() async {
+    if (!Platform.isMacOS) {
+      notifyError('System audio recording is only available on macOS.');
+      return;
+    }
+
+    updateRecordingState(RecordingState.initialising);
+
+    try {
+      // Check microphone permission first
+      String micStatus = await _screenCaptureChannel.invokeMethod('checkMicrophonePermission');
+      if (micStatus != 'granted') {
+        debugPrint('Microphone permission not granted: $micStatus');
+        if (micStatus == 'undetermined') {
+          bool micGranted = await _screenCaptureChannel.invokeMethod('requestMicrophonePermission');
+          if (!micGranted) {
+            AppSnackbar.showSnackbarError('Microphone permission is required for system audio recording.');
+            updateRecordingState(RecordingState.stop);
+            return;
+          }
+        } else if (micStatus == 'denied') {
+          AppSnackbar.showSnackbarError('Microphone permission denied. Please grant permission in System Preferences.');
+          updateRecordingState(RecordingState.stop);
+          return;
+        }
+      }
+
+      // Check screen capture permission
+      String screenStatus = await _screenCaptureChannel.invokeMethod('checkScreenCapturePermission');
+      if (screenStatus != 'granted') {
+        debugPrint('Screen capture permission not granted: $screenStatus');
+        if (screenStatus == 'undetermined' || screenStatus == 'denied') {
+          bool screenGranted = await _screenCaptureChannel.invokeMethod('requestScreenCapturePermission');
+          if (!screenGranted) {
+            AppSnackbar.showSnackbarError('Screen capture permission is required for system audio recording.');
+            updateRecordingState(RecordingState.stop);
+            return;
+          }
+        }
+      }
+
+      await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
+
+      await ServiceManager.instance().systemAudio.start(onFormatReceived: (Map<String, dynamic> format) async {
+        final int sampleRate = format['sampleRate'] as int? ?? 16000;
+        final int channels = format['channels'] as int? ?? 1;
+        BleAudioCodec determinedCodec = BleAudioCodec.pcm16;
+      }, onByteReceived: (bytes) {
+        if (_socket?.state == SocketServiceState.connected) {
+          _socket?.send(bytes);
+        }
+      }, onRecording: () {
+        updateRecordingState(RecordingState.systemAudioRecord);
+      }, onStop: () {
+        updateRecordingState(RecordingState.stop);
+        _socket?.stop(reason: 'system audio stream ended from native');
+      }, onError: (error) {
+        notifyError('System Audio Error: $error');
+        updateRecordingState(RecordingState.stop);
+        _socket?.stop(reason: 'system audio stream error: $error');
+      });
+    } catch (e) {
+      debugPrint('Error checking/requesting permissions: $e');
+      notifyError('Failed to check permissions: $e');
+      updateRecordingState(RecordingState.stop);
+    }
+  }
+
+  Future<void> stopSystemAudioRecording() async {
+    if (!Platform.isMacOS) return;
+    ServiceManager.instance().systemAudio.stop();
+    updateRecordingState(RecordingState.stop);
+    await _socket?.stop(reason: 'stop system audio recording from Flutter');
+    await _cleanupCurrentState();
+  }
 
   @override
   void onClosed() {
@@ -461,6 +554,9 @@ class CaptureProvider extends ChangeNotifier
       if (recordingState == RecordingState.record) {
         await _initiateWebsocket(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
         return;
+      }
+      if (recordingState == RecordingState.systemAudioRecord && Platform.isMacOS) {
+        debugPrint("[Provider] System audio was recording, but socket disconnected. Consider manual restart.");
       }
     });
   }

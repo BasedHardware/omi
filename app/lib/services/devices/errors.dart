@@ -1,32 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 void logErrorMessage(String message, String deviceId) {
   debugPrint('($deviceId) $message');
-  CrashReporting.reportHandledCrash(
-    Exception(message),
-    StackTrace.current,
-    level: NonFatalExceptionLevel.error,
-  );
+  PlatformManager.instance.instabug.reportCrash(Exception(message), StackTrace.current);
 }
 
 void logCommonErrorMessage(String message) {
-  debugPrint('$message');
-  CrashReporting.reportHandledCrash(
-    Exception(message),
-    StackTrace.current,
-    level: NonFatalExceptionLevel.error,
-  );
+  debugPrint(message);
+  PlatformManager.instance.instabug.reportCrash(Exception(message), StackTrace.current);
 }
 
 void logCrashMessage(String message, String deviceId, Object e, StackTrace stackTrace) {
   logErrorMessage('$message error: $e', deviceId);
-  CrashReporting.reportHandledCrash(
-    e,
-    stackTrace,
-    level: NonFatalExceptionLevel.error,
-    userAttributes: {'deviceId': deviceId},
-  );
+  PlatformManager.instance.instabug.reportCrash(e, stackTrace);
 }
 
 void logServiceNotFoundError(String serviceName, String deviceId) {

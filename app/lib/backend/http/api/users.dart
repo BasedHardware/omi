@@ -6,7 +6,7 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/env/env.dart';
-import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 Future<bool> updateUserGeolocation({required Geolocation geolocation}) async {
   var response = await makeApiCall(
@@ -17,12 +17,8 @@ Future<bool> updateUserGeolocation({required Geolocation geolocation}) async {
   );
   if (response == null) return false;
   if (response.statusCode == 200) return true;
-  CrashReporting.reportHandledCrash(
-    Exception('Failed to update user geolocation'),
-    StackTrace.current,
-    level: NonFatalExceptionLevel.info,
-    userAttributes: {'response': response.body},
-  );
+  PlatformManager.instance.instabug.reportCrash(Exception('Failed to update user geolocation'), StackTrace.current,
+      userAttributes: {'response': response.body});
   return false;
 }
 
