@@ -167,6 +167,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       try {
         // Use macOS-specific permission handling
         String notificationStatus = await _screenCaptureChannel.invokeMethod('checkNotificationPermission');
+        debugPrint('notificationStatus: $notificationStatus');
         if (notificationStatus == 'granted') {
           updateNotificationPermission(true);
           return;
@@ -175,25 +176,16 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         if (notificationStatus == 'undetermined') {
           bool granted = await _screenCaptureChannel.invokeMethod('requestNotificationPermission');
           updateNotificationPermission(granted);
-          if (!granted) {
-            AppSnackbar.showSnackbarError(
-                'Notification permission is required to stay informed about your conversations.');
-          }
         } else if (notificationStatus == 'denied') {
           updateNotificationPermission(false);
-          AppSnackbar.showSnackbarError(
-              'Notification permission denied. Please grant permission in System Preferences.');
         } else if (notificationStatus == 'provisional') {
           updateNotificationPermission(true); // Provisional permissions are still functional
           debugPrint('Notification permission is provisional - notifications will be delivered quietly');
         } else {
           updateNotificationPermission(false);
-          AppSnackbar.showSnackbarError(
-              'Notification permission status: $notificationStatus. Please check System Preferences.');
         }
       } catch (e) {
         debugPrint('Error checking/requesting Notification permission on macOS: $e');
-        AppSnackbar.showSnackbarError('Failed to check Notification permission: $e');
         updateNotificationPermission(false);
       }
     } else {
@@ -216,6 +208,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       try {
         // Use macOS-specific permission handling
         String locationStatus = await _screenCaptureChannel.invokeMethod('checkLocationPermission');
+        debugPrint('locationStatus: $locationStatus');
         if (locationStatus == 'granted') {
           updateLocationPermission(true);
           return (true, PermissionStatus.granted);
@@ -224,6 +217,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         if (locationStatus == 'undetermined') {
           bool granted = await _screenCaptureChannel.invokeMethod('requestLocationPermission');
           updateLocationPermission(granted);
+          debugPrint('undetermined location permission granted: $granted');
           return (true, granted ? PermissionStatus.granted : PermissionStatus.denied);
         } else if (locationStatus == 'denied' || locationStatus == 'restricted') {
           updateLocationPermission(false);

@@ -8,6 +8,7 @@ import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/profile.dart';
 import 'package:omi/pages/settings/widgets.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -94,22 +95,26 @@ class _SettingsPageState extends State<SettingsPage> {
         const SizedBox(height: 12),
 
         // Help & Support
-        getItemAddOn2(
-          'Guides & Tutorials',
-          () async {
-            await Intercom.instance.displayHelpCenter();
-          },
-          icon: const Icon(Icons.help_outline_outlined, color: Colors.white, size: 22),
-        ),
-        const SizedBox(height: 12),
-        getItemAddOn2(
-          'Need Help? Chat with us',
-          () async {
-            await Intercom.instance.displayMessenger();
-          },
-          icon: const Icon(Icons.chat, color: Colors.white, size: 22),
-        ),
-        const SizedBox(height: 12),
+        !PlatformService.isIntercomSupported
+            ? const SizedBox()
+            : getItemAddOn2(
+                'Guides & Tutorials',
+                () async {
+                  await Intercom.instance.displayHelpCenter();
+                },
+                icon: const Icon(Icons.help_outline_outlined, color: Colors.white, size: 22),
+              ),
+        SizedBox(height: PlatformService.isIntercomSupported ? 12 : 0),
+        !PlatformService.isIntercomSupported
+            ? const SizedBox()
+            : getItemAddOn2(
+                'Need Help? Chat with us',
+                () async {
+                  await Intercom.instance.displayMessenger();
+                },
+                icon: const Icon(Icons.chat, color: Colors.white, size: 22),
+              ),
+        SizedBox(height: PlatformService.isIntercomSupported ? 12 : 0),
 
         // Information
         getItemAddOn2(
