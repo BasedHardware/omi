@@ -87,6 +87,8 @@ dist/
 **/web/.dart_tool/
 
 # Miscellaneous
+!app/pubspec.lock
+!app/ios/Podfile.lock
 *.lock
 *.log
 *.swo
