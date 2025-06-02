@@ -1059,9 +1059,9 @@ export default function CreateAppPage() {
                 <label htmlFor="termsAgreed" className="text-white font-medium">Agree to Terms of Service <span className="text-red-400">*</span></label>
                 <p className="text-sm text-gray-400 mt-1">
                   By submitting this app, I agree to the{' '}
-                  <a href="https://omi.ai/terms" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">Omi AI Terms of Service</a>
+                  <a href="https://omi.me/pages/terms-of-service" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">Omi AI Terms of Service</a>
                   {' '}and{' '}
-                  <a href="https://omi.ai/privacy" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">Privacy Policy</a>
+                  <a href="https://omi.me/pages/privacy" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">Privacy Policy</a>
                 </p>
               </div>
             </div>
