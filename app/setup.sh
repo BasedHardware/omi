@@ -1,14 +1,23 @@
 #!/bin/bash
 #
 # Set up the Omi Mobile Project(iOS/Android).
-# Prerequisites:
-# - Flutter SDK
-# - Dart SDK
-# - Xcode (for iOS)
-# - CocoaPods (for iOS dependencies)
-# - Android Studio (for Android)
-# - NDK 26.3.11579264 or above (to build Opus for ARM Devices)
+#
+# Prerequisites (stable versions, use these or higher):
+#
+# Common for all developers:
+# - Flutter SDK (v3.24.1)
 # - Opus Codec: https://opus-codec.org
+#
+# For iOS Developers:
+# - Xcode (v15.2)
+# - CocoaPods (v1.14.3)
+#
+# For Android Developers:
+# - Android Studio (Iguana | 2023.2.1 Patch 2)
+# - Android SDK Platform (API 34)
+# - JDK (v17)
+# - Gradle (v8.10)
+# - NDK (27.0.12077973)
 # Usages: 
 # - $bash setup.sh ios
 # - $bash setup.sh android
@@ -16,14 +25,22 @@
 set -euo pipefail
 
 echo "👋 Yo folks! Welcome to the OMI Mobile Project - We're hiring! Join us on Discord: http://discord.omi.me"
-echo "Prerequisites:"
-echo "- Flutter SDK"
-echo "- Dart SDK"
-echo "- Xcode (for iOS)"
-echo "- CocoaPods (for iOS dependencies)"
-echo "- Android Studio (for Android)"
-echo "- NDK 26.3.11579264 or above (to build Opus for ARM Devices)"
+echo "Prerequisites (stable versions, use these or higher):"
+echo ""
+echo "Common for all developers:"
+echo "- Flutter SDK (v3.24.1)"
 echo "- Opus Codec: https://opus-codec.org"
+echo ""
+echo "For iOS Developers:"
+echo "- Xcode (v15.2)"
+echo "- CocoaPods (v1.14.3)"
+echo ""
+echo "For Android Developers:"
+echo "- Android Studio (Iguana | 2023.2.1 Patch 2)"
+echo "- Android SDK Platform (API 34)"
+echo "- JDK (v17)"
+echo "- Gradle (v8.10)"
+echo "- NDK (27.0.12077973)"
 echo "Usages:"
 echo "- bash setup.sh ios"
 echo "- bash setup.sh android"
