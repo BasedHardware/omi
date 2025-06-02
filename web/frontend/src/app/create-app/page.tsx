@@ -4,35 +4,20 @@ import { useAuth } from '../../hooks/useAuth';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-
-// Types based on Flutter app
-interface Category {
-  title: string;
-  id: string;
-}
-
-interface TriggerEvent {
-  title: string;
-  id: string;
-}
-
-interface NotificationScope {
-  title: string;
-  id: string;
-}
-
-interface AppCapability {
-  title: string;
-  id: string;
-  triggers?: TriggerEvent[];
-  scopes?: NotificationScope[];
-  actions?: any[];
-}
-
-interface PaymentPlan {
-  title: string;
-  id: string;
-}
+import {
+  getAppInitializationData,
+  generateDescription as generateDescriptionAction,
+  uploadThumbnails,
+  submitApp,
+  type Category,
+  type TriggerEvent,
+  type NotificationScope,
+  type AppCapability,
+  type PaymentPlan,
+  type AppSubmissionData,
+  type ExternalIntegration,
+  type ProactiveNotification
+} from '../../actions/apps';
 
 export default function CreateAppPage() {
   const { user, loading, signOut } = useAuth();
@@ -107,46 +92,19 @@ export default function CreateAppPage() {
     console.log('🚀 [initializeData] Starting data initialization...');
     
     try {
-      console.log('📋 [initializeData] Fetching categories...');
-      const categoriesRes = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/v1/app-categories`);
-      console.log('📋 [initializeData] Categories response status:', categoriesRes.status);
-      if (categoriesRes.ok) {
-        const categoriesData = await categoriesRes.json();
-        setCategories(categoriesData);
-      } else {
-        console.error('❌ [initializeData] Categories fetch failed:', categoriesRes.status, categoriesRes.statusText);
-      }
-
-      console.log('⚡ [initializeData] Fetching capabilities...');
-      const capabilitiesRes = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/v1/app-capabilities`);
-      console.log('⚡ [initializeData] Capabilities response status:', capabilitiesRes.status);
-      if (capabilitiesRes.ok) {
-        const capabilitiesData = await capabilitiesRes.json();
-        setCapabilities(capabilitiesData);
-      } else {
-        console.error('❌ [initializeData] Capabilities fetch failed:', capabilitiesRes.status, capabilitiesRes.statusText);
-      }
-
-      console.log('💳 [initializeData] Fetching payment plans...');
       const token = await user?.getIdToken();
-      if (token) {
-        const paymentPlansRes = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/v1/app/plans`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        console.log('💳 [initializeData] Payment plans response status:', paymentPlansRes.status);
-        if (paymentPlansRes.ok) {
-          const paymentPlansData = await paymentPlansRes.json();
-          setPaymentPlans(paymentPlansData);
-        } else {
-          console.error('❌ [initializeData] Payment plans fetch failed:', paymentPlansRes.status, paymentPlansRes.statusText);
-        }
-      } else {
-        console.log('💳 [initializeData] No token available, skipping payment plans');
-      }
+      console.log('📋 [initializeData] Fetching app initialization data...');
+      
+      const data = await getAppInitializationData(token);
+      
+      setCategories(data.categories);
+      setCapabilities(data.capabilities);
+      setPaymentPlans(data.paymentPlans);
+      
+      console.log('✅ [initializeData] Data initialization complete');
     } catch (error) {
       console.error('❌ [initializeData] Error fetching data:', error);
     } finally {
-      console.log('✅ [initializeData] Data initialization complete');
       setIsLoading(false);
     }
   };
@@ -163,17 +121,73 @@ export default function CreateAppPage() {
     }
   };
 
+  const processImageFile = (file: File) => {
+    // Validate file size (10MB limit)
+    const maxSize = 10 * 1024 * 1024; // 10MB in bytes
+    if (file.size > maxSize) {
+      alert('File size must be less than 10MB');
+      return;
+    }
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      alert('Please upload a valid image file (PNG, JPG, JPEG, WEBP)');
+      return;
+    }
+
+    setIsUploadingThumbnail(true);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      setThumbnailUrls(prev => [...prev, result]);
+      setIsUploadingThumbnail(false);
+    };
+    reader.onerror = () => {
+      alert('Error reading file. Please try again.');
+      setIsUploadingThumbnail(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleThumbnailUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setIsUploadingThumbnail(true);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const result = event.target?.result as string;
-        setThumbnailUrls(prev => [...prev, result]);
-        setIsUploadingThumbnail(false);
-      };
-      reader.readAsDataURL(file);
+      processImageFile(file);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (thumbnailUrls.length >= 5) {
+      alert('Maximum 5 images allowed');
+      return;
+    }
+    
+    const files = Array.from(e.dataTransfer.files);
+    const imageFile = files.find(file => file.type.startsWith('image/'));
+    
+    if (imageFile) {
+      processImageFile(imageFile);
+    } else {
+      alert('Please drop an image file');
     }
   };
 
@@ -237,23 +251,20 @@ export default function CreateAppPage() {
     setIsGeneratingDescription(true);
     try {
       const token = await user?.getIdToken();
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/v1/app/generate-description`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          name: appName,
-          description: appDescription
-        })
-      });
+      if (!token) {
+        console.error('[generateDescription] No token available');
+        return;
+      }
       
-      if (response.ok) {
-        const data = await response.json();
-        setAppDescription(data.description);
+      const result = await generateDescriptionAction({
+        name: appName,
+        description: appDescription
+      }, token);
+      
+      if (result) {
+        setAppDescription(result.description);
       } else {
-        console.error('[generateDescription] Failed to generate description:', response.status, response.statusText);
+        console.error('[generateDescription] Failed to generate description');
       }
     } catch (error) {
       console.error('[generateDescription] Error:', error);
@@ -310,7 +321,7 @@ export default function CreateAppPage() {
       }
       console.log('🔑 [handleSubmit] Token acquired.');
 
-      const appData: any = {
+      const appData: AppSubmissionData = {
         name: appName.trim(),
         description: appDescription.trim(),
         capabilities: selectedCapabilities.map((e) => e.id),
@@ -326,7 +337,7 @@ export default function CreateAppPage() {
 
       for (const capability of selectedCapabilities) {
         if (capability.id === 'external_integration') {
-          appData.external_integration = {
+          const externalIntegration: ExternalIntegration = {
             triggers_on: triggerEvent,
             webhook_url: webhookUrl.trim(),
             setup_completed_url: setupCompletedUrl.trim(),
@@ -335,59 +346,36 @@ export default function CreateAppPage() {
             auth_steps: [],
           };
           if (authUrl.trim()) {
-            appData.external_integration.auth_steps = [{
+            externalIntegration.auth_steps = [{
               url: authUrl.trim(),
               name: `Setup ${appName}`,
             }];
           }
+          appData.external_integration = externalIntegration;
         }
         if (capability.id === 'chat') appData.chat_prompt = chatPrompt.trim();
         if (capability.id === 'memories') appData.memory_prompt = conversationPrompt.trim();
         if (capability.id === 'proactive_notification') {
-          appData.proactive_notification = { scopes: selectedScopes.map((s) => s.id) };
+          const proactiveNotification: ProactiveNotification = { 
+            scopes: selectedScopes.map((s) => s.id) 
+          };
+          appData.proactive_notification = proactiveNotification;
         }
       }
       console.log('📝 [handleSubmit] App data constructed:', appData);
 
-      const thumbnailIds: string[] = [];
-      if (thumbnailUrls.length > 0) {
-        console.log('📸 [handleSubmit] Uploading thumbnails...');
-        for (const thumbnailUrl of thumbnailUrls) {
-          try {
-            const response = await fetch(thumbnailUrl);
-            const blob = await response.blob();
-            const thumbnailFormData = new FormData();
-            thumbnailFormData.append('file', blob, 'thumbnail.jpg');
-            
-            const thumbnailResponse = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/v1/app/thumbnails`, {
-              method: 'POST',
-              headers: { 'Authorization': `Bearer ${token}` },
-              body: thumbnailFormData,
-            });
-            
-            if (thumbnailResponse.ok) {
-              const thumbnailResult = await thumbnailResponse.json();
-              thumbnailIds.push(thumbnailResult.thumbnail_id);
-              console.log('📸 [handleSubmit] Thumbnail uploaded successfully:', thumbnailResult.thumbnail_id);
-            } else {
-              console.warn('⚠️ [handleSubmit] Failed to upload thumbnail, status:', thumbnailResponse.status);
-            }
-          } catch (thumbnailError) {
-            console.warn('⚠️ [handleSubmit] Error uploading thumbnail, continuing:', thumbnailError);
-          }
-        }
-        console.log('📸 [handleSubmit] Thumbnail IDs collected:', thumbnailIds);
-      } else {
-        console.log('📸 [handleSubmit] No thumbnails to upload');
-      }
+      const thumbnailIds = await uploadThumbnails(thumbnailUrls, token);
       appData.thumbnails = thumbnailIds;
 
-      const formData = new FormData();
-      formData.append('app_data', JSON.stringify(appData));
-      
+      // Create FormData for the submission
+      const submissionFormData = new FormData();
+      submissionFormData.append('app_data', JSON.stringify(appData));
+      submissionFormData.append('token', token);
+
+      // Handle app icon
       if (imageFile) {
-        formData.append('file', imageFile);
-        console.log('🖼️ [handleSubmit] App icon (user-provided) added to FormData.');
+        submissionFormData.append('file', imageFile);
+        console.log('🖼️ [handleSubmit] App icon (user-provided) prepared.');
       } else {
         console.log('🖼️ [handleSubmit] No user-provided app icon, generating default...');
         const blob = await new Promise<Blob | null>((resolve) => {
@@ -409,44 +397,31 @@ export default function CreateAppPage() {
           }
         });
         if (blob) {
-          formData.append('file', blob, 'icon.png');
-          console.log('🖼️ [handleSubmit] Default app icon added to FormData.');
+          submissionFormData.append('file', blob, 'default-icon.png');
+          console.log('🖼️ [handleSubmit] Default app icon generated.');
         } else {
           console.warn('⚠️ [handleSubmit] Failed to generate default icon blob.');
         }
       }
 
-      console.log('🚀 [handleSubmit] Submitting app to backend. FormData keys:', Array.from(formData.keys()));
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/v1/apps`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData,
-      });
+      console.log('🚀 [handleSubmit] Submitting app to backend.');
+      const result = await submitApp(submissionFormData);
 
-      console.log('📡 [handleSubmit] Backend response status:', response.status);
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: 'Failed to parse error response' }));
-        console.error('❌ [handleSubmit] Backend submission failed:', response.status, errorData);
-        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const result = await response.json();
       console.log('✅ [handleSubmit] App submission successful:', result);
 
       alert(`App "${appName}" submitted successfully! ${makeAppPublic ? 'Your app will be reviewed and made public.' : 'Your app will be reviewed and made available to you privately.'} You can start using it immediately, even during the review!`);
       
-      setIsRedirecting(true); // Set redirecting state
-      console.log('↪️ [handleSubmit] App submitted, preparing to redirect to /'); // Updated log message
-      // Delay slightly to show loading, then redirect
+      setIsRedirecting(true);
+      console.log('↪️ [handleSubmit] App submitted, preparing to redirect to /');
       setTimeout(() => {
-        router.push('/'); // Changed redirection to homepage
-      }, 1500); // 1.5 second delay for user to see message if any
+        router.push('/');
+      }, 1500);
       
     } catch (error: any) {
       console.error('❌ [handleSubmit] App submission failed with error:', error.message, error.stack);
       submissionRef.current = false;
       setSubmissionStarted(false);
-      setIsRedirecting(false); // Reset redirecting state on error
+      setIsRedirecting(false);
       console.log('🔄 [handleSubmit] Guards reset due to error.');
       
       let errorMessage = 'Error submitting app. Please try again.';
@@ -487,14 +462,23 @@ export default function CreateAppPage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#0B0F17] text-white">
         <div className="text-center">
-          <div className="mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-white"></div>
-          <p>
+          <div className="mb-6 h-8 w-8 mx-auto animate-spin rounded-full border-2 border-gray-600 border-t-white"></div>
+          
+          <p className="text-lg font-medium text-white">
             {isRedirecting 
-              ? 'App submitted successfully! Redirecting to homepage...' // Updated redirect message
+              ? 'App submitted successfully!' 
               : isSubmitting 
               ? 'Submitting your app...' 
-              : 'Hold on, we are preparing the form for you'}
+              : 'Loading...'}
           </p>
+          
+          {(isSubmitting || isRedirecting) && (
+            <p className="text-sm text-gray-400 mt-2">
+              {isRedirecting 
+                ? 'Redirecting to homepage...'
+                : 'Please wait while we process your submission'}
+            </p>
+          )}
         </div>
       </div>
     );
@@ -643,7 +627,7 @@ export default function CreateAppPage() {
                 >
                   {isGeneratingDescription ? (
                     <div className="flex items-center space-x-2">
-                      <div className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                      <div className="h-3 w-3 animate-spin rounded-full border border-white/40 border-t-white"></div>
                       <span>Generating...</span>
                     </div>
                   ) : (
@@ -771,45 +755,116 @@ export default function CreateAppPage() {
                 </div>
                 <div>
                     <h3 className="text-xl font-semibold text-white">Preview & Screenshots</h3>
-                    <p className="text-sm text-gray-400">Add images to showcase your app</p>
+                    <p className="text-sm text-gray-400">Add images to showcase your app (up to 5 images)</p>
                 </div>
             </div>
-          <div className="grid grid-cols-3 gap-4">
-            {thumbnailUrls.map((url, index) => (
-              <div key={index} className="relative group aspect-w-2 aspect-h-3">
-                <Image
-                  src={url}
-                  alt={`Screenshot ${index + 1}`}
-                  fill
-                  className="object-cover rounded-[0.5rem] border border-white/10"
-                />
-                <button
-                  onClick={() => removeThumbnail(index)}
-                  className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-              </div>
-            ))}
             
-            {thumbnailUrls.length < 5 && (
-              <label className={`aspect-w-2 aspect-h-3 flex items-center justify-center rounded-[0.5rem] border-2 border-dashed border-gray-600 hover:border-gray-500 transition-colors cursor-pointer 
-                              ${isUploadingThumbnail ? 'opacity-50 cursor-default' : ''}`}>
-                {isUploadingThumbnail ? (
-                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                ) : (
-                  <svg className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
-                )}
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleThumbnailUpload}
-                  className="hidden"
-                  disabled={isUploadingThumbnail}
-                />
-              </label>
+            {/* Thumbnail Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {thumbnailUrls.map((url, index) => (
+                <div key={index} className="group relative">
+                  {/* Aspect Ratio Container - Made taller */}
+                  <div className="relative aspect-[3/4] overflow-hidden rounded-[0.5rem] border border-white/20 bg-gray-800/50">
+                    <Image
+                      src={url}
+                      alt={`Screenshot ${index + 1}`}
+                      fill
+                      className="object-cover transition-transform duration-300 group-hover:scale-105"
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
+                    />
+                    
+                    {/* Overlay */}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300" />
+                    
+                    {/* Delete Button */}
+                    <button
+                      onClick={() => removeThumbnail(index)}
+                      className="absolute top-2 right-2 bg-red-500/80 hover:bg-red-500 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-1 group-hover:translate-y-0"
+                      title="Remove image"
+                    >
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                    
+                    {/* Image Number Badge */}
+                    <div className="absolute bottom-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded-full">
+                      {index + 1}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              
+              {/* Add New Thumbnail Button */}
+              {thumbnailUrls.length > 0 && thumbnailUrls.length < 5 && (
+                <div className="group relative">
+                  <label 
+                    className={`relative aspect-[3/4] flex flex-col items-center justify-center rounded-[0.5rem] border-2 border-dashed border-gray-600 hover:border-gray-500 bg-gray-800/20 hover:bg-gray-800/40 transition-all duration-300 cursor-pointer p-6 ${
+                      isUploadingThumbnail ? 'opacity-50 cursor-default' : ''
+                    }`}
+                    onDragOver={handleDragOver}
+                    onDragEnter={handleDragEnter}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                  >
+                    {isUploadingThumbnail ? (
+                      <div className="flex flex-col items-center space-y-3">
+                        <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-600 border-t-blue-500"></div>
+                        <span className="text-sm text-gray-400">Uploading...</span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center space-y-3 text-gray-400 group-hover:text-gray-300 transition-colors">
+                        <div className="h-12 w-12 rounded-full bg-gray-700 group-hover:bg-gray-600 flex items-center justify-center transition-colors">
+                          <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                          </svg>
+                        </div>
+                        <div className="text-center">
+                          <span className="text-sm font-medium">Add Image</span>
+                          <p className="text-xs mt-1">Click or drag & drop</p>
+                          <p className="text-xs text-gray-500">PNG, JPG up to 10MB</p>
+                        </div>
+                      </div>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleThumbnailUpload}
+                      className="hidden"
+                      disabled={isUploadingThumbnail}
+                    />
+                  </label>
+                </div>
+              )}
+            </div>
+            
+            {/* Helper Text - Clean Empty State */}
+            {thumbnailUrls.length === 0 && (
+              <div className="py-12 px-8 text-center">
+                <div className="h-16 w-16 mx-auto mb-6 rounded-full bg-gradient-to-r from-gray-700 to-gray-800 flex items-center justify-center">
+                  <svg className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <h4 className="text-lg font-medium text-white mb-3">No screenshots added yet</h4>
+                <p className="text-gray-400 text-sm max-w-md mx-auto mb-6 leading-relaxed">
+                  Add screenshots to showcase your app's features and functionality. High-quality images help users understand what your app does.
+                </p>
+                <label className="inline-flex items-center justify-center space-x-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-3 px-6 rounded-[0.375rem] transition-all duration-200 cursor-pointer">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  <span>Add Screenshot</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleThumbnailUpload}
+                    className="hidden"
+                    disabled={isUploadingThumbnail}
+                  />
+                </label>
+              </div>
             )}
-          </div>
         </div>
 
         {/* App Capabilities */}
@@ -1059,8 +1114,8 @@ export default function CreateAppPage() {
             }`}
           >
             {isSubmitting ? (
-              <div className="flex items-center justify-center space-x-2">
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+              <div className="flex items-center justify-center space-x-3">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"></div>
                 <span>Submitting App...</span>
               </div>
             ) : 'Submit App'}
@@ -1114,8 +1169,8 @@ export default function CreateAppPage() {
                   className="flex-1 py-3 px-4 rounded-[0.5rem] bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? (
-                    <div className="flex items-center justify-center space-x-2">
-                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                    <div className="flex items-center justify-center space-x-3">
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"></div>
                       <span>Submitting...</span>
                     </div>
                   ) : 'Submit'}
