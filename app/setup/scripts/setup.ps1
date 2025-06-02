@@ -91,20 +91,20 @@ function SetupKeystoreAndroid {
 }
 
 function Build {
-    fvm flutter pub get
-    fvm dart pub run build_runner build
+    flutter pub get
+    dart run build_runner build
 }
 
 function BuildiOS {
-    fvm flutter pub get
+    flutter pub get
     Push-Location "ios"
     pod install --repo-update
     Pop-Location
-    fvm dart pub run build_runner build
+    dart run build_runner build
 }
 
 function RunDev {
-    fvm flutter run --flavor dev
+    flutter run --flavor dev
 }
 
 # Function to show menu and get platform choice
