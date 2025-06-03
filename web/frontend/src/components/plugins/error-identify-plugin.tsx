@@ -9,7 +9,7 @@ export default function ErrorIdentifyPlugin() {
           <Puzzle className="text-xs" />
         </div>
         <div>
-          <h3 className="text-base font-semibold md:text-base">Plugin name not found</h3>
+          <h3 className="text-base font-semibold md:text-base">Unknown/Private app</h3>
         </div>
       </div>
     </div>
