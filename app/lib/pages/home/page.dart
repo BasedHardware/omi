@@ -40,6 +40,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 
 import '../conversations/sync_page.dart';
 import 'widgets/battery_info_widget.dart';
+import '../../widgets/mute_toggle_widget.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final String? navigateToRoute;
@@ -71,6 +72,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
       }
       if (mounted) {
         await context.read<ConversationProvider>().getInitialConversations();
+      }
+      if (mounted) {
+        context.read<AppProvider>().setSelectedChatAppId(null);
       }
     });
     _navigateToRoute = widget.navigateToRoute;
@@ -636,6 +640,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           ),
           Row(
             children: [
+              // Mute toggle widget
+              const MuteToggleWidget(
+                iconSize: 24.0,
+                showTimerOptions: true,
+              ),
+              const SizedBox(width: 8),
               Container(
                 decoration: const BoxDecoration(
                   shape: BoxShape.circle,
