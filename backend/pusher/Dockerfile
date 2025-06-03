@@ -16,5 +16,5 @@ RUN apt-get update && apt-get -y install ffmpeg curl unzip && rm -rf /var/lib/ap
 COPY --from=builder /opt/venv /opt/venv
 COPY backend/ .
 
-EXPOSE 8080
-CMD ["uvicorn", "pusher.main:app", "--host", "0.0.0.0", "--port", "8080"]
+EXPOSE 8090
+CMD ["uvicorn", "pusher.main:app", "--host", "0.0.0.0", "--port", "8090"]

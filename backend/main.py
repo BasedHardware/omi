@@ -12,7 +12,15 @@ from routers import workflow, chat, firmware, plugins, transcribe, notifications
 from utils.other.timeout import TimeoutMiddleware
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
-    service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
+    service_account_json = os.environ["SERVICE_ACCOUNT_JSON"]
+    if os.path.isfile(service_account_json):
+    # If it's a file path, read the file
+        with open(service_account_json, "r") as f:
+            service_account_info = json.load(f)
+    else:
+        # If it's a JSON string, parse directly
+        service_account_info = json.loads(service_account_json)
+        
     credentials = firebase_admin.credentials.Certificate(service_account_info)
     firebase_admin.initialize_app(credentials)
 else:

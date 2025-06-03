@@ -103,7 +103,7 @@ Before you start, make sure you have the following:
       ```bash
       cp .env.template .env
       ```
-    - Set the `SERVICE_ACCOUNT_JSON` environment variable in the `.env` file to the string representation of your Google Cloud service account credentials (`google-credentials.json`). This is used to authenticate with Google Cloud
+    - Set the `SERVICE_ACCOUNT_JSON` environment variable in the `.env` file to the filename or string representation of your Google Cloud service account credentials (`google-credentials.json`). This is used to authenticate with Google Cloud
     - Move back to the backend directory and run the following command to start the Pusher service:
        ```bash
        uvicorn pusher.main:app --reload --env-file .env --port 8000

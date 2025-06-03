@@ -529,7 +529,7 @@ async def _listen(
     # Transcripts
     #
     current_conversation_id = None
-    translation_enabled = including_combined_segments and stt_language == 'multi'
+    translation_enabled = including_combined_segments and stt_language == 'multi' and os.getenv('TRANSLATION_ENABLED', 'true') == 'true'
     language_cache = TranscriptSegmentLanguageCache()
 
     async def translate(segments: List[TranscriptSegment], conversation_id: str):

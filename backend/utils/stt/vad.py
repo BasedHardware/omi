@@ -11,7 +11,11 @@ from database import redis_db
 
 torch.set_num_threads(1)
 torch.hub.set_dir('pretrained_models')
-model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
+model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad',
+    trust_repo=True,
+    force_reload=True,
+    skip_validation=True
+)
 (get_speech_timestamps, save_audio, read_audio, VADIterator, collect_chunks) = utils
 
 
@@ -49,7 +53,7 @@ def is_speech_present(data, vad_iterator, window_size_samples=256):
     return SpeechState.no_speech
 
 
-def is_audio_empty(file_path, sample_rate=8000):
+def is_audio_empty(file_path, sample_rate=16000):
     wav = read_audio(file_path)
     timestamps = get_speech_timestamps(wav, model, sampling_rate=sample_rate)
     if len(timestamps) == 1:
@@ -66,14 +70,34 @@ def vad_is_empty(file_path, return_segments: bool = False, cache: bool = False):
             if return_segments:
                 return exists
             return len(exists) == 0
-
+    sampling_rate = 16000
+    # silero vad model needs 16000 sampling rate, won't work with 8000
     try:
         # file_duration = AudioSegment.from_wav(file_path).duration_seconds
         # print('vad_is_empty file duration:', file_duration)
         with open(file_path, 'rb') as file:
-            files = {'file': (file_path.split('/')[-1], file, 'audio/wav')}
-            response = requests.post(os.getenv('HOSTED_VAD_API_URL'), files=files)
-            segments = response.json()
+            # use the external vad api if it is set. This is better quality and has longer voice segments
+            if os.getenv('HOSTED_VAD_API_URL'):
+                files = {'file': (file_path.split('/')[-1], file, 'audio/wav')}
+                url = os.getenv('HOSTED_VAD_API_URL')
+                print("contacting vad api on", url)
+                response = requests.post(url+"/v1/vad", files=files)
+                segments = response.json()
+                print(f'segments using vad api {segments}')
+            else:
+                # use the silero vad model if the external vad api is not set. This cuts up the audio into smaller segments it would seem
+                response = read_audio(file_path)
+                segments_silero = get_speech_timestamps(response, model, sampling_rate=sampling_rate)
+                segments = [
+                {
+                    'start': seg['start'] / sampling_rate,
+                    'end': seg['end'] / sampling_rate,
+                    'duration': (seg['end'] - seg['start']) / sampling_rate
+                }
+                for seg in segments_silero
+                ]
+                print(f'segments using silero vad {segments}')
+            
             if cache:
                 redis_db.set_generic_cache(caching_key, segments, ttl=60 * 60 * 24)
             if return_segments:
@@ -81,7 +105,7 @@ def vad_is_empty(file_path, return_segments: bool = False, cache: bool = False):
             print('vad_is_empty', len(segments) == 0)  # compute % of empty files in someway
             return len(segments) == 0  # but also check likelyhood of silence if only 1 segment?
     except Exception as e:
-        print('vad_is_empty', e)
+        print('vad_is_empty ERROR', e)
         if return_segments:
             return []
         return False

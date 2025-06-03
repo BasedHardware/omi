@@ -10,7 +10,15 @@ from google.cloud.storage import transfer_manager
 from database.redis_db import cache_signed_url, get_cached_signed_url
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
-    service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
+    service_account_json = os.environ["SERVICE_ACCOUNT_JSON"]
+    if os.path.isfile(service_account_json):
+    # If it's a file path, read the file
+        with open(service_account_json, "r") as f:
+            service_account_info = json.load(f)
+    else:
+        # If it's a JSON string, parse directly
+        service_account_info = json.loads(service_account_json)
+
     credentials = service_account.Credentials.from_service_account_info(service_account_info)
     storage_client = storage.Client(credentials=credentials)
 else:

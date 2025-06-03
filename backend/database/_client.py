@@ -6,7 +6,15 @@ import uuid
 from google.cloud import firestore
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
-    service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
+    service_account_json = os.environ["SERVICE_ACCOUNT_JSON"]
+    if os.path.isfile(service_account_json):
+    # If it's a file path, read the file
+        with open(service_account_json, "r") as f:
+            service_account_info = json.load(f)
+    else:
+        # If it's a JSON string, parse directly
+        service_account_info = json.loads(service_account_json)
+
     # create google-credentials.json
     with open('google-credentials.json', 'w') as f:
         json.dump(service_account_info, f)
