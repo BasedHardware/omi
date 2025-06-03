@@ -19,6 +19,23 @@ const nextConfig = {
       bodySizeLimit: '10mb',
     },
   },
+  async redirects() {
+    return [
+      {
+        source: '/memories/:path*',
+        destination: '/conversations/:path*',
+        permanent: true,
+      },
+    ];
+  },
+  async rewrites() {
+    return [
+      {
+        source: '/conversations/:path*',
+        destination: '/memories/:path*',
+      },
+    ];
+  },
   images: {
     remotePatterns: [
       {
