@@ -52,9 +52,12 @@ export default async function MemoryPage({ params, searchParams }: MemoryPagePro
   if (!memory) throw new Error();
 
   return (
-    <section className="mx-3 my-10 mt-10 max-w-screen-md md:mx-auto md:my-28">
-      <MemoryHeader />
-      <Memory memory={memory} searchParams={searchParams} />
-    </section>
+    <div className="min-h-screen bg-gradient-to-b from-zinc-900 via-zinc-900 to-black">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_500px_at_50%_200px,#3e3e3e40,transparent)]" />
+      <section className="relative mx-auto max-w-screen-md px-4 py-16 md:px-6 md:py-24">
+        <MemoryHeader />
+        <Memory memory={memory} searchParams={searchParams} />
+      </section>
+    </div>
   );
 }

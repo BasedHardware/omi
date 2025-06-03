@@ -9,7 +9,7 @@ export interface Memory {
   transcript_segments: TranscriptSegment[];
   geolocation: null;
   photos: string[];
-  plugins_results: PluginsResult[];
+  apps_results: AppsResult[];
   external_data: ExternalData | null;
   postprocessing: Postprocessing;
   discarded: boolean;
@@ -28,8 +28,8 @@ export interface TimestampRange {
   end: number;
 }
 
-export interface PluginsResult {
-  plugin_id: string;
+export interface AppsResult {
+  app_id: string;
   content: string;
 }
 
