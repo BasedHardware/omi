@@ -193,10 +193,80 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                             Selector<ConversationDetailProvider, ConversationSource?>(
                               selector: (context, provider) => provider.conversation?.source,
                               builder: (context, source, child) {
-                                return source == ConversationSource.openglass
-                                    ? ListView(
-                                        shrinkWrap: true, children: const [PhotosGridComponent(), SizedBox(height: 32)])
-                                    : const TranscriptWidgets();
+                                return Consumer<ConversationDetailProvider>(
+                                  builder: (context, provider, child) {
+                                    // Treat photo-only conversations exactly like audio+photo conversations
+                                    // Show unified timeline regardless of whether there are transcript segments
+                                    bool hasPhotos = provider.photos.isNotEmpty;
+                                    bool hasTranscripts = provider.conversation.transcriptSegments.isNotEmpty;
+                                    
+                                    if (!hasPhotos && !hasTranscripts) {
+                                      // Only show "no content" if there's truly nothing
+                                      return const Center(
+                                        child: Padding(
+                                          padding: EdgeInsets.all(32.0),
+                                          child: Text(
+                                            'No transcript or photos available.',
+                                            style: TextStyle(color: Colors.grey),
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                    
+                                    // Convert photos to ImageSegment format for unified timeline
+                                    // This ensures photo-only conversations use the same UI as audio+photo
+                                    final images = provider.photos.map((photo) {
+                                      DateTime createdAt = photo.createdAtDateTime;
+                                      String imageId = photo.photoId?.isNotEmpty == true 
+                                          ? photo.photoId! 
+                                          : photo.id.toString();
+                                      final displayUrl = photo.getFullUrl() ?? '';
+                                      
+                                      return ImageSegment(
+                                        id: imageId,
+                                        thumbnailUrl: displayUrl,
+                                        mimeType: 'image/jpeg',
+                                        createdAt: createdAt,
+                                      );
+                                    }).toList();
+                                    
+                                    // Always use TranscriptWidget for unified timeline
+                                    // This treats photo-only conversations exactly like audio+photo conversations
+                                    return TranscriptWidget(
+                                      segments: provider.conversation.transcriptSegments, // Empty for photo-only
+                                      images: images, // Photos for both photo-only and audio+photo
+                                      horizontalMargin: false,
+                                      topMargin: false,
+                                      canDisplaySeconds: provider.canDisplaySeconds,
+                                      isConversationDetail: true,
+                                      bottomMargin: 200,
+                                      editSegment: (i, j) {
+                                        // Segment editing only applies to audio conversations
+                                        if (provider.conversation.transcriptSegments.isNotEmpty) {
+                                          final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                                          if (!connectivityProvider.isConnected) {
+                                            ConnectivityProvider.showNoInternetDialog(context);
+                                            return;
+                                          }
+                                          showModalBottomSheet(
+                                            context: context,
+                                            isScrollControlled: true,
+                                            backgroundColor: Colors.black,
+                                            shape: const RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                                            ),
+                                            builder: (context) {
+                                              return NameSpeakerBottomSheet(
+                                                speakerId: j,
+                                                segmentIdx: i,
+                                              );
+                                            },
+                                          );
+                                        }
+                                      },
+                                    );
+                                  },
+                                );
                               },
                             ),
                             const SummaryTab(),
@@ -221,7 +291,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                       mode: ConversationBottomBarMode.detail,
                       selectedTab: selectedTab,
                       hasSegments:
-                          conversation.transcriptSegments.isNotEmpty || conversation.externalIntegration != null,
+                          conversation.transcriptSegments.isNotEmpty || 
+                          conversation.externalIntegration != null ||
+                          provider.photos.isNotEmpty, // Include photos for tab display
                       onTabSelected: (tab) {
                         int index;
                         switch (tab) {
@@ -386,66 +458,6 @@ class SummaryTab extends StatelessWidget {
           );
         },
       ),
-    );
-  }
-}
-
-class TranscriptWidgets extends StatelessWidget {
-  const TranscriptWidgets({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<ConversationDetailProvider>(
-      builder: (context, provider, child) {
-        final segments = provider.conversation.transcriptSegments;
-
-        if (segments.isEmpty) {
-          return Padding(
-            padding: const EdgeInsets.only(top: 32),
-            child: ExpandableTextWidget(
-              text: (provider.conversation.externalIntegration?.text ?? '').decodeString,
-              maxLines: 1000,
-              linkColor: Colors.grey.shade300,
-              style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-              toggleExpand: () {
-                provider.toggleIsTranscriptExpanded();
-              },
-              isExpanded: provider.isTranscriptExpanded,
-            ),
-          );
-        }
-
-        // Use a Container with fixed height for large lists to enable proper scrolling
-        return TranscriptWidget(
-          segments: segments,
-          horizontalMargin: false,
-          topMargin: false,
-          canDisplaySeconds: provider.canDisplaySeconds,
-          isConversationDetail: true,
-          bottomMargin: 200,
-          editSegment: (i, j) {
-            final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-            if (!connectivityProvider.isConnected) {
-              ConnectivityProvider.showNoInternetDialog(context);
-              return;
-            }
-            showModalBottomSheet(
-              context: context,
-              isScrollControlled: true,
-              backgroundColor: Colors.black,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-              ),
-              builder: (context) {
-                return NameSpeakerBottomSheet(
-                  speakerId: j,
-                  segmentIdx: i,
-                );
-              },
-            );
-          },
-        );
-      },
     );
   }
 }

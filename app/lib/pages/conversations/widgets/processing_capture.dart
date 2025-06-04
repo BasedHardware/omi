@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/capture.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
@@ -35,9 +36,13 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         return const SizedBox.shrink();
       }
 
+      // Check if we have local images to show notification
+      bool hasLocalImages = provider.allImages.isNotEmpty;
+
       return GestureDetector(
         onTap: () async {
-          if (provider.segments.isEmpty) return;
+          // Allow navigation if we have segments OR local images
+          if (provider.segments.isEmpty && !hasLocalImages) return;
           routeToPage(context, ConversationCapturingPage(topConversationId: topConvoId));
         },
         child: Container(
@@ -46,6 +51,10 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           decoration: BoxDecoration(
             color: Colors.grey.shade900,
             borderRadius: BorderRadius.circular(16.0),
+            // Add a subtle border if images are available
+            border: hasLocalImages 
+                ? Border.all(color: Colors.blue.withOpacity(0.3), width: 1)
+                : null,
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -54,6 +63,37 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 header,
+                // Show notification for local images
+                hasLocalImages
+                    ? Column(
+                        children: [
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.camera_alt, color: Colors.blue, size: 16),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '${provider.allImages.length} live image${provider.allImages.length == 1 ? '' : 's'} received',
+                                  style: const TextStyle(color: Colors.blue, fontSize: 12),
+                                ),
+                                const Spacer(),
+                                const Text(
+                                  'Tap to view →',
+                                  style: TextStyle(color: Colors.blue, fontSize: 12, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                      )
+                    : const SizedBox.shrink(),
                 provider.segments.isNotEmpty
                     ? const Column(
                         children: [
@@ -77,7 +117,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       await provider.stopStreamRecording();
       MixpanelManager().phoneMicRecordingStopped();
     } else if (recordingState == RecordingState.initialising) {
-      debugPrint('initialising, have to wait');
+      // Initialising state - user needs to wait
     } else {
       showDialog(
         context: context,
@@ -101,21 +141,27 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   Widget? _getConversationHeader(BuildContext context) {
     var captureProvider = context.read<CaptureProvider>();
     var connectivityProvider = context.read<ConnectivityProvider>();
+    var deviceProvider = context.read<DeviceProvider>();
 
     bool internetConnectionStateOk = connectivityProvider.isConnected;
     bool deviceServiceStateOk = captureProvider.recordingDeviceServiceReady;
     bool transcriptServiceStateOk = captureProvider.transcriptServiceReady;
     bool isHavingTranscript = captureProvider.segments.isNotEmpty;
-    bool isHavingDesireDevice = SharedPreferencesUtil().btDevice.id.isNotEmpty;
+    
+    // Use real-time device state from DeviceProvider instead of cached SharedPreferencesUtil
+    final connectedDevice = deviceProvider.connectedDevice;
     bool isHavingRecordingDevice = captureProvider.havingRecordingDevice;
+    bool isHavingOmiDevice = connectedDevice != null && connectedDevice.type == DeviceType.omi;
 
     bool isUsingPhoneMic = captureProvider.recordingState == RecordingState.record ||
         captureProvider.recordingState == RecordingState.initialising ||
         captureProvider.recordingState == RecordingState.pause;
 
-    // Left
+    // Left section logic
     Widget? left;
-    if (isUsingPhoneMic || !isHavingDesireDevice) {
+    
+    // Show phone mic button if no Omi device is connected OR if actively using phone mic
+    if (!isHavingOmiDevice || isUsingPhoneMic) {
       left = Center(
         child: getPhoneMicRecordingButton(
           context,
@@ -123,97 +169,129 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           captureProvider.recordingState,
         ),
       );
-    } else if (!deviceServiceStateOk && !transcriptServiceStateOk && !isHavingTranscript && !isHavingDesireDevice) {
-      return null; // not using phone mic, not ready
-    } else if (!deviceServiceStateOk) {
+    } else if (isHavingOmiDevice && !deviceServiceStateOk) {
+      // Omi device connected but not ready
       left = Row(
         children: [
           const Icon(Icons.record_voice_over),
           const SizedBox(width: 12),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.grey.shade800,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Text(
-              'Waiting for device...',
-              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
-              maxLines: 1,
+          Flexible(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.grey.shade800,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Text(
+                'Waiting for device...',
+                style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ),
         ],
       );
     } else {
+      // Omi device connected and ready
       left = Row(
         children: [
           const Icon(Icons.record_voice_over),
           const SizedBox(width: 12),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.grey.shade800,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Text(
-              isHavingTranscript ? 'In progress...' : 'Say something...',
-              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
-              maxLines: 1,
+          Flexible(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.grey.shade800,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Text(
+                isHavingTranscript 
+                    ? 'In progress...' 
+                    : captureProvider.allImages.isNotEmpty
+                        ? 'Images ready, say something...'
+                        : 'Say something...',
+                style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ),
         ],
       );
     }
 
-    // Right
+    // Right section logic
     Widget? statusIndicator;
     var stateText = "";
-    if (!isHavingRecordingDevice && !isUsingPhoneMic) {
-      stateText = "";
-    } else if (transcriptServiceStateOk && (isUsingPhoneMic || isHavingRecordingDevice)) {
+    
+    if (isUsingPhoneMic) {
+      // Phone mic is actively recording
+      if (transcriptServiceStateOk) {
       var lastEvent = captureProvider.transcriptionServiceStatuses.lastOrNull;
       if (lastEvent?.status == "ready") {
         stateText = "Listening";
         statusIndicator = const RecordingStatusIndicator();
+        } else {
+          stateText = "Connecting";
+        }
+      } else if (!internetConnectionStateOk) {
+        stateText = "Waiting for network";
+      } else {
+        stateText = "Connecting";
+      }
+    } else if (isHavingRecordingDevice) {
+      // Device is recording
+      if (transcriptServiceStateOk) {
+        var lastEvent = captureProvider.transcriptionServiceStatuses.lastOrNull;
+        if (lastEvent?.status == "ready") {
+          stateText = "Capturing";
+          statusIndicator = const RecordingStatusIndicator();
       } else {
         bool transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
         stateText = transcriptionDiagnosticEnabled ? (lastEvent?.statusText ?? "") : "Connecting";
       }
     } else if (!internetConnectionStateOk) {
       stateText = "Waiting for network";
-    } else if (!transcriptServiceStateOk) {
+      } else {
       stateText = "Connecting";
+      }
     }
-    Widget right = stateText.isNotEmpty || statusIndicator != null
-        ? Expanded(
-            child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Text(
-                stateText,
-                style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                maxLines: 1,
-                textAlign: TextAlign.end,
-              ),
-              if (statusIndicator != null) ...[
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: statusIndicator,
-                )
-              ],
-            ],
-          ))
-        : const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.only(left: 0, right: 12),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          left,
-          right,
+          Expanded(
+            flex: 3,
+            child: left ?? const SizedBox.shrink(),
+          ),
+          if (stateText.isNotEmpty || statusIndicator != null)
+            Expanded(
+              flex: 2,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Flexible(
+                    child: Text(
+                      stateText,
+                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                      maxLines: 1,
+                      textAlign: TextAlign.end,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (statusIndicator != null) ...[
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: statusIndicator,
+                    )
+                  ],
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -257,13 +335,21 @@ class _RecordingStatusIndicatorState extends State<RecordingStatusIndicator> wit
 }
 
 getPhoneMicRecordingButton(BuildContext context, toggleRecording, RecordingState state) {
-  if (SharedPreferencesUtil().btDevice.id.isNotEmpty) return const SizedBox.shrink();
+  // Use real-time device state from DeviceProvider instead of cached SharedPreferencesUtil
+  final deviceProvider = context.read<DeviceProvider>();
+  final connectedDevice = deviceProvider.connectedDevice;
+  
+  // Only hide the phone mic button if an Omi device is connected
+  // Allow phone mic when: no device connected, OpenGlass connected, or any other device type
+  if (connectedDevice != null && connectedDevice.type == DeviceType.omi) {
+    return const SizedBox.shrink();
+  }
+  
   return MaterialButton(
     onPressed: state == RecordingState.initialising ? null : toggleRecording,
     child: Row(
       mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.start,
-      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         state == RecordingState.initialising
             ? const SizedBox(
@@ -275,14 +361,18 @@ getPhoneMicRecordingButton(BuildContext context, toggleRecording, RecordingState
                 ),
               )
             : (state == RecordingState.record
-                ? const Icon(Icons.stop, color: Colors.red, size: 12)
-                : const Icon(Icons.mic, size: 18)),
-        const SizedBox(width: 4),
-        Text(
+                ? const Icon(Icons.stop, color: Colors.red, size: 24)
+                : const Icon(Icons.mic)),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
           state == RecordingState.initialising
               ? 'Initialising Recorder'
               : (state == RecordingState.record ? 'Stop Recording' : 'Try With Phone Mic'),
-          style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white, fontWeight: FontWeight.w500),
+            style: const TextStyle(fontSize: 14),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
         ),
         const SizedBox(width: 4),
       ],
