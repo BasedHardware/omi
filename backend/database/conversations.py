@@ -1,7 +1,7 @@
 import asyncio
 import json
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Tuple, Optional
 
 from google.cloud import firestore
@@ -295,25 +295,137 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
 # ********** OPENGLASS **************
 # ***********************************
 
+def add_photos_to_conversation(uid: str, conversation_id: str, photos: List[ConversationPhoto]):
+    """Add photos to an existing conversation."""
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    photos_ref = conversation_ref.collection('photos')
+    batch = db.batch()
+    
+    for photo in photos:
+        photo_id = str(uuid.uuid4())
+        photo_ref = photos_ref.document(photo_id)
+        data = photo.dict()
+        data['id'] = photo_id
+        data['added_at'] = datetime.now(timezone.utc)
+        batch.set(photo_ref, data)
+    
+    batch.commit()
+
+
 def store_conversation_photos(uid: str, conversation_id: str, photos: List[ConversationPhoto]):
+    """Store photos for a conversation."""
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     photos_ref = conversation_ref.collection('photos')
     batch = db.batch()
     for photo in photos:
         photo_id = str(uuid.uuid4())
-        photo_ref = photos_ref.document(str(uuid.uuid4()))
+        photo_ref = photos_ref.document(photo_id)
         data = photo.dict()
         data['id'] = photo_id
+        data['added_at'] = datetime.now(timezone.utc)
         batch.set(photo_ref, data)
     batch.commit()
 
 
 def get_conversation_photos(uid: str, conversation_id: str):
-    user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    photos_ref = conversation_ref.collection('photos')
-    return [doc.to_dict() for doc in photos_ref.stream()]
+    """Get photos for a conversation."""
+    try:
+        # Import inside function to avoid circular imports
+        from utils.other.storage import _get_signed_url, _get_bucket_safely, chat_files_bucket
+        
+        user_ref = db.collection('users').document(uid)
+        conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+        photos_ref = conversation_ref.collection('photos')
+        
+        photos_data = []
+        
+        # Get bucket for signed URL generation
+        bucket = _get_bucket_safely(chat_files_bucket, "conversation photos")
+        
+        for doc in photos_ref.stream():
+            photo_data = doc.to_dict()
+            photo_data['id'] = doc.id
+            
+            # Convert datetime fields to ISO strings
+            datetime_fields = ['created_at', 'added_at']
+            for field in datetime_fields:
+                if field in photo_data and photo_data[field]:
+                    field_value = photo_data[field]
+                    if hasattr(field_value, 'isoformat'):
+                        photo_data[field] = field_value.isoformat()
+                    elif isinstance(field_value, (int, float)):
+                        dt = datetime.fromtimestamp(field_value, tz=timezone.utc)
+                        photo_data[field] = dt.isoformat()
+            
+            # Generate fresh signed URLs for thumbnail_url and url if they exist and bucket is available
+            if bucket:
+                # Extract blob path from stored URL and generate fresh signed URL
+                if photo_data.get('thumbnail_url'):
+                    try:
+                        # Extract blob path from URL like: https://storage.googleapis.com/bucket/path
+                        url = photo_data['thumbnail_url']
+                        if 'storage.googleapis.com' in url and chat_files_bucket in url:
+                            # Get the blob path after the bucket name
+                            blob_path = url.split(f'/{chat_files_bucket}/')[-1].split('?')[0]
+                            blob = bucket.blob(blob_path)
+                            if blob.exists():
+                                photo_data['thumbnail_url'] = _get_signed_url(blob, 1440)  # 24 hour expiry
+                    except Exception as e:
+                        print(f"Warning: Could not generate signed URL for thumbnail: {e}")
+                
+                if photo_data.get('url'):
+                    try:
+                        # Extract blob path from URL and generate fresh signed URL
+                        url = photo_data['url']
+                        if 'storage.googleapis.com' in url and chat_files_bucket in url:
+                            blob_path = url.split(f'/{chat_files_bucket}/')[-1].split('?')[0]
+                            blob = bucket.blob(blob_path)
+                            if blob.exists():
+                                photo_data['url'] = _get_signed_url(blob, 1440)  # 24 hour expiry
+                    except Exception as e:
+                        print(f"Warning: Could not generate signed URL for full image: {e}")
+            
+            photos_data.append(photo_data)
+        
+        return photos_data
+    except Exception as e:
+        print(f"Error getting conversation photos for {conversation_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
+
+def get_recent_conversations(uid: str, limit: int = 5, source: str = None) -> List[dict]:
+    """Get recent conversations for a user, optionally filtered by source."""
+    try:
+        user_ref = db.collection('users').document(uid)
+        query = user_ref.collection(conversations_collection).order_by('created_at', direction=firestore.Query.DESCENDING)
+        
+        if source:
+            query = query.where('source', '==', source)
+        
+        query = query.limit(limit)
+        conversations = []
+        
+        for doc in query.stream():
+            conversation_data = doc.to_dict()
+            conversation_data['id'] = doc.id
+            
+            # Parse datetime fields
+            datetime_fields = ['finished_at', 'created_at', 'started_at']
+            for field in datetime_fields:
+                if field in conversation_data and conversation_data[field]:
+                    if isinstance(conversation_data[field], (int, float)):
+                        conversation_data[field] = datetime.fromtimestamp(conversation_data[field], tz=timezone.utc)
+                
+            conversations.append(conversation_data)
+        
+        return conversations
+    except Exception as e:
+        print(f"Error getting recent conversations: {e}")
+        return []
 
 
 # ********************************

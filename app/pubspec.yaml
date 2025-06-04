@@ -29,7 +29,7 @@ dependencies:
   visibility_detector: ^0.4.0+2
   flutter_rating_bar: ^4.0.1
   dotted_border: ^2.1.0
-  skeletonizer: ^1.4.2
+  skeletonizer: ^2.0.1
   shimmer: ^3.0.0
 
   # Firebase
@@ -48,8 +48,8 @@ dependencies:
   flutter_blue_plus: 1.33.6
   http: ^1.2.1
   pdf: ^3.11.0
-  intl: ^0.19.0
-  permission_handler: ^11.3.1
+  intl: ^0.20.2
+  permission_handler: ^12.0.0+1
   share_plus: 10.0.1
   shared_preferences: ^2.2.3
   url_launcher: ^6.3.0
@@ -70,7 +70,7 @@ dependencies:
   package_info_plus: ^8.0.1
   path_provider: any
   flutter_foreground_task: 8.13.0
-  upgrader: ^10.3.0
+  upgrader: ^11.4.0
   crypto: ^3.0.3
   flutter_markdown: ^0.7.2+1
   flutter_background_service: ^5.0.7
@@ -94,7 +94,7 @@ dependencies:
   just_audio: ^0.9.39
   frame_sdk: ^0.0.7
   web_socket_channel: ^3.0.1
-  talker_flutter: 4.5.0
+  talker_flutter: ^4.8.1
   flutter_silero_vad:
     git:
       url: https://github.com/char5742/flutter_silero_vad.git
@@ -102,9 +102,10 @@ dependencies:
   timeago: ^3.7.0
   app_links: ^6.3.2
   flutter_svg: ^2.0.16
-  file_picker: 8.3.2
+  file_picker: ^10.1.9
   photo_view: ^0.15.0
   font_awesome_flutter: ^10.8.0
+  device_info_plus: ^11.4.0
 
 dependency_overrides:
   http: ^1.2.1

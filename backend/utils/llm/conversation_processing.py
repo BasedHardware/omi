@@ -6,8 +6,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
 from models.app import App
-from models.conversation import Structured, Conversation, ActionItem, Event
-from .clients import llm_mini, parser, llm_high, llm_medium_experiment
+from models.conversation import Structured, Conversation, ActionItem, Event, ConversationPhoto
+from .clients import llm_mini, llm_medium_experiment, parser
 
 
 class DiscardConversation(BaseModel):
@@ -114,7 +114,6 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
     • Hypothetical scenarios ("if we meet Tuesday...")
     
     For date context, this conversation happened on {started_at}. {tz} is the user's timezone; convert all event times to UTC and respond in UTC.
-
 
     Transcript: ```{transcript}```
 
@@ -340,5 +339,49 @@ def generate_summary_with_prompt(conversation_text: str, prompt: str) -> str:
 
     You must output only the summary, no other text. Make sure to be concise and clear.
     """
-    response = llm_medium_experiment.invoke(prompt)
+    response = llm_mini.invoke(prompt)
     return response.content
+
+
+def get_combined_transcript_and_photos_structure(transcript: str, photos: List[ConversationPhoto], started_at: datetime, language_code: str, tz: str) -> Structured:
+    """
+    Enhanced structure generation for conversations that combine both transcript and photos.
+    This is used when OpenGlass images are added to ongoing Omi/phone mic conversations.
+    """
+    
+    # Create photos description section
+    photos_str = ''
+    if photos:
+        photos_str = '\n\nVisual Context (Photos captured during conversation):\n'
+        for i, photo in enumerate(photos):
+            photos_str += f'{i + 1}. {photo.description}\n'
+    
+    prompt_text = '''You are an expert conversation analyzer. Your task is to analyze a conversation that includes both spoken content and visual context from photos.
+    The conversation language is {language_code}. Use the same language {language_code} for your response.
+
+    This conversation combines:
+    1. Spoken/audio content (transcript)
+    2. Visual context (photos captured during the conversation)
+
+    For the title, use the main topic that combines both the spoken conversation and visual context.
+    For the overview, create a comprehensive summary that weaves together the spoken content and visual elements, highlighting how they relate to each other and provide context.
+    For the emoji, select a single emoji that reflects the combined nature of the conversation - both what was discussed and what was visually observed.
+    For the action items, include tasks or commitments from the spoken conversation, enhanced with visual context when relevant.
+    For the category, classify based on the combined conversation content.
+    For Calendar Events, include events from the transcript, enhanced with location/context details from the photos if relevant. For date context, this conversation happened on {started_at}. {tz} is the user's timezone, convert it to UTC and respond in UTC.
+
+    Transcript: ```{transcript}```{photos_str}
+
+    {format_instructions}'''.replace('    ', '').strip()
+
+    prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
+    chain = prompt | llm_medium_experiment | parser
+
+    return chain.invoke({
+        'transcript': transcript,
+        'photos_str': photos_str,
+        'started_at': started_at.strftime('%B %d, %Y at %H:%M UTC'),
+        'language_code': language_code,
+        'tz': tz,
+        'format_instructions': parser.get_format_instructions()
+    })

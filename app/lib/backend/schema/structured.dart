@@ -149,19 +149,93 @@ class Event {
 class ConversationPhoto {
   int id = 0;
 
-  String base64;
+  String? photoId;  // Cloud storage photo ID
+  String? base64;   // Legacy base64 data - optional for cloud photos
   String description;
+  String? thumbnailUrl;  // Cloud storage thumbnail URL
+  String? url;           // Cloud storage full-size URL
+  String? createdAt;     // When photo was taken/added
+  String? addedAt;       // When photo was added to conversation
 
-  ConversationPhoto(this.base64, this.description, {this.id = 0});
+  ConversationPhoto(this.description, {
+    this.id = 0, 
+    this.photoId, 
+    this.base64, 
+    this.thumbnailUrl, 
+    this.url, 
+    this.createdAt, 
+    this.addedAt
+  });
 
   factory ConversationPhoto.fromJson(Map<String, dynamic> json) {
-    return ConversationPhoto(json['base64'], json['description']);
+    return ConversationPhoto(
+      json['description'] ?? '',
+      id: json['id'] is int ? json['id'] : 0,
+      photoId: json['photo_id'] as String? ?? json['id'] as String?,
+      base64: json['base64'] as String?,
+      thumbnailUrl: json['thumbnail_url'] as String?,
+      url: json['url'] as String?,
+      createdAt: json['created_at'] as String?,
+      addedAt: json['added_at'] as String?,
+    );
   }
 
   toJson() {
     return {
+      'id': id,
+      'photo_id': photoId,
       'base64': base64,
       'description': description,
+      'thumbnail_url': thumbnailUrl,
+      'url': url,
+      'created_at': createdAt,
+      'added_at': addedAt,
     };
+  }
+
+  // Helper method to get createdAt as DateTime
+  DateTime get createdAtDateTime {
+    if (createdAt != null) {
+      try {
+        return DateTime.parse(createdAt!);
+      } catch (e) {
+        // Fallback to current time if parsing fails
+        return DateTime.now();
+      }
+    }
+    return DateTime.now();
+  }
+
+  // Helper method to get the best display URL (thumbnail first, then full URL)
+  String? getDisplayUrl() {
+    // Prefer thumbnail URL for display, fallback to full URL
+    if (thumbnailUrl != null && thumbnailUrl!.isNotEmpty) {
+      return thumbnailUrl;
+    }
+    if (url != null && url!.isNotEmpty) {
+      return url;
+    }
+    return null;
+  }
+
+  // Helper method to get full-size URL - prefer full URL, fallback to thumbnail, then base64
+  String? getFullUrl() {
+    if (url != null && url!.isNotEmpty) {
+      return url;
+    }
+    if (thumbnailUrl != null && thumbnailUrl!.isNotEmpty) {
+      return thumbnailUrl;
+    }
+    if (base64 != null && base64!.isNotEmpty) {
+      return 'data:image/jpeg;base64,$base64';
+    }
+    return null;
+  }
+
+  // Helper method to check if photo has any displayable content
+  bool hasDisplayableContent() {
+    return (thumbnailUrl != null && thumbnailUrl!.isNotEmpty) ||
+           (url != null && url!.isNotEmpty) ||
+           (base64 != null && base64!.isNotEmpty);
   }
 }
