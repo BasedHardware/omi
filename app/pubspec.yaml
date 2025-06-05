@@ -37,6 +37,10 @@ dependencies:
   firebase_auth: 5.5.3
   firebase_messaging: 15.2.5
 
+  # Auth
+  google_sign_in: 6.2.2
+  google_sign_in_all_platforms: 1.1.0
+
   # Analytics and Support
   intercom_flutter: 9.2.10
   mixpanel_flutter: ^2.2.0
@@ -82,7 +86,6 @@ dependencies:
   manage_calendar_events: ^2.0.3
   flutter_timezone: ^2.0.0
   sign_in_with_apple: ^6.1.1
-  google_sign_in: 6.2.2
   location: ^7.0.0
   cached_network_image: 3.4.1
   map_launcher: ^3.3.1
