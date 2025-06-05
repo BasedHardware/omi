@@ -87,6 +87,7 @@ class ForegroundUtil {
   Future<bool> get isIgnoringBatteryOptimizations async => await FlutterForegroundTask.isIgnoringBatteryOptimizations;
 
   static Future<void> initializeForegroundService() async {
+    if (Platform.isWindows || Platform.isMacOS) return;
     if (await FlutterForegroundTask.isRunningService) return;
     debugPrint('initializeForegroundService');
     // await Location().requestPermission();
@@ -119,6 +120,7 @@ class ForegroundUtil {
   }
 
   static Future<ServiceRequestResult> startForegroundTask() async {
+    if (Platform.isWindows || Platform.isMacOS) return ServiceRequestResult.success();
     debugPrint('startForegroundTask');
     if (await FlutterForegroundTask.isRunningService) {
       return FlutterForegroundTask.restartService();

@@ -1,12 +1,16 @@
 import 'dart:convert';
 import 'dart:math';
+import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:google_sign_in/google_sign_in.dart';
+import 'package:google_sign_in/google_sign_in.dart' as standard_google_sign_in;
+import 'package:google_sign_in_all_platforms/google_sign_in_all_platforms.dart' as all_platforms_google_sign_in;
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 /// Generates a cryptographically secure random nonce, to be included in a
@@ -22,6 +26,26 @@ String sha256ofString(String input) {
   final bytes = utf8.encode(input);
   final digest = sha256.convert(bytes);
   return digest.toString();
+}
+
+final String _googleClientId = Env.googleClientId!;
+final String _googleClientSecret = Env.googleClientSecret!;
+
+// Create a single GoogleSignIn instance for all platforms to avoid assertion errors
+all_platforms_google_sign_in.GoogleSignIn? _googleSignInAllPlatforms;
+
+all_platforms_google_sign_in.GoogleSignIn _getGoogleSignInAllPlatforms() {
+  return _googleSignInAllPlatforms ??= all_platforms_google_sign_in.GoogleSignIn(
+    params: all_platforms_google_sign_in.GoogleSignInParams(
+      clientId: _googleClientId,
+      clientSecret: _googleClientSecret,
+      scopes: [
+        'https://www.googleapis.com/auth/userinfo.profile',
+        'https://www.googleapis.com/auth/userinfo.email',
+      ],
+      redirectPort: 5000,
+    ),
+  );
 }
 
 Future<UserCredential?> signInWithApple() async {
@@ -110,51 +134,142 @@ Future<UserCredential?> signInWithApple() async {
 Future<UserCredential?> signInWithGoogle() async {
   try {
     debugPrint('Signing in with Google');
-    // Trigger the authentication flow
-    final GoogleSignInAccount? googleUser = await GoogleSignIn(
-      scopes: ['profile', 'email'],
-    ).signIn();
-    debugPrint('Google User: $googleUser');
 
-    // Obtain the auth details from the request
-    final GoogleSignInAuthentication? googleAuth = await googleUser?.authentication;
-    debugPrint('Google Auth: $googleAuth');
-    if (googleAuth == null) {
-      debugPrint('Failed to sign in with Google: googleAuth is NULL');
-      Logger.error('An error occurred while signing in. Please try again later. (Error: 40001)');
-      return null;
+    // Platform-specific Google Sign In implementation
+    if (kIsWeb || PlatformService.isDesktop) {
+      // Use google_sign_in_all_platforms for Windows, macOS and Web
+      return await _signInWithGoogleAllPlatforms();
+    } else {
+      // Use standard google_sign_in for iOS, Android
+      return await _signInWithGoogleStandard();
     }
-
-    // Create a new credential
-    if (googleAuth.accessToken == null && googleAuth.idToken == null) {
-      debugPrint('Failed to sign in with Google: accessToken, idToken are NULL');
-      Logger.error('An error occurred while signing in. Please try again later. (Error: 40002)');
-      return null;
-    }
-    final credential = GoogleAuthProvider.credential(
-      accessToken: googleAuth.accessToken,
-      idToken: googleAuth.idToken,
-    );
-
-    // Once signed in, return the UserCredential
-    var result = await FirebaseAuth.instance.signInWithCredential(credential);
-    var givenName = result.additionalUserInfo?.profile?['given_name'] ?? '';
-    var familyName = result.additionalUserInfo?.profile?['family_name'] ?? '';
-    var email = result.additionalUserInfo?.profile?['email'] ?? '';
-    if (email != null) SharedPreferencesUtil().email = email;
-    if (givenName != null) {
-      SharedPreferencesUtil().givenName = givenName;
-      SharedPreferencesUtil().familyName = familyName;
-    }
-    // TODO: test subsequent signIn
-    debugPrint('signInWithGoogle Email: ${SharedPreferencesUtil().email}');
-    debugPrint('signInWithGoogle Name: ${SharedPreferencesUtil().givenName}');
-    return result;
   } catch (e) {
     debugPrint('Failed to sign in with Google: $e');
     Logger.handle(e, null, message: 'An error occurred while signing in. Please try again later.');
     return null;
   }
+}
+
+/// Google Sign In using the standard google_sign_in package (iOS, Android)
+Future<UserCredential?> _signInWithGoogleStandard() async {
+  debugPrint('Using standard Google Sign In');
+
+  // Trigger the authentication flow
+  final standard_google_sign_in.GoogleSignInAccount? googleUser = await standard_google_sign_in.GoogleSignIn(
+    scopes: ['profile', 'email'],
+  ).signIn();
+  debugPrint('Google User: $googleUser');
+
+  // Obtain the auth details from the request
+  final standard_google_sign_in.GoogleSignInAuthentication? googleAuth = await googleUser?.authentication;
+  debugPrint('Google Auth: $googleAuth');
+  if (googleAuth == null) {
+    debugPrint('Failed to sign in with Google: googleAuth is NULL');
+    Logger.error('An error occurred while signing in. Please try again later. (Error: 40001)');
+    return null;
+  }
+
+  // Create a new credential
+  if (googleAuth.accessToken == null && googleAuth.idToken == null) {
+    debugPrint('Failed to sign in with Google: accessToken, idToken are NULL');
+    Logger.error('An error occurred while signing in. Please try again later. (Error: 40002)');
+    return null;
+  }
+  final credential = GoogleAuthProvider.credential(
+    accessToken: googleAuth.accessToken,
+    idToken: googleAuth.idToken,
+  );
+
+  // Once signed in, return the UserCredential
+  var result = await FirebaseAuth.instance.signInWithCredential(credential);
+  return _processGoogleSignInResult(result);
+}
+
+/// Google Sign In using google_sign_in_all_platforms (Windows, macOS, Web)
+Future<UserCredential?> _signInWithGoogleAllPlatforms() async {
+  debugPrint('Using Google Sign In All Platforms');
+
+  if (_googleClientId.isEmpty) {
+    Logger.error('Google Client ID not configured. Please configure _googleClientId and _googleClientSecret');
+    return null;
+  }
+
+  // Initialize the all platforms Google Sign In with required params for Windows
+  final googleSignIn = _getGoogleSignInAllPlatforms();
+
+  // Trigger the authentication flow
+  final all_platforms_google_sign_in.GoogleSignInCredentials? credentials = await googleSignIn.signIn();
+  debugPrint('Google Credentials (All Platforms): ${credentials?.accessToken != null ? 'Present' : 'Null'}');
+
+  if (credentials == null || credentials.accessToken == null) {
+    debugPrint('Google Sign In was cancelled by user or failed');
+    return null;
+  }
+
+  // For all platforms package, we only get accessToken, so we need to make an API call to get user info
+  // and create a custom token for Firebase (this is more complex)
+  // For now, let's create a credential with just the access token
+  final credential = GoogleAuthProvider.credential(
+    accessToken: credentials.accessToken,
+    idToken: credentials.idToken, // May be null
+  );
+
+  try {
+    // Once signed in, return the UserCredential
+    var result = await FirebaseAuth.instance.signInWithCredential(credential);
+    return _processGoogleSignInResultAllPlatforms(result, credentials);
+  } catch (e) {
+    debugPrint('Firebase sign-in failed with all platforms credentials: $e');
+    Logger.error('Failed to complete Google sign-in. Please try again.');
+    return null;
+  }
+}
+
+/// Process the Google Sign In result for standard platforms and update user preferences
+Future<UserCredential?> _processGoogleSignInResult(UserCredential result) async {
+  var givenName = result.additionalUserInfo?.profile?['given_name'] ?? '';
+  var familyName = result.additionalUserInfo?.profile?['family_name'] ?? '';
+  var email = result.additionalUserInfo?.profile?['email'] ?? '';
+
+  if (email != null) SharedPreferencesUtil().email = email;
+  if (givenName != null) {
+    SharedPreferencesUtil().givenName = givenName;
+    SharedPreferencesUtil().familyName = familyName;
+  }
+
+  debugPrint('signInWithGoogle Email: ${SharedPreferencesUtil().email}');
+  debugPrint('signInWithGoogle Name: ${SharedPreferencesUtil().givenName}');
+  return result;
+}
+
+/// Process the Google Sign In result for all platforms and update user preferences
+Future<UserCredential?> _processGoogleSignInResultAllPlatforms(
+    UserCredential result, all_platforms_google_sign_in.GoogleSignInCredentials credentials) async {
+  // For all platforms, we might need to fetch user info separately if not available in Firebase result
+  var givenName = result.additionalUserInfo?.profile?['given_name'] ?? '';
+  var familyName = result.additionalUserInfo?.profile?['family_name'] ?? '';
+  var email = result.additionalUserInfo?.profile?['email'] ?? '';
+
+  // If user info is not available, try to get it from the Firebase user
+  if (email.isEmpty) {
+    email = result.user?.email ?? '';
+  }
+  if (givenName.isEmpty) {
+    var displayName = result.user?.displayName ?? '';
+    var nameParts = displayName.split(' ');
+    givenName = nameParts.isNotEmpty ? nameParts[0] : '';
+    familyName = nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
+  }
+
+  if (email.isNotEmpty) SharedPreferencesUtil().email = email;
+  if (givenName.isNotEmpty) {
+    SharedPreferencesUtil().givenName = givenName;
+    SharedPreferencesUtil().familyName = familyName;
+  }
+
+  debugPrint('signInWithGoogle (All Platforms) Email: ${SharedPreferencesUtil().email}');
+  debugPrint('signInWithGoogle (All Platforms) Name: ${SharedPreferencesUtil().givenName}');
+  return result;
 }
 
 Future<String?> getIdToken() async {
@@ -180,7 +295,7 @@ Future<String?> getIdToken() async {
     }
     return newToken?.token;
   } catch (e) {
-    print(e);
+    debugPrint(e.toString());
     return SharedPreferencesUtil().authToken;
   }
 }
@@ -188,7 +303,15 @@ Future<String?> getIdToken() async {
 Future<void> signOut() async {
   await FirebaseAuth.instance.signOut();
   try {
-    await GoogleSignIn().signOut();
+    // Platform-specific Google Sign Out
+    if (kIsWeb || PlatformService.isDesktop) {
+      // Use google_sign_in_all_platforms for Windows, macOS and Web
+      final googleSignIn = _getGoogleSignInAllPlatforms();
+      await googleSignIn.signOut();
+    } else {
+      // Use standard google_sign_in for iOS, Android
+      await standard_google_sign_in.GoogleSignIn().signOut();
+    }
   } catch (e) {
     debugPrint(e.toString());
   }
@@ -203,9 +326,25 @@ getFirebaseUser() {
 
 // update user given name
 Future<void> updateGivenName(String fullName) async {
-  var user = FirebaseAuth.instance.currentUser;
-  if (user != null) {
-    await user.updateProfile(displayName: fullName);
+  // TODO: This is an issue on windows, need to fix it
+  try {
+    debugPrint('Updating given name: $fullName');
+    var user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      // TEMPORARILY SKIP updateProfile on Windows to isolate crash
+      if (Platform.isWindows) {
+        debugPrint('Skipping updateProfile on Windows (for debugging)');
+        // Just update SharedPreferences instead
+        SharedPreferencesUtil().givenName = fullName.split(' ')[0];
+        if (fullName.split(' ').length > 1) {
+          SharedPreferencesUtil().familyName = fullName.split(' ').sublist(1).join(' ');
+        }
+      } else {
+        await user.updateProfile(displayName: fullName);
+      }
+    }
+  } catch (e) {
+    debugPrint('Error updating given name: $e');
   }
 }
 
@@ -218,4 +357,104 @@ Future<void> signInAnonymously() async {
   } catch (e) {
     Logger.handle(e, null, message: 'An error occurred while signing in. Please try again later.');
   }
+}
+
+/// Platform-specific Google account linking with current Firebase user
+Future<UserCredential?> linkWithGoogle() async {
+  try {
+    debugPrint('Linking Google account with current Firebase user');
+
+    // Platform-specific Google Sign In implementation for linking
+    if (kIsWeb || PlatformService.isDesktop) {
+      // Use google_sign_in_all_platforms for Windows, macOS and Web
+      return await _linkWithGoogleAllPlatforms();
+    } else {
+      // Use standard google_sign_in for iOS, Android
+      return await _linkWithGoogleStandard();
+    }
+  } catch (e) {
+    debugPrint('Failed to link with Google: $e');
+    Logger.handle(e, null, message: 'Failed to link with Google, please try again.');
+    rethrow;
+  }
+}
+
+/// Link Google account using the standard google_sign_in package (iOS, Android)
+Future<UserCredential?> _linkWithGoogleStandard() async {
+  debugPrint('Using standard Google Sign In for linking');
+
+  final standard_google_sign_in.GoogleSignInAccount? googleUser = await standard_google_sign_in.GoogleSignIn().signIn();
+  if (googleUser == null) {
+    return null;
+  }
+
+  final standard_google_sign_in.GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+  final credential = GoogleAuthProvider.credential(
+    accessToken: googleAuth.accessToken,
+    idToken: googleAuth.idToken,
+  );
+
+  try {
+    return await FirebaseAuth.instance.currentUser?.linkWithCredential(credential);
+  } catch (e) {
+    if (e is FirebaseAuthException && e.code == 'credential-already-in-use') {
+      // Handle existing credential case
+      return await _handleExistingCredential(e);
+    }
+    rethrow;
+  }
+}
+
+/// Link Google account using google_sign_in_all_platforms (Windows, macOS, Web)
+Future<UserCredential?> _linkWithGoogleAllPlatforms() async {
+  debugPrint('Using Google Sign In All Platforms for linking');
+
+  if (_googleClientId.isEmpty) {
+    Logger.error('Google Client ID not configured. Please configure _googleClientId and _googleClientSecret');
+    return null;
+  }
+
+  final googleSignIn = _getGoogleSignInAllPlatforms();
+
+  final all_platforms_google_sign_in.GoogleSignInCredentials? credentials = await googleSignIn.signIn();
+  if (credentials == null) {
+    return null;
+  }
+
+  final credential = GoogleAuthProvider.credential(
+    accessToken: credentials.accessToken,
+    idToken: credentials.idToken,
+  );
+
+  try {
+    return await FirebaseAuth.instance.currentUser?.linkWithCredential(credential);
+  } catch (e) {
+    if (e is FirebaseAuthException && e.code == 'credential-already-in-use') {
+      // Handle existing credential case
+      return await _handleExistingCredential(e);
+    }
+    rethrow;
+  }
+}
+
+/// Handle the case when credential is already in use
+Future<UserCredential?> _handleExistingCredential(FirebaseAuthException e) async {
+  // Get existing user credentials
+  final existingCred = e.credential;
+  final oldUserId = FirebaseAuth.instance.currentUser?.uid;
+
+  // Sign out current anonymous user
+  await FirebaseAuth.instance.signOut();
+
+  // Sign in with existing account
+  final result = await FirebaseAuth.instance.signInWithCredential(existingCred!);
+  final newUserId = FirebaseAuth.instance.currentUser?.uid;
+  await getIdToken();
+
+  SharedPreferencesUtil().onboardingCompleted = false;
+  SharedPreferencesUtil().uid = newUserId ?? '';
+  SharedPreferencesUtil().email = FirebaseAuth.instance.currentUser?.email ?? '';
+  SharedPreferencesUtil().givenName = FirebaseAuth.instance.currentUser?.displayName?.split(' ')[0] ?? '';
+
+  return result;
 }
