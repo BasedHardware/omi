@@ -1,32 +1,24 @@
-FROM python:3.11 AS builder
-
-ENV PATH="/opt/venv/bin:$PATH"
-RUN python -m venv /opt/venv
-
-COPY backend/requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
-
-FROM python:3.11-slim
-# Python 3.11 on Debian 12 (Bookworm)
+FROM nvidia/cuda:12.6.2-cudnn-runtime-ubuntu22.04
 
 WORKDIR /app
-ENV PATH="/usr/local/nvidia/bin:/usr/local/cuda/bin:/opt/venv/bin:$PATH"
-ENV LD_LIBRARY_PATH="/usr/local/nvidia/lib:/usr/local/nvidia/lib64"
 
-# Install CUDA Toolkit 12.6 Update 3
-RUN apt-get update && apt-get -y install build-essential ffmpeg curl unzip wget software-properties-common && \ 
-wget https://developer.download.nvidia.com/compute/cuda/12.6.3/local_installers/cuda-repo-debian12-12-6-local_12.6.3-560.35.05-1_amd64.deb && \
-dpkg -i cuda-repo-debian12-12-6-local_12.6.3-560.35.05-1_amd64.deb && \
-cp /var/cuda-repo-debian12-12-6-local/cuda-*-keyring.gpg /usr/share/keyrings/ && \
-add-apt-repository contrib && \
-apt-get update && \
-apt-get -y install cuda-toolkit-12-6 && \
-rm -rf /var/lib/apt/lists/* cuda-repo-debian11-12-6-local_12.6.3-560.35.05-1_amd64.deb
+# Install Python and system dependencies
+RUN apt-get update && \
+    apt-get install -y python3 python3-pip python3-venv ffmpeg curl unzip wget git && \
+    rm -rf /var/lib/apt/lists/*
+# Copy requirements and install
+COPY backend/requirements.txt /tmp/requirements.txt
+RUN python3 -m venv /opt/venv && \
+    /opt/venv/bin/pip install --upgrade pip && \
+    /opt/venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt
 
-COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy your app code
 COPY backend/database /app/database
 COPY backend/utils /app/utils
 COPY backend/modal/ .
+RUN if [ -f service-account.json ]; then cp service-account.json /app/service-account.json; fi
 
-EXPOSE 8080
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+EXPOSE 8091
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8091"]
