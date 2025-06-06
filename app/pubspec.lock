@@ -643,6 +643,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.33.6"
+  flutter_blue_plus_windows:
+    dependency: "direct main"
+    description:
+      name: flutter_blue_plus_windows
+      sha256: "5fd0f28885d805da943e3f31914375251209727f563e462c45d05c00e72a7ab0"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.24.21"
   flutter_cache_manager:
     dependency: transitive
     description:
@@ -2034,6 +2042,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.1"
+  stream_with_value:
+    dependency: transitive
+    description:
+      name: stream_with_value
+      sha256: "483d79bf604fdea5274e31207956b2f624f5f03a506cacf081b65cdfcfa647a6"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.5.0"
   string_scanner:
     dependency: transitive
     description:
@@ -2386,6 +2402,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.1.5"
+  win_ble:
+    dependency: transitive
+    description:
+      name: win_ble
+      sha256: "2a867e13c4b355b101fc2c6e2ac85eeebf965db34eca46856f8b478e93b41e96"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.1"
   xdg_directories:
     dependency: transitive
     description:
