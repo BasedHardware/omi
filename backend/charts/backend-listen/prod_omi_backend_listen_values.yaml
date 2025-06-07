@@ -244,6 +244,11 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: CONVERSATION_SUMMARIZED_APP_IDS
+  - name: STT_SERVICE_MODELS
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: STT_SERVICE_MODELS
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
