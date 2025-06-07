@@ -184,7 +184,7 @@ env:
   - name: DD_TRACE_SAMPLE_RATE
     value: "1"
   - name: DD_LOGS_ENABLED
-    value: "true"
+    value: "false"
   - name: DD_SERVICE
     value: "backend-listen"
   - name: DD_ENV
