@@ -27,7 +27,7 @@ class ServiceManager {
     sm._device = DeviceService();
     sm._socket = SocketServicePool();
     sm._wal = WalService();
-    if (Platform.isMacOS) {
+    if (Platform.isMacOS || Platform.isWindows) {
       sm._systemAudio = MacSystemAudioRecorderService();
     }
 
@@ -51,8 +51,8 @@ class ServiceManager {
   IWalService get wal => _wal;
 
   ISystemAudioRecorderService get systemAudio {
-    if (!Platform.isMacOS) {
-      throw Exception("System audio recording is only available on macOS");
+    if (!Platform.isMacOS && !Platform.isWindows) {
+      throw Exception("System audio recording is only available on macOS and Windows");
     }
     return _systemAudio;
   }

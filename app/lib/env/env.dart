@@ -30,6 +30,10 @@ abstract class Env {
   static String? get intercomAndroidApiKey => _instance.intercomAndroidApiKey;
 
   static String? get posthogApiKey => _instance.posthogApiKey;
+
+  static String? get googleClientId => _instance.googleClientId;
+
+  static String? get googleClientSecret => _instance.googleClientSecret;
 }
 
 abstract class EnvFields {
@@ -52,4 +56,8 @@ abstract class EnvFields {
   String? get intercomAndroidApiKey;
 
   String? get posthogApiKey;
+
+  String? get googleClientId;
+
+  String? get googleClientSecret;
 }

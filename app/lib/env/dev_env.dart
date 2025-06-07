@@ -47,4 +47,12 @@ final class DevEnv implements EnvFields {
   @override
   @EnviedField(varName: 'POSTHOG_API_KEY', obfuscate: true)
   final String? posthogApiKey = _DevEnv.posthogApiKey;
+
+  @override
+  @EnviedField(varName: 'GOOGLE_CLIENT_ID', obfuscate: true)
+  final String? googleClientId = _DevEnv.googleClientId;
+
+  @override
+  @EnviedField(varName: 'GOOGLE_CLIENT_SECRET', obfuscate: true)
+  final String? googleClientSecret = _DevEnv.googleClientSecret;
 }

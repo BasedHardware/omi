@@ -3,6 +3,8 @@ import 'dart:io';
 /// A utility class to handle platform-specific service availability
 class PlatformService {
   static bool get isMacOS => Platform.isMacOS;
+  static bool get isWindows => Platform.isWindows;
+  static bool get isDesktop => Platform.isWindows || Platform.isLinux || Platform.isMacOS;
   static bool get isAnalyticsSupported => !Platform.isMacOS;
   static bool get isNotificationSupported => !Platform.isMacOS;
   static bool get isIntercomSupported => !Platform.isMacOS;
