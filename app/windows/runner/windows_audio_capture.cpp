@@ -10,6 +10,8 @@
 #include <functiondiscoverykeys_devpkey.h>
 #include <propvarutil.h>
 #include <propsys.h>
+#include <shellapi.h>  // For ShellExecute
+#include <winreg.h>    // For registry functions
 
 
 const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
@@ -158,71 +160,14 @@ bool WindowsAudioCapture::InitializeWASAPI() {
 }
 
 bool WindowsAudioCapture::InitializeMicrophone() {
-    // First, try to find a headset/earphone microphone
-    IMMDevice* preferred_mic_device = nullptr;
-    
-    // Enumerate capture devices to look for headset/earphone microphones
-    IMMDeviceCollection* capture_devices = nullptr;
-    HRESULT hr = device_enumerator_->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &capture_devices);
-    if (SUCCEEDED(hr)) {
-        UINT capture_count = 0;
-        capture_devices->GetCount(&capture_count);
-        
-        std::cout << "Searching for preferred microphone device..." << std::endl;
-        
-        for (UINT i = 0; i < capture_count; i++) {
-            IMMDevice* device = nullptr;
-            hr = capture_devices->Item(i, &device);
-            if (SUCCEEDED(hr)) {
-                IPropertyStore* props = nullptr;
-                device->OpenPropertyStore(STGM_READ, &props);
-                if (props) {
-                    PROPVARIANT var_name;
-                    PropVariantInit(&var_name);
-                    props->GetValue(PKEY_Device_FriendlyName, &var_name);
-                    
-                    std::wstring device_name(var_name.pwszVal);
-                    std::wcout << L"  Checking device: " << device_name << std::endl;
-                    
-                    // Look for headset/earphone keywords (case-insensitive)
-                    std::wstring lower_name = device_name;
-                    std::transform(lower_name.begin(), lower_name.end(), lower_name.begin(), ::towlower);
-                    
-                    if (lower_name.find(L"headset") != std::wstring::npos ||
-                        lower_name.find(L"earphone") != std::wstring::npos ||
-                        lower_name.find(L"earbud") != std::wstring::npos ||
-                        lower_name.find(L"ear (") != std::wstring::npos ||
-                        lower_name.find(L"headphone") != std::wstring::npos) {
-                        
-                        std::wcout << L"  -> PREFERRED: Found headset microphone: " << device_name << std::endl;
-                        preferred_mic_device = device;
-                        device->AddRef(); // Keep reference
-                        PropVariantClear(&var_name);
-                        props->Release();
-                        break; // Use the first headset device found
-                    }
-                    
-                    PropVariantClear(&var_name);
-                    props->Release();
-                }
-                device->Release();
-            }
-        }
-        capture_devices->Release();
+    // Always use the system's default microphone device
+    // The user can control which device is used through Windows sound settings
+    HRESULT hr = device_enumerator_->GetDefaultAudioEndpoint(eCapture, eConsole, &microphone_device_);
+    if (FAILED(hr)) {
+        std::cout << "Failed to get default microphone device: " << HResultToString(hr) << std::endl;
+        return false;
     }
-    
-    // Use preferred device if found, otherwise fall back to default
-    if (preferred_mic_device) {
-        microphone_device_ = preferred_mic_device;
-        std::cout << "Using preferred headset microphone" << std::endl;
-    } else {
-        hr = device_enumerator_->GetDefaultAudioEndpoint(eCapture, eConsole, &microphone_device_);
-        if (FAILED(hr)) {
-            std::cout << "Failed to get default microphone device: " << HResultToString(hr) << std::endl;
-            return false;
-        }
-        std::cout << "Using default microphone (no headset found)" << std::endl;
-    }
+    std::cout << "Using system default microphone device" << std::endl;
 
     // DEBUG: Show which microphone device was selected
     LPWSTR mic_device_id = nullptr;
@@ -287,71 +232,14 @@ bool WindowsAudioCapture::InitializeMicrophone() {
 }
 
 bool WindowsAudioCapture::InitializeLoopback() {
-    // Try to find the preferred render device (headphones/earphones) for loopback
-    IMMDevice* preferred_render_device = nullptr;
-    
-    // Enumerate render devices to look for headphones/earphones
-    IMMDeviceCollection* render_devices = nullptr;
-    HRESULT hr = device_enumerator_->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &render_devices);
-    if (SUCCEEDED(hr)) {
-        UINT render_count = 0;
-        render_devices->GetCount(&render_count);
-        
-        std::cout << "Searching for preferred render device for loopback..." << std::endl;
-        
-        for (UINT i = 0; i < render_count; i++) {
-            IMMDevice* device = nullptr;
-            hr = render_devices->Item(i, &device);
-            if (SUCCEEDED(hr)) {
-                IPropertyStore* props = nullptr;
-                device->OpenPropertyStore(STGM_READ, &props);
-                if (props) {
-                    PROPVARIANT var_name;
-                    PropVariantInit(&var_name);
-                    props->GetValue(PKEY_Device_FriendlyName, &var_name);
-                    
-                    std::wstring device_name(var_name.pwszVal);
-                    std::wcout << L"  Checking render device: " << device_name << std::endl;
-                    
-                    // Look for headphone/earphone keywords (case-insensitive)
-                    std::wstring lower_name = device_name;
-                    std::transform(lower_name.begin(), lower_name.end(), lower_name.begin(), ::towlower);
-                    
-                    if (lower_name.find(L"headphone") != std::wstring::npos ||
-                        lower_name.find(L"earphone") != std::wstring::npos ||
-                        lower_name.find(L"earbud") != std::wstring::npos ||
-                        lower_name.find(L"ear (") != std::wstring::npos ||
-                        lower_name.find(L"headset") != std::wstring::npos) {
-                        
-                        std::wcout << L"  -> PREFERRED: Found headphone device: " << device_name << std::endl;
-                        preferred_render_device = device;
-                        device->AddRef(); // Keep reference
-                        PropVariantClear(&var_name);
-                        props->Release();
-                        break; // Use the first headphone device found
-                    }
-                    
-                    PropVariantClear(&var_name);
-                    props->Release();
-                }
-                device->Release();
-            }
-        }
-        render_devices->Release();
+    // Always use the system's default render device for loopback capture
+    // This captures audio from whatever the user is actually hearing
+    HRESULT hr = device_enumerator_->GetDefaultAudioEndpoint(eRender, eConsole, &loopback_device_);
+    if (FAILED(hr)) {
+        std::cout << "Failed to get default render device: " << HResultToString(hr) << std::endl;
+        return false;
     }
-    
-    // Use preferred device if found, otherwise fall back to default
-    if (preferred_render_device) {
-        loopback_device_ = preferred_render_device;
-        std::cout << "Using preferred headphone device for loopback" << std::endl;
-    } else {
-        hr = device_enumerator_->GetDefaultAudioEndpoint(eRender, eConsole, &loopback_device_);
-        if (FAILED(hr)) {
-            std::cout << "Failed to get default render device: " << HResultToString(hr) << std::endl;
-            return false;
-        }
-        std::cout << "Using default render device for loopback (no headphones found)" << std::endl;
-    }
+    std::cout << "Using system default render device for loopback capture" << std::endl;
 
     // DEBUG: Show which render device was selected for loopback
     LPWSTR render_device_id = nullptr;
@@ -781,7 +669,7 @@ void WindowsAudioCapture::ProcessMicrophoneData(BYTE* data, UINT32 frames, float
                      output, max_frames, FLUTTER_SAMPLE_RATE);
     } else {
         // No resampling needed, just copy
-        int copy_frames = std::min((int)frames, max_frames);
+        int copy_frames = (static_cast<int>(frames) < max_frames) ? static_cast<int>(frames) : max_frames;
         std::copy(temp_buffer.begin(), temp_buffer.begin() + copy_frames, output);
     }
 }
@@ -841,7 +729,7 @@ void WindowsAudioCapture::ProcessSystemAudioData(BYTE* data, UINT32 frames, floa
                      output, max_frames, FLUTTER_SAMPLE_RATE);
     } else {
         // No resampling needed, just copy
-        int copy_frames = std::min((int)frames, max_frames);
+        int copy_frames = (static_cast<int>(frames) < max_frames) ? static_cast<int>(frames) : max_frames;
         std::copy(temp_buffer.begin(), temp_buffer.begin() + copy_frames, output);
     }
 }
@@ -885,7 +773,7 @@ void WindowsAudioCapture::ResampleAudio(const float* input, int input_frames, in
     
     // If rates are the same, just copy
     if (input_rate == output_rate) {
-        int copy_frames = std::min(input_frames, output_frames);
+        int copy_frames = (input_frames < output_frames) ? input_frames : output_frames;
         std::copy(input, input + copy_frames, output);
         return;
     }
@@ -1052,139 +940,49 @@ void WindowsAudioCapture::SafeRelease(IUnknown** ppunk) {
 }
 
 bool WindowsAudioCapture::DetectDeviceChanges() {
-    // Check if a preferred headset device is now available that wasn't before
-    IMMDeviceCollection* capture_devices = nullptr;
-    HRESULT hr = device_enumerator_->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &capture_devices);
+    // Check if the current default devices have changed
+    // This is simpler and more reliable than searching for "preferred" devices
+    
+    // Check if default microphone device changed
+    IMMDevice* current_default_mic = nullptr;
+    HRESULT hr = device_enumerator_->GetDefaultAudioEndpoint(eCapture, eConsole, &current_default_mic);
     if (FAILED(hr)) return false;
     
-    bool found_better_mic = false;
-    UINT capture_count = 0;
-    capture_devices->GetCount(&capture_count);
+    LPWSTR current_default_mic_id = nullptr;
+    current_default_mic->GetId(&current_default_mic_id);
     
-    // Get current microphone device ID for comparison
     LPWSTR current_mic_id = nullptr;
     microphone_device_->GetId(&current_mic_id);
-    std::wstring current_mic_id_str(current_mic_id);
+    
+    bool mic_changed = wcscmp(current_default_mic_id, current_mic_id) != 0;
+    
+    CoTaskMemFree(current_default_mic_id);
     CoTaskMemFree(current_mic_id);
+    current_default_mic->Release();
     
-    for (UINT i = 0; i < capture_count; i++) {
-        IMMDevice* device = nullptr;
-        hr = capture_devices->Item(i, &device);
-        if (SUCCEEDED(hr)) {
-            LPWSTR device_id = nullptr;
-            device->GetId(&device_id);
-            std::wstring device_id_str(device_id);
-            
-            // Skip if this is the current device
-            if (device_id_str == current_mic_id_str) {
-                CoTaskMemFree(device_id);
-                device->Release();
-                continue;
-            }
-            
-            IPropertyStore* props = nullptr;
-            device->OpenPropertyStore(STGM_READ, &props);
-            if (props) {
-                PROPVARIANT var_name;
-                PropVariantInit(&var_name);
-                props->GetValue(PKEY_Device_FriendlyName, &var_name);
-                
-                std::wstring device_name(var_name.pwszVal);
-                std::wstring lower_name = device_name;
-                std::transform(lower_name.begin(), lower_name.end(), lower_name.begin(), ::towlower);
-                
-                // Check if this is a preferred headset device
-                if (lower_name.find(L"headset") != std::wstring::npos ||
-                    lower_name.find(L"earphone") != std::wstring::npos ||
-                    lower_name.find(L"earbud") != std::wstring::npos ||
-                    lower_name.find(L"ear (") != std::wstring::npos ||
-                    lower_name.find(L"headphone") != std::wstring::npos) {
-                    
-                    std::wcout << L"DEVICE DETECTION: Found new preferred microphone: " << device_name << std::endl;
-                    found_better_mic = true;
-                    PropVariantClear(&var_name);
-                    props->Release();
-                    device->Release();
-                    break;
-                }
-                
-                PropVariantClear(&var_name);
-                props->Release();
-            }
-            
-            CoTaskMemFree(device_id);
-            device->Release();
-        }
-    }
-    capture_devices->Release();
+    // Check if default render device changed
+    IMMDevice* current_default_render = nullptr;
+    hr = device_enumerator_->GetDefaultAudioEndpoint(eRender, eConsole, &current_default_render);
+    if (FAILED(hr)) return mic_changed; // Return mic change status even if render check fails
     
-    // Also check for render devices (headphones)
-    bool found_better_render = false;
-    IMMDeviceCollection* render_devices = nullptr;
-    hr = device_enumerator_->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &render_devices);
-    if (SUCCEEDED(hr)) {
-        UINT render_count = 0;
-        render_devices->GetCount(&render_count);
-        
-        // Get current render device ID for comparison
-        LPWSTR current_render_id = nullptr;
-        loopback_device_->GetId(&current_render_id);
-        std::wstring current_render_id_str(current_render_id);
-        CoTaskMemFree(current_render_id);
-        
-        for (UINT i = 0; i < render_count; i++) {
-            IMMDevice* device = nullptr;
-            hr = render_devices->Item(i, &device);
-            if (SUCCEEDED(hr)) {
-                LPWSTR device_id = nullptr;
-                device->GetId(&device_id);
-                std::wstring device_id_str(device_id);
-                
-                // Skip if this is the current device
-                if (device_id_str == current_render_id_str) {
-                    CoTaskMemFree(device_id);
-                    device->Release();
-                    continue;
-                }
-                
-                IPropertyStore* props = nullptr;
-                device->OpenPropertyStore(STGM_READ, &props);
-                if (props) {
-                    PROPVARIANT var_name;
-                    PropVariantInit(&var_name);
-                    props->GetValue(PKEY_Device_FriendlyName, &var_name);
-                    
-                    std::wstring device_name(var_name.pwszVal);
-                    std::wstring lower_name = device_name;
-                    std::transform(lower_name.begin(), lower_name.end(), lower_name.begin(), ::towlower);
-                    
-                    // Check if this is a preferred headphone device
-                    if (lower_name.find(L"headphone") != std::wstring::npos ||
-                        lower_name.find(L"earphone") != std::wstring::npos ||
-                        lower_name.find(L"earbud") != std::wstring::npos ||
-                        lower_name.find(L"ear (") != std::wstring::npos ||
-                        lower_name.find(L"headset") != std::wstring::npos) {
-                        
-                        std::wcout << L"DEVICE DETECTION: Found new preferred render device: " << device_name << std::endl;
-                        found_better_render = true;
-                        PropVariantClear(&var_name);
-                        props->Release();
-                        device->Release();
-                        break;
-                    }
-                    
-                    PropVariantClear(&var_name);
-                    props->Release();
-                }
-                
-                CoTaskMemFree(device_id);
-                device->Release();
-            }
-        }
-        render_devices->Release();
+    LPWSTR current_default_render_id = nullptr;
+    current_default_render->GetId(&current_default_render_id);
+    
+    LPWSTR current_render_id = nullptr;
+    loopback_device_->GetId(&current_render_id);
+    
+    bool render_changed = wcscmp(current_default_render_id, current_render_id) != 0;
+    
+    CoTaskMemFree(current_default_render_id);
+    CoTaskMemFree(current_render_id);
+    current_default_render->Release();
+    
+    if (mic_changed || render_changed) {
+        std::cout << "DEVICE DETECTION: Default device changed - Mic: " << (mic_changed ? "YES" : "NO") 
+                  << ", Render: " << (render_changed ? "YES" : "NO") << std::endl;
     }
     
-    return found_better_mic || found_better_render;
+    return mic_changed || render_changed;
 }
 
 bool WindowsAudioCapture::RecoverFromDeviceChange() {
@@ -1261,5 +1059,160 @@ void WindowsAudioCapture::CleanupAudioClients() {
     if (loopback_format_) {
         CoTaskMemFree(loopback_format_);
         loopback_format_ = nullptr;
+    }
+}
+
+std::string WindowsAudioCapture::CheckLocationPermission() {
+    try {
+        // Check if location services are enabled system-wide
+        HKEY hKey;
+        LONG result = RegOpenKeyEx(HKEY_LOCAL_MACHINE,
+            L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\location",
+            0, KEY_READ, &hKey);
+        
+        if (result != ERROR_SUCCESS) {
+            return "denied";
+        }
+        
+        // Read the Value as a string
+        wchar_t stringValue[256] = {0};
+        DWORD dataSize = sizeof(stringValue);
+        DWORD valueType = 0;
+        
+        result = RegQueryValueExW(hKey, L"Value", NULL, &valueType, (LPBYTE)stringValue, &dataSize);
+        RegCloseKey(hKey);
+        
+        if (result != ERROR_SUCCESS) {
+            return "denied";
+        }
+        
+        // Check the string value
+        std::wstring valueStr(stringValue);
+        if (valueStr == L"Allow") {
+            return "granted";
+        } else if (valueStr == L"Deny") {
+            return "denied";
+        } else {
+            // If value is not explicitly "Allow", consider it denied
+            return "denied";
+        }
+        
+    } catch (...) {
+        return "denied";
+    }
+}
+
+bool WindowsAudioCapture::RequestLocationPermission() {
+    try {
+        // On Windows, we need to direct the user to open system settings
+        // since there's no direct API to request location permission programmatically
+        // for desktop apps like there is for UWP apps
+        
+        // First check if it's already granted
+        std::string currentStatus = CheckLocationPermission();
+        if (currentStatus == "granted") {
+            return true;
+        }
+        
+        // Open Windows Settings to Privacy & Security > Location
+        std::wstring settingsUri = L"ms-settings:privacy-location";
+        
+        HINSTANCE result = ShellExecute(
+            NULL,           // parent window handle
+            L"open",        // operation
+            settingsUri.c_str(),  // file/URI to open
+            NULL,           // parameters
+            NULL,           // default directory
+            SW_SHOWNORMAL   // show command
+        );
+        
+        // ShellExecute returns a value greater than 32 on success
+        if ((INT_PTR)result > 32) {
+            // We opened settings successfully, but we can't know if user actually granted permission
+            // Return false to indicate that user intervention is needed
+            return false;
+        } else {
+            return false;
+        }
+        
+    } catch (...) {
+        return false;
+    }
+}
+
+std::string WindowsAudioCapture::CheckNotificationPermission() {
+    try {
+        // Check if notifications are enabled system-wide
+        HKEY hKey;
+        LONG result;
+        
+        // Check if notifications are disabled globally
+        result = RegOpenKeyEx(HKEY_CURRENT_USER,
+            L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Notifications\\Settings",
+            0, KEY_READ, &hKey);
+        
+        if (result == ERROR_SUCCESS) {
+            // Check if notifications are disabled globally
+            DWORD dataSize = sizeof(DWORD);
+            DWORD value = 1; // Default to enabled
+            RegQueryValueEx(hKey, L"NOC_GLOBAL_SETTING_ALLOW_NOTIFICATION_SOUND", NULL, NULL, (LPBYTE)&value, &dataSize);
+            
+            RegCloseKey(hKey);
+            
+            // If global notifications are explicitly disabled (value == 0), return denied
+            if (value == 0) {
+                return "denied";
+            }
+        }
+        
+        // For Windows desktop applications (Win32 apps), notifications are typically 
+        // allowed by default unless the user has specifically disabled them.
+        // Unlike mobile platforms, Windows doesn't require explicit permission request
+        // for desktop applications to show notifications.
+        return "granted";
+        
+    } catch (...) {
+        // If we can't check the registry, assume notifications are allowed
+        // This is the safe default for Windows desktop applications
+        return "granted";
+    }
+}
+
+bool WindowsAudioCapture::RequestNotificationPermission() {
+    try {
+        // Check if notifications are already granted
+        std::string currentStatus = CheckNotificationPermission();
+        if (currentStatus == "granted") {
+            return true;
+        }
+        
+        // On Windows desktop applications, notifications don't require explicit permission
+        // like mobile platforms do. If we reach here, it means notifications are disabled
+        // system-wide, so we direct the user to settings to enable them.
+        
+        // Open Windows Settings to System > Notifications
+        std::wstring settingsUri = L"ms-settings:notifications";
+        
+        HINSTANCE result = ShellExecute(
+            NULL,           // parent window handle
+            L"open",        // operation
+            settingsUri.c_str(),  // file/URI to open
+            NULL,           // parameters
+            NULL,           // default directory
+            SW_SHOWNORMAL   // show command
+        );
+        
+        // ShellExecute returns a value greater than 32 on success
+        if ((INT_PTR)result > 32) {
+            // We opened settings successfully
+            // For Windows desktop apps, we assume permission will be granted
+            // once the user enables notifications system-wide
+            return true;
+        } else {
+            return false;
+        }
+        
+    } catch (...) {
+        return false;
     }
 } 
