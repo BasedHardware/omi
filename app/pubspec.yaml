@@ -85,7 +85,7 @@ dependencies:
   opus_dart: ^3.0.1
   growthbook_sdk_flutter: 3.9.2
   manage_calendar_events: ^2.0.3
-  flutter_timezone: ^2.0.0
+  flutter_timezone: 3.0.1
   sign_in_with_apple: ^6.1.1
   location: ^7.0.0
   cached_network_image: 3.4.1
