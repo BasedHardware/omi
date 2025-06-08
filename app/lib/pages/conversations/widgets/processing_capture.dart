@@ -10,6 +10,7 @@ import 'package:omi/pages/processing_conversations/page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -77,6 +78,14 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     var recordingState = provider.recordingState;
 
     if (Platform.isMacOS) {
+      final onboardingProvider = context.read<OnboardingProvider>();
+      if (!onboardingProvider.hasMicrophonePermission) {
+        bool granted = await onboardingProvider.askForMicrophonePermissions();
+        if (!granted) {
+          return;
+        }
+      }
+
       if (recordingState == RecordingState.systemAudioRecord) {
         await provider.stopSystemAudioRecording();
         // MixpanelManager().track("System Audio Recording Stopped");
