@@ -95,7 +95,6 @@ def _get_conversation_obj(uid: str, structured: Structured,
             **conversation.dict(),
             created_at=datetime.now(timezone.utc),
             discarded=discarded,
-            deleted=False,
         )
         if conversation.photos:
             conversations_db.store_conversation_photos(uid, conversation.id, conversation.photos)
@@ -105,7 +104,6 @@ def _get_conversation_obj(uid: str, structured: Structured,
             id=str(uuid.uuid4()),
             **conversation.dict(),
             created_at=datetime.now(timezone.utc),
-            deleted=False,
             structured=structured,
             discarded=discarded,
         )
