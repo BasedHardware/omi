@@ -115,6 +115,8 @@ def get_messages(
     # Fetch messages and collect conversation IDs
     for doc in messages_ref.stream():
         message = doc.to_dict()
+        if message.get('reported') is True:
+            continue
         # if message.get('deleted') is True:
         #     continue
         messages.append(message)
