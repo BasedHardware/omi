@@ -117,8 +117,6 @@ def get_messages(
         message = doc.to_dict()
         if message.get('reported') is True:
             continue
-        # if message.get('deleted') is True:
-        #     continue
         messages.append(message)
         conversations_id.update(message.get('memories_id', []))
         files_id.update(message.get('files_id', []))
