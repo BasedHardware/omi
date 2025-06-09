@@ -454,8 +454,8 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> streamSystemAudioRecording() async {
-    if (!Platform.isMacOS) {
-      notifyError('System audio recording is only available on macOS.');
+    if (!PlatformService.isDesktop) {
+      notifyError('System audio recording is only available on macOS and Windows.');
       return;
     }
 

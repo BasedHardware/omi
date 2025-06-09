@@ -124,7 +124,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         _goNext(); // Go to Permissions page
         MixpanelManager().onboardingStepCompleted('Primary Language');
       }),
-      PlatformService.isMacOS
+      PlatformService.isDesktop
           ? PermissionsMacOSWidget(
               goNext: () {
                 _goNext(); // Go to Welcome page
@@ -157,7 +157,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
             routeToPage(context, const HomePageWrapper(), replace: true);
           } else {
             var codec = await _getAudioCodec(provider.deviceId);
-            if (codec.isOpusSupported()) {
+            if (codec.isOpusSupported() && !PlatformService.isDesktop) {
               _goNext(); // Go to Speech Profile page
             } else {
               // Device selected, but not Opus, skip speech profile

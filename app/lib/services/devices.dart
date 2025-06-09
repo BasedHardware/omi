@@ -7,6 +7,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/errors.dart';
 import 'package:omi/services/devices/models.dart';
+import 'package:omi/utils/bluetooth/bluetooth_adapter.dart';
 
 abstract class IDeviceService {
   void start();
@@ -65,18 +66,18 @@ class DeviceService implements IDeviceService {
       return;
     }
 
-    if (!(await FlutterBluePlus.isSupported)) {
+    if (!(await BluetoothAdapter.isSupported)) {
       logCommonErrorMessage("Bluetooth is not supported");
       return;
     }
 
-    if (FlutterBluePlus.isScanningNow) {
+    if (BluetoothAdapter.isScanningNow) {
       debugPrint("Device service is scanning...");
       return;
     }
 
     // Listen to scan results, always re-emits previous results
-    var discoverSubscription = FlutterBluePlus.scanResults.listen(
+    var discoverSubscription = BluetoothAdapter.scanResults.listen(
       (results) async {
         await _onBleDiscovered(results, desirableDeviceId);
       },
@@ -84,20 +85,20 @@ class DeviceService implements IDeviceService {
         debugPrint('bleFindDevices error: $e');
       },
     );
-    FlutterBluePlus.cancelWhenScanComplete(discoverSubscription);
+    BluetoothAdapter.cancelWhenScanComplete(discoverSubscription);
 
     // Only look for devices that implement Omi or Frame main service
     _status = DeviceServiceStatus.scanning;
-    await FlutterBluePlus.adapterState.where((val) => val == BluetoothAdapterState.on).first;
-    await FlutterBluePlus.startScan(
+    await BluetoothAdapter.adapterState.where((val) => val == BluetoothAdapterStateHelper.on).first;
+    await BluetoothAdapter.startScan(
       timeout: Duration(seconds: timeout),
-      withServices: [Guid(omiServiceUuid), Guid(frameServiceUuid)],
+      withServices: [BluetoothAdapter.createGuid(omiServiceUuid), BluetoothAdapter.createGuid(frameServiceUuid)],
     );
     _status = DeviceServiceStatus.ready;
   }
 
-  Future<void> _onBleDiscovered(List<ScanResult> results, String? desirableDeviceId) async {
-    _bleDevices = results.where((r) => r.device.platformName.isNotEmpty).toList();
+  Future<void> _onBleDiscovered(List<dynamic> results, String? desirableDeviceId) async {
+    _bleDevices = results.cast<ScanResult>().where((r) => r.device.platformName.isNotEmpty).toList();
     _bleDevices.sort((a, b) => b.rssi.compareTo(a.rssi));
     _devices = _bleDevices.map<BtDevice>((e) => BtDevice.fromScanResult(e)).toList();
     onDevices(devices);
@@ -160,8 +161,8 @@ class DeviceService implements IDeviceService {
     _status = DeviceServiceStatus.stop;
     onStatusChanged(_status);
 
-    if (FlutterBluePlus.isScanningNow) {
-      FlutterBluePlus.stopScan();
+    if (BluetoothAdapter.isScanningNow) {
+      BluetoothAdapter.stopScan();
     }
     _subscriptions.clear();
     _devices.clear();

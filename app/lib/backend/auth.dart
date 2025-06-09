@@ -1,6 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
-import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -197,11 +197,18 @@ Future<UserCredential?> _signInWithGoogleAllPlatforms() async {
   // Initialize the all platforms Google Sign In with required params for Windows
   final googleSignIn = _getGoogleSignInAllPlatforms();
 
+  // First, sign out to ensure we get fresh credentials (needed for windows)
+  try {
+    await googleSignIn.signOut();
+    debugPrint('Signed out from Google (all platforms) to get fresh credentials');
+  } catch (e) {
+    debugPrint('Error signing out from Google: $e');
+  }
+
   // Trigger the authentication flow
   final all_platforms_google_sign_in.GoogleSignInCredentials? credentials = await googleSignIn.signIn();
-  debugPrint('Google Credentials (All Platforms): ${credentials?.accessToken != null ? 'Present' : 'Null'}');
 
-  if (credentials == null || credentials.accessToken == null) {
+  if (credentials == null) {
     debugPrint('Google Sign In was cancelled by user or failed');
     return null;
   }
@@ -220,7 +227,51 @@ Future<UserCredential?> _signInWithGoogleAllPlatforms() async {
     return _processGoogleSignInResultAllPlatforms(result, credentials);
   } catch (e) {
     debugPrint('Firebase sign-in failed with all platforms credentials: $e');
+
+    // Handle specific invalid credential error by retrying once with fresh auth
+    if (e is FirebaseAuthException && e.code == 'invalid-credential') {
+      debugPrint('Invalid credential error detected, attempting to retry with fresh authentication...');
+      return await _retryGoogleSignInWithFreshAuth();
+    }
+
     Logger.error('Failed to complete Google sign-in. Please try again.');
+    return null;
+  }
+}
+
+/// Retry Google Sign In with completely fresh authentication
+Future<UserCredential?> _retryGoogleSignInWithFreshAuth() async {
+  try {
+    debugPrint('Retrying Google Sign In with fresh authentication');
+
+    // Sign out from Firebase first
+    await FirebaseAuth.instance.signOut();
+
+    // Get a fresh GoogleSignIn instance
+    final googleSignIn = _getGoogleSignInAllPlatforms();
+
+    // Ensure complete sign out
+    await googleSignIn.signOut();
+
+    // Trigger fresh authentication flow
+    final all_platforms_google_sign_in.GoogleSignInCredentials? credentials = await googleSignIn.signIn();
+
+    if (credentials == null) {
+      return null;
+    }
+
+    // Create new credential
+    final credential = GoogleAuthProvider.credential(
+      accessToken: credentials.accessToken,
+      idToken: credentials.idToken,
+    );
+
+    // Attempt Firebase sign-in with fresh credential
+    var result = await FirebaseAuth.instance.signInWithCredential(credential);
+    return _processGoogleSignInResultAllPlatforms(result, credentials);
+  } catch (e) {
+    debugPrint('Retry with fresh authentication also failed: $e');
+    Logger.error('Failed to complete Google sign-in after retry. Please try again later.');
     return null;
   }
 }
@@ -324,27 +375,64 @@ getFirebaseUser() {
   return FirebaseAuth.instance.currentUser;
 }
 
-// update user given name
 Future<void> updateGivenName(String fullName) async {
-  // TODO: This is an issue on windows, need to fix it
   try {
-    debugPrint('Updating given name: $fullName');
     var user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      // TEMPORARILY SKIP updateProfile on Windows to isolate crash
-      if (Platform.isWindows) {
-        debugPrint('Skipping updateProfile on Windows (for debugging)');
-        // Just update SharedPreferences instead
-        SharedPreferencesUtil().givenName = fullName.split(' ')[0];
-        if (fullName.split(' ').length > 1) {
-          SharedPreferencesUtil().familyName = fullName.split(' ').sublist(1).join(' ');
+
+    SharedPreferencesUtil().givenName = fullName.split(' ')[0];
+    if (fullName.split(' ').length > 1) {
+      SharedPreferencesUtil().familyName = fullName.split(' ').sublist(1).join(' ');
+    }
+
+    if (user == null) {
+      debugPrint('Firebase user is null, skipping Firebase profile update');
+      return;
+    }
+
+    // Try to update Firebase profile with platform-specific handling
+    // Skip Firebase updateProfile on Windows due to known crashes and threading issues
+    // https://github.com/firebase/flutterfire/issues/13340
+    // https://github.com/firebase/flutterfire/issues/12725
+    if (PlatformService.isWindows) {
+      debugPrint('Skipping Firebase updateProfile on Windows due to known platform issues');
+    } else {
+      try {
+        debugPrint('Attempting to update Firebase user profile...');
+
+        // Web and other desktop platforms may still have issues, so use timeout
+        if (kIsWeb || PlatformService.isDesktop) {
+          debugPrint('Desktop/Web platform detected - attempting updateProfile with caution');
+
+          // Try with a timeout to prevent hanging
+          await user.updateProfile(displayName: fullName).timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              debugPrint('updateProfile timed out on desktop platform');
+              throw TimeoutException('updateProfile timed out', const Duration(seconds: 5));
+            },
+          );
+        } else {
+          await user.updateProfile(displayName: fullName);
         }
-      } else {
-        await user.updateProfile(displayName: fullName);
+        await user.reload();
+        user = FirebaseAuth.instance.currentUser;
+      } catch (updateError) {
+        debugPrint('Firebase updateProfile failed (this is expected on windows): $updateError');
       }
     }
   } catch (e) {
-    debugPrint('Error updating given name: $e');
+    debugPrint('Error in updateGivenName: $e');
+
+    // Ensure SharedPreferences are updated even if everything else fails
+    try {
+      SharedPreferencesUtil().givenName = fullName.split(' ')[0];
+      if (fullName.split(' ').length > 1) {
+        SharedPreferencesUtil().familyName = fullName.split(' ').sublist(1).join(' ');
+      }
+      debugPrint('SharedPreferences updated despite error');
+    } catch (prefError) {
+      debugPrint('Failed to update SharedPreferences: $prefError');
+    }
   }
 }
 
