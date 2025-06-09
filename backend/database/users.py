@@ -54,16 +54,37 @@ def delete_person(uid: str, person_id: str):
 
 
 def delete_user_data(uid: str):
-    # TODO: why dont we delete the whole document ref here?
     user_ref = db.collection('users').document(uid)
-    for cname in ['conversations', 'messages', 'chat_sessions', 'people', 'memories', 'files']:
-        cref = user_ref.collection(cname)
-        batch = db.batch()
-        for doc in cref.stream():
-            batch.delete(doc.reference)
-        batch.commit()
+    if not user_ref.get().exists:
+        return {'status': 'error', 'message': 'User not found'}
 
-    # delete user
+    subcollections_to_delete = ['conversations', 'messages', 'chat_sessions', 'people', 'memories', 'files']
+    batch_size = 450
+
+    for cname in subcollections_to_delete:
+        print(f"Deleting subcollection: {cname} for user {uid}")
+        collection_ref = user_ref.collection(cname)
+
+        while True:
+            docs_query = collection_ref.limit(batch_size)
+            docs = list(docs_query.stream())
+
+            if not docs:
+                print(f"No more documents to delete in {collection_ref.path}")
+                break
+
+            batch = db.batch()
+            for doc in docs:
+                print(f"Deleting document: {doc.reference.path}")
+                batch.delete(doc.reference)
+            batch.commit()
+
+            if len(docs) < batch_size:
+                print(f"Processed all documents in {collection_ref.path}")
+                break
+
+    # delete the user document itself
+    print(f"Deleting user document: {uid}")
     user_ref.delete()
     return {'status': 'ok', 'message': 'Account deleted successfully'}
 

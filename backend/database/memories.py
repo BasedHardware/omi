@@ -124,9 +124,8 @@ def delete_memory(uid: str, memory_id: str):
 def delete_all_memories(uid: str):
     user_ref = db.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
-    query = memories_ref # Query all documents in the collection
     batch = db.batch()
-    for doc in query.stream():
+    for doc in memories_ref.stream():
         batch.delete(doc.reference)
     batch.commit()
 

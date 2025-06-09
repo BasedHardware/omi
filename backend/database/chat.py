@@ -193,33 +193,24 @@ def batch_delete_messages(parent_doc_ref, batch_size=450, app_id: Optional[str] 
     if chat_session_id:
         messages_ref = messages_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
     print('batch_delete_messages', app_id)
-    last_doc = None  # For pagination
 
     while True:
-        if last_doc:
-            docs = messages_ref.limit(batch_size).start_after(last_doc).stream()
-        else:
-            docs = messages_ref.limit(batch_size).stream()
-
-        docs_list = list(docs)
+        docs_stream = messages_ref.limit(batch_size).stream()
+        docs_list = list(docs_stream)
 
         if not docs_list:
             print("No more messages to delete")
             break
 
         batch = db.batch()
-
         for doc in docs_list:
             print('Deleting message:', doc.id)
             batch.delete(doc.reference)
-
         batch.commit()
 
         if len(docs_list) < batch_size:
             print("Processed all messages")
             break
-
-        last_doc = docs_list[-1]
 
 
 def clear_chat(uid: str, app_id: Optional[str] = None, chat_session_id: Optional[str] = None):
@@ -260,9 +251,8 @@ def delete_multi_files(uid: str, files_data: list):
     user_ref = db.collection('users').document(uid)
 
     for file_data in files_data:
-        # file_data["deleted"] = True # Changed to hard delete
         file_ref = user_ref.collection('files').document(file_data["id"])
-        batch.delete(file_ref)  # Changed from update to delete
+        batch.delete(file_ref)
 
     batch.commit()
 
