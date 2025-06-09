@@ -38,7 +38,6 @@ def get_person(uid: str, person_id: str):
 def get_people(uid: str):
     people_ref = (
         db.collection('users').document(uid).collection('people')
-        .where(filter=FieldFilter('deleted', '==', False))
     )
     people = people_ref.stream()
     return [person.to_dict() for person in people]
@@ -51,37 +50,41 @@ def update_person(uid: str, person_id: str, name: str):
 
 def delete_person(uid: str, person_id: str):
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
-    person_ref.update({'deleted': True})
+    person_ref.delete()
 
 
 def delete_user_data(uid: str):
-    # TODO: why dont we delete the whole document ref here?
     user_ref = db.collection('users').document(uid)
-    conversations_ref = user_ref.collection('memories')
-    # delete all conversations
-    batch = db.batch()
-    for doc in conversations_ref.stream():
-        batch.delete(doc.reference)
-    batch.commit()
-    # delete chat messages
-    messages_ref = user_ref.collection('messages')
-    batch = db.batch()
-    for doc in messages_ref.stream():
-        batch.delete(doc.reference)
-    batch.commit()
-    # delete memories
-    batch = db.batch()
-    memories_ref = user_ref.collection('facts')
-    for doc in memories_ref.stream():
-        batch.delete(doc.reference)
-    batch.commit()
-    # delete processing conversations
-    processing_conversations_ref = user_ref.collection('processing_memories')
-    batch = db.batch()
-    for doc in processing_conversations_ref.stream():
-        batch.delete(doc.reference)
-    batch.commit()
-    # delete user
+    if not user_ref.get().exists:
+        return {'status': 'error', 'message': 'User not found'}
+
+    subcollections_to_delete = ['conversations', 'messages', 'chat_sessions', 'people', 'memories', 'files']
+    batch_size = 450
+
+    for cname in subcollections_to_delete:
+        print(f"Deleting subcollection: {cname} for user {uid}")
+        collection_ref = user_ref.collection(cname)
+
+        while True:
+            docs_query = collection_ref.limit(batch_size)
+            docs = list(docs_query.stream())
+
+            if not docs:
+                print(f"No more documents to delete in {collection_ref.path}")
+                break
+
+            batch = db.batch()
+            for doc in docs:
+                print(f"Deleting document: {doc.reference.path}")
+                batch.delete(doc.reference)
+            batch.commit()
+
+            if len(docs) < batch_size:
+                print(f"Processed all documents in {collection_ref.path}")
+                break
+
+    # delete the user document itself
+    print(f"Deleting user document: {uid}")
     user_ref.delete()
     return {'status': 'ok', 'message': 'Account deleted successfully'}
 

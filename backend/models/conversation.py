@@ -68,7 +68,6 @@ class AppResult(BaseModel):
 class ActionItem(BaseModel):
     description: str = Field(description="The action item to be completed")
     completed: bool = False
-    deleted: bool = False
 
     @staticmethod
     def actions_to_string(action_items: List['ActionItem']) -> str:
@@ -205,7 +204,6 @@ class Conversation(BaseModel):
     app_id: Optional[str] = None
 
     discarded: bool = False
-    deleted: bool = False
     visibility: ConversationVisibility = ConversationVisibility.private
 
     # TODO: processing_memory_id for backward compatibility with the old memories routes and app

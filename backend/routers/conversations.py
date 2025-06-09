@@ -18,7 +18,7 @@ router = APIRouter()
 
 def _get_conversation_by_id(uid: str, conversation_id: str) -> dict:
     conversation = conversations_db.get_conversation(uid, conversation_id)
-    if conversation is None or conversation.get('deleted', False):
+    if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return conversation
 
@@ -174,11 +174,9 @@ def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=
     conversation = _get_conversation_by_id(uid, conversation_id)
     conversation = Conversation(**conversation)
     action_items = conversation.structured.action_items
-    for i, action_item in enumerate(action_items):
-        if action_item.description == data.description:
-            action_item.deleted = True
+    updated_action_items = [item for item in action_items if not (item.description == data.description)]
     conversations_db.update_conversation_action_items(uid, conversation_id,
-                                                      [action_item.dict() for action_item in action_items])
+                                                      [action_item.dict() for action_item in updated_action_items])
     return {"status": "Ok"}
 
 
