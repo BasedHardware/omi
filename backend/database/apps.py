@@ -36,24 +36,21 @@ def get_app_by_id_db(app_id: str):
     app_ref = db.collection(apps_collection).document(app_id)
     doc = app_ref.get()
     if doc.exists:
-        if doc.to_dict().get('deleted', True):
-            return None
-        else:
-            return doc.to_dict()
+        return doc.to_dict()
     return None
 
 
 def get_audio_apps_count(app_ids: List[str]):
     if not app_ids or len(app_ids) == 0:
         return 0
-    filters = [FieldFilter('id', 'in', app_ids), FieldFilter('deleted', '==', False),
+    filters = [FieldFilter('id', 'in', app_ids),
                FieldFilter('external_integration.triggers_on', '==', 'audio_bytes')]
     apps_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).count().get()
     return apps_ref[0][0].value
 
 
 def get_private_apps_db(uid: str) -> List:
-    filters = [FieldFilter('uid', '==', uid), FieldFilter('private', '==', True), FieldFilter('deleted', '==', False)]
+    filters = [FieldFilter('uid', '==', uid), FieldFilter('private', '==', True)]
     private_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).stream()
     data = [doc.to_dict() for doc in private_apps]
     return data
@@ -61,15 +58,14 @@ def get_private_apps_db(uid: str) -> List:
 
 # This returns public unapproved apps of all users
 def get_unapproved_public_apps_db() -> List:
-    filters = [FieldFilter('approved', '==', False), FieldFilter('private', '==', False),
-               FieldFilter('deleted', '==', False)]
+    filters = [FieldFilter('approved', '==', False), FieldFilter('private', '==', False)]
     public_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).stream()
     return [doc.to_dict() for doc in public_apps]
 
 
 # This returns all unapproved apps of all users including private apps
 def get_all_unapproved_apps_db() -> List:
-    filters = [FieldFilter('approved', '==', False), FieldFilter('deleted', '==', False)]
+    filters = [FieldFilter('approved', '==', False)]
     all_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).stream()
     return [doc.to_dict() for doc in all_apps]
 
@@ -82,14 +78,13 @@ def get_public_apps_db(uid: str) -> List:
 
 
 def get_public_approved_apps_db() -> List:
-    filters = [FieldFilter('approved', '==', True), FieldFilter('private', '==', False),
-               FieldFilter('deleted', '==', False)]
+    filters = [FieldFilter('approved', '==', True), FieldFilter('private', '==', False)]
     public_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).stream()
     return [doc.to_dict() for doc in public_apps]
 
 
 def get_popular_apps_db() -> List:
-    filters = [FieldFilter('approved', '==', True), FieldFilter('deleted', '==', False),
+    filters = [FieldFilter('approved', '==', True),
                FieldFilter('is_popular', '==', True)]
     popular_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).stream()
     return [doc.to_dict() for doc in popular_apps]
@@ -102,7 +97,7 @@ def set_app_popular_db(app_id: str, popular: bool):
 
 # This returns public unapproved apps for a user
 def get_public_unapproved_apps_db(uid: str) -> List:
-    filters = [FieldFilter('approved', '==', False), FieldFilter('uid', '==', uid), FieldFilter('deleted', '==', False),
+    filters = [FieldFilter('approved', '==', False), FieldFilter('uid', '==', uid),
                FieldFilter('private', '==', False)]
     public_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).stream()
     return [doc.to_dict() for doc in public_apps]
@@ -115,8 +110,7 @@ def get_apps_for_tester_db(uid: str) -> List:
         apps = doc.to_dict().get('apps', [])
         if not apps:
             return []
-        filters = [FieldFilter('approved', '==', False), FieldFilter('id', 'in', apps),
-                   FieldFilter('deleted', '==', False)]
+        filters = [FieldFilter('approved', '==', False), FieldFilter('id', 'in', apps)]
         public_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).stream()
         return [doc.to_dict() for doc in public_apps]
     return []
@@ -139,7 +133,7 @@ def update_app_in_db(app_data: dict):
 
 def delete_app_from_db(app_id: str):
     app_ref = db.collection(apps_collection).document(app_id)
-    app_ref.update({'deleted': True})
+    app_ref.delete()
 
 
 def update_app_visibility_in_db(app_id: str, private: bool):
@@ -265,7 +259,7 @@ def record_app_usage(
 
 def delete_persona_db(persona_id: str):
     persona_ref = db.collection(apps_collection).document(persona_id)
-    persona_ref.update({'deleted': True})
+    persona_ref.delete()
 
 
 def get_personas_by_username_db(persona_id: str):
@@ -277,8 +271,7 @@ def get_personas_by_username_db(persona_id: str):
 
 
 def get_persona_by_username_db(username: str):
-    filters = [FieldFilter('username', '==', username), FieldFilter('capabilities', 'array_contains', 'persona'),
-               FieldFilter('deleted', '==', False)]
+    filters = [FieldFilter('username', '==', username), FieldFilter('capabilities', 'array_contains', 'persona')]
     persona_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).limit(1)
     docs = persona_ref.get()
     if not docs:
@@ -314,7 +307,6 @@ def get_user_persona_by_uid(uid: str):
     filters = [
         FieldFilter('capabilities', 'array_contains', 'persona'),
         FieldFilter('category', '==', 'personality-emulation'),
-        FieldFilter('deleted', '==', False),
         FieldFilter('uid', '==', uid),
     ]
     persona_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).limit(1)
@@ -337,7 +329,6 @@ def create_user_persona_db(persona_data: dict):
 def get_persona_by_twitter_handle_db(handle: str):
     filters = [
         FieldFilter('category', '==', 'personality-emulation'),
-        FieldFilter('deleted', '==', False),
         FieldFilter('twitter.username', '==', handle)
     ]
     persona_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).limit(1)
@@ -354,7 +345,6 @@ def get_persona_by_username_twitter_handle_db(username: str, handle: str):
     filters = [
         FieldFilter('username', '==', username),
         FieldFilter('category', '==', 'personality-emulation'),
-        FieldFilter('deleted', '==', False),
         FieldFilter('twitter.username', '==', handle)
     ]
     persona_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).limit(1)
@@ -368,8 +358,7 @@ def get_persona_by_username_twitter_handle_db(username: str, handle: str):
 
 
 def get_omi_personas_by_uid_db(uid: str):
-    filters = [FieldFilter('uid', '==', uid), FieldFilter('capabilities', 'array_contains', 'persona'),
-               FieldFilter('deleted', '==', False)]
+    filters = [FieldFilter('uid', '==', uid), FieldFilter('capabilities', 'array_contains', 'persona')]
     persona_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters))
     docs = persona_ref.get()
     if not docs:
@@ -380,8 +369,7 @@ def get_omi_personas_by_uid_db(uid: str):
 
 def get_omi_persona_apps_by_uid_db(uid: str):
     filters = [FieldFilter('uid', '==', uid),
-               FieldFilter('category', '==', 'personality-emulation'),
-               FieldFilter('deleted', '==', False)]
+               FieldFilter('category', '==', 'personality-emulation')]
     persona_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters))
     docs = persona_ref.get()
     if not docs:
@@ -401,7 +389,7 @@ def update_persona_in_db(persona_data: dict):
 
 
 def migrate_app_owner_id_db(new_id: str, old_id: str):
-    filters = [FieldFilter('uid', '==', old_id), FieldFilter('deleted', '==', False)]
+    filters = [FieldFilter('uid', '==', old_id)]
     apps_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).stream()
     for app in apps_ref:
         app_ref = db.collection(apps_collection).document(app.id)

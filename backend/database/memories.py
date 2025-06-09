@@ -15,10 +15,9 @@ def get_memories(uid: str, limit: int = 100, offset: int = 0, categories: List[s
     memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
     if categories:
         memories_ref = memories_ref.where(filter=FieldFilter('category', 'in', categories))
-        
+
     memories_ref = (
         memories_ref
-        .where(filter=FieldFilter('deleted', '==', False))
         .order_by('scoring', direction=firestore.Query.DESCENDING)
         .order_by('created_at', direction=firestore.Query.DESCENDING)
         .limit(limit)
@@ -39,7 +38,6 @@ def get_user_public_memories(uid: str, limit: int = 100, offset: int = 0):
     memories_ref = (
         memories_ref.order_by('scoring', direction=firestore.Query.DESCENDING)
         .order_by('created_at', direction=firestore.Query.DESCENDING)
-        .where(filter=FieldFilter('deleted', '==', False))
     )
 
     memories_ref = memories_ref.limit(limit).offset(offset)
@@ -57,7 +55,6 @@ def get_non_filtered_memories(uid: str, limit: int = 100, offset: int = 0):
     memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
     memories_ref = (
         memories_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
-        .where(filter=FieldFilter('deleted', '==', False))
     )
     memories_ref = memories_ref.limit(limit).offset(offset)
     return [doc.to_dict() for doc in memories_ref.stream()]
@@ -121,16 +118,16 @@ def delete_memory(uid: str, memory_id: str):
     user_ref = db.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
     memory_ref = memories_ref.document(memory_id)
-    memory_ref.update({'deleted': True})
+    memory_ref.delete()
 
 
 def delete_all_memories(uid: str):
     user_ref = db.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
-    query = memories_ref.where(filter=FieldFilter('deleted', '==', False))
+    query = memories_ref # Query all documents in the collection
     batch = db.batch()
     for doc in query.stream():
-        batch.update(doc.reference, {'deleted': True})
+        batch.delete(doc.reference)
     batch.commit()
 
 
@@ -140,12 +137,11 @@ def delete_memories_for_conversation(uid: str, memory_id: str):
     memories_ref = user_ref.collection(memories_collection)
     query = (
         memories_ref.where(filter=FieldFilter('memory_id', '==', memory_id))
-        .where(filter=FieldFilter('deleted', '==', False))
     )
 
     removed_ids = []
     for doc in query.stream():
-        batch.update(doc.reference, {'deleted': True})
+        batch.delete(doc.reference)
         removed_ids.append(doc.id)
     batch.commit()
     print('delete_memories_for_conversation', memory_id, len(removed_ids))
@@ -178,7 +174,7 @@ def migrate_memories(prev_uid: str, new_uid: str, app_id: str = None):
     # Create batch for destination user
     batch = db.batch()
     new_user_ref = db.collection(users_collection).document(new_uid)
-    new_memories_ref = new_user_ref.collection('facts')
+    new_memories_ref = new_user_ref.collection(memories_collection)
 
     # Add memories to batch
     for memory in memories_to_migrate:
