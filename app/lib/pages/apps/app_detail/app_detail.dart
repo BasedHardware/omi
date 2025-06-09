@@ -90,8 +90,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
       }
 
       setIsLoading(false);
-      context.read<AppProvider>().checkIsAppOwner(app.uid);
-      context.read<AppProvider>().setIsAppPublicToggled(!app.private);
+      if (mounted){
+        context.read<AppProvider>().checkIsAppOwner(app.uid);
+        context.read<AppProvider>().setIsAppPublicToggled(!app.private);
+      }
     });
     if (app.worksExternally()) {
       if (app.externalIntegration!.setupInstructionsFilePath?.isNotEmpty == true) {

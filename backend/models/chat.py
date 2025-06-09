@@ -32,7 +32,6 @@ class FileChat(BaseModel):
     mime_type: str
     openai_file_id: str
     created_at: datetime
-    deleted: bool = False
     thumb_name: Optional[str] = ""
 
     def is_image(self):
@@ -55,7 +54,6 @@ class Message(BaseModel):
     type: MessageType
     memories_id: List[str] = []  # used in db
     memories: List[MessageConversation] = []  # used front facing
-    deleted: bool = False
     reported: bool = False
     report_reason: Optional[str] = None
     files_id: List[str] = []
@@ -153,7 +151,6 @@ class ChatSession(BaseModel):
     app_id: Optional[str] = None
     plugin_id: Optional[str] = None
     created_at: datetime
-    deleted: bool = False
 
     @model_validator(mode='before')
     @classmethod

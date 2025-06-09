@@ -112,7 +112,6 @@ class MemoryDB(Memory):
 
     manually_added: bool = False
     edited: bool = False
-    deleted: bool = False
     scoring: Optional[str] = None
     app_id: Optional[str] = None
 

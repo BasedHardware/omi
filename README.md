@@ -66,14 +66,14 @@ Start speaking, you'll see Real-time transcript on [webhook.site ](https://webho
 
 - [omi device](https://github.com/BasedHardware/omi/tree/main/omi)
 - [omi glass](https://github.com/BasedHardware/omi/tree/main/omiGlass)
-- [mobile app](https://github.com/BasedHardware/omi/tree/main/app)
+- [omi app](https://github.com/BasedHardware/omi/tree/main/app)
 - [ai personas (web)](https://github.com/BasedHardware/omi/tree/main/personas-open-source)
 - [SDKs](sdks)
 
 ## Documentation:
 
 - [Introduction](https://docs.omi.me/)
-- [omi mobile App setup](https://docs.omi.me/docs/developer/AppSetup)
+- [omi App setup](https://docs.omi.me/docs/developer/AppSetup)
 - [Buying Guide](https://docs.omi.me/docs/assembly/Buying_Guide/)
 - [Build the device](https://docs.omi.me/docs/assembly/Build_the_device/)
 - [Install firmware](https://docs.omi.me/docs/get_started/Flash_device/)
