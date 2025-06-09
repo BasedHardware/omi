@@ -41,8 +41,7 @@ class CaptureProvider extends ChangeNotifier
     implements ITransctipSegmentSocketServiceListener {
   // ────────────────────────────────── ctor & listeners ──────────────────────────────────
   CaptureProvider() {
-    _internetStatusListener =
-        PureCore().internetConnection.onStatusChange.listen(onInternetStatusChanged);
+    _internetStatusListener = PureCore().internetConnection.onStatusChange.listen(onInternetStatusChanged);
   }
 
   // Initialize after construction
@@ -79,7 +78,7 @@ class CaptureProvider extends ChangeNotifier
   InternetStatus? _internetStatus;
   InternetStatus? get internetStatus => _internetStatus;
 
-  final List<ServerMessageEvent> _transcriptionServiceStatuses = [];
+  List<ServerMessageEvent> _transcriptionServiceStatuses = [];
   List<ServerMessageEvent> get transcriptionServiceStatuses => _transcriptionServiceStatuses;
 
   BtDevice? _recordingDevice;
@@ -89,8 +88,7 @@ class CaptureProvider extends ChangeNotifier
   bool _transcriptServiceReady = false;
 
   /// Whether the server socket is up **and** we have internet.
-  bool get transcriptServiceReady =>
-      _transcriptServiceReady && _internetStatus == InternetStatus.connected;
+  bool get transcriptServiceReady => _transcriptServiceReady && _internetStatus == InternetStatus.connected;
 
   /// either a device is connected or we're using phone-mic recording
   bool get recordingDeviceServiceReady =>
@@ -115,36 +113,36 @@ class CaptureProvider extends ChangeNotifier
 
   // Simple image storage - no complex session management
   List<Map<String, dynamic>> capturedImages = [];
-  
+
   // Keep these for compatibility with existing code that references them
   bool _conversationCompleted = false;
-  
+
   // Backward compatibility getters for unified approach
   List<Map<String, dynamic>> get allImages => allCapturedImages;
   List<Map<String, dynamic>> get localImages => capturedImages.where((img) => img['data'] != null).toList();
   List<Map<String, dynamic>> get cloudImages => capturedImages.where((img) => img['url'] != null).toList();
-  
+
   // Shared in-progress conversation state
   String? _inProgressConversationId;
   DateTime? _conversationStartedAt;
   List<Map<String, dynamic>> _inProgressImages = [];
   List<TranscriptSegment> _inProgressSegments = [];
   bool _hasActiveConversation = false;
-  
+
   StreamSubscription? _speechProfileStream;
   Timer? _blinkTimer;
 
   // ───────────────────────────────── getters for widgets ────────────────────────────────
   StreamSubscription? get bleBytesStream => _bleBytesStream;
   StreamSubscription? get storageStream => _storageStream;
-  
+
   // Shared in-progress conversation getters
   String? get inProgressConversationId => _inProgressConversationId;
   DateTime? get conversationStartedAt => _conversationStartedAt;
   bool get hasActiveConversation => _hasActiveConversation;
   List<Map<String, dynamic>> get inProgressImages => _inProgressImages;
   List<TranscriptSegment> get inProgressSegments => _inProgressSegments;
-  
+
   // Conversation state getters
   bool get conversationCompleted => _conversationCompleted;
 
@@ -179,7 +177,7 @@ class CaptureProvider extends ChangeNotifier
   // Public method for external classes to update recording device
   void updateRecordingDevice(BtDevice? device) {
     _updateRecordingDevice(device);
-    
+
     // If OpenGlass is being set as recording device, set up image streaming
     if (device?.type == DeviceType.openglass) {
       startOpenGlassImageStreaming(device!.id);
@@ -188,7 +186,6 @@ class CaptureProvider extends ChangeNotifier
       stopOpenGlassImageStreaming();
     }
   }
-
 
   // ─────────────────────────────────── lifecycle ────────────────────────────────────────
   @override
@@ -210,7 +207,6 @@ class CaptureProvider extends ChangeNotifier
     bool? isPcm,
     bool force = false,
   }) async {
-
     print('initiateWebsocket in capture_provider');
 
     BleAudioCodec codec = audioCodec;
@@ -242,21 +238,24 @@ class CaptureProvider extends ChangeNotifier
 
   @override
   void onClosed() {
-    // WebSocket closed
+    _transcriptionServiceStatuses = [];
+    _transcriptServiceReady = false;
+    debugPrint('[Provider] Socket is closed');
+    notifyListeners();
   }
 
   @override
   void onConnected() {
     _transcriptServiceReady = true;
-    
+
     // Clear stale images when WebSocket connects to ensure fresh start
     clearStaleImages();
-    
+
     // Ensure shared in-progress conversation is started when WebSocket connects
     if (!_hasActiveConversation) {
       startInProgressConversation();
     }
-    
+
     notifyListeners();
   }
 
@@ -285,7 +284,7 @@ class CaptureProvider extends ChangeNotifier
     // Update both legacy segments and shared in-progress conversation
     final remain = TranscriptSegment.updateSegments(segments, newSegments);
     TranscriptSegment.combineSegments(segments, remain);
-    
+
     // Add to shared in-progress conversation
     addSegmentsToInProgressConversation(newSegments);
 
@@ -299,29 +298,29 @@ class CaptureProvider extends ChangeNotifier
     if (conversationCreating) {
       return;
     }
-    
+
     if (imageData != null && imageData is Map<String, dynamic>) {
       final description = imageData['description'];
       final id = imageData['id'] ?? 'unknown';
       final thumbnailUrl = imageData['thumbnail_url'];
       final isInteresting = imageData['is_interesting'] ?? true;
-      
+
       // Create unified image object
-        Map<String, dynamic> newImage = {
-          'id': id,
-          'thumbnail_url': thumbnailUrl,
-          'url': imageData['url'],
-          'mime_type': imageData['mime_type'],
-          'created_at': imageData['created_at'],
+      Map<String, dynamic> newImage = {
+        'id': id,
+        'thumbnail_url': thumbnailUrl,
+        'url': imageData['url'],
+        'mime_type': imageData['mime_type'],
+        'created_at': imageData['created_at'],
         'description': description?.toString(),
         'is_interesting': isInteresting,
-        };
-        
+      };
+
       // Add to unified captured images
       addCapturedImage(newImage);
-      
-        notifyListeners();
-      } else {
+
+      notifyListeners();
+    } else {
       // Invalid image data
     }
   }
@@ -332,22 +331,21 @@ class CaptureProvider extends ChangeNotifier
       final conversationId = clearData['conversation_id'];
       final reason = clearData['reason'];
       final processedCount = clearData['processed_image_count'];
-      
+
       // Clear all captured images when conversation is created
-      if (reason == 'conversation_created' || 
+      if (reason == 'conversation_created' ||
           reason == 'added_to_existing_conversation' ||
-          reason == 'processed_into_new_conversation' || 
+          reason == 'processed_into_new_conversation' ||
           reason == 'processed_to_existing_conversation') {
-        
         // Simple immediate cleanup
         capturedImages.clear();
         _inProgressImages.clear();
         clearInProgressConversation();
-        
+
         // Brief block then allow new sessions
         setConversationCreating(false);
         setConversationCompleted(false);
-        
+
         notifyListeners();
       }
     }
@@ -432,19 +430,18 @@ class CaptureProvider extends ChangeNotifier
   Future<void> _resetStateVariables() async {
     segments = [];
     hasTranscripts = false;
-    
+
     // Reset conversation completion state for new conversation
     setConversationCompleted(false);
     setConversationCreating(false);
-    
+
     // Clear captured images for fresh start
     clearCapturedImages();
-    
+
     notifyListeners();
   }
 
-  Future<void> _processConversationCreated(
-      ServerConversation? conversation, List<ServerMessage> messages) async {
+  Future<void> _processConversationCreated(ServerConversation? conversation, List<ServerMessage> messages) async {
     if (conversation == null) return;
     conversationProvider?.upsertConversation(conversation);
     MixpanelManager().conversationCreated(conversation);
@@ -479,30 +476,10 @@ class CaptureProvider extends ChangeNotifier
   // ─────────────────────────────── internet callback ────────────────────────────────────
   void onInternetStatusChanged(InternetStatus status) {
     _internetStatus = status;
-    }, onRecording: () {
-      updateRecordingState(RecordingState.record);
-    }, onStop: () {
-      updateRecordingState(RecordingState.stop);
-    }, onInitializing: () {
-      updateRecordingState(RecordingState.initialising);
-    });
+    notifyListeners();
   }
 
-  stopStreamRecording() async {
-    await _cleanupCurrentState();
-    ServiceManager.instance().mic.stop();
-    updateRecordingState(RecordingState.stop);
-    await _socket?.stop(reason: 'stop stream recording');
-  }
-
-  Future streamDeviceRecording({BtDevice? device}) async {
-    debugPrint("streamDeviceRecording $device");
-    if (device != null) _updateRecordingDevice(device);
-
-    await _resetState();
-  }
-
-  Future stopStreamDeviceRecording({bool cleanDevice = false}) async {
+  Future _stopStreamRecordingLegacy({bool cleanDevice = false}) async {
     if (cleanDevice) {
       _updateRecordingDevice(null);
     }
@@ -587,14 +564,6 @@ class CaptureProvider extends ChangeNotifier
     await _cleanupCurrentState();
   }
 
-  @override
-  void onClosed() {
-    _transcriptionServiceStatuses = [];
-    _transcriptServiceReady = false;
-    debugPrint('[Provider] Socket is closed');
-    notifyListeners();
-  }
-
   // ───────────────────────────── keep-alive watchdog ────────────────────────────────────
   void _startKeepAliveServices() {
     _keepAliveTimer?.cancel();
@@ -654,13 +623,11 @@ class CaptureProvider extends ChangeNotifier
     }
 
     final codec = await _getAudioCodec(_recordingDevice!.id);
-    final language = SharedPreferencesUtil().hasSetPrimaryLanguage
-        ? SharedPreferencesUtil().userPrimaryLanguage
-        : 'multi';
+    final language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : 'multi';
 
-    final socketMismatch = language != _socket?.language ||
-        codec != _socket?.codec ||
-        _socket?.state != SocketServiceState.connected;
+    final socketMismatch =
+        language != _socket?.language || codec != _socket?.codec || _socket?.state != SocketServiceState.connected;
 
     if (socketMismatch) {
       await _initiateWebsocket(audioCodec: codec, force: true);
@@ -669,12 +636,12 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> _initiateDeviceAudioStreaming() async {
     if (_recordingDevice == null) return;
-    
+
     // Skip audio streaming for OpenGlass devices - they only have camera, no microphone
     if (_recordingDevice!.type == DeviceType.openglass) {
       return;
     }
-    
+
     final deviceId = _recordingDevice!.id;
     final codec = await _getAudioCodec(deviceId);
 
@@ -732,8 +699,7 @@ class CaptureProvider extends ChangeNotifier
     _bleButtonStream?.cancel();
     _bleButtonStream = await _getBleButtonListener(deviceId, onButtonReceived: (value) {
       if (value.length < 4) return;
-      final buttonState =
-          ByteData.view(Uint8List.fromList(value.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
+      final buttonState = ByteData.view(Uint8List.fromList(value.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
 
       // start long press
       if (buttonState == 3 && _voiceCommandSession == null) {
@@ -788,7 +754,7 @@ class CaptureProvider extends ChangeNotifier
     await Permission.microphone.request();
 
     // set profile & socket first - specify this is for phone mic
-    await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000, isPhoneMic: true);
+    await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000, isPcm: true);
 
     // Reset conversation completion state for new recording session
     setConversationCompleted(false);
@@ -798,70 +764,70 @@ class CaptureProvider extends ChangeNotifier
 
     // begin mic
     await ServiceManager.instance().mic.start(
-      onByteReceived: (bytes) {
-        if (_socket?.state == SocketServiceState.connected) _socket!.send(bytes);
-      },
-      onRecording: () => updateRecordingState(RecordingState.record),
-      onStop: () => updateRecordingState(RecordingState.stop),
-      onInitializing: () => updateRecordingState(RecordingState.initialising),
-    );
+          onByteReceived: (bytes) {
+            if (_socket?.state == SocketServiceState.connected) _socket!.send(bytes);
+          },
+          onRecording: () => updateRecordingState(RecordingState.record),
+          onStop: () => updateRecordingState(RecordingState.stop),
+          onInitializing: () => updateRecordingState(RecordingState.initialising),
+        );
   }
 
   Future<void> stopStreamRecording() async {
     // Set conversation creating flag to prevent new images during stopping
     setConversationCreating(true);
-    
+
     await _cleanupCurrentState();
     ServiceManager.instance().mic.stop();
     await _socket?.stop(reason: 'stop stream recording');
-    
+
     // Don't finalize the in-progress conversation yet - let the API call process it first
     // finalizeInProgressConversation will be called after successful conversation creation
   }
 
   Future<void> streamDeviceRecording({BtDevice? device}) async {
     if (device != null) _updateRecordingDevice(device);
-    
+
     // Reset conversation completion state for new device recording session
     setConversationCompleted(false);
-    
+
     // Skip device recording setup for OpenGlass - it's camera-only and shouldn't affect audio
     if (device?.type == DeviceType.openglass) {
       // Start shared in-progress conversation for image tracking
       startInProgressConversation();
-      
+
       // Set up dedicated OpenGlass image streaming
       await startOpenGlassImageStreaming(device!.id);
-      
+
       // Skip audio-related state reset to avoid interfering with phone mic
       await initiateStorageBytesStreaming();
       notifyListeners();
       return;
     }
-    
+
     // Start shared in-progress conversation for device recording
     startInProgressConversation();
-    
+
     await _resetState();
   }
 
   Future<void> stopStreamDeviceRecording({bool cleanDevice = false}) async {
     if (cleanDevice) _updateRecordingDevice(null);
-    
+
     // Set conversation creating flag to prevent new images during stopping
     setConversationCreating(true);
-    
+
     // Use appropriate cleanup based on connected device type
     if (_recordingDevice?.type == DeviceType.openglass) {
       // For OpenGlass, only clean up audio streams but preserve image streams
-    await _cleanupCurrentState();
+      await _cleanupCurrentState();
     } else {
       // For regular devices, clean up everything
       await _cleanupDeviceState();
     }
-    
+
     await _socket?.stop(reason: 'stop stream device recording');
-    
+
     // Don't finalize the in-progress conversation yet - let the API call process it first
     // finalizeInProgressConversation will be called after successful conversation creation
   }
@@ -880,8 +846,7 @@ class CaptureProvider extends ChangeNotifier
         return;
       }
       final value = await _getBleButtonState(deviceId);
-      final buttonState =
-          ByteData.view(Uint8List.fromList(value.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
+      final buttonState = ByteData.view(Uint8List.fromList(value.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
 
       // force process if BLE missed release
       if (buttonState == 5 && session == _voiceCommandSession) {
@@ -907,11 +872,11 @@ class CaptureProvider extends ChangeNotifier
   Future<void> _closeBleStream() async {
     await _bleBytesStream?.cancel();
   }
-  
+
   Future<void> _closeImageStream() async {
     await _imageStream?.cancel();
   }
-  
+
   Future<void> _cleanupDeviceState() async {
     await _closeBleStream();
     await _closeImageStream();
@@ -927,7 +892,7 @@ class CaptureProvider extends ChangeNotifier
   double currentSdCardSecondsReceived = 0.0;
 
   int totalStorageFileBytes = 0; // bytes on storage
-  int totalBytesReceived = 0;    // bytes already pulled
+  int totalBytesReceived = 0; // bytes already pulled
   double sdCardSecondsTotal = 0.0;
   double sdCardSecondsReceived = 0.0;
 
@@ -973,12 +938,10 @@ class CaptureProvider extends ChangeNotifier
 
     final codec = await _getAudioCodec(deviceId);
     sdCardSecondsTotal = totalBytes / codec.getFramesLengthInBytes() / codec.getFramesPerSecond();
-    sdCardSecondsReceived =
-        storageOffset / codec.getFramesLengthInBytes() / codec.getFramesPerSecond();
+    sdCardSecondsReceived = storageOffset / codec.getFramesLengthInBytes() / codec.getFramesPerSecond();
 
     // mark ready if >10s left
-    if (totalBytes - storageOffset >
-        10 * codec.getFramesLengthInBytes() * codec.getFramesPerSecond()) {
+    if (totalBytes - storageOffset > 10 * codec.getFramesLengthInBytes() * codec.getFramesPerSecond()) {
       sdCardReady = true;
     }
     notifyListeners();
@@ -1036,29 +999,29 @@ class CaptureProvider extends ChangeNotifier
     if (conversationCreating) {
       return;
     }
-    
+
     // Simple deduplication by ID
     final imageId = imageData['id']?.toString() ?? 'unknown_${DateTime.now().millisecondsSinceEpoch}';
     bool alreadyExists = capturedImages.any((img) => img['id']?.toString() == imageId);
-    
+
     if (!alreadyExists) {
       capturedImages.add(imageData);
-      
+
       // Add to in-progress conversation for timeline display
       addImageToInProgressConversation(imageData);
     } else {
       // Skipping duplicate image
     }
-      
+
     notifyListeners();
   }
-  
+
   void clearCapturedImages() {
     final oldCount = capturedImages.length;
     capturedImages.clear();
     notifyListeners();
   }
-  
+
   // Get all captured images for display
   List<Map<String, dynamic>> get allCapturedImages {
     final imageList = List<Map<String, dynamic>>.from(capturedImages);
@@ -1068,52 +1031,52 @@ class CaptureProvider extends ChangeNotifier
   // ─────────────────────────── Shared In-Progress Conversation Management ──────────────────────────
   void startInProgressConversation() {
     if (_hasActiveConversation) return;
-    
+
     _inProgressConversationId = 'in_progress_${DateTime.now().millisecondsSinceEpoch}';
     _conversationStartedAt = DateTime.now();
     _inProgressImages.clear();
     _inProgressSegments.clear();
     _hasActiveConversation = true;
-    
+
     notifyListeners();
   }
-  
+
   void addImageToInProgressConversation(Map<String, dynamic> imageData) {
     if (!_hasActiveConversation) {
       startInProgressConversation();
     }
-    
+
     // Simple duplicate check
     bool alreadyExists = _inProgressImages.any((img) => img['id'] == imageData['id']);
-    
+
     if (!alreadyExists) {
       _inProgressImages.add(imageData);
       notifyListeners();
     }
   }
-  
+
   void addSegmentsToInProgressConversation(List<TranscriptSegment> newSegments) {
     if (!_hasActiveConversation) {
       startInProgressConversation();
     }
-    
+
     // Update segments using existing logic
     final remain = TranscriptSegment.updateSegments(_inProgressSegments, newSegments);
     TranscriptSegment.combineSegments(_inProgressSegments, remain);
-    
+
     notifyListeners();
   }
-  
+
   Future<void> finalizeInProgressConversation() async {
     if (!_hasActiveConversation) return;
-    
+
     // Clear the in-progress state
     _hasActiveConversation = false;
     _inProgressConversationId = null;
     _conversationStartedAt = null;
     _inProgressImages.clear();
     _inProgressSegments.clear();
-    
+
     // SIMPLE & ELEGANT: Clear images immediately and set up fallback
     Timer(const Duration(seconds: 2), () {
       capturedImages.clear();
@@ -1121,10 +1084,10 @@ class CaptureProvider extends ChangeNotifier
       setConversationCompleted(false);
       notifyListeners();
     });
-    
+
     notifyListeners();
   }
-  
+
   void clearInProgressConversation() {
     _hasActiveConversation = false;
     _inProgressConversationId = null;
@@ -1139,7 +1102,7 @@ class CaptureProvider extends ChangeNotifier
     // Device provider already handles OpenGlass image streaming
     return;
   }
-  
+
   Future<void> stopOpenGlassImageStreaming() async {
     await _closeImageStream();
   }
@@ -1156,7 +1119,7 @@ class CaptureProvider extends ChangeNotifier
       // Just stop the socket if no specific recording type
       await _socket?.stop(reason: 'stop conversation');
     }
-    
+
     // Don't automatically finalize - let the conversation creation flow handle it
   }
 
@@ -1178,7 +1141,7 @@ class CaptureProvider extends ChangeNotifier
     String? fullUrl,
   }) {
     bool updated = false;
-    
+
     // Update in captured images (main list)
     for (int i = 0; i < capturedImages.length; i++) {
       if (capturedImages[i]['id'] == imageId) {
@@ -1193,7 +1156,7 @@ class CaptureProvider extends ChangeNotifier
         break;
       }
     }
-    
+
     // Update in in-progress images
     for (int i = 0; i < _inProgressImages.length; i++) {
       if (_inProgressImages[i]['id'] == imageId) {
@@ -1208,7 +1171,7 @@ class CaptureProvider extends ChangeNotifier
         break;
       }
     }
-    
+
     if (updated) {
       notifyListeners();
     } else {
