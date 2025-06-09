@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/widgets/sign_in_button.dart';
+import 'package:omi/widgets/consent_bottom_sheet.dart';
 import 'package:provider/provider.dart';
 
 class AuthComponent extends StatefulWidget {
@@ -41,18 +42,24 @@ class _AuthComponentState extends State<AuthComponent> {
               if (Platform.isIOS || Platform.isMacOS) ...[
                 SignInButton.withApple(
                   title: 'Sign in with Apple',
-                  onTap: () async {
-                    final user = FirebaseAuth.instance.currentUser;
-                    if (user != null && user.isAnonymous && SharedPreferencesUtil().hasPersonaCreated) {
-                      await provider.linkWithApple();
-                      if (mounted) {
-                        SharedPreferencesUtil().hasOmiDevice = true;
-                        SharedPreferencesUtil().verifiedPersonaId = null;
-                        widget.onSignIn();
-                      }
-                    } else {
-                      provider.onAppleSignIn(widget.onSignIn);
-                    }
+                  onTap: () {
+                    ConsentBottomSheet.show(
+                      context,
+                      authMethod: 'apple',
+                      onContinue: () async {
+                        final user = FirebaseAuth.instance.currentUser;
+                        if (user != null && user.isAnonymous && SharedPreferencesUtil().hasPersonaCreated) {
+                          await provider.linkWithApple();
+                          if (mounted) {
+                            SharedPreferencesUtil().hasOmiDevice = true;
+                            SharedPreferencesUtil().verifiedPersonaId = null;
+                            widget.onSignIn();
+                          }
+                        } else {
+                          provider.onAppleSignIn(widget.onSignIn);
+                        }
+                      },
+                    );
                   },
                 ),
                 const SizedBox(height: 12),
@@ -102,18 +109,24 @@ class _AuthComponentState extends State<AuthComponent> {
               const SizedBox(height: 12),
               SignInButton.withGoogle(
                 title: 'Sign in with Google',
-                onTap: () async {
-                  final user = FirebaseAuth.instance.currentUser;
-                  if (user != null && user.isAnonymous && SharedPreferencesUtil().hasPersonaCreated) {
-                    await provider.linkWithGoogle();
-                    if (mounted) {
-                      SharedPreferencesUtil().hasOmiDevice = true;
-                      SharedPreferencesUtil().verifiedPersonaId = null;
-                      widget.onSignIn();
-                    }
-                  } else {
-                    provider.onGoogleSignIn(widget.onSignIn);
-                  }
+                onTap: () {
+                  ConsentBottomSheet.show(
+                    context,
+                    authMethod: 'google',
+                    onContinue: () async {
+                      final user = FirebaseAuth.instance.currentUser;
+                      if (user != null && user.isAnonymous && SharedPreferencesUtil().hasPersonaCreated) {
+                        await provider.linkWithGoogle();
+                        if (mounted) {
+                          SharedPreferencesUtil().hasOmiDevice = true;
+                          SharedPreferencesUtil().verifiedPersonaId = null;
+                          widget.onSignIn();
+                        }
+                      } else {
+                        provider.onGoogleSignIn(widget.onSignIn);
+                      }
+                    },
+                  );
                 },
               ),
               const SizedBox(height: 16),
