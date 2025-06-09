@@ -178,9 +178,7 @@ def report_message(uid: str, msg_doc_id: str):
     user_ref = db.collection('users').document(uid)
     message_ref = user_ref.collection('messages').document(msg_doc_id)
     try:
-        # message_ref.update({'deleted': True, 'reported': True}) # Changed to hard delete
         message_ref.update({'reported': True})
-        # message_ref.delete() # Note: 'reported' status will be lost with the document. Now, we are not deleting.
         return {"message": "Message reported"}
     except Exception as e:
         print("Update failed:", e)
@@ -265,7 +263,7 @@ def delete_multi_files(uid: str, files_data: list):
     for file_data in files_data:
         # file_data["deleted"] = True # Changed to hard delete
         file_ref = user_ref.collection('files').document(file_data["id"])
-        batch.delete(file_ref) # Changed from update to delete
+        batch.delete(file_ref)  # Changed from update to delete
 
     batch.commit()
 
