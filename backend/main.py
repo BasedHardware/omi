@@ -19,6 +19,7 @@ else:
     firebase_admin.initialize_app()
 
 app = FastAPI()
+
 app.include_router(transcribe.router)
 app.include_router(conversations.router)
 app.include_router(memories.router)

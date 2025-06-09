@@ -3,7 +3,8 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import ShareButton from '../memories/share-button';
-import { useParams, usePathname } from 'next/navigation';
+import { useParams, usePathname, useRouter } from 'next/navigation';
+import { useAuth } from '../../hooks/useAuth';
 
 interface NavItem {
   href: string;
@@ -11,6 +12,8 @@ interface NavItem {
   target?: string;
   className?: string;
   icon?: React.ReactNode;
+  onClick?: (e: React.MouseEvent) => Promise<void> | void;
+  id?: string;
 }
 
 interface AppHeaderProps {
@@ -59,6 +62,25 @@ const ZapIcon = () => (
   </svg>
 );
 
+const LoadingSpinner = () => (
+  <svg className="h-5 w-5 animate-spin text-white" viewBox="0 0 24 24">
+    <circle
+      className="opacity-25"
+      cx="12"
+      cy="12"
+      r="10"
+      stroke="currentColor"
+      strokeWidth="4"
+      fill="none"
+    />
+    <path
+      className="opacity-75"
+      fill="currentColor"
+      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+    />
+  </svg>
+);
+
 const CartIcon = () => (
   <div className="relative">
     <svg
@@ -79,48 +101,7 @@ const CartIcon = () => (
 );
 
 export default function AppHeader({
-  navItems = [
-    {
-      href: 'https://rebrand.ly/discord-invite-a2a451',
-      label: '6.7k+ Join Discord',
-      icon: <DiscordIcon />,
-      className: 'flex items-center space-x-2 text-white hover:text-gray-300',
-    },
-    {
-      href: 'https://github.com/BasedHardware/Omi',
-      label: '4.4K Github',
-      icon: <GithubIcon />,
-      className: 'flex items-center space-x-2 text-white hover:text-gray-300',
-    },
-    {
-      href: 'https://docs.omi.me',
-      label: 'Docs',
-      className: 'text-white hover:text-gray-300',
-    },
-    {
-      href: 'https://www.omi.me/help',
-      label: 'Help center',
-      className: 'text-white hover:text-gray-300',
-    },
-    {
-      href: 'https://docs.omi.me/docs/developer/apps/Introduction',
-      label: 'Start Building',
-      icon: <ZapIcon />,
-      className: 'flex items-center space-x-2 rounded-full bg-[#6C2BD9] px-3 py-1 text-white transition-colors hover:bg-[#5A1CB8]',
-      target: '_blank',
-    },
-    {
-      href: 'https://www.omi.me/products/omi-dev-kit-2',
-      label: 'Order Now',
-      className: 'text-white hover:text-gray-300',
-    },
-    {
-      href: 'https://omi.me/cart',
-      label: 'Cart',
-      icon: <CartIcon />,
-      className: 'flex items-center space-x-2 text-white hover:text-gray-300',
-    },
-  ],
+  navItems: initialNavItems = [],
   showShareButton = false,
   mobileMenuId = 'mobile-menu',
   customLogo = {
@@ -131,8 +112,11 @@ export default function AppHeader({
 }: AppHeaderProps) {
   const [scrollPosition, setScrollPosition] = useState(0);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isProcessingAuth, setIsProcessingAuth] = useState(false);
   const params = useParams();
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, loading, signIn, signOut, isAuthenticated } = useAuth();
 
   const dreamforcePage = pathname.includes('dreamforce');
 
@@ -147,6 +131,70 @@ export default function AppHeader({
       window.removeEventListener('scroll', handleScroll);
     };
   }, []);
+
+  const handleCreateAppAuth = async () => {
+    if (loading || isProcessingAuth) {
+      console.log('🔄 Auth state loading or processing, please wait...');
+      return;
+    }
+
+    if (isAuthenticated) {
+      console.log('✅ User is authenticated, redirecting to create app page');
+      setIsProcessingAuth(true);
+      router.push('/create-app');
+      setTimeout(() => setIsProcessingAuth(false), 2000); 
+    } else {
+      console.log('🔑 User not authenticated, initiating Google sign-in...');
+      setIsProcessingAuth(true);
+      try {
+        const signedInUser = await signIn();
+        if (signedInUser) {
+          console.log('🎉 Sign-in successful, redirecting to create app page');
+          router.push('/create-app');
+        } else {
+          console.log('❌ Sign-in cancelled or failed');
+        }
+      } catch (error: any) {
+        console.error('❌ Authentication failed:', error);
+        if (error?.code === 'auth/popup-closed-by-user') {
+          console.log('🚪 User cancelled sign-in');
+        } else if (error?.code === 'auth/popup-blocked') {
+          console.error('🚫 Popup blocked - please allow popups for this site');
+        } else {
+          console.error('⚠️ Unexpected error during sign-in:', error.message);
+        }
+      } finally {
+        setIsProcessingAuth(false);
+      }
+    }
+  };
+
+  const defaultNavItems: NavItem[] = [
+    {
+      id: 'create-app-button',
+      href: '#', 
+      label: isAuthenticated ? 'Create App' : 'Sign in to Create App',
+      onClick: handleCreateAppAuth,
+      className: `px-4 py-2 rounded-[0.5rem] font-semibold text-sm transition-all duration-200 flex items-center justify-center ${
+        isProcessingAuth 
+          ? 'bg-gray-700 text-gray-400 cursor-not-allowed' 
+          : 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 shadow-md hover:shadow-lg transform hover:-translate-y-px'
+      }`,
+    },
+    {
+      href: 'https://www.omi.me/products/omi-dev-kit-2',
+      label: 'Order Now',
+      className: 'text-white hover:text-gray-300',
+    },
+    {
+      href: 'https://omi.me/cart',
+      label: 'Cart',
+      icon: <CartIcon />,
+      className: 'flex items-center space-x-2 text-white hover:text-gray-300',
+    },
+  ];
+
+  const navItems = [...defaultNavItems, ...initialNavItems.filter(item => !defaultNavItems.find(di => di.label === item.label))];
 
   return !dreamforcePage ? (
     <>
@@ -167,116 +215,119 @@ export default function AppHeader({
           </Link>
         </h1>
 
-        <nav className="flex items-center">
-          {/* Mobile Menu Toggle */}
-          <button
-            className="rounded-md p-2 text-white hover:bg-white/10 md:hidden"
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            aria-label="Toggle mobile menu"
-          >
-            <svg
-              className="h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth="1.5"
-              stroke="currentColor"
+        <nav className="hidden items-center space-x-4 md:flex">
+          {navItems.map((item) => (
+            <button
+              key={item.label}
+              onClick={(e) => {
+                if (item.onClick) {
+                  item.onClick(e);
+                } else if (item.href && item.href !== '#') {
+                  if (item.target === '_blank') {
+                    window.open(item.href, '_blank');
+                  } else {
+                    router.push(item.href);
+                  }
+                }
+              }}
+              disabled={item.id === 'create-app-button' && isProcessingAuth}
+              className={item.className || 'text-white hover:text-gray-300'}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"
-              />
-            </svg>
-          </button>
-
-          {/* Desktop Navigation */}
-          <ul className="hidden items-center gap-3 text-sm md:flex md:gap-4 md:text-base">
-            {showShareButton && params.id && (
-              <li>
-                <ShareButton />
-              </li>
-            )}
-            {navItems.map((item, index) => {
-              // Special styling for Start Building button
-              if (item.label === 'Start Building') {
-                return (
-                  <li key={index} className="ml-1">
-                    <Link href={item.href} target={item.target} className={item.className}>
-                      {item.icon && <span className="flex-shrink-0">{item.icon}</span>}
-                      <span>{item.label}</span>
-                    </Link>
-                  </li>
-                );
-              }
-              
-              return (
-                <li key={index}>
-                  <Link href={item.href} target={item.target} className={item.className}>
-                    {item.icon && <span className="flex-shrink-0">{item.icon}</span>}
-                    <span>{item.label}</span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+              {item.id === 'create-app-button' && isProcessingAuth ? (
+                <LoadingSpinner /> 
+              ) : (
+                <>
+                  {item.icon && <span className="mr-1">{item.icon}</span>} 
+                  {item.label}
+                </>
+              )}
+            </button>
+          ))}
         </nav>
-      </header>
-      <div className="h-px w-full bg-white/5"></div>
 
-      {/* Mobile Menu Panel - Moved outside header */}
-      <div
-        className={`
-          fixed inset-0 z-[100] bg-[#0B0F17] transition-transform duration-300
-          ${isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full'}
-          md:hidden
-        `}
-      >
-        <div className="flex h-20 items-center justify-between border-b border-white/10 px-6">
-          <Link href="/" className="text-2xl font-bold text-white">
-            <Image
-              src={customLogo.src}
-              alt={customLogo.alt}
-              width={146}
-              height={64}
-              className="h-auto w-[50px]"
-            />
-          </Link>
+        <div className="md:hidden">
           <button
-            className="rounded-md p-2 text-white hover:bg-white/10"
-            onClick={() => setIsMobileMenuOpen(false)}
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="text-white focus:outline-none"
+            aria-controls={mobileMenuId}
+            aria-expanded={isMobileMenuOpen}
           >
-            <svg
-              className="h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth="1.5"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
+            {isMobileMenuOpen ? (
+              <svg
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            ) : (
+              <svg
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
+              </svg>
+            )}
           </button>
         </div>
-        <div className="px-6 py-4">
-          <ul className="flex flex-col gap-4">
-            {navItems.map((item, index) => (
-              <li key={index}>
-                <Link
-                  href={item.href}
-                  target={item.target}
-                  className={item.className}
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  {item.icon && <span className="flex-shrink-0">{item.icon}</span>}
-                  <span>{item.label}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
+      </header>
+
+      <div
+        id={mobileMenuId}
+        className={`fixed inset-x-0 top-16 z-40 transform bg-[#0A0E17] p-4 transition-transform duration-300 ease-in-out md:hidden ${
+          isMobileMenuOpen ? 'translate-y-0' : '-translate-y-full'
+        }`}
+      >
+        <nav className="space-y-3">
+          {navItems.map((item) => (
+            <button
+              key={`mobile-${item.label}`}
+              onClick={(e) => {
+                if (item.onClick) {
+                  item.onClick(e);
+                } else if (item.href && item.href !== '#') {
+                  if (item.target === '_blank') {
+                    window.open(item.href, '_blank');
+                  } else {
+                    router.push(item.href);
+                  }
+                }
+                setIsMobileMenuOpen(false);
+              }}
+              disabled={item.id === 'create-app-button' && isProcessingAuth}
+              className={`flex w-full items-center justify-center space-x-2 rounded-md px-3 py-2.5 text-base font-medium ${item.className} ${
+                item.id === 'create-app-button' ? '' : 'hover:bg-gray-700'
+              }`}
+            >
+               {item.id === 'create-app-button' && isProcessingAuth ? (
+                <LoadingSpinner />
+              ) : (
+                <>
+                  {item.icon && <span className="mr-1">{item.icon}</span>} 
+                  {item.label}
+                </>
+              )}
+            </button>
+          ))}
+        </nav>
+        {showShareButton && (
+          <div className="mt-4 border-t border-gray-700 pt-4">
+            <ShareButton />
+          </div>
+        )}
       </div>
     </>
   ) : null;

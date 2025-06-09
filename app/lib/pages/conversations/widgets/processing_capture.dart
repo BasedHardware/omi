@@ -1,3 +1,5 @@
+import 'dart:io'; // Added for Platform check
+
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -113,28 +115,41 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
   _toggleRecording(BuildContext context, CaptureProvider provider) async {
     var recordingState = provider.recordingState;
-    if (recordingState == RecordingState.record) {
-      await provider.stopStreamRecording();
-      MixpanelManager().phoneMicRecordingStopped();
-    } else if (recordingState == RecordingState.initialising) {
-      // Initialising state - user needs to wait
+
+    if (Platform.isMacOS) {
+      if (recordingState == RecordingState.systemAudioRecord) {
+        await provider.stopSystemAudioRecording();
+        // MixpanelManager().track("System Audio Recording Stopped");
+      } else if (recordingState == RecordingState.initialising) {
+        debugPrint('initialising, have to wait');
+      } else {
+        await provider.streamSystemAudioRecording();
+        // MixpanelManager().track("System Audio Recording Started");
+      }
     } else {
-      showDialog(
-        context: context,
-        builder: (c) => getDialog(
-          context,
-          () => Navigator.pop(context),
-          () async {
-            Navigator.pop(context);
-            provider.updateRecordingState(RecordingState.initialising);
-            await provider.streamRecording();
-            MixpanelManager().phoneMicRecordingStarted();
-          },
-          'Limited Capabilities',
-          'Recording with your phone microphone has a few limitations, including but not limited to: speaker profiles, background reliability.',
-          okButtonText: 'Ok, I understand',
-        ),
-      );
+      // Existing phone mic logic
+      if (recordingState == RecordingState.record) {
+        await provider.stopStreamRecording();
+        MixpanelManager().phoneMicRecordingStopped();
+      } else if (recordingState == RecordingState.initialising) {
+        debugPrint('initialising, have to wait');
+      } else {
+        showDialog(
+          context: context,
+          builder: (c) => getDialog(
+            context,
+            () => Navigator.pop(context),
+            () async {
+              Navigator.pop(context);
+              await provider.streamRecording();
+              MixpanelManager().phoneMicRecordingStarted();
+            },
+            'Limited Capabilities',
+            'Recording with your phone microphone has a few limitations, including but not limited to: speaker profiles, background reliability.',
+            okButtonText: 'Ok, I understand',
+          ),
+        );
+      }
     }
   }
 
@@ -334,45 +349,79 @@ class _RecordingStatusIndicatorState extends State<RecordingStatusIndicator> wit
   }
 }
 
-getPhoneMicRecordingButton(BuildContext context, toggleRecording, RecordingState state) {
-  // Use real-time device state from DeviceProvider instead of cached SharedPreferencesUtil
-  final deviceProvider = context.read<DeviceProvider>();
-  final connectedDevice = deviceProvider.connectedDevice;
-  
-  // Only hide the phone mic button if an Omi device is connected
-  // Allow phone mic when: no device connected, OpenGlass connected, or any other device type
-  if (connectedDevice != null && connectedDevice.type == DeviceType.omi) {
+
+getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb, RecordingState currentActualState) {
+  if (SharedPreferencesUtil().btDevice.id.isNotEmpty && !Platform.isMacOS) {
+    // If a BT device is configured and we are NOT on macOS, don't show this button.
+    // On macOS, this button might be repurposed for system audio.
     return const SizedBox.shrink();
   }
-  
+  // If on macOS, AND a BT device is connected, this button should still be hidden
+  // as the primary interaction should be via the BT device, not system audio as a fallback to phone mic.
+  // This button is primarily for when NO BT device is the target.
+  final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+  if (Platform.isMacOS &&
+      deviceProvider.connectedDevice != null &&
+      SharedPreferencesUtil().btDevice.id == deviceProvider.connectedDevice!.id) {
+    return const SizedBox.shrink();
+  }
+
+  final bool isMac = Platform.isMacOS;
+  String text;
+  Widget icon;
+  bool isLoading = currentActualState == RecordingState.initialising;
+
+  if (isMac) {
+    if (isLoading) {
+      text = 'Initialising System Audio';
+      icon = const SizedBox(
+        height: 8,
+        width: 8,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          color: Colors.white,
+        ),
+      );
+    } else if (currentActualState == RecordingState.systemAudioRecord) {
+      text = 'Stop Recording';
+      icon = const Icon(Icons.stop, color: Colors.red, size: 12);
+    } else {
+      text = 'Start Recording';
+      icon = const Icon(Icons.mic, size: 18);
+    }
+  } else {
+    // Phone Mic
+    if (isLoading) {
+      text = 'Initialising Recorder';
+      icon = const SizedBox(
+        height: 8,
+        width: 8,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          color: Colors.white,
+        ),
+      );
+    } else if (currentActualState == RecordingState.record) {
+      text = 'Stop Recording';
+      icon = const Icon(Icons.stop, color: Colors.red, size: 12);
+    } else {
+      text = 'Try With Phone Mic';
+      icon = const Icon(Icons.mic, size: 18);
+    }
+  }
+
+
   return MaterialButton(
-    onPressed: state == RecordingState.initialising ? null : toggleRecording,
+    onPressed: isLoading ? null : toggleRecordingCb,
     child: Row(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        state == RecordingState.initialising
-            ? const SizedBox(
-                height: 8,
-                width: 8,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            : (state == RecordingState.record
-                ? const Icon(Icons.stop, color: Colors.red, size: 24)
-                : const Icon(Icons.mic)),
-        const SizedBox(width: 8),
-        Flexible(
-          child: Text(
-          state == RecordingState.initialising
-              ? 'Initialising Recorder'
-              : (state == RecordingState.record ? 'Stop Recording' : 'Try With Phone Mic'),
-            style: const TextStyle(fontSize: 14),
-            overflow: TextOverflow.ellipsis,
-            maxLines: 1,
-          ),
+        icon,
+        const SizedBox(width: 4),
+        Text(
+          text,
+          style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white, fontWeight: FontWeight.w500),
         ),
         const SizedBox(width: 4),
       ],
