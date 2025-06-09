@@ -149,8 +149,6 @@ def get_messages(
     for doc in doc_files:
         if doc.exists:
             file = doc.to_dict()
-            # if file['deleted']: # Removed: No longer using soft delete
-            #     continue
             files[file['id']] = file
 
     # Attach files to messages
