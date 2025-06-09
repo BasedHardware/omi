@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 
 @pragma('vm:entry-point')
 void _startForegroundCallback() {
@@ -87,7 +88,7 @@ class ForegroundUtil {
   Future<bool> get isIgnoringBatteryOptimizations async => await FlutterForegroundTask.isIgnoringBatteryOptimizations;
 
   static Future<void> initializeForegroundService() async {
-    if (Platform.isWindows || Platform.isMacOS) return;
+    if (PlatformService.isDesktop) return;
     if (await FlutterForegroundTask.isRunningService) return;
     debugPrint('initializeForegroundService');
     // await Location().requestPermission();
@@ -120,7 +121,7 @@ class ForegroundUtil {
   }
 
   static Future<ServiceRequestResult> startForegroundTask() async {
-    if (Platform.isWindows || Platform.isMacOS) return ServiceRequestResult.success();
+    if (PlatformService.isDesktop) return ServiceRequestResult.success();
     debugPrint('startForegroundTask');
     if (await FlutterForegroundTask.isRunningService) {
       return FlutterForegroundTask.restartService();
