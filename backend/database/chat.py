@@ -63,7 +63,8 @@ def get_app_messages(uid: str, app_id: str, limit: int = 20, offset: int = 0, in
     # Fetch messages and collect conversation IDs
     for doc in messages_ref.stream():
         message = doc.to_dict()
-
+        if message.get('reported') is True:
+            continue
         messages.append(message)
         conversations_id.update(message.get('memories_id', []))
 
