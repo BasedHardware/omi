@@ -102,33 +102,58 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
     }
     
     func checkScreenCapturePermission() async -> String {
+        // First try the most reliable method - actually attempt to get content
         do {
-            // Try to get shareable content to check if we have permission
             let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
-            return content.displays.isEmpty ? "denied" : "granted"
+            if !content.displays.isEmpty {
+                return "granted"
+            } else {
+                return "denied"
+            }
         } catch {
+            print("Error checking shareable content: \(error)")
             if case SCStreamError.userDeclined = error {
                 return "denied"
             }
+            // For any other error, it's likely undetermined
             return "undetermined"
         }
     }
     
     func requestScreenCapturePermission() async -> Bool {
+        // First check if we can actually use the permission without triggering dialogs
         do {
             let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
-            return !content.displays.isEmpty
-        } catch {
-            if case SCStreamError.userDeclined = error {
-                // Open system preferences for user to grant permission
-                await MainActor.run {
-                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
-                }
-                return false
+            if !content.displays.isEmpty {
+                print("Screen capture permission is actually working despite status")
+                return true
             }
-            print("Error checking screen capture permission: \(error)")
-            return false
+        } catch {
+            print("Initial screen capture test failed: \(error)")
         }
+        
+        // Only if the above fails, try the official request method
+        if #available(macOS 11.0, *) {
+            // Check TCC database first to avoid unnecessary prompts
+            let hasAccess = CGPreflightScreenCaptureAccess()
+            if hasAccess {
+                print("TCC database shows screen capture access is granted")
+                return true
+            }
+            
+            print("Requesting screen capture permission via CGRequestScreenCaptureAccess")
+            let granted = CGRequestScreenCaptureAccess()
+            if granted {
+                return true
+            }
+        }
+        
+        // As a last resort, open system preferences
+        print("Opening System Preferences as last resort for screen capture permission")
+        await MainActor.run {
+            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
+        }
+        return false
     }
 
     // MARK: - Bluetooth Permission Management
@@ -301,24 +326,35 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
         let currentSettings = await center.notificationSettings()
         
         guard currentSettings.authorizationStatus != .authorized else {
+            print("Notification permission already granted")
             return true
         }
         
-        guard currentSettings.authorizationStatus == .notDetermined else {
-            // If denied, open system preferences
+        if currentSettings.authorizationStatus == .notDetermined {
+            // Only try to request if undetermined
+            do {
+                let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+                print("Notification permission request result: \(granted)")
+                if !granted {
+                    print("User denied notification permission request, opening System Preferences")
+                    await MainActor.run {
+                        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.notifications")!)
+                    }
+                }
+                return granted
+            } catch {
+                print("Error requesting notification permission: \(error.localizedDescription)")
+                await MainActor.run {
+                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.notifications")!)
+                }
+                return false
+            }
+        } else {
+            // If denied, restricted, or any other status, redirect to system preferences
             print("Notification permission is \(currentSettings.authorizationStatus.rawValue), opening System Preferences")
             await MainActor.run {
                 NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.notifications")!)
             }
-            return false
-        }
-        
-        do {
-            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
-            print("Notification permission request result: \(granted)")
-            return granted
-        } catch {
-            print("Error requesting notification permission: \(error.localizedDescription)")
             return false
         }
     }
