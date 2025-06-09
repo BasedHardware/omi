@@ -9,6 +9,7 @@ import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/frame_connection.dart';
 import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/utils/bluetooth/bluetooth_adapter.dart';
 
 class DeviceConnectionFactory {
   static DeviceConnection? create(
@@ -74,7 +75,7 @@ abstract class DeviceConnection {
     });
 
     try {
-      await FlutterBluePlus.adapterState.where((val) => val == BluetoothAdapterState.on).first;
+      await BluetoothAdapter.adapterState.where((val) => val == BluetoothAdapterStateHelper.on).first;
       await bleDevice.connect();
       await bleDevice.connectionState.where((val) => val == BluetoothConnectionState.connected).first;
     } on FlutterBluePlusException catch (e) {

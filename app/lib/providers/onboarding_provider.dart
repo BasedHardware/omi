@@ -18,6 +18,7 @@ import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/audio/foreground.dart';
+import 'package:omi/utils/bluetooth/bluetooth_adapter.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -135,11 +136,12 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   Future askForBluetoothPermissions() async {
-    FlutterBluePlus.setLogLevel(LogLevel.info, color: true);
+    if (!PlatformService.isWindows) {
+      FlutterBluePlus.setLogLevel(LogLevel.info, color: true);
+    }
 
-    if (Platform.isMacOS) {
+    if (PlatformService.isDesktop) {
       try {
-        // Use macOS-specific permission handling
         String bluetoothStatus = await _screenCaptureChannel.invokeMethod('checkBluetoothPermission');
         if (bluetoothStatus == 'granted') {
           updateBluetoothPermission(true);
@@ -171,7 +173,8 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       updateBluetoothPermission(bleStatus.isGranted);
     } else {
       if (Platform.isAndroid) {
-        if (FlutterBluePlus.adapterStateNow != BluetoothAdapterState.on) {
+        if (!(await BluetoothAdapter.isSupported) ||
+            FlutterBluePlus.adapterStateNow != BluetoothAdapterStateHelper.on) {
           try {
             await FlutterBluePlus.turnOn();
           } catch (e) {
@@ -194,7 +197,6 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   Future askForNotificationPermissions() async {
     if (PlatformService.isDesktop) {
       try {
-        // Use macOS-specific permission handling
         String notificationStatus = await _screenCaptureChannel.invokeMethod('checkNotificationPermission');
         debugPrint('notificationStatus: $notificationStatus');
         if (notificationStatus == 'granted') {
@@ -284,8 +286,6 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
   Future<bool> alwaysAllowLocation() async {
     if (PlatformService.isDesktop) {
-      // On macOS, the location permission request already handles the full permission
-      // Just check the current status
       try {
         String locationStatus = await _screenCaptureChannel.invokeMethod('checkLocationPermission');
         bool granted = locationStatus == 'granted';
@@ -305,9 +305,8 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   Future askForMicrophonePermissions() async {
-    if (Platform.isMacOS) {
+    if (PlatformService.isDesktop) {
       try {
-        // Use macOS-specific permission handling
         String microphoneStatus = await _screenCaptureChannel.invokeMethod('checkMicrophonePermission');
         debugPrint('microphoneStatus: $microphoneStatus');
         if (microphoneStatus == 'granted') {
@@ -349,9 +348,8 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   Future askForScreenCapturePermissions() async {
-    if (Platform.isMacOS) {
+    if (PlatformService.isDesktop) {
       try {
-        // Use macOS-specific permission handling
         String screenCaptureStatus = await _screenCaptureChannel.invokeMethod('checkScreenCapturePermission');
         debugPrint('screenCaptureStatus: $screenCaptureStatus');
         if (screenCaptureStatus == 'granted') {
