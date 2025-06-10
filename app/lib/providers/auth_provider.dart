@@ -1,6 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:omi/backend/auth.dart';
+import 'package:omi/backend/auth.dart' as backend_auth;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/services/notifications.dart';
@@ -8,41 +8,47 @@ import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:omi/backend/http/api/apps.dart' as apps_api;
 
 class AuthenticationProvider extends BaseProvider {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  FirebaseAuth get _auth => FirebaseAuth.instance;
+
   User? user;
   String? authToken;
   bool _loading = false;
   bool get loading => _loading;
 
   AuthenticationProvider() {
-    _auth.authStateChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) {
-      this.user = user;
-      SharedPreferencesUtil().uid = user?.uid ?? '';
-      SharedPreferencesUtil().email = user?.email ?? '';
-      SharedPreferencesUtil().givenName = user?.displayName?.split(' ')[0] ?? '';
-    });
-    _auth.idTokenChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) async {
-      if (user == null) {
-        debugPrint('User is currently signed out or the token has been revoked! ${user == null}');
-        SharedPreferencesUtil().authToken = '';
-        authToken = null;
-      } else {
-        debugPrint('User is signed in at ${DateTime.now()} with user ${user.uid}');
-        try {
-          if (SharedPreferencesUtil().authToken.isEmpty ||
-              DateTime.now().millisecondsSinceEpoch > SharedPreferencesUtil().tokenExpirationTime) {
-            authToken = await getIdToken();
-          }
-        } catch (e) {
+    _initializeAuthListeners();
+  }
+
+  void _initializeAuthListeners() {
+    Future.microtask(() {
+      _auth.authStateChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) {
+        this.user = user;
+        SharedPreferencesUtil().uid = user?.uid ?? '';
+        SharedPreferencesUtil().email = user?.email ?? '';
+        SharedPreferencesUtil().givenName = user?.displayName?.split(' ')[0] ?? '';
+      });
+      _auth.idTokenChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) async {
+        if (user == null) {
+          debugPrint('User is currently signed out or the token has been revoked! ${user == null}');
+          SharedPreferencesUtil().authToken = '';
           authToken = null;
-          debugPrint('Failed to get token: $e');
+        } else {
+          debugPrint('User is signed in at ${DateTime.now()} with user ${user.uid}');
+          try {
+            if (SharedPreferencesUtil().authToken.isEmpty ||
+                DateTime.now().millisecondsSinceEpoch > SharedPreferencesUtil().tokenExpirationTime) {
+              authToken = await backend_auth.getIdToken();
+            }
+          } catch (e) {
+            authToken = null;
+            debugPrint('Failed to get token: $e');
+          }
         }
-      }
-      notifyListeners();
+        notifyListeners();
+      });
     });
   }
 
@@ -56,7 +62,7 @@ class AuthenticationProvider extends BaseProvider {
   Future<void> onGoogleSignIn(Function() onSignIn) async {
     if (!loading) {
       setLoadingState(true);
-      await signInWithGoogle();
+      await backend_auth.signInWithGoogle();
       if (isSignedIn()) {
         _signIn(onSignIn);
       } else {
@@ -69,7 +75,7 @@ class AuthenticationProvider extends BaseProvider {
   Future<void> onAppleSignIn(Function() onSignIn) async {
     if (!loading) {
       setLoadingState(true);
-      await signInWithApple();
+      await backend_auth.signInWithApple();
       if (isSignedIn()) {
         _signIn(onSignIn);
       } else {
@@ -81,7 +87,7 @@ class AuthenticationProvider extends BaseProvider {
 
   Future<String?> _getIdToken() async {
     try {
-      final token = await getIdToken();
+      final token = await backend_auth.getIdToken();
       NotificationService.instance.saveNotificationToken();
 
       debugPrint('Token: $token');
@@ -131,48 +137,22 @@ class AuthenticationProvider extends BaseProvider {
   Future<void> linkWithGoogle() async {
     setLoading(true);
     try {
-      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
-      if (googleUser == null) {
+      final result = await backend_auth.linkWithGoogle();
+      if (result == null) {
         setLoading(false);
         return;
       }
-
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      try {
-        await FirebaseAuth.instance.currentUser?.linkWithCredential(credential);
-      } catch (e) {
-        if (e is FirebaseAuthException && e.code == 'credential-already-in-use') {
-          // Get existing user credentials
-          final existingCred = e.credential;
-          final oldUserId = FirebaseAuth.instance.currentUser?.uid;
-
-          // Sign out current anonymous user
-          await FirebaseAuth.instance.signOut();
-
-          // Sign in with existing account
-          await FirebaseAuth.instance.signInWithCredential(existingCred!);
+    } catch (e) {
+      if (e is FirebaseAuthException && e.code == 'credential-already-in-use') {
+        final oldUserId = FirebaseAuth.instance.currentUser?.uid;
+        if (oldUserId != null) {
           final newUserId = FirebaseAuth.instance.currentUser?.uid;
-          await getIdToken();
-
-          SharedPreferencesUtil().onboardingCompleted = false;
-          SharedPreferencesUtil().uid = newUserId ?? '';
-          SharedPreferencesUtil().email = FirebaseAuth.instance.currentUser?.email ?? '';
-          SharedPreferencesUtil().givenName = FirebaseAuth.instance.currentUser?.displayName?.split(' ')[0] ?? '';
-          if (oldUserId != null && newUserId != null) {
+          if (newUserId != null) {
             await migrateAppOwnerId(oldUserId);
           }
-          return;
         }
-        AppSnackbar.showSnackbarError('Failed to link with Google, please try again.');
-        rethrow;
+        return;
       }
-    } catch (e) {
-      print('Error linking with Google: $e');
       AppSnackbar.showSnackbarError('Failed to link with Google, please try again.');
       rethrow;
     } finally {
@@ -198,7 +178,7 @@ class AuthenticationProvider extends BaseProvider {
           // Sign in with existing account
           await FirebaseAuth.instance.signInWithCredential(existingCred!);
           final newUserId = FirebaseAuth.instance.currentUser?.uid;
-          await getIdToken();
+          await backend_auth.getIdToken();
 
           SharedPreferencesUtil().onboardingCompleted = false;
           SharedPreferencesUtil().uid = newUserId ?? '';

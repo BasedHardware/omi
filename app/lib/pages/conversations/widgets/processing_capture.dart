@@ -1,5 +1,3 @@
-import 'dart:io'; // Added for Platform check
-
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -11,9 +9,11 @@ import 'package:omi/pages/processing_conversations/page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
@@ -116,7 +116,14 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   _toggleRecording(BuildContext context, CaptureProvider provider) async {
     var recordingState = provider.recordingState;
 
-    if (Platform.isMacOS) {
+    if (PlatformService.isDesktop) {
+      final onboardingProvider = context.read<OnboardingProvider>();
+      if (!onboardingProvider.hasMicrophonePermission) {
+        bool granted = await onboardingProvider.askForMicrophonePermissions();
+        if (!granted) {
+          return;
+        }
+      }
       if (recordingState == RecordingState.systemAudioRecord) {
         await provider.stopSystemAudioRecording();
         // MixpanelManager().track("System Audio Recording Stopped");
@@ -351,27 +358,26 @@ class _RecordingStatusIndicatorState extends State<RecordingStatusIndicator> wit
 
 
 getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb, RecordingState currentActualState) {
-  if (SharedPreferencesUtil().btDevice.id.isNotEmpty && !Platform.isMacOS) {
-    // If a BT device is configured and we are NOT on macOS, don't show this button.
-    // On macOS, this button might be repurposed for system audio.
+  if (SharedPreferencesUtil().btDevice.id.isNotEmpty && (!PlatformService.isDesktop)) {
+    // If a BT device is configured and we are NOT on desktop, don't show this button.
     return const SizedBox.shrink();
   }
-  // If on macOS, AND a BT device is connected, this button should still be hidden
+  // If on desktop, AND a BT device is connected, this button should still be hidden
   // as the primary interaction should be via the BT device, not system audio as a fallback to phone mic.
   // This button is primarily for when NO BT device is the target.
   final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
-  if (Platform.isMacOS &&
+  if (PlatformService.isDesktop &&
       deviceProvider.connectedDevice != null &&
       SharedPreferencesUtil().btDevice.id == deviceProvider.connectedDevice!.id) {
     return const SizedBox.shrink();
   }
 
-  final bool isMac = Platform.isMacOS;
+  final bool isDesktop = PlatformService.isDesktop;
   String text;
   Widget icon;
   bool isLoading = currentActualState == RecordingState.initialising;
 
-  if (isMac) {
+  if (isDesktop) {
     if (isLoading) {
       text = 'Initialising System Audio';
       icon = const SizedBox(
