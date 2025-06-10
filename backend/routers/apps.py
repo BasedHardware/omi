@@ -59,7 +59,6 @@ def get_popular_apps_endpoint(uid: str = Depends(auth.get_current_user_uid)):
 def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
     data = json.loads(app_data)
     data['approved'] = False
-    data['deleted'] = False
     data['status'] = 'under-review'
     data['name'] = (data.get('name') or '').strip()
     data['id'] = str(ULID())
@@ -135,7 +134,6 @@ async def create_persona(persona_data: str = Form(...), file: UploadFile = File(
                          uid=Depends(auth.get_current_user_uid)):
     data = json.loads(persona_data)
     data['approved'] = False
-    data['deleted'] = False
     data['status'] = 'under-review'
     data['category'] = 'personality-emulation'
     data['name'] = (data.get('name') or '').strip()
@@ -263,7 +261,6 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
         'author': user.get('display_name', ''),
         'email': user.get('email', ''),
         'approved': False,
-        'deleted': False,
         'status': 'under-review',
         'category': 'personality-emulation',
         'capabilities': ['persona'],
