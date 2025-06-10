@@ -9,8 +9,8 @@ import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/auth.dart';
 import 'package:omi/pages/onboarding/find_device/page.dart';
 import 'package:omi/pages/onboarding/name/name_widget.dart';
-import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
-import 'package:omi/pages/onboarding/permissions/permissions_macos_widget.dart';
+import 'package:omi/pages/onboarding/permissions/permissions_mobile_widget.dart';
+import 'package:omi/pages/onboarding/permissions/permissions_desktop_widget.dart';
 import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/onboarding/welcome/page.dart';
@@ -125,13 +125,13 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         MixpanelManager().onboardingStepCompleted('Primary Language');
       }),
       PlatformService.isDesktop
-          ? PermissionsMacOSWidget(
+          ? PermissionsDesktopWidget(
               goNext: () {
                 _goNext(); // Go to Welcome page
                 MixpanelManager().onboardingStepCompleted('Permissions');
               },
             )
-          : PermissionsWidget(
+          : PermissionsMobileWidget(
               goNext: () {
                 _goNext(); // Go to Welcome page
                 MixpanelManager().onboardingStepCompleted('Permissions');

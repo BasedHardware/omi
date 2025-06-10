@@ -9,16 +9,16 @@ import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
-class PermissionsWidget extends StatefulWidget {
+class PermissionsMobileWidget extends StatefulWidget {
   final VoidCallback goNext;
 
-  const PermissionsWidget({super.key, required this.goNext});
+  const PermissionsMobileWidget({super.key, required this.goNext});
 
   @override
-  State<PermissionsWidget> createState() => _PermissionsWidgetState();
+  State<PermissionsMobileWidget> createState() => _PermissionsMobileWidgetState();
 }
 
-class _PermissionsWidgetState extends State<PermissionsWidget> {
+class _PermissionsMobileWidgetState extends State<PermissionsMobileWidget> {
   @override
   Widget build(BuildContext context) {
     return Consumer<OnboardingProvider>(builder: (context, provider, child) {

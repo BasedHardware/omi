@@ -6,16 +6,16 @@ import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:provider/provider.dart';
 
-class PermissionsMacOSWidget extends StatefulWidget {
+class PermissionsDesktopWidget extends StatefulWidget {
   final VoidCallback goNext;
 
-  const PermissionsMacOSWidget({super.key, required this.goNext});
+  const PermissionsDesktopWidget({super.key, required this.goNext});
 
   @override
-  State<PermissionsMacOSWidget> createState() => _PermissionsMacOSWidgetState();
+  State<PermissionsDesktopWidget> createState() => _PermissionsDesktopWidgetState();
 }
 
-class _PermissionsMacOSWidgetState extends State<PermissionsMacOSWidget> with WidgetsBindingObserver {
+class _PermissionsDesktopWidgetState extends State<PermissionsDesktopWidget> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
@@ -30,11 +30,11 @@ class _PermissionsMacOSWidgetState extends State<PermissionsMacOSWidget> with Wi
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // if (state == AppLifecycleState.resumed) {
-    //   // Refresh permissions when user returns to the app
-    //   final provider = Provider.of<OnboardingProvider>(context, listen: false);
-    //   provider.updatePermissions();
-    // }
+    if (state == AppLifecycleState.resumed) {
+      // Refresh permissions when user returns to the app
+      final provider = Provider.of<OnboardingProvider>(context, listen: false);
+      provider.updatePermissions();
+    }
   }
 
   void _showPermissionDialog({

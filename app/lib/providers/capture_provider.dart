@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
-import 'dart:ui';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -411,6 +409,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   streamRecording() async {
+    updateRecordingState(RecordingState.initialising);
     await Permission.microphone.request();
 
     // prepare

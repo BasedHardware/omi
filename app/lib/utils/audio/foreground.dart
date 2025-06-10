@@ -135,6 +135,7 @@ class ForegroundUtil {
   }
 
   static Future<void> stopForegroundTask() async {
+    if (PlatformService.isDesktop) return;
     debugPrint('stopForegroundTask');
     if (await FlutterForegroundTask.isRunningService) {
       await FlutterForegroundTask.stopService();

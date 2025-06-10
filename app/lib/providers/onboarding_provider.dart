@@ -262,6 +262,8 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
           return (true, granted ? PermissionStatus.granted : PermissionStatus.denied);
         } else if (locationStatus == 'denied' || locationStatus == 'restricted') {
           updateLocationPermission(false);
+          AppSnackbar.showSnackbarError(
+              'Please grant location permission in Settings > Privacy & Security > Location Services');
           return (true, PermissionStatus.permanentlyDenied);
         } else {
           updateLocationPermission(false);
