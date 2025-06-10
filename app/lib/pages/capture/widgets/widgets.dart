@@ -137,7 +137,7 @@ class UpdateFirmwareCardWidget extends StatelessWidget {
 getTranscriptWidget(
   bool conversationCreating,
   List<TranscriptSegment> segments,
-  List<Tuple2<String, String>> photos,
+  List<ImageSegment> images,
   BtDevice? btDevice,
 ) {
   if (conversationCreating) {
@@ -147,23 +147,34 @@ getTranscriptWidget(
     );
   }
 
-  final bool showPhotos = photos.isNotEmpty;
+  final bool showPhotos = images.isNotEmpty;
   final bool showTranscript = segments.isNotEmpty;
 
   if (showPhotos && showTranscript) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const PhotosGridComponent(),
         Expanded(
-          child: TranscriptWidget(segments: segments, bottomMargin: 100),
+          child: TranscriptWidget(
+            segments: segments,
+            images: images,
+            bottomMargin: 100,
+          ),
         ),
       ],
     );
   } else if (showPhotos) {
-    return const PhotosGridComponent();
+    return TranscriptWidget(
+      segments: [],
+      images: images,
+      bottomMargin: 100,
+    );
   } else if (showTranscript) {
-    return TranscriptWidget(segments: segments, bottomMargin: 100);
+    return TranscriptWidget(
+      segments: segments,
+      images: [],
+      bottomMargin: 100,
+    );
   } else {
     return const SizedBox.shrink();
   }
@@ -186,8 +197,17 @@ getLiteTranscriptWidget(
   );
 }
 
-getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordingState state) {
-  if (SharedPreferencesUtil().btDevice.id.isNotEmpty) return const SizedBox.shrink();
+getPhoneMicRecordingButton(BuildContext context, VoidCallback recordingToggled, RecordingState state) {
+  // Use real-time device state from DeviceProvider instead of cached SharedPreferencesUtil
+  final deviceProvider = context.read<DeviceProvider>();
+  final connectedDevice = deviceProvider.connectedDevice;
+  
+  // Only hide the phone mic button if an Omi device is connected
+  // Allow phone mic when: no device connected, OpenGlass connected, or any other device type
+  if (connectedDevice != null && connectedDevice.type == DeviceType.omi) {
+    return const SizedBox.shrink();
+  }
+  
   return Visibility(
     visible: true,
     child: Padding(
@@ -219,11 +239,15 @@ getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordingState state) 
                         ? const Icon(Icons.stop, color: Colors.red, size: 24)
                         : const Icon(Icons.mic)),
                 const SizedBox(width: 8),
-                Text(
-                  state == RecordingState.initialising
-                      ? 'Initialising Recorder'
-                      : (state == RecordingState.record ? 'Stop Recording' : 'Try With Phone Mic'),
-                  style: const TextStyle(fontSize: 14),
+                Flexible(
+                  child: Text(
+                    state == RecordingState.initialising
+                        ? 'Initialising Recorder'
+                        : (state == RecordingState.record ? 'Stop Recording' : 'Try With Phone Mic'),
+                    style: const TextStyle(fontSize: 14),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
                 ),
                 const SizedBox(width: 4),
               ],

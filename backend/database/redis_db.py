@@ -6,7 +6,7 @@ from typing import List, Union, Optional
 import redis
 
 r = redis.Redis(
-    host=os.getenv('REDIS_DB_HOST'),
+    host=os.getenv('REDIS_DB_HOST') or 'localhost',
     port=int(os.getenv('REDIS_DB_PORT')) if os.getenv('REDIS_DB_PORT') is not None else 6379,
     username='default',
     password=os.getenv('REDIS_DB_PASSWORD'),
