@@ -731,6 +731,7 @@ async def _listen(
 
                 segments = realtime_segment_buffers.copy()
                 realtime_segment_buffers = []
+                segments.sort(key=lambda x: x["start"])
 
                 # Align the start, end segment
                 if seconds_to_trim is None:
