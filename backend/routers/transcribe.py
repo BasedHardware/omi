@@ -2,10 +2,8 @@ import os
 import uuid
 import asyncio
 import struct
-import time
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, time
 from enum import Enum
-from typing import List
 
 import opuslib
 import webrtcvad
@@ -18,7 +16,7 @@ import database.conversations as conversations_db
 import database.users as user_db
 from database import redis_db
 from database.redis_db import get_cached_user_geolocation
-from models.conversation import Conversation, TranscriptSegment, ConversationStatus, Structured, Geolocation, ConversationPhoto
+from models.conversation import Conversation, TranscriptSegment, ConversationStatus, Structured, Geolocation
 from models.message_event import ConversationEvent, MessageEvent, MessageServiceStatusEvent, LastConversationEvent, \
     TranslationEvent
 from models.transcript_segment import Translation
@@ -27,6 +25,10 @@ from utils.conversations.location import get_google_maps_location
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.other.task import safe_create_task
 from utils.app_integrations import trigger_external_integrations
+from utils.stt.streaming import *
+from utils.stt.streaming import get_stt_service_for_language, STTService
+from utils.stt.streaming import process_audio_soniox, process_audio_dg, process_audio_speechmatics, \
+    send_initial_file_path
 from utils.webhooks import get_audio_bytes_webhook_seconds
 from utils.pusher import connect_to_trigger_pusher
 from utils.translation import translate_text, detect_language
@@ -34,15 +36,17 @@ from utils.translation_cache import TranscriptSegmentLanguageCache
 
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists
-from utils.stt.streaming import process_audio_dg, process_audio_soniox, process_audio_speechmatics, send_initial_file_path, get_stt_service_for_language as get_stt_service_from_streaming, STTService
 
 router = APIRouter()
+
 
 async def _listen(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = None,
         including_combined_segments: bool = False,
 ):
+    print('_listen', uid, language, sample_rate, codec, include_speech_profile, stt_service)
+
     if not uid or len(uid) <= 0:
         await websocket.close(code=1008, reason="Bad uid")
         return
@@ -57,7 +61,7 @@ async def _listen(
     language = 'multi' if language == 'auto' else language
 
     # Determine the best STT service
-    stt_service, stt_language, stt_model = get_stt_service_from_streaming(language)
+    stt_service, stt_language, stt_model = get_stt_service_for_language(language)
     if not stt_service or not stt_language:
         await websocket.close(code=1008, reason=f"The language is not supported, {language}")
         return
@@ -74,6 +78,7 @@ async def _listen(
 
     async def _asend_message_event(msg: MessageEvent):
         nonlocal websocket_active
+        print(f"Message: type ${msg.event_type}", uid)
         if not websocket_active:
             return False
         try:
@@ -100,6 +105,7 @@ async def _listen(
     # Send pong every 10s then handle it in the app \
     # since Starlette is not support pong automatically
     async def send_heartbeat():
+        print("send_heartbeat", uid)
         nonlocal websocket_active
         nonlocal websocket_close_code
         nonlocal started_at
@@ -112,25 +118,6 @@ async def _listen(
                     await websocket.send_text("ping")
                 else:
                     break
-
-                # Check for clear_live_images messages from Redis
-                try:
-                    import json
-                    from database.redis_db import r
-                    
-                    clear_images_key = f"clear_live_images:{uid}"
-                    clear_message_data = r.get(clear_images_key)
-                    
-                    if clear_message_data:
-                        # Send clear_live_images message to client
-                        clear_message = json.loads(clear_message_data)
-                        await websocket.send_json(clear_message)
-                        
-                        # Delete the message from Redis after sending
-                        r.delete(clear_images_key)
-                        
-                except Exception as e:
-                    print(f"Error handling clear_live_images message: {e}")
 
                 # timeout
                 if has_timeout and time.time() - started_at >= timeout_seconds:
@@ -175,22 +162,9 @@ async def _listen(
 
             # recheck session
             conversation = retrieve_in_progress_conversation(uid)
-            if not conversation:
+            if not conversation or conversation['finished_at'] > finished_at:
+                print("_trigger_create_conversation_with_delay not conversation or not last session", uid)
                 return
-            
-            # Safely access finished_at field
-            conversation_finished_at = conversation.get('finished_at')
-            if conversation_finished_at:
-                # Handle both string and datetime objects
-                if isinstance(conversation_finished_at, str):
-                    finished_at_parsed = datetime.fromisoformat(conversation_finished_at)
-                else:
-                    # Already a datetime object
-                    finished_at_parsed = conversation_finished_at
-                
-                if finished_at_parsed > finished_at:
-                    return
-                
             await _create_current_conversation()
         except asyncio.CancelledError:
             pass
@@ -223,6 +197,7 @@ async def _listen(
         # handle edge case of conversation was actually processing? maybe later, doesn't hurt really anyway.
         # also fix from getMemories endpoint?
         processing = conversations_db.get_processing_conversations(uid)
+        print('finalize_processing_conversations len(processing):', len(processing), uid)
         if not processing or len(processing) == 0:
             return
 
@@ -243,6 +218,8 @@ async def _listen(
     asyncio.create_task(send_last_conversation())
 
     async def _create_current_conversation():
+        print("_create_current_conversation", uid)
+
         # Reset state variables
         nonlocal seconds_to_trim
         nonlocal seconds_to_add
@@ -250,26 +227,8 @@ async def _listen(
         seconds_to_add = None
 
         conversation = retrieve_in_progress_conversation(uid)
-        if not conversation:
+        if not conversation or not conversation['transcript_segments']:
             return
-        
-        # CRITICAL: Process conversations with EITHER transcript segments OR photos
-        # This ensures photo-only conversations get processed into summaries
-        has_transcript_segments = conversation.get('transcript_segments') and len(conversation['transcript_segments']) > 0
-        
-        # Check if conversation has photos (they're stored separately, so we need to fetch them)
-        has_photos = False
-        if conversation.get('id'):
-            try:
-                from database import conversations as conversations_db
-                photos = conversations_db.get_conversation_photos(uid, conversation['id'])
-                has_photos = photos and len(photos) > 0
-            except Exception as e:
-                print(f"Error checking photos for conversation {conversation['id']}: {e}")
-        
-        if not has_transcript_segments and not has_photos:
-            return
-            
         await _create_conversation(conversation)
 
     conversation_creation_task_lock = asyncio.Lock()
@@ -286,33 +245,20 @@ async def _listen(
         nonlocal conversation_creation_timeout
         # Determine previous disconnected socket seconds to add + start processing timer if a conversation in progress
         if existing_conversation := retrieve_in_progress_conversation(uid):
-            # segments seconds alignment - handle both string and datetime objects
-            started_at_value = existing_conversation['started_at']
-            if isinstance(started_at_value, str):
-                started_at = datetime.fromisoformat(started_at_value)
-            else:
-                # Already a datetime object
-                started_at = started_at_value
-            
+            # segments seconds alignment
+            started_at = datetime.fromisoformat(existing_conversation['started_at'].isoformat())
             seconds_to_add = (datetime.now(timezone.utc) - started_at).total_seconds()
 
-            # processing if needed logic - handle missing finished_at field
-            finished_at_value = existing_conversation.get('finished_at')
-            if finished_at_value:
-                if isinstance(finished_at_value, str):
-                    finished_at = datetime.fromisoformat(finished_at_value)
-                else:
-                    # Already a datetime object
-                    finished_at = finished_at_value
-            else:
-                # Fallback to current time if finished_at is missing
-                finished_at = datetime.now(timezone.utc)
-                print('Warning: missing finished_at field, using current time as fallback', uid)
-            
+            # processing if needed logic
+            finished_at = datetime.fromisoformat(existing_conversation['finished_at'].isoformat())
             seconds_since_last_segment = (datetime.now(timezone.utc) - finished_at).total_seconds()
             if seconds_since_last_segment >= conversation_creation_timeout:
+                print('_websocket_util processing existing_conversation', existing_conversation['id'],
+                      seconds_since_last_segment, uid)
                 asyncio.create_task(_create_current_conversation())
             else:
+                print('_websocket_util will process', existing_conversation['id'], 'in',
+                      conversation_creation_timeout - seconds_since_last_segment, 'seconds')
                 conversation_creation_task = asyncio.create_task(
                     _trigger_create_conversation_with_delay(conversation_creation_timeout - seconds_since_last_segment,
                                                             finished_at)
@@ -324,51 +270,17 @@ async def _listen(
 
     def _upsert_in_progress_conversation(segments: List[TranscriptSegment], finished_at: datetime):
         if existing := retrieve_in_progress_conversation(uid):
-            # Check if this is an active session (fake conversation ID)
-            if existing.get('id', '').startswith('active_session_'):
-                # Create a new real conversation instead of trying to update the fake one
-                started_at = datetime.now(timezone.utc) - timedelta(seconds=segments[0].end - segments[0].start)
-                conversation = Conversation(
-                    id=str(uuid.uuid4()),
-                    uid=uid,
-                    structured=Structured(),
-                    language=language,
-                    created_at=started_at,
-                    started_at=started_at,
-                    finished_at=finished_at,
-                    transcript_segments=segments,
-                    status=ConversationStatus.in_progress,
-                )
-                conversations_db.upsert_conversation(uid, conversation_data=conversation.dict())
-                redis_db.set_in_progress_conversation_id(uid, conversation.id)
-                return conversation, (0, len(segments))
-            else:
-                # Normal existing conversation - update it
-                # Ensure all required fields are present before creating Conversation object
-                if 'finished_at' not in existing or existing['finished_at'] is None:
-                    existing['finished_at'] = finished_at
-                
-                if 'created_at' not in existing or existing['created_at'] is None:
-                    existing['created_at'] = datetime.now(timezone.utc)
-                
-                if 'started_at' not in existing or existing['started_at'] is None:
-                    existing['started_at'] = datetime.now(timezone.utc)
-                
-                # Ensure status is set
-                if 'status' not in existing:
-                    existing['status'] = ConversationStatus.in_progress
-                
-                conversation = Conversation(**existing)
-                conversation.transcript_segments, (starts, ends) = TranscriptSegment.combine_segments(
-                    conversation.transcript_segments, segments)
-                conversations_db.update_conversation_segments(uid, conversation.id,
-                                                              [segment.dict() for segment in
-                                                               conversation.transcript_segments])
-                conversations_db.update_conversation_finished_at(uid, conversation.id, finished_at)
-                redis_db.set_in_progress_conversation_id(uid, conversation.id)
-                return conversation, (starts, ends)
+            conversation = Conversation(**existing)
+            conversation.transcript_segments, (starts, ends) = TranscriptSegment.combine_segments(
+                conversation.transcript_segments, segments)
+            conversations_db.update_conversation_segments(uid, conversation.id,
+                                                          [segment.dict() for segment in
+                                                           conversation.transcript_segments])
+            conversations_db.update_conversation_finished_at(uid, conversation.id, finished_at)
+            redis_db.set_in_progress_conversation_id(uid, conversation.id)
+            return conversation, (starts, ends)
 
-        # new conversation
+        # new
         started_at = datetime.now(timezone.utc) - timedelta(seconds=segments[0].end - segments[0].start)
         conversation = Conversation(
             id=str(uuid.uuid4()),
@@ -381,6 +293,7 @@ async def _listen(
             transcript_segments=segments,
             status=ConversationStatus.in_progress,
         )
+        print('_get_in_progress_conversation new', conversation, uid)
         conversations_db.upsert_conversation(uid, conversation_data=conversation.dict())
         redis_db.set_in_progress_conversation_id(uid, conversation.id)
         return conversation, (0, len(segments))
@@ -468,6 +381,8 @@ async def _listen(
                 )
 
                 # Create a second socket for initial speech profile if needed
+                print("speech_profile_duration", speech_profile_duration)
+                print("file_path", file_path)
                 if speech_profile_duration and file_path:
                     soniox_socket2 = await process_audio_soniox(
                         stream_transcript, sample_rate, stt_language,
@@ -496,9 +411,6 @@ async def _listen(
     #
     def create_pusher_task_handler():
         nonlocal websocket_active
-        
-        # Import json here to ensure it's in scope
-        import json
 
         pusher_ws = None
         pusher_connect_lock = asyncio.Lock()
@@ -537,8 +449,7 @@ async def _listen(
                         pusher_connected = False
                     except Exception as e:
                         print(f"Pusher transcripts failed: {e}", uid)
-                # Only retry connection if Pusher is configured (not None)
-                if pusher_connected is False and pusher_ws is not None:
+                if pusher_connected is False:
                     await connect()
 
         # Audio bytes
@@ -569,8 +480,7 @@ async def _listen(
                         pusher_connected = False
                     except Exception as e:
                         print(f"Pusher audio_bytes failed: {e}", uid)
-                # Only retry connection if Pusher is configured (not None)
-                if pusher_connected is False and pusher_ws is not None:
+                if pusher_connected is False:
                     await connect()
 
         async def connect():
@@ -596,14 +506,9 @@ async def _listen(
 
             try:
                 pusher_ws = await connect_to_trigger_pusher(uid, sample_rate)
-                if pusher_ws is None:
-                    pusher_connected = False  # Keep it false so we don't try to send data
-                    print(f"Pusher not configured, skipping webhook integration for {uid}")
-                else:
-                    pusher_connected = True
+                pusher_connected = True
             except Exception as e:
                 print(f"Exception in connect: {e}")
-                pusher_connected = False
 
         async def close(code: int = 1000):
             if pusher_ws:
@@ -731,7 +636,6 @@ async def _listen(
 
                 segments = realtime_segment_buffers.copy()
                 realtime_segment_buffers = []
-                segments.sort(key=lambda x: x["start"])
 
                 # Align the start, end segment
                 if seconds_to_trim is None:
@@ -757,30 +661,24 @@ async def _listen(
                                                                              segments])
 
                 # can trigger race condition? increase soniox utterance?
-                try:
-                    conversation, (starts, ends) = _upsert_in_progress_conversation(transcript_segments, finished_at)
-                    current_conversation_id = conversation.id
+                conversation, (starts, ends) = _upsert_in_progress_conversation(transcript_segments, finished_at)
+                current_conversation_id = conversation.id
 
-                    # Send to client
-                    if including_combined_segments:
-                        updates_segments = [segment.dict() for segment in conversation.transcript_segments[starts:ends]]
-                    else:
-                        updates_segments = [segment.dict() for segment in transcript_segments]
+                # Send to client
+                if including_combined_segments:
+                    updates_segments = [segment.dict() for segment in conversation.transcript_segments[starts:ends]]
+                else:
+                    updates_segments = [segment.dict() for segment in transcript_segments]
 
-                    await websocket.send_json(updates_segments)
+                await websocket.send_json(updates_segments)
 
-                    # Send to external trigger
-                    if transcript_send is not None:
-                        transcript_send([segment.dict() for segment in transcript_segments], current_conversation_id)
+                # Send to external trigger
+                if transcript_send is not None:
+                    transcript_send([segment.dict() for segment in transcript_segments], current_conversation_id)
 
-                    # Translate
-                    if translation_enabled:
-                        await translate(conversation.transcript_segments[starts:ends], conversation.id)
-                        
-                except Exception as conv_error:
-                    print(f'Error in conversation processing: {conv_error}', uid)
-                    # Continue processing even if conversation update fails
-                    continue
+                # Translate
+                if translation_enabled:
+                    await translate(conversation.transcript_segments[starts:ends], conversation.id)
 
             except Exception as e:
                 print(f'Could not process transcript: error {e}', uid)
@@ -820,6 +718,7 @@ async def _listen(
                 last_audio_received_time = time.time()
                 if codec == 'opus' and sample_rate == 16000:
                     data = decoder.decode(bytes(data), frame_size=frame_size)
+                    # audio_data.extend(data)
 
                 # STT
                 has_speech = True
@@ -856,9 +755,9 @@ async def _listen(
                         else:
                             dg_socket2.send(data)
 
-                    # Send to external trigger
-                    if audio_bytes_send is not None:
-                        audio_bytes_send(data)
+                # Send to external trigger
+                if audio_bytes_send is not None:
+                    audio_bytes_send(data)
 
         except WebSocketDisconnect:
             print("WebSocket disconnected", uid)

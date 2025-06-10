@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/foundation.dart';
@@ -496,83 +495,68 @@ class OmiDeviceConnection extends DeviceConnection {
   }
 
   Future<StreamSubscription?> _getBleImageBytesListener({
-    required void Function(Uint8List) onImageReceived,
+    required void Function(List<int>) onImageBytesReceived,
   }) async {
     if (_omiService == null) {
       logServiceNotFoundError('Omi', deviceId);
       return null;
     }
 
-    var imageDataStreamCharacteristic = getCharacteristic(_omiService!, imageDataStreamCharacteristicUuid);
-    if (imageDataStreamCharacteristic == null) {
+    var imageStreamCharacteristic = getCharacteristic(_omiService!, imageDataStreamCharacteristicUuid);
+    if (imageStreamCharacteristic == null) {
       logCharacteristicNotFoundError('Image data stream', deviceId);
       return null;
     }
 
     try {
-      // Ensure notifications are enabled for the characteristic
-      final device = bleDevice;
-      if (device.isConnected) {
-         if (Platform.isAndroid && device.mtuNow < 512) {
-          await device.requestMtu(512); // Try to increase MTU for better throughput
-        }
-        if (device.isConnected) {
-          try {
-             await imageDataStreamCharacteristic.setNotifyValue(true); // Enable notifications
-          } on PlatformException catch (e) {
-            Logger.error('Error setting notify value for image data stream $e');
-          }
-        } else {
-           Logger.handle(Exception('Device disconnected before setting notify value'), StackTrace.current,
-              message: 'Device is disconnected. Please reconnect and try again');
-        }
-      } else {
-        Logger.handle(Exception('Device not connected for image listener'), StackTrace.current,
-              message: 'Device is not connected. Cannot set up image listener.');
-        return null;
-      }
-
+      await imageStreamCharacteristic.setNotifyValue(true); // device could be disconnected here.
     } catch (e, stackTrace) {
       logSubscribeError('Image data stream', deviceId, e, stackTrace);
       return null;
     }
 
-    // Use ImageBytesUtil to process chunks and reassemble the image
-    ImageBytesUtil imageBytesUtil = ImageBytesUtil();
-    StreamSubscription? listener;
-
-    listener = imageDataStreamCharacteristic.lastValueStream.listen((value) {
-      if (value.isEmpty) return;
-
-      // Process each incoming chunk using ImageBytesUtil
-      Uint8List? completedImage = imageBytesUtil.processChunk(value);
-
-      if (completedImage != null && completedImage.isNotEmpty) {
-        onImageReceived(completedImage);
-      }
+    debugPrint('Subscribed to imageBytes stream from Omi Device');
+    var listener = imageStreamCharacteristic.lastValueStream.listen((value) {
+      if (value.isNotEmpty) onImageBytesReceived(value);
     });
 
     final device = bleDevice;
     device.cancelWhenDisconnected(listener);
 
-    return listener;
-  }
+    // This will cause a crash in OpenGlass devices
+    // due to a race with discoverServices() that triggers
+    // a bug in the device firmware.
+    // if (Platform.isAndroid) await device.requestMtu(512);
 
-  // Public method for external access to image streaming
-  Future<StreamSubscription?> getBleImageBytesListener({
-    required void Function(Uint8List) onImageReceived,
-  }) async {
-    return await _getBleImageBytesListener(onImageReceived: onImageReceived);
+    return listener;
   }
 
   @override
   Future<StreamSubscription?> performGetImageListener({
     required void Function(Uint8List base64JpgData) onImageReceived,
   }) async {
-    if (!await isConnected()) {
+    if (!await hasPhotoStreamingCharacteristic()) {
       return null;
     }
-    return await _getBleImageBytesListener(onImageReceived: onImageReceived);
+    print("OpenGlassDevice getImageListener called");
+    ImageBytesUtil imageBytesUtil = ImageBytesUtil();
+    var bleBytesStream = await _getBleImageBytesListener(
+      onImageBytesReceived: (List<int> value) async {
+        if (value.isEmpty) return;
+        Uint8List data = Uint8List.fromList(value);
+        // print(data);
+        Uint8List? completedImage = imageBytesUtil.processChunk(data);
+        if (completedImage != null && completedImage.isNotEmpty) {
+          debugPrint('Completed image bytes length: ${completedImage.length}');
+          onImageReceived(completedImage);
+        }
+      },
+    );
+    bleBytesStream?.onDone(() {
+      debugPrint('Image listener done');
+      cameraStopPhotoController();
+    });
+    return bleBytesStream;
   }
 
   @override
