@@ -20,7 +20,7 @@ LOG_MODULE_REGISTER(ble_shell);
 #define DEVICE_NAME_LEN	        (sizeof(DEVICE_NAME) - 1)
 
 
-static struct bt_conn *current_conn;
+struct bt_conn *current_conn;
 
 static const struct bt_data ad[] = {
 	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
