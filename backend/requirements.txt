@@ -97,7 +97,6 @@ langchain-community==0.3.3
 langchain-core==0.3.12
 langchain-groq==0.2.0
 langchain-openai==0.2.3
-langchain-pinecone==0.2.0
 langchain-text-splitters==0.3.0
 langgraph==0.2.39
 langgraph-checkpoint==2.0.1
@@ -141,7 +140,7 @@ pandas==2.2.2
 parso==0.8.4
 pexpect==4.9.0
 pillow==10.4.0
-pinecone-client==5.0.1
+pinecone==7.0.2
 pinecone-plugin-inference==1.0.3
 pinecone-plugin-interface==0.0.7
 platformdirs==4.2.2
