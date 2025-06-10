@@ -13,7 +13,6 @@ from ._client import db
 @timeit
 def add_message(uid: str, message_data: dict):
     del message_data['memories']
-    message_data['deleted'] = False
     user_ref = db.collection('users').document(uid)
     user_ref.collection('messages').add(message_data)
     return message_data
@@ -64,10 +63,8 @@ def get_app_messages(uid: str, app_id: str, limit: int = 20, offset: int = 0, in
     # Fetch messages and collect conversation IDs
     for doc in messages_ref.stream():
         message = doc.to_dict()
-
-        if message.get('deleted') is True:
+        if message.get('reported') is True:
             continue
-
         messages.append(message)
         conversations_id.update(message.get('memories_id', []))
 
@@ -104,7 +101,6 @@ def get_messages(
     user_ref = db.collection('users').document(uid)
     messages_ref = (
         user_ref.collection('messages')
-        .where(filter=FieldFilter('deleted', '==', False))
     )
     # if include_plugin_id_filter:
     messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
@@ -120,8 +116,8 @@ def get_messages(
     # Fetch messages and collect conversation IDs
     for doc in messages_ref.stream():
         message = doc.to_dict()
-        # if message.get('deleted') is True:
-        #     continue
+        if message.get('reported') is True:
+            continue
         messages.append(message)
         conversations_id.update(message.get('memories_id', []))
         files_id.update(message.get('files_id', []))
@@ -154,8 +150,6 @@ def get_messages(
     for doc in doc_files:
         if doc.exists:
             file = doc.to_dict()
-            if file['deleted']:
-                continue
             files[file['id']] = file
 
     # Attach files to messages
@@ -176,9 +170,6 @@ def get_message(uid: str, message_id: str) -> tuple[Message, str] | None:
     if not message:
         return None
 
-    if message.deleted is True:
-        return None
-
     return message, message_doc.id
 
 
@@ -186,7 +177,7 @@ def report_message(uid: str, msg_doc_id: str):
     user_ref = db.collection('users').document(uid)
     message_ref = user_ref.collection('messages').document(msg_doc_id)
     try:
-        message_ref.update({'deleted': True, 'reported': True})
+        message_ref.update({'reported': True})
         return {"message": "Message reported"}
     except Exception as e:
         print("Update failed:", e)
@@ -197,39 +188,29 @@ def batch_delete_messages(parent_doc_ref, batch_size=450, app_id: Optional[str] 
                           chat_session_id: Optional[str] = None):
     messages_ref = (
         parent_doc_ref.collection('messages')
-        .where(filter=FieldFilter('deleted', '==', False))
     )
     messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
     if chat_session_id:
         messages_ref = messages_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
     print('batch_delete_messages', app_id)
-    last_doc = None  # For pagination
 
     while True:
-        if last_doc:
-            docs = messages_ref.limit(batch_size).start_after(last_doc).stream()
-        else:
-            docs = messages_ref.limit(batch_size).stream()
-
-        docs_list = list(docs)
+        docs_stream = messages_ref.limit(batch_size).stream()
+        docs_list = list(docs_stream)
 
         if not docs_list:
             print("No more messages to delete")
             break
 
         batch = db.batch()
-
         for doc in docs_list:
             print('Deleting message:', doc.id)
-            batch.update(doc.reference, {'deleted': True})
-
+            batch.delete(doc.reference)
         batch.commit()
 
         if len(docs_list) < batch_size:
             print("Processed all messages")
             break
-
-        last_doc = docs_list[-1]
 
 
 def clear_chat(uid: str, app_id: Optional[str] = None, chat_session_id: Optional[str] = None):
@@ -249,7 +230,6 @@ def add_multi_files(uid: str, files_data: list):
     user_ref = db.collection('users').document(uid)
 
     for file_data in files_data:
-        file_data["deleted"] = False
         file_ref = user_ref.collection('files').document(file_data['id'])
         batch.set(file_ref, file_data)
 
@@ -259,7 +239,6 @@ def add_multi_files(uid: str, files_data: list):
 def get_chat_files(uid: str, files_id: List[str] = []):
     files_ref = (
         db.collection('users').document(uid).collection('files')
-        .where(filter=FieldFilter('deleted', '==', False))
     )
     if len(files_id) > 0:
         files_ref = files_ref.where(filter=FieldFilter('id', 'in', files_id))
@@ -272,15 +251,13 @@ def delete_multi_files(uid: str, files_data: list):
     user_ref = db.collection('users').document(uid)
 
     for file_data in files_data:
-        file_data["deleted"] = True
         file_ref = user_ref.collection('files').document(file_data["id"])
-        batch.update(file_ref, file_data)
+        batch.delete(file_ref)
 
     batch.commit()
 
 
 def add_chat_session(uid: str, chat_session_data: dict):
-    chat_session_data['deleted'] = False
     user_ref = db.collection('users').document(uid)
     user_ref.collection('chat_sessions').document(chat_session_data['id']).set(chat_session_data)
     return chat_session_data
@@ -289,7 +266,6 @@ def add_chat_session(uid: str, chat_session_data: dict):
 def get_chat_session(uid: str, app_id: Optional[str] = None):
     session_ref = (
         db.collection('users').document(uid).collection('chat_sessions')
-        .where(filter=FieldFilter('deleted', '==', False))
         .where(filter=FieldFilter('plugin_id', '==', app_id))
         .limit(1)
     )
@@ -304,7 +280,7 @@ def get_chat_session(uid: str, app_id: Optional[str] = None):
 def delete_chat_session(uid, chat_session_id):
     user_ref = db.collection('users').document(uid)
     session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
-    session_ref.update({'deleted': True})
+    session_ref.delete()
 
 
 def add_message_to_chat_session(uid: str, chat_session_id: str, message_id: str):

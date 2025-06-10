@@ -210,10 +210,10 @@ packages:
     dependency: transitive
     description:
       name: built_value
-      sha256: ea90e81dc4a25a043d9bee692d20ed6d1c4a1662a28c03a96417446c093ed6b4
+      sha256: "082001b5c3dc495d4a42f1d5789990505df20d8547d42507c29050af6933ee27"
       url: "https://pub.dev"
     source: hosted
-    version: "8.9.5"
+    version: "8.10.1"
   cached_network_image:
     dependency: "direct main"
     description:
@@ -849,10 +849,10 @@ packages:
     dependency: "direct main"
     description:
       name: geolocator
-      sha256: e7ebfa04ce451daf39b5499108c973189a71a919aa53c1204effda1c5b93b822
+      sha256: ee2212a3df8292ec4c90b91183b8001d3f5a800823c974b570c5f9344ca320dc
       url: "https://pub.dev"
     source: hosted
-    version: "14.0.0"
+    version: "14.0.1"
   geolocator_android:
     dependency: "direct overridden"
     description:
@@ -1190,18 +1190,18 @@ packages:
     dependency: transitive
     description:
       name: intercom_flutter_platform_interface
-      sha256: "42cd30ff7fb987567d5e58092c3625e01ddb3d1831ec269df7567f333236aa51"
+      sha256: "5c8469818bddc4f152354cda1a2de1ca41d2d614a7b5aeafd001867547378b50"
       url: "https://pub.dev"
     source: hosted
-    version: "2.0.2"
+    version: "2.0.3"
   intercom_flutter_web:
     dependency: transitive
     description:
       name: intercom_flutter_web
-      sha256: "410f624093a30972c13df8775eaf84a8dd958629aadb90e5d367518cbea79f70"
+      sha256: "6c2968db27206a4267fddf261c766eb82771fb3209b57abb47a00e2ebfed3ca8"
       url: "https://pub.dev"
     source: hosted
-    version: "1.1.5"
+    version: "1.1.6"
   internet_connection_checker_plus:
     dependency: "direct main"
     description:
@@ -1431,10 +1431,10 @@ packages:
     dependency: "direct main"
     description:
       name: mixpanel_flutter
-      sha256: "949732cdb4c115c0c33f6ad51ad217e642960ba9cf823c722b29a00c22ec47db"
+      sha256: "0ecd870cceed1cf4600c403e5544b88efa65b8fd3f30fad679702d1ae9e0ac15"
       url: "https://pub.dev"
     source: hosted
-    version: "2.4.1"
+    version: "2.4.4"
   nested:
     dependency: transitive
     description:
@@ -1488,7 +1488,7 @@ packages:
     description:
       path: opus_flutter_android
       ref: HEAD
-      resolved-ref: "67ba9d8704a93c8a30b9266f4df6663e0b08e3c8"
+      resolved-ref: "0190d7a660945f8c450085533262239a56d58c86"
       url: "https://github.com/mdmohsin7/opus_flutter.git"
     source: git
     version: "3.0.1"
@@ -2078,10 +2078,10 @@ packages:
     dependency: transitive
     description:
       name: talker
-      sha256: "13e4c7c77b2ebd24ca0394b42858e7d42f28b5758255129369842eb71ceac80d"
+      sha256: "6d81e18910ef1ff0c3d262855966a6ea3113d98423b460359d8fe17c8d82a984"
       url: "https://pub.dev"
     source: hosted
-    version: "4.7.9"
+    version: "4.8.2"
   talker_flutter:
     dependency: "direct main"
     description:
@@ -2094,10 +2094,10 @@ packages:
     dependency: transitive
     description:
       name: talker_logger
-      sha256: d8d2afd912c4a185bc125d8ae84d5960c3505f7ec52856e732a4b8a0db510b5d
+      sha256: "44b7d6c966bcf117506c92592cbad0110509abd312e2872f2a8c0fd74ad428fe"
       url: "https://pub.dev"
     source: hosted
-    version: "4.7.9"
+    version: "4.8.2"
   term_glyph:
     dependency: transitive
     description:
