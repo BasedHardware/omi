@@ -180,20 +180,36 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
         default_apps = get_default_conversation_summarized_apps()
         filtered_apps.extend(default_apps)
 
-        # auto plugins. For segments > 90 and language is not Spanish or Japanese, find the best one.
-        if len(conversation.transcript_segments) >= 90 and conversation.language not in ["ja", "es"]:
-            best_app = select_best_app_for_conversation(conversation, uid, conversation_apps)
-            if best_app is None:
-                pass
+        if filtered_apps and len(filtered_apps) > 0:
+            # Check if the user has a preferred app
+            preferred_app_id = get_user_preferred_app(uid)
+            if preferred_app_id is None:
+                best_app = select_best_app_for_conversation(conversation, filtered_apps)
             else:
-                filtered_apps.insert(0, best_app)
+                best_app = next((app for app in filtered_apps if app.id == preferred_app_id), None)
 
-                # enabled
-                user_enabled = set(redis_db.get_enabled_plugins(uid))
+            if best_app:
+                print(f"Selected best app for conversation: {best_app.name}")
+
+                user_enabled = set(redis_db.get_enabled_apps(uid))
                 if best_app.id not in user_enabled:
                     redis_db.enable_app(uid, best_app.id)
 
-        filtered_apps = list(set(filtered_apps))
+                filtered_apps = [best_app]  # Use only the best app
+        # auto plugins. For segments > 90 and language is not Spanish or Japanese, find the best one.
+        # if len(conversation.transcript_segments) >= 90 and conversation.language not in ["ja", "es"]:
+        #     best_app = select_best_app_for_conversation(conversation, conversation_apps)
+        #     if best_app is None:
+        #         pass
+        #     else:
+        #         filtered_apps.insert(0, best_app)
+        #
+        #         # enabled
+        #         user_enabled = set(redis_db.get_enabled_apps(uid))
+        #         if best_app.id not in user_enabled:
+        #             redis_db.enable_app(uid, best_app.id)
+        #
+        # filtered_apps = list(set(filtered_apps))
 
     if len(filtered_apps) == 0:
         # Remove debug message - fallback handling works regardless
