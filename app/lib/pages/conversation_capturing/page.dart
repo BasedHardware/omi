@@ -808,9 +808,13 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
           
           // 3. CRITICAL: Explicitly reset all in-progress state for clean next session
           provider.clearInProgressConversation();
+          
+          // 4. Clear live transcription segments from UI for next session
+          provider.clearTranscripts();
+          
           provider.setConversationCreating(false);
           
-          // 4. Reset for next recording session (WebSocket stays open)
+          // 5. Reset for next recording session (WebSocket stays open)
         } else {
           // Reset flag on failure so user can try again
           provider.setConversationCreating(false);
@@ -821,6 +825,8 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
           await provider.finalizeInProgressConversation();
           // Also clear in-progress state on error
           provider.clearInProgressConversation();
+          // Clear transcripts on error too for clean next session
+          provider.clearTranscripts();
         } catch (cleanupError) {
           // Cleanup error handling
         }
