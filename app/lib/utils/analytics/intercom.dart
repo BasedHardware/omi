@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
@@ -48,6 +47,13 @@ class IntercomManager {
     return PlatformService.executeIfSupportedAsync(
       PlatformService.isIntercomSupported,
       () => intercom.loginIdentifiedUser(userId: uid),
+    );
+  }
+
+  Future loginUnidentifiedUser() async {
+    return PlatformService.executeIfSupportedAsync(
+      PlatformService.isIntercomSupported,
+      () => intercom.loginUnidentifiedUser(),
     );
   }
 

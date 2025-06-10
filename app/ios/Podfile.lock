@@ -130,6 +130,8 @@ PODS:
   - geolocator_apple (1.2.0):
     - Flutter
     - FlutterMacOS
+  - google_sign_in_all_platforms_mobile (0.0.1):
+    - Flutter
   - google_sign_in_ios (0.0.1):
     - Flutter
     - FlutterMacOS
@@ -279,6 +281,7 @@ DEPENDENCIES:
   - flutter_timezone (from `.symlinks/plugins/flutter_timezone/ios`)
   - frame_sdk (from `.symlinks/plugins/frame_sdk/ios`)
   - geolocator_apple (from `.symlinks/plugins/geolocator_apple/darwin`)
+  - google_sign_in_all_platforms_mobile (from `.symlinks/plugins/google_sign_in_all_platforms_mobile/ios`)
   - google_sign_in_ios (from `.symlinks/plugins/google_sign_in_ios/darwin`)
   - image_picker_ios (from `.symlinks/plugins/image_picker_ios/ios`)
   - instabug_flutter (from `.symlinks/plugins/instabug_flutter/ios`)
@@ -384,6 +387,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/frame_sdk/ios"
   geolocator_apple:
     :path: ".symlinks/plugins/geolocator_apple/darwin"
+  google_sign_in_all_platforms_mobile:
+    :path: ".symlinks/plugins/google_sign_in_all_platforms_mobile/ios"
   google_sign_in_ios:
     :path: ".symlinks/plugins/google_sign_in_ios/darwin"
   image_picker_ios:
@@ -463,10 +468,11 @@ SPEC CHECKSUMS:
   flutter_silero_vad: 623c22e30420ae174857926385670b9f6e52e4b9
   flutter_sound: b9236a5875299aaa4cef1690afd2f01d52a3f890
   flutter_sound_core: 427465f72d07ab8c3edbe8ffdde709ddacd3763c
-  flutter_timezone: ee50ce7786b5fde27e2fe5375bbc8c9661ffc13f
-  frame_sdk: 4d4df786d828557bf57e05f6f1856613896cc9db
-  geolocator_apple: ab36aa0e8b7d7a2d7639b3b4e48308394e8cef5e
-  google_sign_in_ios: 39f46834c156be9a4dfef914258e0145b7117725
+  flutter_timezone: ffb07bdad3c6276af8dada0f11978d8a1f8a20bb
+  frame_sdk: 5d4d7ba36cf53cfdb6aebf563dc0a69e7920a727
+  geolocator_apple: 66b711889fd333205763b83c9dcf0a57a28c7afd
+  google_sign_in_all_platforms_mobile: 14062cc28e3432a927ebf2fa5dbdba85c157951b
+  google_sign_in_ios: 7c205d44fdc266640375c6ac33d96ba3983dbe02
   GoogleDataTransport: aae35b7ea0c09004c3797d53c8c41f66f219d6a7
   GoogleSignIn: b232380cf495a429b8095d3178a8d5855b42e842
   GoogleUtilities: 00c88b9a86066ef77f0da2fab05f65d7768ed8e1

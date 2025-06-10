@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
-import 'dart:ui';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -29,6 +27,7 @@ import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
 
@@ -410,6 +409,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   streamRecording() async {
+    updateRecordingState(RecordingState.initialising);
     await Permission.microphone.request();
 
     // prepare
@@ -453,19 +453,86 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> streamSystemAudioRecording() async {
-    if (!Platform.isMacOS) {
-      notifyError('System audio recording is only available on macOS.');
+    if (!PlatformService.isDesktop) {
+      notifyError('System audio recording is only available on macOS and Windows.');
       return;
     }
 
     updateRecordingState(RecordingState.initialising);
 
+    // WORKAROUND FOR MACOS SONOMA BUG: Try recording first without checking permissions
+    // This works around the bug where permissions show as undetermined even when granted
+    debugPrint('Attempting to start system audio recording directly (macOS bug workaround)');
+
+    try {
+      await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
+
+      // Try to start recording immediately - if permissions are actually granted, this will work
+      bool recordingStarted = false;
+
+      await ServiceManager.instance().systemAudio.start(onFormatReceived: (Map<String, dynamic> format) async {
+        final int sampleRate = ((format['sampleRate'] ?? 16000) as num).toInt();
+        final int channels = ((format['channels'] ?? 1) as num).toInt();
+        BleAudioCodec determinedCodec = BleAudioCodec.pcm16;
+      }, onByteReceived: (bytes) {
+        if (_socket?.state == SocketServiceState.connected) {
+          _socket?.send(bytes);
+        }
+      }, onRecording: () {
+        recordingStarted = true;
+        updateRecordingState(RecordingState.systemAudioRecord);
+        debugPrint('System audio recording started successfully - permissions were actually granted');
+      }, onStop: () {
+        updateRecordingState(RecordingState.stop);
+        _socket?.stop(reason: 'system audio stream ended from native');
+      }, onError: (error) {
+        debugPrint('System audio failed to start, error: $error');
+        // Only now do we check and request permissions
+        _handleSystemAudioPermissionError(error);
+      });
+
+      // Give it a moment to start or fail
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      if (recordingStarted) {
+        // Success! Recording started despite potentially incorrect permission status
+        return;
+      } else {
+        // If we get here, try the permission flow
+        debugPrint('Recording did not start immediately, checking permissions');
+        await _checkAndRequestPermissions();
+      }
+    } catch (e) {
+      debugPrint('Error attempting direct system audio start: $e');
+      await _checkAndRequestPermissions();
+    }
+  }
+
+  Future<void> _handleSystemAudioPermissionError(String error) async {
+    debugPrint('System audio failed with error: $error');
+
+    if (error.contains('MIC_PERMISSION_REQUIRED') || error.contains('microphone')) {
+      AppSnackbar.showSnackbarError(
+          'Microphone permission is required. Please grant permission in System Preferences > Privacy & Security > Microphone.');
+    } else if (error.contains('SCREEN_PERMISSION_REQUIRED') || error.contains('screen')) {
+      AppSnackbar.showSnackbarError(
+          'Screen recording permission is required. Please grant permission in System Preferences > Privacy & Security > Screen Recording.');
+    } else {
+      // Generic permission error - try the full permission check
+      await _checkAndRequestPermissions();
+    }
+
+    updateRecordingState(RecordingState.stop);
+  }
+
+  Future<void> _checkAndRequestPermissions() async {
     try {
       // Check microphone permission first
       String micStatus = await _screenCaptureChannel.invokeMethod('checkMicrophonePermission');
+      debugPrint('Microphone permission status: $micStatus');
+
       if (micStatus != 'granted') {
-        debugPrint('Microphone permission not granted: $micStatus');
-        if (micStatus == 'undetermined') {
+        if (micStatus == 'undetermined' || micStatus == 'unavailable') {
           bool micGranted = await _screenCaptureChannel.invokeMethod('requestMicrophonePermission');
           if (!micGranted) {
             AppSnackbar.showSnackbarError('Microphone permission is required for system audio recording.');
@@ -473,7 +540,8 @@ class CaptureProvider extends ChangeNotifier
             return;
           }
         } else if (micStatus == 'denied') {
-          AppSnackbar.showSnackbarError('Microphone permission denied. Please grant permission in System Preferences.');
+          AppSnackbar.showSnackbarError(
+              'Microphone permission denied. Please grant permission in System Preferences > Privacy & Security > Microphone.');
           updateRecordingState(RecordingState.stop);
           return;
         }
@@ -481,41 +549,59 @@ class CaptureProvider extends ChangeNotifier
 
       // Check screen capture permission
       String screenStatus = await _screenCaptureChannel.invokeMethod('checkScreenCapturePermission');
+      debugPrint('Screen capture permission status: $screenStatus');
+
       if (screenStatus != 'granted') {
-        debugPrint('Screen capture permission not granted: $screenStatus');
-        if (screenStatus == 'undetermined' || screenStatus == 'denied') {
-          bool screenGranted = await _screenCaptureChannel.invokeMethod('requestScreenCapturePermission');
-          if (!screenGranted) {
-            AppSnackbar.showSnackbarError('Screen capture permission is required for system audio recording.');
+        // Try once more to start recording before requesting permission
+        // This is the key workaround for the macOS bug
+        debugPrint('Screen permission not granted, but trying recording once more due to macOS bug');
+
+        try {
+          bool secondAttemptWorked = false;
+
+          await ServiceManager.instance().systemAudio.start(onFormatReceived: (Map<String, dynamic> format) async {
+            final int sampleRate = ((format['sampleRate'] ?? 16000) as num).toInt();
+            final int channels = ((format['channels'] ?? 1) as num).toInt();
+            BleAudioCodec determinedCodec = BleAudioCodec.pcm16;
+          }, onByteReceived: (bytes) {
+            if (_socket?.state == SocketServiceState.connected) {
+              _socket?.send(bytes);
+            }
+          }, onRecording: () {
+            secondAttemptWorked = true;
+            updateRecordingState(RecordingState.systemAudioRecord);
+            debugPrint('Second attempt succeeded - macOS permission bug confirmed');
+          }, onStop: () {
             updateRecordingState(RecordingState.stop);
-            return;
+            _socket?.stop(reason: 'system audio stream ended from native');
+          }, onError: (error) {
+            debugPrint('Second attempt also failed: $error');
+          });
+
+          await Future.delayed(const Duration(milliseconds: 500));
+
+          if (secondAttemptWorked) {
+            return; // Success on second try!
           }
+        } catch (e) {
+          debugPrint('Second attempt exception: $e');
         }
+
+        // Only request permission if both attempts failed
+        bool screenGranted = await _screenCaptureChannel.invokeMethod('requestScreenCapturePermission');
+        if (!screenGranted) {
+          AppSnackbar.showSnackbarError(
+              'Screen recording permission is required. The app is already granted permission in System Preferences, but you may need to restart the app due to a macOS bug.');
+          updateRecordingState(RecordingState.stop);
+          return;
+        }
+
+        // Try one final time after permission request
+        await streamSystemAudioRecording();
       }
-
-      await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
-
-      await ServiceManager.instance().systemAudio.start(onFormatReceived: (Map<String, dynamic> format) async {
-        final int sampleRate = format['sampleRate'] as int? ?? 16000;
-        final int channels = format['channels'] as int? ?? 1;
-        BleAudioCodec determinedCodec = BleAudioCodec.pcm16;
-      }, onByteReceived: (bytes) {
-        if (_socket?.state == SocketServiceState.connected) {
-          _socket?.send(bytes);
-        }
-      }, onRecording: () {
-        updateRecordingState(RecordingState.systemAudioRecord);
-      }, onStop: () {
-        updateRecordingState(RecordingState.stop);
-        _socket?.stop(reason: 'system audio stream ended from native');
-      }, onError: (error) {
-        notifyError('System Audio Error: $error');
-        updateRecordingState(RecordingState.stop);
-        _socket?.stop(reason: 'system audio stream error: $error');
-      });
     } catch (e) {
-      debugPrint('Error checking/requesting permissions: $e');
-      notifyError('Failed to check permissions: $e');
+      debugPrint('Error in permission checking: $e');
+      notifyError('Permission error: $e');
       updateRecordingState(RecordingState.stop);
     }
   }
@@ -713,7 +799,9 @@ class CaptureProvider extends ChangeNotifier
 
     if (segments.isEmpty) {
       debugPrint('newSegments: ${newSegments.last}');
-      FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
+      if (!PlatformService.isDesktop) {
+        FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
+      }
       await _loadInProgressConversation();
     }
     var remainSegments = TranscriptSegment.updateSegments(segments, newSegments);

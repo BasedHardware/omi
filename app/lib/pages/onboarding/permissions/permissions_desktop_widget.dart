@@ -6,16 +6,37 @@ import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:provider/provider.dart';
 
-class PermissionsMacOSWidget extends StatefulWidget {
+class PermissionsDesktopWidget extends StatefulWidget {
   final VoidCallback goNext;
 
-  const PermissionsMacOSWidget({super.key, required this.goNext});
+  const PermissionsDesktopWidget({super.key, required this.goNext});
 
   @override
-  State<PermissionsMacOSWidget> createState() => _PermissionsMacOSWidgetState();
+  State<PermissionsDesktopWidget> createState() => _PermissionsDesktopWidgetState();
 }
 
-class _PermissionsMacOSWidgetState extends State<PermissionsMacOSWidget> {
+class _PermissionsDesktopWidgetState extends State<PermissionsDesktopWidget> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Refresh permissions when user returns to the app
+      final provider = Provider.of<OnboardingProvider>(context, listen: false);
+      provider.updatePermissions();
+    }
+  }
+
   void _showPermissionDialog({
     required String title,
     required String description,
@@ -174,7 +195,7 @@ class _PermissionsMacOSWidgetState extends State<PermissionsMacOSWidget> {
                     _showPermissionDialog(
                       title: 'Notifications',
                       description:
-                          'This app would like to send you notifications to keep you informed about important updates and activities.',
+                          'This app would like to send you notifications to keep you informed about important updates and activities. If permission is denied, we\'ll redirect you to System Preferences.',
                       onContinue: () async {
                         await provider.askForNotificationPermissions();
                       },
@@ -219,9 +240,13 @@ class _PermissionsMacOSWidgetState extends State<PermissionsMacOSWidget> {
                               provider.setLoading(false);
                               widget.goNext();
                             },
-                            child: const Text(
-                              'Skip',
-                              style: TextStyle(
+                            child: Text(
+                              (provider.hasBluetoothPermission ||
+                                      provider.hasLocationPermission ||
+                                      provider.hasNotificationPermission)
+                                  ? 'Continue'
+                                  : 'Skip',
+                              style: const TextStyle(
                                 decoration: TextDecoration.none,
                               ),
                             ),
