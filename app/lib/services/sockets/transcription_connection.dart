@@ -20,10 +20,6 @@ abstract interface class ITransctipSegmentSocketServiceListener {
   void onConnected();
 
   void onClosed();
-
-  void onImageReceived(dynamic imageData);
-
-  void onClearLiveImages(dynamic clearData);
 }
 
 class SpeechProfileTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
@@ -123,39 +119,6 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     }
     if (jsonEvent == null) {
       debugPrint("Can not decode message event json $event");
-      return;
-    }
-
-    // Handle image data
-    if (jsonEvent is Map<String, dynamic> && jsonEvent['type'] == 'image') {
-      var imageData = jsonEvent['data'];
-      _listeners.forEach((k, v) {
-        if (v is ITransctipSegmentSocketServiceListener) {
-          v.onImageReceived(imageData);
-        }
-      });
-      return;
-    }
-
-    // Handle image description data (OpenGlass images with AI descriptions)
-    if (jsonEvent is Map<String, dynamic> && jsonEvent['type'] == 'image_description') {
-      var imageData = jsonEvent['image_data'];
-      _listeners.forEach((k, v) {
-        if (v is ITransctipSegmentSocketServiceListener) {
-          v.onImageReceived(imageData);
-        }
-      });
-      return;
-    }
-
-    // Handle clear live images notification
-    if (jsonEvent is Map<String, dynamic> && jsonEvent['type'] == 'clear_live_images') {
-      var clearData = jsonEvent['data'];
-      _listeners.forEach((k, v) {
-        if (v is ITransctipSegmentSocketServiceListener) {
-          v.onClearLiveImages(clearData);
-        }
-      });
       return;
     }
 

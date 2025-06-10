@@ -115,24 +115,3 @@ class TranslationEvent(MessageEvent):
         j["type"] = self.event_type
         del j["event_type"]
         return j
-
-
-class ClearLiveImagesEvent(MessageEvent):
-    event_type: str = "clear_live_images"
-    conversation_id: str
-    reason: str = "conversation_created"
-    processed_image_count: int = 0
-
-    def to_json(self):
-        j = self.model_dump(mode="json")
-        j["type"] = self.event_type
-        j["data"] = {
-            "conversation_id": self.conversation_id,
-            "reason": self.reason,
-            "processed_image_count": self.processed_image_count
-        }
-        del j["event_type"]
-        del j["conversation_id"]
-        del j["reason"]  
-        del j["processed_image_count"]
-        return j

@@ -57,13 +57,8 @@ async def get_omi_github_releases(cache_key: str) -> Optional[List[Dict]]:
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
+            "Authorization": f"Bearer {os.getenv('GITHUB_TOKEN')}",
         }
-        
-        # Only add Authorization header if token is properly configured
-        github_token = os.getenv('GITHUB_TOKEN')
-        if github_token and github_token.strip():
-            headers["Authorization"] = f"Bearer {github_token}"
-        
         response = await client.get(url, headers=headers)
         if response.status_code != 200:
             raise HTTPException(status_code=response.status_code, detail="Failed to fetch latest release")
