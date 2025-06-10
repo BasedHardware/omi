@@ -9,8 +9,8 @@ import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/auth.dart';
 import 'package:omi/pages/onboarding/find_device/page.dart';
 import 'package:omi/pages/onboarding/name/name_widget.dart';
-import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
-import 'package:omi/pages/onboarding/permissions/permissions_macos_widget.dart';
+import 'package:omi/pages/onboarding/permissions/permissions_mobile_widget.dart';
+import 'package:omi/pages/onboarding/permissions/permissions_desktop_widget.dart';
 import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/onboarding/welcome/page.dart';
@@ -124,14 +124,14 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         _goNext(); // Go to Permissions page
         MixpanelManager().onboardingStepCompleted('Primary Language');
       }),
-      PlatformService.isMacOS
-          ? PermissionsMacOSWidget(
+      PlatformService.isDesktop
+          ? PermissionsDesktopWidget(
               goNext: () {
                 _goNext(); // Go to Welcome page
                 MixpanelManager().onboardingStepCompleted('Permissions');
               },
             )
-          : PermissionsWidget(
+          : PermissionsMobileWidget(
               goNext: () {
                 _goNext(); // Go to Welcome page
                 MixpanelManager().onboardingStepCompleted('Permissions');
@@ -157,7 +157,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
             routeToPage(context, const HomePageWrapper(), replace: true);
           } else {
             var codec = await _getAudioCodec(provider.deviceId);
-            if (codec.isOpusSupported()) {
+            if (codec.isOpusSupported() && !PlatformService.isDesktop) {
               _goNext(); // Go to Speech Profile page
             } else {
               // Device selected, but not Opus, skip speech profile
