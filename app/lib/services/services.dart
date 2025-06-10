@@ -9,6 +9,7 @@ import 'package:omi/services/devices.dart';
 import 'package:omi/services/sockets.dart';
 import 'package:omi/services/wals.dart';
 import 'package:flutter/services.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 
 class ServiceManager {
   late IMicRecorderService _mic;
@@ -27,8 +28,8 @@ class ServiceManager {
     sm._device = DeviceService();
     sm._socket = SocketServicePool();
     sm._wal = WalService();
-    if (Platform.isMacOS) {
-      sm._systemAudio = MacSystemAudioRecorderService();
+    if (PlatformService.isDesktop) {
+      sm._systemAudio = DesktopSystemAudioRecorderService();
     }
 
     return sm;
@@ -51,8 +52,8 @@ class ServiceManager {
   IWalService get wal => _wal;
 
   ISystemAudioRecorderService get systemAudio {
-    if (!Platform.isMacOS) {
-      throw Exception("System audio recording is only available on macOS");
+    if (PlatformService.isMobile) {
+      throw Exception("System audio recording is only available on macOS and Windows");
     }
     return _systemAudio;
   }
@@ -384,7 +385,7 @@ abstract class ISystemAudioRecorderService {
   // TODO: Add status property
 }
 
-class MacSystemAudioRecorderService implements ISystemAudioRecorderService {
+class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
   static const MethodChannel _channel = MethodChannel('screenCapturePlatform');
   Function(Uint8List bytes)? _onByteReceived;
   Function(Map<String, dynamic> format)? _onFormatReceived;
@@ -395,7 +396,7 @@ class MacSystemAudioRecorderService implements ISystemAudioRecorderService {
   // To keep track of recording state from Dart's perspective
   bool _isRecording = false;
 
-  MacSystemAudioRecorderService() {
+  DesktopSystemAudioRecorderService() {
     _channel.setMethodCallHandler(_handleMethodCall);
   }
 
@@ -434,7 +435,7 @@ class MacSystemAudioRecorderService implements ISystemAudioRecorderService {
         _clearCallbacks(); // Clear callbacks after error
         break;
       default:
-        debugPrint('MacSystemAudioRecorderService: Unhandled method call: \${call.method}');
+        debugPrint('DesktopSystemAudioRecorderService: Unhandled method call: \${call.method}');
     }
   }
 
