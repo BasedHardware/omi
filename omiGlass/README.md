@@ -133,8 +133,6 @@ You'll need the following components to build your own omiGlass:
 
 4. Upload the firmware to the XIAO ESP32S3 board.
 
-If you are using Arduino and getting an error, most likely it's because of duplicate files. Try relocating or deleting src/main.cpp file 
-
 ## How You Can Contribute
 
 ### Software
