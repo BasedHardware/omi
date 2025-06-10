@@ -358,10 +358,10 @@ class _RecordingStatusIndicatorState extends State<RecordingStatusIndicator> wit
 
 
 getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb, RecordingState currentActualState) {
-  if (SharedPreferencesUtil().btDevice.id.isNotEmpty && (!PlatformService.isDesktop)) {
-    // If a BT device is configured and we are NOT on desktop, don't show this button.
-    return const SizedBox.shrink();
-  }
+  // if (SharedPreferencesUtil().btDevice.id.isNotEmpty && (!PlatformService.isDesktop)) {
+  //   // If a BT device is configured and we are NOT on desktop, don't show this button.
+  //   return const SizedBox.shrink();
+  // }
   // If on desktop, AND a BT device is connected, this button should still be hidden
   // as the primary interaction should be via the BT device, not system audio as a fallback to phone mic.
   // This button is primarily for when NO BT device is the target.

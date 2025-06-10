@@ -452,7 +452,7 @@ class CaptureProvider extends ChangeNotifier
   Future<void> streamRecording() async {
     updateRecordingState(RecordingState.initialising);
     await Permission.microphone.request();
-    
+
     // set profile & socket first - specify this is for phone mic
     await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000, isPcm: true);
 
@@ -503,15 +503,6 @@ class CaptureProvider extends ChangeNotifier
   void onInternetStatusChanged(InternetStatus status) {
     _internetStatus = status;
     notifyListeners();
-  }
-
-  Future _stopStreamRecordingLegacy({bool cleanDevice = false}) async {
-    if (cleanDevice) {
-      _updateRecordingDevice(null);
-    }
-    await _cleanupCurrentState();
-    updateRecordingState(RecordingState.stop);
-    await _socket?.stop(reason: 'stop stream device recording');
   }
 
   Future<void> streamSystemAudioRecording() async {
@@ -872,6 +863,15 @@ class CaptureProvider extends ChangeNotifier
 
     // Don't finalize the in-progress conversation yet - let the API call process it first
     // finalizeInProgressConversation will be called after successful conversation creation
+  }
+
+  Future _stopStreamRecordingLegacy({bool cleanDevice = false}) async {
+    if (cleanDevice) {
+      _updateRecordingDevice(null);
+    }
+    await _cleanupCurrentState();
+    updateRecordingState(RecordingState.stop);
+    await _socket?.stop(reason: 'stop stream device recording');
   }
 
   Future<void> streamDeviceRecording({BtDevice? device}) async {
