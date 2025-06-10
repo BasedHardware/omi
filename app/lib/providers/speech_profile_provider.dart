@@ -227,6 +227,7 @@ class SpeechProfileProvider extends ChangeNotifier
 
   _validateSingleSpeaker() {
     int speakersCount = segments.map((e) => e.speaker).toSet().length;
+    debugPrint('_validateSingleSpeaker speakers count: $speakersCount');
     if (speakersCount > 1) {
       var speakerToWords = segments.fold<Map<int, int>>(
         {},
@@ -235,6 +236,7 @@ class SpeechProfileProvider extends ChangeNotifier
           return previousValue;
         },
       );
+      debugPrint('speakerToWords: $speakerToWords');
       if (speakerToWords.values.every((element) => element / segments.length > 0.08)) {
         notifyError('MULTIPLE_SPEAKERS');
       }
@@ -318,7 +320,7 @@ class SpeechProfileProvider extends ChangeNotifier
           notifyListeners();
         }
       default:
-        // Unsupported device connection state
+        debugPrint("Device connection state is not supported $state");
     }
   }
 
@@ -330,41 +332,21 @@ class SpeechProfileProvider extends ChangeNotifier
 
   @override
   void onClosed() {
-    // Handle WebSocket closed event if needed
+    // TODO: implement onClosed
   }
 
   @override
   void onError(Object err) {
-    notifyError('CONNECTION_ERROR');
+    notifyError('WS_ERR');
   }
 
   @override
   void onMessageEventReceived(ServerMessageEvent event) {
-    // Handle message events if needed in the future
+    // TODO: implement onMessageEventReceived
   }
 
   @override
-  void onSegmentReceived(List<TranscriptSegment> segments) {
-    _processNewSegmentReceived(segments);
-  }
-
-  @override
-  void onConnected() {
-    message = ''; // Clear any connection error messages
-    notifyListeners();
-  }
-
-  @override
-  void onImageReceived(dynamic imageData) {
-    // This provider doesn't handle images - interface requirement only
-  }
-
-  @override
-  void onClearLiveImages(dynamic clearData) {
-    // This provider doesn't handle images - interface requirement only
-  }
-
-  void _processNewSegmentReceived(List<TranscriptSegment> newSegments) {
+  void onSegmentReceived(List<TranscriptSegment> newSegments) {
     if (newSegments.isEmpty) return;
     if (segments.isEmpty) {
       audioStorage.removeFramesRange(fromSecond: 0, toSecond: newSegments[0].start.toInt());
@@ -381,5 +363,9 @@ class SpeechProfileProvider extends ChangeNotifier
     _validateSingleSpeaker();
     _handleCompletion();
     notifyInfo('SCROLL_DOWN');
+    debugPrint('Conversation creation timer restarted');
   }
+
+  @override
+  void onConnected() {}
 }
