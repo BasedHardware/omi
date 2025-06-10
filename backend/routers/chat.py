@@ -683,6 +683,11 @@ def upload_image_to_bucket(image_data: bytes, uid: str, original_filename: str) 
         import tempfile
         import os
         
+        # Check bucket configuration first
+        if not storage.chat_files_bucket:
+            print(f"ERROR: BUCKET_CHAT_FILES environment variable not set - cannot upload full images")
+            return ""
+        
         # Save to temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as temp_file:
             temp_file.write(image_data)
@@ -692,6 +697,7 @@ def upload_image_to_bucket(image_data: bytes, uid: str, original_filename: str) 
             # Use direct blob upload instead of transfer_manager to avoid FFI pickling issues
             bucket = storage._get_bucket_safely(storage.chat_files_bucket, "chat image upload")
             if not bucket:
+                print(f"ERROR: Cannot access bucket '{storage.chat_files_bucket}' - check GCP credentials and bucket permissions")
                 return ""
             
             # Use original filename for blob name (matching upload_multi_chat_files structure)
@@ -700,20 +706,23 @@ def upload_image_to_bucket(image_data: bytes, uid: str, original_filename: str) 
             
             # Upload directly using blob
             blob.upload_from_filename(temp_file_path)
+            print(f"SUCCESS: Uploaded full image to {blob_name}")
             
             # Clean up temp file
             os.unlink(temp_file_path)
             
             # Return signed URL for private bucket access (24 hour expiry)
             try:
-                return storage._get_signed_url(blob, 1440)
+                signed_url = storage._get_signed_url(blob, 1440)
+                print(f"SUCCESS: Generated signed URL for full image")
+                return signed_url
             except Exception as url_error:
-                print(f"Warning: Could not generate signed URL for full image: {url_error}")
+                print(f"ERROR: Could not generate signed URL for full image: {url_error}")
                 # Return empty string but don't fail - image still processed with description
                 return ""
             
         except Exception as e:
-            print(f"Warning: Could not upload image to cloud storage: {e}")
+            print(f"ERROR: Could not upload image to cloud storage: {e}")
             # Clean up temp file even on error
             try:
                 os.unlink(temp_file_path)
@@ -722,7 +731,7 @@ def upload_image_to_bucket(image_data: bytes, uid: str, original_filename: str) 
             return ""
             
     except Exception as e:
-        print(f"Error in upload_image_to_bucket: {e}")
+        print(f"ERROR in upload_image_to_bucket: {e}")
         return ""
 
 def upload_thumbnail(image_bytes: bytes, image_name: str, uid: str) -> str:
@@ -731,6 +740,11 @@ def upload_thumbnail(image_bytes: bytes, image_name: str, uid: str) -> str:
         from PIL import Image
         import tempfile
         import io
+        
+        # Check bucket configuration first
+        if not storage.chat_files_bucket:
+            print(f"ERROR: BUCKET_CHAT_FILES environment variable not set - cannot upload thumbnails")
+            return ""
         
         # Create thumbnail from bytes directly
         with Image.open(io.BytesIO(image_bytes)) as img:
@@ -744,6 +758,7 @@ def upload_thumbnail(image_bytes: bytes, image_name: str, uid: str) -> str:
                 # Get bucket for direct upload (avoiding transfer_manager)
                 bucket = storage._get_bucket_safely(storage.chat_files_bucket, "chat thumbnail upload")
                 if not bucket:
+                    print(f"ERROR: Cannot access bucket '{storage.chat_files_bucket}' for thumbnails - check GCP credentials and bucket permissions")
                     return ""
                 
                 # Create blob with proper path structure
@@ -752,19 +767,22 @@ def upload_thumbnail(image_bytes: bytes, image_name: str, uid: str) -> str:
                 
                 # Upload directly
                 blob.upload_from_filename(thumbnail_path)
+                print(f"SUCCESS: Uploaded thumbnail to {blob_name}")
                 
                 # Clean up local thumbnail file
                 Path(thumbnail_path).unlink()
                 
                 # Return signed URL for private bucket access (24 hour expiry)
                 try:
-                    return storage._get_signed_url(blob, 1440)
+                    signed_url = storage._get_signed_url(blob, 1440)
+                    print(f"SUCCESS: Generated signed URL for thumbnail")
+                    return signed_url
                 except Exception as url_error:
-                    print(f"Warning: Could not generate signed URL for thumbnail: {url_error}")
+                    print(f"ERROR: Could not generate signed URL for thumbnail: {url_error}")
                     return ""
                 
             except Exception as upload_error:
-                print(f"Warning: Could not upload thumbnail to cloud storage: {upload_error}")
+                print(f"ERROR: Could not upload thumbnail to cloud storage: {upload_error}")
                 # Clean up local thumbnail file
                 try:
                     Path(thumbnail_path).unlink()
@@ -773,7 +791,7 @@ def upload_thumbnail(image_bytes: bytes, image_name: str, uid: str) -> str:
                 return ""
             
     except Exception as e:
-        print(f"Error generating thumbnail: {e}")
+        print(f"ERROR generating thumbnail: {e}")
         return ""
 
 def upload_single_image_sync(image_data: dict, uid: str) -> dict:
@@ -979,3 +997,128 @@ def _create_new_photo_conversation(uid: str, images: List[dict]) -> Optional[str
         import traceback
         traceback.print_exc()
         return None
+
+@router.get('/v2/storage/diagnostics', tags=['chat'])
+async def storage_diagnostics(uid: str = Depends(auth.get_current_user_uid)):
+    """Diagnostic endpoint to check storage configuration and permissions"""
+    try:
+        from utils.other import storage
+        import os
+        
+        diagnostics = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "uid": uid,
+            "environment_variables": {},
+            "bucket_access": {},
+            "credentials": {},
+            "overall_status": "unknown"
+        }
+        
+        # Check environment variables
+        env_vars = [
+            'BUCKET_CHAT_FILES',
+            'BUCKET_SPEECH_PROFILES', 
+            'BUCKET_POSTPROCESSING',
+            'BUCKET_MEMORIES_RECORDINGS',
+            'BUCKET_PLUGINS_LOGOS',
+            'BUCKET_APP_THUMBNAILS',
+            'SERVICE_ACCOUNT_JSON',
+            'GOOGLE_APPLICATION_CREDENTIALS'
+        ]
+        
+        for var in env_vars:
+            value = os.getenv(var)
+            diagnostics["environment_variables"][var] = {
+                "configured": bool(value),
+                "length": len(value) if value else 0,
+                "preview": value[:50] + "..." if value and len(value) > 50 else value if value else None
+            }
+        
+        # Check credentials setup
+        try:
+            if os.environ.get('SERVICE_ACCOUNT_JSON'):
+                diagnostics["credentials"]["type"] = "SERVICE_ACCOUNT_JSON"
+                diagnostics["credentials"]["status"] = "configured"
+            elif os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
+                diagnostics["credentials"]["type"] = "GOOGLE_APPLICATION_CREDENTIALS"
+                diagnostics["credentials"]["status"] = "configured"
+            else:
+                diagnostics["credentials"]["type"] = "default_credentials"
+                diagnostics["credentials"]["status"] = "using_default"
+        except Exception as e:
+            diagnostics["credentials"]["error"] = str(e)
+        
+        # Test bucket access
+        buckets_to_test = {
+            'chat_files': storage.chat_files_bucket,
+            'app_thumbnails': storage.app_thumbnails_bucket,
+            'speech_profiles': storage.speech_profiles_bucket
+        }
+        
+        all_buckets_ok = True
+        
+        for bucket_name, bucket_value in buckets_to_test.items():
+            try:
+                if not bucket_value:
+                    diagnostics["bucket_access"][bucket_name] = {
+                        "status": "not_configured",
+                        "bucket_name": None,
+                        "error": "Environment variable not set"
+                    }
+                    all_buckets_ok = False
+                    continue
+                
+                bucket = storage._get_bucket_safely(bucket_value, f"diagnostics_{bucket_name}")
+                if bucket:
+                    # Try to list some blobs to test read access
+                    try:
+                        list(bucket.list_blobs(max_results=1))
+                        diagnostics["bucket_access"][bucket_name] = {
+                            "status": "accessible",
+                            "bucket_name": bucket_value,
+                            "can_read": True
+                        }
+                    except Exception as read_error:
+                        diagnostics["bucket_access"][bucket_name] = {
+                            "status": "no_read_access",
+                            "bucket_name": bucket_value,
+                            "can_read": False,
+                            "read_error": str(read_error)
+                        }
+                        all_buckets_ok = False
+                else:
+                    diagnostics["bucket_access"][bucket_name] = {
+                        "status": "not_accessible",
+                        "bucket_name": bucket_value,
+                        "error": "Could not access bucket"
+                    }
+                    all_buckets_ok = False
+                    
+            except Exception as e:
+                diagnostics["bucket_access"][bucket_name] = {
+                    "status": "error", 
+                    "bucket_name": bucket_value,
+                    "error": str(e)
+                }
+                all_buckets_ok = False
+        
+        # Determine overall status
+        chat_files_configured = diagnostics["environment_variables"]["BUCKET_CHAT_FILES"]["configured"]
+        credentials_ok = diagnostics["credentials"].get("status") in ["configured", "using_default"]
+        
+        if chat_files_configured and credentials_ok and all_buckets_ok:
+            diagnostics["overall_status"] = "healthy"
+        elif chat_files_configured and credentials_ok:
+            diagnostics["overall_status"] = "partial - bucket access issues"
+        elif chat_files_configured:
+            diagnostics["overall_status"] = "credentials_issue"
+        else:
+            diagnostics["overall_status"] = "configuration_missing"
+        
+        return diagnostics
+        
+    except Exception as e:
+        return {
+            "error": f"Diagnostics failed: {str(e)}",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }

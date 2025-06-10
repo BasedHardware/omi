@@ -28,12 +28,23 @@ chat_files_bucket = os.getenv('BUCKET_CHAT_FILES', '')
 # Helper function to safely get bucket
 def _get_bucket_safely(bucket_name: str, operation_name: str = "operation"):
     if not bucket_name or bucket_name.strip() == '':
-        print(f"Warning: Bucket name not configured for {operation_name}. Skipping.")
+        print(f"ERROR: Bucket name not configured for {operation_name}. Check environment variables.")
+        print(f"Required env vars: BUCKET_CHAT_FILES, BUCKET_SPEECH_PROFILES, etc.")
         return None
     try:
-        return storage_client.bucket(bucket_name)
+        bucket = storage_client.bucket(bucket_name)
+        # Test bucket access with a simple operation
+        try:
+            bucket.exists()  # This will validate credentials and bucket access
+            print(f"SUCCESS: Bucket '{bucket_name}' accessible for {operation_name}")
+        except Exception as access_error:
+            print(f"ERROR: Bucket '{bucket_name}' exists but access denied for {operation_name}: {access_error}")
+            print(f"Check: 1) SERVICE_ACCOUNT_JSON env var, 2) IAM permissions, 3) Bucket exists")
+            return None
+        return bucket
     except Exception as e:
-        print(f"Error accessing bucket '{bucket_name}' for {operation_name}: {e}")
+        print(f"ERROR: Failed to access bucket '{bucket_name}' for {operation_name}: {e}")
+        print(f"Check: 1) Bucket name correct, 2) GCP credentials, 3) Network connectivity")
         return None
 
 # *******************************************
