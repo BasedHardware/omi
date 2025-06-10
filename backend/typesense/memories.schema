@@ -19,10 +19,6 @@
       "type": "int64"
     },
     {
-      "name": "deleted",
-      "type": "bool"
-    },
-    {
       "name": "userId",
       "type": "string"
     },

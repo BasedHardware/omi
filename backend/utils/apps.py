@@ -423,7 +423,7 @@ async def generate_persona_prompt(uid: str, persona: dict):
         tweets = [{'tweet': tweet.text, 'posted_at': tweet.created_at} for tweet in timeline.timeline]
 
     # Condense memories
-    memories_text = condense_memories([memory['content'] for memory in memories if not memory['deleted']], user_name)
+    memories_text = condense_memories([memory['content'] for memory in memories], user_name)
 
     # Generate updated chat prompt
     persona_prompt = f"""
@@ -539,7 +539,7 @@ async def update_persona_prompt(persona: dict):
         condensed_tweets = condense_tweets(tweets, persona['name'])
 
     # Condense memories
-    memories_text = condense_memories([memory['content'] for memory in memories if not memory['deleted']], user_name)
+    memories_text = condense_memories([memory['content'] for memory in memories], user_name)
 
     # Generate updated chat prompt
     persona_prompt = f"""

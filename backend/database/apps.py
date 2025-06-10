@@ -291,8 +291,7 @@ def get_persona_by_id_db(persona_id: str):
 
 
 def get_persona_by_uid_db(uid: str):
-    filters = [FieldFilter('uid', '==', uid), FieldFilter('capabilities', 'array_contains', 'persona'),
-               FieldFilter('deleted', '==', False)]
+    filters = [FieldFilter('uid', '==', uid), FieldFilter('capabilities', 'array_contains', 'persona')]
     persona_ref = db.collection(apps_collection).where(filter=BaseCompositeFilter('AND', filters)).limit(1)
     docs = persona_ref.get()
     if not docs:
