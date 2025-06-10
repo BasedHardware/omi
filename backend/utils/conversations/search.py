@@ -27,7 +27,7 @@ def search_conversations(
 ) -> Dict:
     try:
 
-        filter_by = f'userId:={uid} && deleted:=false'
+        filter_by = f'userId:={uid}'
         if not include_discarded:
             filter_by = filter_by + ' && discarded:=false'
 

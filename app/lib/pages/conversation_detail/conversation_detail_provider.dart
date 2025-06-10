@@ -11,7 +11,6 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:tuple/tuple.dart';
@@ -74,8 +73,6 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   bool showUnassignedFloatingButton = true;
 
-  Timer? _photoRefreshTimer;
-
   void toggleEditSegmentLoading(bool value) {
     editSegmentLoading = value;
     notifyListeners();
@@ -88,18 +85,11 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   Future populatePhotosData() async {
     if (photos.isEmpty) return;
-    
-    List<Tuple2<String, String>> tempData = [];
-    for (ConversationPhoto photo in photos) {
-      // Only include photos that have base64 data
-      if (photo.base64 != null && photo.base64!.isNotEmpty) {
-        String base64Data = photo.base64!; // Safe to use ! because we checked above
-        String description = photo.description; // description is non-nullable
-        tempData.add(Tuple2<String, String>(base64Data, description));
-      }
-    }
-    
-    photosData = tempData;
+    // photosData = await compute<List<MemoryPhoto>, List<Tuple2<String, String>>>(
+    //   (photos) => photos.map((e) => Tuple2(e.base64, e.description)).toList(),
+    //   photos,
+    // );
+    photosData = photos.map((e) => Tuple2(e.base64, e.description)).toList();
     notifyListeners();
   }
 
@@ -208,18 +198,11 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     setShowRatingUi(false);
   }
 
-  @override
-  void dispose() {
-    _photoRefreshTimer?.cancel();
-    super.dispose();
-  }
-
   Future initConversation() async {
     // updateLoadingState(true);
     titleController?.dispose();
     titleFocusNode?.dispose();
     _ratingTimer?.cancel();
-    _photoRefreshTimer?.cancel(); // Cancel any existing photo refresh timer
     showRatingUI = false;
     hasConversationSummaryRatingSet = false;
 
@@ -230,6 +213,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
     titleController!.text = conversation.structured.title;
     titleFocusNode!.addListener(() {
+      print('titleFocusNode focus changed');
       if (!titleFocusNode!.hasFocus) {
         conversation.structured.title = titleController!.text;
         updateConversationTitle(conversation.id, titleController!.text);
@@ -238,14 +222,12 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
     photos = [];
     canDisplaySeconds = TranscriptSegment.canDisplaySeconds(conversation.transcriptSegments);
-    
-    // Load photos for any conversation that might have them (not just OpenGlass)
-    // This supports multi-device scenarios like phone mic + OpenGlass
-    await loadPhotosData();
-
-    // Start auto-refresh for photos to catch new descriptions as they arrive
-    _startPhotoRefreshTimer();
-
+    if (conversation.source == ConversationSource.openglass) {
+      await getConversationPhotos(conversation.id).then((value) async {
+        photos = value;
+        await populatePhotosData();
+      });
+    }
     if (!conversation.discarded) {
       getHasConversationSummaryRating(conversation.id).then((value) {
         hasConversationSummaryRatingSet = value;
@@ -264,80 +246,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
-  Future<void> loadPhotosData() async {
-    await getConversationPhotos(conversation.id).then((value) async {
-      if (value.isNotEmpty) {
-        photos = value;
-        await populatePhotosData();
-      } else {
-        photos = [];
-        photosData = [];
-      }
-      
-      notifyListeners();
-    }).catchError((error) {
-      // If error loading photos, continue without them
-      photos = [];
-      photosData = [];
-    });
-  }
-
-  void _startPhotoRefreshTimer() {
-    // ELEGANT: Only refresh photos for truly in-progress conversations
-    // Completed conversations don't need constant refreshing
-    
-    if (conversation.status == ConversationStatus.completed) {
-      return;
-    }
-    
-    // Only refresh for in-progress or processing conversations
-    if (conversation.status != ConversationStatus.in_progress && 
-        conversation.status != ConversationStatus.processing) {
-      return;
-    }
-    
-    final hasAudio = conversation.transcriptSegments.isNotEmpty;
-    final refreshIntervalSeconds = hasAudio ? 15 : 10; // Conservative intervals
-    
-    _photoRefreshTimer = Timer.periodic(Duration(seconds: refreshIntervalSeconds), (timer) async {
-      try {
-        final currentAge = DateTime.now().difference(conversation.createdAt);
-        
-        // Stop if conversation becomes completed
-        if (conversation.status == ConversationStatus.completed) {
-          timer.cancel();
-          return;
-        }
-        
-        // Stop if conversation is too old (something is wrong)
-        if (currentAge.inHours >= 1) {
-          timer.cancel();
-          return;
-        }
-        
-        await _refreshPhotosConservatively();
-      } catch (e) {
-        // Photo refresh error handling
-      }
-    });
-  }
-  
-  Future<void> _refreshPhotosConservatively() async {
-    final currentPhotoCount = photos.length;
-    final currentDescriptionsCount = photos.where((photo) => photo.description.isNotEmpty).length;
-    
-    await loadPhotosData();
-    
-    // Only notify if there are meaningful changes
-    final newPhotoCount = photos.length;
-    final newDescriptionsCount = photos.where((photo) => photo.description.isNotEmpty).length;
-    
-    if (newPhotoCount != currentPhotoCount || newDescriptionsCount != currentDescriptionsCount) {
-      notifyListeners();
-    }
-  }
-
   Future<bool> reprocessConversation({String? appId}) async {
+    debugPrint('_reProcessConversation with appId: $appId');
     updateReprocessConversationLoadingState(true);
     updateReprocessConversationId(conversation.id);
     try {
@@ -368,6 +278,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       notifyListeners();
       return true;
     } catch (err, stacktrace) {
+      print(err);
       var conversationReporting = MixpanelManager().getConversationEventProperties(conversation);
       CrashReporting.reportHandledCrash(err, stacktrace, level: NonFatalExceptionLevel.critical, userAttributes: {
         'conversation_transcript_length': conversationReporting['transcript_length'].toString(),

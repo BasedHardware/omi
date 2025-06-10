@@ -115,7 +115,7 @@ def postprocess_conversation(conversation_id: str, file_path: str, uid: str, emo
 
 def _get_conversation_by_id(uid: str, conversation_id: str) -> dict:
     conversation = conversations_db.get_conversation(uid, conversation_id)
-    if conversation is None or conversation.get('deleted', False):
+    if conversation is None:
         return None
     return conversation
 
