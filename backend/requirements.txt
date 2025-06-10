@@ -141,8 +141,6 @@ parso==0.8.4
 pexpect==4.9.0
 pillow==10.4.0
 pinecone==7.0.2
-pinecone-plugin-inference==1.0.3
-pinecone-plugin-interface==0.0.7
 platformdirs==4.2.2
 plotly==5.23.0
 polling2==0.5.0
