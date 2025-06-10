@@ -75,7 +75,7 @@ dependencies:
   package_info_plus: ^8.0.1
   path_provider: any
   flutter_foreground_task: 8.13.0
-  upgrader: ^10.3.0
+  upgrader: ^11.4.0
   crypto: ^3.0.3
   flutter_markdown: ^0.7.2+1
   flutter_background_service: ^5.0.7
@@ -106,9 +106,10 @@ dependencies:
   timeago: ^3.7.0
   app_links: ^6.3.2
   flutter_svg: ^2.0.16
-  file_picker: 8.3.2
+  file_picker: ^10.1.9
   photo_view: ^0.15.0
   font_awesome_flutter: ^10.8.0
+  device_info_plus: 11.3.0
 
 dependency_overrides:
   http: ^1.2.1
