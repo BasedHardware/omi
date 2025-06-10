@@ -10,9 +10,9 @@ def summarize_open_glass(photos: List[ConversationPhoto]) -> Structured:
         photos_str += f'{i + 1}. "{photo.description}"\n'
     prompt = f'''The user took a series of pictures from his POV, generated a description for each photo, and wants to create a memory from them.
 
-      For the title, use the main topic/activity of the scenes (keep it concise, 3-8 words).
-      For the overview, create a detailed summary that captures the essence of what the user was doing, where they were, and what was happening. This will serve as the main summary/description that the user sees. Make it engaging and descriptive, highlighting key activities, environment, context, and any interesting details from the visual scenes.
-      For the category, classify the scenes into one of the available categories based on the main activity or context.
+      For the title, use the main topic of the scenes.
+      For the overview, condense the descriptions into a brief summary with the main topics discussed, make sure to capture the key points and important details.
+      For the category, classify the scenes into one of the available categories.
 
       Photos Descriptions: ```{photos_str}```
       '''.replace('    ', '').strip()
