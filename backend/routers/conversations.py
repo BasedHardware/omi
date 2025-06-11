@@ -5,6 +5,8 @@ import database.redis_db as redis_db
 from database.vector_db import delete_vector
 from models.conversation import *
 from models.conversation import SearchRequest
+from datetime import datetime, timezone
+from models.conversation import Structured
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.conversations.search import search_conversations
@@ -30,10 +32,6 @@ def process_in_progress_conversation(uid: str = Depends(auth.get_current_user_ui
         raise HTTPException(status_code=404, detail="Conversation in progress not found")
     
     redis_db.remove_in_progress_conversation_id(uid)
-
-    # Ensure all required fields are present before creating Conversation object
-    from datetime import datetime, timezone
-    from models.conversation import Structured
     
     # Add finished_at if missing
     if 'finished_at' not in conversation or conversation['finished_at'] is None:
