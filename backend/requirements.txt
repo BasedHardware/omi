@@ -135,7 +135,7 @@ openai==1.52.2
 optuna==3.6.1
 opuslib==3.0.1
 orjson==3.10.6
-packaging==24.1
+packaging==24.2
 pandas==2.2.2
 parso==0.8.4
 pexpect==4.9.0
