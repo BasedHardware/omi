@@ -326,7 +326,26 @@ async def _listen(
         if existing := retrieve_in_progress_conversation(uid):
             # Check if this is an active session (fake conversation ID)
             if existing.get('id', '').startswith('active_session_'):
-                # Create a new real conversation instead of trying to update the fake one
+                # CRITICAL FIX: Check for existing image-only conversation before creating new one
+                # This prevents loss of OpenGlass images when transitioning to audio+image
+                
+                # Look for real in-progress conversations that might have photos
+                real_existing = conversations_db.get_in_progress_conversation(uid)
+                existing_photos = []
+                existing_conversation_id = None
+                
+                if real_existing and not real_existing.get('id', '').startswith('active_session_'):
+                    # Check if this existing conversation has photos
+                    try:
+                        photos = conversations_db.get_conversation_photos(uid, real_existing['id'])
+                        if photos and len(photos) > 0:
+                            existing_photos = photos
+                            existing_conversation_id = real_existing['id']
+                            print(f"Found existing image-only conversation {existing_conversation_id} with {len(existing_photos)} photos - will merge with audio")
+                    except Exception as e:
+                        print(f"Error checking existing conversation photos: {e}")
+                
+                # Create a new real conversation
                 started_at = datetime.now(timezone.utc) - timedelta(seconds=segments[0].end - segments[0].start)
                 conversation = Conversation(
                     id=str(uuid.uuid4()),
@@ -339,7 +358,26 @@ async def _listen(
                     transcript_segments=segments,
                     status=ConversationStatus.in_progress,
                 )
+                
+                # Save the new conversation first
                 conversations_db.upsert_conversation(uid, conversation_data=conversation.dict())
+                
+                # CRITICAL: Transfer photos from existing image-only conversation if any
+                if existing_photos and existing_conversation_id:
+                    try:
+                        # Transfer photos to the new conversation
+                        from models.conversation import ConversationPhoto
+                        conversation_photos = [ConversationPhoto(**photo) for photo in existing_photos]
+                        conversations_db.store_conversation_photos(uid, conversation.id, conversation_photos)
+                        print(f"Transferred {len(existing_photos)} photos from conversation {existing_conversation_id} to new audio+image conversation {conversation.id}")
+                        
+                        # Mark the old image-only conversation as discarded to prevent duplicate processing
+                        conversations_db.set_conversation_as_discarded(uid, existing_conversation_id)
+                        print(f"Marked old image-only conversation {existing_conversation_id} as discarded")
+                        
+                    except Exception as e:
+                        print(f"Error transferring photos from existing conversation: {e}")
+                
                 redis_db.set_in_progress_conversation_id(uid, conversation.id)
                 return conversation, (0, len(segments))
             else:
