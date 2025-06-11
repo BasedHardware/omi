@@ -89,6 +89,9 @@ class CaptureProvider extends ChangeNotifier
 
   RecordingState recordingState = RecordingState.stop;
 
+  bool _isPaused = false;
+  bool get isPaused => _isPaused;
+
   bool _transcriptServiceReady = false;
 
   bool get transcriptServiceReady => _transcriptServiceReady && _internetStatus == InternetStatus.connected;
@@ -610,8 +613,25 @@ class CaptureProvider extends ChangeNotifier
     if (!Platform.isMacOS) return;
     ServiceManager.instance().systemAudio.stop();
     updateRecordingState(RecordingState.stop);
+    _isPaused = false; // Clear paused state when stopping
     await _socket?.stop(reason: 'stop system audio recording from Flutter');
     await _cleanupCurrentState();
+  }
+
+  Future<void> pauseSystemAudioRecording() async {
+    if (!Platform.isMacOS) return;
+    ServiceManager.instance().systemAudio.stop();
+    updateRecordingState(RecordingState.stop);
+    _isPaused = true; // Set paused state
+    await _socket?.stop(reason: 'pause system audio recording from Flutter');
+    await _cleanupCurrentState();
+    notifyListeners();
+  }
+
+  Future<void> resumeSystemAudioRecording() async {
+    if (!Platform.isMacOS) return;
+    _isPaused = false; // Clear paused state
+    await streamSystemAudioRecording(); // Restart recording
   }
 
   @override

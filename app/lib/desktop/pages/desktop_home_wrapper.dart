@@ -1,10 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
-import 'package:omi/services/notifications.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'desktop_home_page.dart';
 
@@ -24,17 +20,17 @@ class _DesktopHomePageWrapperState extends State<DesktopHomePageWrapper> {
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Same initialization logic as mobile
-      if (SharedPreferencesUtil().notificationsEnabled != await Permission.notification.isGranted) {
-        SharedPreferencesUtil().notificationsEnabled = await Permission.notification.isGranted;
-        AnalyticsManager().setUserAttribute('Notifications Enabled', SharedPreferencesUtil().notificationsEnabled);
-      }
-      if (SharedPreferencesUtil().notificationsEnabled) {
-        NotificationService.instance.register();
-      }
-      if (SharedPreferencesUtil().locationEnabled != await Permission.location.isGranted) {
-        SharedPreferencesUtil().locationEnabled = await Permission.location.isGranted;
-        AnalyticsManager().setUserAttribute('Location Enabled', SharedPreferencesUtil().locationEnabled);
-      }
+      // if (SharedPreferencesUtil().notificationsEnabled != await Permission.notification.isGranted) {
+      //   SharedPreferencesUtil().notificationsEnabled = await Permission.notification.isGranted;
+      //   AnalyticsManager().setUserAttribute('Notifications Enabled', SharedPreferencesUtil().notificationsEnabled);
+      // }
+      // if (SharedPreferencesUtil().notificationsEnabled) {
+      //   NotificationService.instance.register();
+      // }
+      // if (SharedPreferencesUtil().locationEnabled != await Permission.location.isGranted) {
+      //   SharedPreferencesUtil().locationEnabled = await Permission.location.isGranted;
+      //   AnalyticsManager().setUserAttribute('Location Enabled', SharedPreferencesUtil().locationEnabled);
+      // }
       if (mounted) {
         context.read<DeviceProvider>().periodicConnect('coming from DesktopHomePageWrapper');
       }
