@@ -2,23 +2,14 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
-import 'package:omi/backend/schema/geolocation.dart';
-import 'package:omi/gen/assets.gen.dart';
-import 'package:omi/main.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/apps/page.dart';
 import 'conversations/desktop_conversations_page.dart';
 import 'chat/desktop_chat_page.dart';
-import 'package:omi/pages/home/widgets/battery_info_widget.dart';
-import 'package:omi/pages/home/widgets/chat_apps_dropdown_widget.dart';
 import 'memories/desktop_memories_page.dart';
-import 'package:omi/pages/settings/page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -27,14 +18,12 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/services/notifications.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -53,9 +42,7 @@ class DesktopHomePage extends StatefulWidget {
 }
 
 class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingObserver, TickerProviderStateMixin {
-  ForegroundUtil foregroundUtil = ForegroundUtil();
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
-  bool scriptsInProgress = false;
 
   PageController? _controller;
   late AnimationController _sidebarAnimationController;
@@ -92,21 +79,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
   }
 
   bool? previousConnection;
-
-  void _onReceiveTaskData(dynamic data) async {
-    debugPrint('_onReceiveTaskData $data');
-    if (data is! Map<String, dynamic>) return;
-    if (!(data.containsKey('latitude') && data.containsKey('longitude'))) return;
-    await updateUserGeolocation(
-      geolocation: Geolocation(
-        latitude: data['latitude'],
-        longitude: data['longitude'],
-        accuracy: data['accuracy'],
-        altitude: data['altitude'],
-        time: DateTime.parse(data['time']).toUtc(),
-      ),
-    );
-  }
 
   @override
   void initState() {
@@ -173,7 +145,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
       if (mounted) {
-        await Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
+        await Provider.of<CaptureProvider>(context, listen: false)
+            .streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
       }
 
       // Handle navigation
@@ -210,8 +183,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
 
     _listenToMessagesFromNotification();
     super.initState();
-
-    FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
   }
 
   void _listenToMessagesFromNotification() {
@@ -485,14 +456,14 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                                           width: 1,
                                         ),
                                       ),
-                                      child: Row(
+                                      child: const Row(
                                         children: [
                                           Icon(
                                             Icons.download_rounded,
                                             color: ResponsiveHelper.purplePrimary,
                                             size: 16,
                                           ),
-                                          const SizedBox(width: 8),
+                                          SizedBox(width: 8),
                                           Expanded(
                                             child: Text(
                                               'Sync Available',
@@ -541,7 +512,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
             color: Colors.transparent,
             child: InkWell(
               onTap: () {
-                MixpanelManager().bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Actions', 'Apps'][index]);
+                MixpanelManager()
+                    .bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Actions', 'Apps'][index]);
                 onTap();
               },
               borderRadius: BorderRadius.circular(8),
@@ -582,9 +554,9 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
               bottom: 0,
               child: Container(
                 width: 5,
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: ResponsiveHelper.purplePrimary,
-                  borderRadius: const BorderRadius.only(
+                  borderRadius: BorderRadius.only(
                     topRight: Radius.circular(8),
                     bottomRight: Radius.circular(8),
                   ),
@@ -684,7 +656,9 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
             color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: isConnected ? ResponsiveHelper.purplePrimary.withOpacity(0.3) : ResponsiveHelper.backgroundTertiary.withOpacity(0.5),
+              color: isConnected
+                  ? ResponsiveHelper.purplePrimary.withOpacity(0.3)
+                  : ResponsiveHelper.backgroundTertiary.withOpacity(0.5),
               width: 1,
             ),
           ),
@@ -715,7 +689,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                       const SizedBox(height: 2),
                       Text(
                         deviceProvider.connectedDevice!.name,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 10,
                           color: ResponsiveHelper.textQuaternary,
                         ),
