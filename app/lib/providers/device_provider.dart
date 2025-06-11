@@ -348,7 +348,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
           final timestamp = DateTime.now();
           final timestampString = timestamp.millisecondsSinceEpoch.toString();
           final localImage = {
-            'id': 'openglass_$timestampString',
+            'id': 'omiglass_$timestampString',
             'data': imageData,
             'timestamp': timestamp,
             'uploaded': false,
@@ -528,7 +528,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       final String baseUrl = Env.apiBaseUrl!;
       
       // Create filename with timestamp
-      final String filename = 'openglass_${originalTimestamp ?? DateTime.now().millisecondsSinceEpoch}.jpg';
+      final String filename = 'omiglass_${originalTimestamp ?? DateTime.now().millisecondsSinceEpoch}.jpg';
       
       // Prepare multipart form data
       FormData formData = FormData.fromMap({
