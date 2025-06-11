@@ -109,7 +109,7 @@ dependencies:
   file_picker: 8.3.2
   photo_view: ^0.15.0
   font_awesome_flutter: ^10.8.0
-  device_info_plus: 11.3.0
+  device_info_plus:
 
 dependency_overrides:
   http: ^1.2.1
