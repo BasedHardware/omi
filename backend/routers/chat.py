@@ -324,21 +324,21 @@ def upload_file_chat(files: List[UploadFile] = File(...), uid: str = Depends(aut
     """
     Handle regular chat file uploads.
     
-    Note: For OpenGlass images, use the dedicated /openglass/v1/images endpoint instead.
+    Note: For OmiGlass images, use the dedicated /omiglass/v1/images endpoint instead.
     """
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
     
-    # Check for OpenGlass files and redirect appropriately
-    openglass_files = [
+    # Check for OmiGlass files and redirect appropriately
+    omiglass_files = [
         file.filename for file in files 
-        if file.filename and 'openglass' in file.filename.lower()
+        if file.filename and 'omiglass' in file.filename.lower()
     ]
     
-    if openglass_files:
+    if omiglass_files:
         raise HTTPException(
             status_code=400, 
-            detail=f"OpenGlass files detected: {openglass_files}. Please use /openglass/v1/images endpoint for OpenGlass image uploads."
+            detail=f"OmiGlass files detected: {omiglass_files}. Please use /omiglass/v1/images endpoint for OmiGlass image uploads."
         )
     
     # Process regular files using the existing FileChatTool workflow

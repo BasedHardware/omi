@@ -24,6 +24,7 @@ syncing_local_bucket = os.getenv('BUCKET_TEMPORAL_SYNC_LOCAL', '')
 omi_apps_bucket = os.getenv('BUCKET_PLUGINS_LOGOS', '')
 app_thumbnails_bucket = os.getenv('BUCKET_APP_THUMBNAILS', '')
 chat_files_bucket = os.getenv('BUCKET_CHAT_FILES', '')
+omiglass_bucket = os.getenv('BUCKET_OMIGLASS', '')
 
 # Helper function to safely get bucket
 def _get_bucket_safely(bucket_name: str, operation_name: str = "operation"):
@@ -331,6 +332,129 @@ def get_app_thumbnail_url(thumbnail_id: str) -> str:
         return ""
     path = f'{thumbnail_id}.jpg'
     return f'https://storage.googleapis.com/{app_thumbnails_bucket}/{path}'
+
+# **********************************
+# ************* OMIGLASS IMAGES **************
+# **********************************
+
+def upload_omiglass_image(image_data: bytes, uid: str, filename: str) -> str:
+    """Upload OmiGlass image to dedicated bucket and return signed URL"""
+    import tempfile
+    
+    bucket = _get_bucket_safely(omiglass_bucket, "omiglass image upload")
+    if not bucket:
+        return ""
+    
+    try:
+        # Save to temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as temp_file:
+            temp_file.write(image_data)
+            temp_file_path = temp_file.name
+        
+        try:
+            # Upload to OmiGlass-specific bucket with organized path structure
+            blob_name = f'{uid}/images/{filename}'
+            blob = bucket.blob(blob_name)
+            blob.upload_from_filename(temp_file_path)
+            
+            # Clean up temp file
+            os.unlink(temp_file_path)
+            
+            # Return signed URL for private bucket access (24 hour expiry)
+            return _get_signed_url(blob, 1440)
+            
+        except Exception as e:
+            print(f"Error uploading OmiGlass image to bucket: {e}")
+            # Clean up temp file even on error
+            try:
+                os.unlink(temp_file_path)
+            except:
+                pass
+            return ""
+            
+    except Exception as e:
+        print(f"Error in upload_omiglass_image: {e}")
+        return ""
+
+
+def upload_omiglass_thumbnail(image_bytes: bytes, uid: str, thumbnail_filename: str) -> str:
+    """Generate and upload OmiGlass thumbnail to dedicated bucket"""
+    try:
+        from PIL import Image
+        import tempfile
+        import io
+        
+        bucket = _get_bucket_safely(omiglass_bucket, "omiglass thumbnail upload")
+        if not bucket:
+            return ""
+        
+        # Create thumbnail from bytes directly
+        with Image.open(io.BytesIO(image_bytes)) as img:
+            img.thumbnail((128, 128))
+            
+            # Save thumbnail to temporary file
+            thumbnail_path = f"/tmp/{thumbnail_filename}"
+            img.save(thumbnail_path, format='JPEG')
+            
+            try:
+                # Upload to OmiGlass bucket with organized path structure
+                blob_name = f'{uid}/thumbnails/{thumbnail_filename}'
+                blob = bucket.blob(blob_name)
+                blob.upload_from_filename(thumbnail_path)
+                
+                # Clean up local thumbnail file
+                os.unlink(thumbnail_path)
+                
+                # Return signed URL for private bucket access (24 hour expiry)
+                return _get_signed_url(blob, 1440)
+                
+            except Exception as upload_error:
+                print(f"Error uploading OmiGlass thumbnail: {upload_error}")
+                # Clean up local thumbnail file
+                try:
+                    os.unlink(thumbnail_path)
+                except:
+                    pass
+                return ""
+            
+    except Exception as e:
+        print(f"Error generating OmiGlass thumbnail: {e}")
+        return ""
+
+
+def delete_omiglass_images(uid: str, image_ids: List[str]) -> None:
+    """Delete OmiGlass images and their thumbnails"""
+    bucket = _get_bucket_safely(omiglass_bucket, "omiglass image deletion")
+    if not bucket:
+        return
+    
+    for image_id in image_ids:
+        try:
+            # Delete main image
+            image_blob = bucket.blob(f'{uid}/images/{image_id}.jpg')
+            if image_blob.exists():
+                image_blob.delete()
+            
+            # Delete thumbnail
+            thumb_blob = bucket.blob(f'{uid}/thumbnails/{image_id}_thumb.jpg')
+            if thumb_blob.exists():
+                thumb_blob.delete()
+                
+        except Exception as e:
+            print(f"Error deleting OmiGlass image {image_id}: {e}")
+
+
+def get_omiglass_image_signed_url(uid: str, filename: str, minutes: int = 60) -> str:
+    """Get signed URL for OmiGlass image"""
+    bucket = _get_bucket_safely(omiglass_bucket, "omiglass image access")
+    if not bucket:
+        return ""
+    
+    blob = bucket.blob(f'{uid}/images/{filename}')
+    if blob.exists():
+        return _get_signed_url(blob, minutes)
+    return ""
+
 
 # **********************************
 # ************* CHAT FILES **************

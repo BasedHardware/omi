@@ -540,7 +540,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       });
       
       final response = await dio.post(
-        '${baseUrl}openglass/v1/images',
+        '${baseUrl}omiglass/v1/images',
         data: formData,
         options: Options(
           headers: {
