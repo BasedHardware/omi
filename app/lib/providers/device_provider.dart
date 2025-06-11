@@ -336,9 +336,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
             return;
           }
           
-          // CRITICAL: Check if conversation creation is in progress
-          if (captureProvider?.conversationCreating == true) {
-            debugPrint('BLOCKING device image - conversation creating in progress');
+          // Smart throttling: allow up to 5 images during conversation creation
+          // This prevents deadlock where no images can be captured, which would
+          // prevent conversation creation from ever being triggered
+          if (captureProvider?.conversationCreating == true && 
+              (captureProvider?.capturedImages.length ?? 0) >= 5) {
             return;
           }
           
@@ -505,11 +507,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       return;
     }
     
-    // CRITICAL: Check if conversation creation is in progress
-    if (captureProvider?.conversationCreating == true) {
-      debugPrint('BLOCKING image upload - conversation creating in progress');
+    // Smart throttling for cloud uploads: allow uploads until 5 images are queued
+    // This prevents overwhelming the system while still allowing conversation creation
+    // to proceed with available image content
+    if (captureProvider?.conversationCreating == true && 
+        (captureProvider?.capturedImages.length ?? 0) >= 5) {
       return;
-            }
+    }
     
     try {
       debugPrint('Starting cloud upload for OpenGlass image...');

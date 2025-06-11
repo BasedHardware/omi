@@ -30,7 +30,7 @@ from utils.llm.conversation_processing import get_transcript_structure, \
     get_reprocess_transcript_structure, get_combined_transcript_and_photos_structure
 from utils.llm.memories import extract_memories_from_text, new_memories_extractor
 from utils.llm.external_integrations import summarize_experience_text
-from utils.llm.openglass import summarize_open_glass
+
 from utils.llm.trends import trends_extractor
 from utils.llm.chat import retrieve_metadata_from_text, retrieve_metadata_from_message, retrieve_metadata_fields_from_transcript, obtain_emotional_message
 from utils.llm.external_integrations import get_message_structure
@@ -43,7 +43,7 @@ from utils.webhooks import conversation_created_webhook
 
 def _get_structured(
         uid: str, language_code: str, conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
-        force_process: bool = False
+        force_process: bool = False, retries: int = 0
 ) -> Tuple[Structured, bool]:
     try:
         tz = notification_db.get_user_time_zone(uid)
@@ -79,9 +79,15 @@ def _get_structured(
                 # Never discard conversations with photos - visual content is always valuable
                 return structured, False
             else:
-                # Photos-only conversation - use specialized OpenGlass processing for proper titles
-                from utils.llm.openglass import summarize_open_glass
-                structured = summarize_open_glass(conversation.photos)
+                # Photos-only conversation - use same smart processing as regular conversations
+                # Convert photo descriptions to text format for full transcript structure processing
+                photos_as_transcript = "Visual Experience Description:\n" + "\n".join([
+                    f"Scene {i+1}: {photo.description}" for i, photo in enumerate(conversation.photos)
+                    if photo.description and photo.description.strip()
+                ])
+                
+                # Use full transcript structure processing to get smart tags, action items, events, etc.
+                structured = get_transcript_structure(photos_as_transcript, conversation.started_at, language_code, tz)
                 
                 # Never discard photo conversations - they have valuable visual content
                 return structured, False

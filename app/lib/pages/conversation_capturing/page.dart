@@ -6,6 +6,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
+
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/gen/assets.gen.dart';
@@ -203,12 +204,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   }
 
   Widget _buildActiveConversationContent(CaptureProvider provider, List<Map<String, dynamic>> relevantImages) {
-    // Treat photo-only sessions exactly like audio+photo sessions
-    // Use the same unified timeline approach for consistency
+    // Combine segments, avoiding duplicates by checking segment IDs
     final legacySegments = provider.segments;
     final inProgressSegments = provider.inProgressSegments ?? [];
     
-    // Combine segments, avoiding duplicates by checking segment IDs
     final allSegments = <TranscriptSegment>[];
     allSegments.addAll(legacySegments);
     
@@ -220,10 +219,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
       }
     }
     
-    final legacyImages = relevantImages; // Use session-specific or all images based on context
+    // Combine images, avoiding duplicates by checking IDs
+    final legacyImages = relevantImages;
     final inProgressImages = provider.inProgressImages ?? [];
     
-    // Combine images, avoiding duplicates by checking IDs
     final allImages = <Map<String, dynamic>>[];
     allImages.addAll(legacyImages);
     
@@ -236,118 +235,175 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
       }
     }
     
-    // Show content if we have EITHER segments OR images (treat photo-only same as audio+photo)
+    // Show content if we have EITHER segments OR images
     if (allSegments.isEmpty && allImages.isEmpty) {
       return _buildEmptyState();
     }
 
-    // Create unified real-time timeline for both audio+photo and photo-only sessions
-    // This ensures identical UI treatment regardless of whether there's audio
-    final List<Map<String, dynamic>> timelineItems = [];
-    
-    // Add transcript segments with their actual timestamps (empty for photo-only)
-    for (final segment in allSegments) {
-      final segmentTime = segment.start > 0 
-          ? DateTime.fromMillisecondsSinceEpoch((segment.start * 1000).toInt())
-          : DateTime.now();
-      
-      timelineItems.add({
-        'type': 'transcript',
-        'data': segment,
-        'timestamp': segmentTime,
-      });
-    }
-    
-    // Add images with their actual timestamps (same for both photo-only and audio+photo)
-    for (final image in allImages) {
-      DateTime imageTime;
-      try {
-        if (image['timestamp'] is DateTime) {
-          imageTime = image['timestamp'];
-        } else if (image['created_at'] is DateTime) {
-          imageTime = image['created_at'];
-        } else if (image['timestamp'] is String) {
-          imageTime = DateTime.parse(image['timestamp']);
-        } else if (image['created_at'] is String) {
-          imageTime = DateTime.parse(image['created_at']);
-        } else {
-          // For local images without timestamps, use current time
-          imageTime = DateTime.now();
-        }
-      } catch (e) {
-        imageTime = DateTime.now();
-      }
-      
-      timelineItems.add({
-        'type': 'image',
-        'data': image,
-        'timestamp': imageTime,
-      });
-    }
-    
-    // Sort by actual timestamp for true chronological real-time order
-    timelineItems.sort((a, b) {
-      final aTime = a['timestamp'] as DateTime;
-      final bTime = b['timestamp'] as DateTime;
-      return aTime.compareTo(bTime);
-    });
+    // NEW LAYOUT: Images gallery at top, transcript below
+    return Column(
+      children: [
+        // Images gallery at the top (if any images exist)
+        if (allImages.isNotEmpty) ...[
+          _buildImageGallery(allImages),
+          const SizedBox(height: 16),
+        ],
+        
+        // Transcript section below images
+        Expanded(
+          child: allSegments.isEmpty 
+            ? _buildNoTranscriptState()
+            : _buildTranscriptList(allSegments),
+        ),
+      ],
+    );
+  }
 
-    // Group consecutive images together for horizontal scroll (same for both types)
-    final List<Map<String, dynamic>> groupedTimelineItems = [];
-    List<Map<String, dynamic>> currentImageGroup = [];
-    
-    for (int i = 0; i < timelineItems.length; i++) {
-      final item = timelineItems[i];
-      
-      if (item['type'] == 'image') {
-        currentImageGroup.add(item);
-      } else {
-        // If we have accumulated images, add them as a group
-        if (currentImageGroup.isNotEmpty) {
-          groupedTimelineItems.add({
-            'type': 'image_group',
-            'data': currentImageGroup.map((img) => img['data'] as Map<String, dynamic>).toList(),
-            'timestamp': currentImageGroup.first['timestamp'],
-          });
-          currentImageGroup = [];
-        }
-        // Add the non-image item
-        groupedTimelineItems.add(item);
-      }
-    }
-    
-    // Don't forget any remaining images at the end
-    if (currentImageGroup.isNotEmpty) {
-      groupedTimelineItems.add({
-        'type': 'image_group',
-        'data': currentImageGroup.map((img) => img['data'] as Map<String, dynamic>).toList(),
-        'timestamp': currentImageGroup.first['timestamp'],
-      });
-    }
+  Widget _buildImageGallery(List<Map<String, dynamic>> images) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header showing image count
+          Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Row(
+              children: [
+                const Icon(Icons.camera_alt, color: Colors.blue, size: 16),
+                const SizedBox(width: 8),
+                Text(
+                  '${images.length} image${images.length == 1 ? '' : 's'} captured',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const Spacer(),
+                const Text(
+                  'Swipe to view →',
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Horizontal scroll view of images
+          SizedBox(
+            height: 200,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.only(left: 12.0, right: 12.0, bottom: 12.0),
+              itemCount: images.length,
+              itemBuilder: (context, index) {
+                try {
+                  final image = images[index];
+                  if (image == null) {
+                    return _buildErrorImageContainer();
+                  }
+                  
+                  final isLocalImage = image['data'] != null;
+                  
+                  return Container(
+                    width: 280, // Fixed width for each image
+                    margin: EdgeInsets.only(
+                      right: index < images.length - 1 ? 12.0 : 0,
+                    ),
+                    child: GestureDetector(
+                      onTap: () => _showSimpleImageDialog(image),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8.0),
+                        child: Container(
+                          width: 280,
+                          height: 200,
+                          child: isLocalImage 
+                            ? Image.memory(
+                                image['data'] as Uint8List,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return _buildErrorImageContainer();
+                                },
+                              )
+                            : Image.network(
+                                image['url']?.toString() ?? '',
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return _buildErrorImageContainer();
+                                },
+                                loadingBuilder: (context, child, loadingProgress) {
+                                  if (loadingProgress == null) return child;
+                                  return Container(
+                                    color: Colors.grey.shade700,
+                                    child: const Center(
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    ),
+                                  );
+                                },
+                              ),
+                        ),
+                      ),
+                    ),
+                  );
+                } catch (e, stackTrace) {
+                  return _buildErrorImageContainer();
+                }
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-    // Use identical ListView display for both photo-only and audio+photo sessions
+  Widget _buildTranscriptList(List<TranscriptSegment> segments) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
       child: ListView.builder(
-        itemCount: groupedTimelineItems.length,
+        itemCount: segments.length,
         itemBuilder: (context, index) {
-          final item = groupedTimelineItems[index];
-          final type = item['type'] as String;
-          
-          try {
-            if (type == 'transcript') {
-              return _buildTimelineTranscriptItem(item['data'] as TranscriptSegment);
-            } else if (type == 'image_group') {
-              final rawData = item['data'];
-              final images = rawData as List<Map<String, dynamic>>;
-              return _buildTimelineImageGroupItem(images);
-            } else {
-              return _buildTimelineImageItem(item['data'] as Map<String, dynamic>);
-            }
-          } catch (e, stackTrace) {
-            return const SizedBox.shrink();
-          }
+          final segment = segments[index];
+          return _buildTimelineTranscriptItem(segment);
         },
+      ),
+    );
+  }
+
+  Widget _buildNoTranscriptState() {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.mic_outlined,
+              size: 48,
+              color: Colors.grey,
+            ),
+            SizedBox(height: 16),
+            Text(
+              'No speech detected yet',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Start speaking to see the transcript appear here',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -369,7 +425,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
       margin: const EdgeInsets.only(bottom: 12.0),
       padding: const EdgeInsets.all(12.0),
       decoration: BoxDecoration(
-        color: Colors.grey.shade800,
+        color: Colors.grey.shade900,
         borderRadius: BorderRadius.circular(8.0),
         border: Border.all(color: speakerColor.withOpacity(0.3), width: 1),
       ),
@@ -557,109 +613,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     return colors[speakerId % colors.length];
   }
 
-  Widget _buildTimelineImageGroupItem(List<Map<String, dynamic>> images) {
-    if (images.isEmpty) {
-      return const SizedBox.shrink();
-    }
-    
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header showing image count
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8.0),
-            child: Row(
-              children: [
-                const Icon(Icons.camera_alt, color: Colors.blue, size: 16),
-                const SizedBox(width: 8),
-                Text(
-                  '${images.length} image${images.length == 1 ? '' : 's'}',
-                  style: const TextStyle(
-                    color: Colors.blue,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const Spacer(),
-                const Text(
-                  'Swipe to view →',
-                  style: TextStyle(
-                    color: Colors.grey,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-          // Horizontal scroll view of images
-          SizedBox(
-            height: 200,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: images.length,
-              itemBuilder: (context, index) {
-                try {
-                  final image = images[index];
-                  if (image == null) {
-                    return _buildErrorImageContainer();
-                  }
-                  
-                  final isLocalImage = image['data'] != null;
-                  final imageId = image['id']?.toString() ?? 'unknown';
-                  
-                  return Container(
-                    width: 300, // Fixed width for each image
-                    margin: EdgeInsets.only(
-                      right: index < images.length - 1 ? 12.0 : 0,
-                    ),
-                    child: GestureDetector(
-                      onTap: () => _showSimpleImageDialog(image),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8.0),
-                        child: Container(
-                          width: 300,
-                          height: 200,
-                          child: isLocalImage 
-                            ? Image.memory(
-                                image['data'] as Uint8List,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return _buildErrorImageContainer();
-                                },
-                              )
-                            : Image.network(
-                                image['url']?.toString() ?? '',
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return _buildErrorImageContainer();
-                                },
-                                loadingBuilder: (context, child, loadingProgress) {
-                                  if (loadingProgress == null) return child;
-                                  return Container(
-                                    color: Colors.grey.shade700,
-                                    child: const Center(
-                                      child: CircularProgressIndicator(strokeWidth: 2),
-                                    ),
-                                  );
-                                },
-                              ),
-                        ),
-                      ),
-                    ),
-                  );
-                } catch (e, stackTrace) {
-                  return _buildErrorImageContainer();
-                }
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+
   
   Widget _buildErrorImageContainer() {
     return Container(
