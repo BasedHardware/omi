@@ -5,20 +5,6 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/logger.dart';
 
-class MigrationObject {
-  final String id;
-  final String type;
-
-  MigrationObject({required this.id, required this.type});
-
-  factory MigrationObject.fromJson(Map<String, dynamic> json) {
-    return MigrationObject(
-      id: json['id'],
-      type: json['type'],
-    );
-  }
-}
-
 class UserProvider with ChangeNotifier {
   static const int _migrationNotificationId = 1337;
 
@@ -26,7 +12,7 @@ class UserProvider with ChangeNotifier {
   bool _isLoading = false;
 
   bool _isMigrating = false;
-  List<MigrationObject> _migrationQueue = [];
+  List<MigrationRequest> _migrationQueue = [];
   int _processedCount = 0;
   String _migrationMessage = '';
 
@@ -133,8 +119,14 @@ class UserProvider with ChangeNotifier {
         return;
       }
 
-      for (final object in _migrationQueue) {
-        _processedCount++;
+      const batchSize = 5;
+      for (var i = 0; i < _migrationQueue.length; i += batchSize) {
+        final end = (i + batchSize > _migrationQueue.length) ? _migrationQueue.length : i + batchSize;
+        final batch = _migrationQueue.sublist(i, end);
+
+        await PrivacyApi.migrateObjectsBatch(batch);
+
+        _processedCount += batch.length;
         final percentage = ((_processedCount / migrationTotalCount) * 100).toInt();
         _migrationMessage = 'Migrating... $percentage%';
 
@@ -147,7 +139,6 @@ class UserProvider with ChangeNotifier {
         );
 
         notifyListeners();
-        await PrivacyApi.migrateObject(object, targetLevel);
       }
 
       _migrationMessage = 'All objects migrated. Finalizing...';

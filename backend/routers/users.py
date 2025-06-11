@@ -1,6 +1,7 @@
 import threading
 import uuid
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union
+import hashlib
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -23,10 +24,18 @@ from utils.webhooks import webhook_first_time_setup
 router = APIRouter()
 
 
-class MigrateObjectRequest(BaseModel):
+class MigrationRequest(BaseModel):
     type: str
     id: str
     target_level: str
+
+
+class MigrationTargetRequest(BaseModel):
+    target_level: str
+
+
+class BatchMigrationRequest(BaseModel):
+    requests: List[MigrationRequest]
 
 
 @router.get('/v1/users/profile', tags=['v1'])
@@ -34,7 +43,7 @@ def get_user_profile_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     """Gets the full user profile, including data protection and migration status."""
     profile = get_user_profile(uid)
     if not profile:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=410, detail="User not found")
     return profile
 
 
@@ -155,7 +164,7 @@ def get_single_person(
 ):
     person = get_person(uid, person_id)
     if not person:
-        raise HTTPException(status_code=404, detail="Person not found")
+        raise HTTPException(status_code=410, detail="Person not found")
     if include_speech_samples:
         person['speech_samples'] = get_user_person_speech_samples(uid, person['id'])
     return person
@@ -272,19 +281,38 @@ def set_user_language(data: dict, uid: str = Depends(auth.get_current_user_uid))
 # ********* Data Protection ************
 # **************************************
 
-@router.post('/v1/users/settings/privacy/start_migration', tags=['v1'])
-def start_data_migration(data: Dict[str, Any], uid: str = Depends(auth.get_current_user_uid)):
-    """Initiates the data migration process by setting the status on the user's profile."""
-    target_level = data.get('target_level')
-    if not target_level or target_level not in ['standard', 'enhanced']:
-        raise HTTPException(status_code=400, detail="Invalid or missing target_level.")
-    
-    set_migration_status(uid, target_level)
-    return {'status': 'ok', 'message': 'Migration status set.'}
+@router.post('/v1/users/migration/requests', tags=['v1'])
+def handle_migration_requests(
+    request: Union[MigrationRequest, MigrationTargetRequest],
+    uid: str = Depends(auth.get_current_user_uid)
+):
+    """
+    Handles data migration requests.
+    - If 'id' and 'type' are present, it migrates a single object.
+    - Otherwise, it initiates the data migration process for a 'target_level'.
+    """
+    if isinstance(request, MigrationRequest):
+        # This is for migrating a single object
+        if request.type == 'conversation':
+            try:
+                conversations_db.migrate_conversation_level(uid, request.id, request.target_level)
+                return {'status': 'ok'}
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Failed to migrate conversation {request.id}: {e}")
+        # Add handlers for 'memory', 'chat', etc. in the future
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown object type for migration: {request.type}")
+    elif isinstance(request, MigrationTargetRequest):
+        # This is for starting the migration process
+        if request.target_level not in ['standard', 'enhanced']:
+            raise HTTPException(status_code=400, detail="Invalid or missing target_level.")
+
+        set_migration_status(uid, request.target_level)
+        return {'status': 'ok', 'message': 'Migration status set.'}
 
 
-@router.get('/v1/users/settings/privacy/migration_check', tags=['v1'])
-def check_migration_status(target_level: str, uid: str = Depends(auth.get_current_user_uid)):
+@router.get('/v1/users/migration/requests', tags=['v1'])
+def get_migration_requests(target_level: str, uid: str = Depends(auth.get_current_user_uid)):
     """Checks which documents need to be migrated to the target level."""
     if target_level not in ['standard', 'enhanced']:
         raise HTTPException(status_code=400, detail="Invalid target_level.")
@@ -296,28 +324,37 @@ def check_migration_status(target_level: str, uid: str = Depends(auth.get_curren
     return {"needs_migration": needs_migration}
 
 
-@router.post('/v1/users/settings/privacy/migrate_object', tags=['v1'])
-def migrate_single_object(request: MigrateObjectRequest, uid: str = Depends(auth.get_current_user_uid)):
-    """Migrates a single data object to the target protection level."""
-    if request.type == 'conversation':
-        try:
-            conversations_db.migrate_conversation_level(uid, request.id, request.target_level)
-            return {'status': 'ok'}
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to migrate conversation {request.id}: {e}")
-    # Add handlers for 'memory', 'chat', etc. in the future
-    else:
-        raise HTTPException(status_code=400, detail=f"Unknown object type for migration: {request.type}")
+@router.post('/v1/users/migration/batch-requests', tags=['v1'])
+def handle_batch_migration_requests(
+    batch_request: BatchMigrationRequest,
+    uid: str = Depends(auth.get_current_user_uid)
+):
+    """Migrates a batch of data objects to the target protection level."""
+    errors = []
+    for request in batch_request.requests:
+        if request.type == 'conversation':
+            try:
+                conversations_db.migrate_conversation_level(uid, request.id, request.target_level)
+            except Exception as e:
+                error_detail = f"Failed to migrate conversation {request.id}: {e}"
+                print(error_detail)
+                errors.append(error_detail)
+        else:
+            errors.append(f"Unknown object type for migration: {request.type}")
+
+    if errors:
+        raise HTTPException(status_code=500, detail={"message": "Some objects failed to migrate.", "errors": errors})
+
+    return {'status': 'ok'}
 
 
-@router.post('/v1/users/settings/privacy/finalize_migration', tags=['v1'])
-def finalize_data_migration(data: Dict[str, Any], uid: str = Depends(auth.get_current_user_uid)):
+@router.post('/v1/users/migration/requests/data-protection-level/finalize', tags=['v1'])
+def finalize_migration_request(request: MigrationTargetRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Finalizes the migration by setting the user's global protection level."""
-    target_level = data.get('target_level')
-    if not target_level or target_level not in ['standard', 'enhanced']:
+    if request.target_level not in ['standard', 'enhanced']:
         raise HTTPException(status_code=400, detail="Invalid or missing target_level.")
 
-    finalize_migration(uid, target_level)
+    finalize_migration(uid, request.target_level)
     return {'status': 'ok'}
 
 
@@ -332,7 +369,7 @@ def set_preferred_app_for_user(
 
     selected_app = get_available_app_by_id(app_id_to_set, uid)
     if not selected_app:
-        raise HTTPException(status_code=404, detail=f"App with ID '{app_id_to_set}' not found or not accessible.")
+        raise HTTPException(status_code=410, detail=f"App with ID '{app_id_to_set}' not found or not accessible.")
 
     try:
         set_user_preferred_app(uid, app_id_to_set)

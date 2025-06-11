@@ -22,6 +22,55 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
     super.initState();
   }
 
+  Widget _buildIntroSection(BuildContext context) {
+    return Column(
+      children: [
+        const Text(
+          '🛡️',
+          style: TextStyle(fontSize: 64),
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          'Your Privacy, Your Control',
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 8),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: RichText(
+            textAlign: TextAlign.center,
+            text: TextSpan(
+              style: const TextStyle(fontSize: 16, color: Colors.grey, height: 1.5),
+              children: [
+                const TextSpan(
+                  text:
+                      'At Omi, we are committed to protecting your privacy. This page allows you to control how your data is stored and used. ',
+                ),
+                TextSpan(
+                  text: 'Learn more...',
+                  style: const TextStyle(
+                    color: Colors.deepPurpleAccent,
+                    decoration: TextDecoration.underline,
+                    decorationColor: Colors.deepPurpleAccent,
+                  ),
+                  recognizer: TapGestureRecognizer()
+                    ..onTap = () async {
+                      final url = Uri.parse('https://www.omi.me/pages/privacy');
+                      if (await canLaunchUrl(url)) {
+                        await launchUrl(url, mode: LaunchMode.externalApplication);
+                      }
+                    },
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 32),
+      ],
+    );
+  }
+
   String _getAccessDescription(App app) {
     List<String> accessTypes = [];
     if (app.hasConversationsAccess()) {
@@ -31,14 +80,29 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
       accessTypes.add('Memories');
     }
 
-    String accessDescription = accessTypes.isEmpty ? 'No specific data access configured' : 'Access to: ${accessTypes.join(', ')}';
-
-    final trigger = app.externalIntegration?.getTriggerOnString();
-    if (trigger != null && trigger != 'Unknown') {
-      return '$accessDescription. Triggers on: ${trigger.toLowerCase()}';
+    String accessDescription = '';
+    if (accessTypes.isNotEmpty) {
+      accessDescription = 'Accesses ${accessTypes.join(' & ')}';
     }
 
-    return accessDescription;
+    final trigger = app.externalIntegration?.getTriggerOnString();
+    String triggerDescription = '';
+    if (trigger != null && trigger != 'Unknown') {
+      triggerDescription = 'triggered by ${trigger.toLowerCase()}';
+    }
+
+    if (accessDescription.isNotEmpty && triggerDescription.isNotEmpty) {
+      return '$accessDescription and is $triggerDescription.';
+    }
+    if (accessDescription.isNotEmpty) {
+      return '$accessDescription.';
+    }
+    if (triggerDescription.isNotEmpty) {
+      var sentence = 'Is $triggerDescription.';
+      return sentence[0].toUpperCase() + sentence.substring(1);
+    }
+
+    return 'No specific data access configured.';
   }
 
   @override
@@ -69,6 +133,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
               ListView(
                 padding: const EdgeInsets.all(16.0),
                 children: [
+                  _buildIntroSection(context),
                   const Text(
                     'Data Protection Level',
                     style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
@@ -97,7 +162,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                           ),
                           const SizedBox(height: 8),
                           const Text(
-                            'The following installed apps can send your data to external services. Tap on an app to manage its permissions.',
+                            'The following apps can access to your data. Tap on an app to manage its permissions.',
                             style: TextStyle(color: Colors.grey, fontSize: 14),
                           ),
                           const SizedBox(height: 16),
@@ -139,7 +204,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                                     ),
                                     trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                                     onTap: () {
-                                      routeToPage(context, AppDetailPage(app: app));
+                                      routeToPage(context, AppDetailPage(app: app, preventAutoOpenHomePage: true));
                                     },
                                   );
                                 },
@@ -154,26 +219,6 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                     },
                   ),
                   const SizedBox(height: 32),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                    child: RichText(
-                      textAlign: TextAlign.center,
-                      text: TextSpan(
-                        style: const TextStyle(color: Colors.grey, fontSize: 12, height: 1.5),
-                        children: [
-                          const TextSpan(text: 'For more details on how we handle your data, please see our '),
-                          TextSpan(
-                            text: 'Privacy Policy.',
-                            style: const TextStyle(color: Colors.deepPurple, decoration: TextDecoration.underline),
-                            recognizer: TapGestureRecognizer()
-                              ..onTap = () {
-                                launchUrl(Uri.parse('https://www.omi.me/pages/privacy'));
-                              },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
                 ],
               ),
               if (isLoading && !isMigrating)

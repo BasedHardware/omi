@@ -1,8 +1,27 @@
 import 'dart:convert';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
-import 'package:omi/providers/user_provider.dart';
 import 'package:omi/utils/logger.dart';
+
+class MigrationRequest {
+  final String id;
+  final String type;
+  final String targetLevel;
+
+  MigrationRequest({
+    required this.id,
+    required this.type,
+    required this.targetLevel,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'type': type,
+      'target_level': targetLevel,
+    };
+  }
+}
 
 class PrivacyApi {
   static Future<Map<String, dynamic>> getUserProfile() async {
@@ -17,6 +36,10 @@ class PrivacyApi {
       if (response != null && response.statusCode == 200) {
         return jsonDecode(response.body);
       } else {
+        if (response?.statusCode == 410) {
+          Logger.error('User profile not found: ${response?.statusCode} ${response?.body}');
+          throw Exception('User profile not found');
+        }
         Logger.error('Failed to get user profile: ${response?.statusCode} ${response?.body}');
         throw Exception('Failed to load user profile');
       }
@@ -29,7 +52,7 @@ class PrivacyApi {
   static Future<void> startMigration(String targetLevel) async {
     try {
       final response = await makeApiCall(
-        url: '${Env.apiBaseUrl}v1/users/settings/privacy/start_migration',
+        url: '${Env.apiBaseUrl}v1/users/migration/requests',
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'target_level': targetLevel}),
@@ -44,10 +67,10 @@ class PrivacyApi {
     }
   }
 
-  static Future<List<MigrationObject>> checkMigration(String targetLevel) async {
+  static Future<List<MigrationRequest>> checkMigration(String targetLevel) async {
     try {
       final response = await makeApiCall(
-        url: '${Env.apiBaseUrl}v1/users/settings/privacy/migration_check?target_level=$targetLevel',
+        url: '${Env.apiBaseUrl}v1/users/migration/requests?target_level=$targetLevel',
         method: 'GET',
         headers: {},
         body: '',
@@ -55,7 +78,13 @@ class PrivacyApi {
       if (response != null && response.statusCode == 200) {
         final body = jsonDecode(response.body);
         final List<dynamic> objects = body['needs_migration'];
-        return objects.map((obj) => MigrationObject.fromJson(obj)).toList();
+        return objects
+            .map((obj) => MigrationRequest(
+                  id: obj['id'],
+                  type: obj['type'],
+                  targetLevel: targetLevel,
+                ))
+            .toList();
       } else {
         Logger.error('Failed to check migration status: ${response?.statusCode} ${response?.body}');
         throw Exception('Failed to check migration status');
@@ -66,24 +95,38 @@ class PrivacyApi {
     }
   }
 
-  static Future<void> migrateObject(MigrationObject object, String targetLevel) async {
+  static Future<void> migrateObject(MigrationRequest request) async {
     try {
       final response = await makeApiCall(
-        url: '${Env.apiBaseUrl}v1/users/settings/privacy/migrate_object',
+        url: '${Env.apiBaseUrl}v1/users/migration/requests',
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'id': object.id,
-          'type': object.type,
-          'target_level': targetLevel,
-        }),
+        body: jsonEncode(request.toJson()),
       );
       if (response == null || response.statusCode != 200) {
-        Logger.error('Failed to migrate object ${object.id}: ${response?.statusCode} ${response?.body}');
+        Logger.error('Failed to migrate object ${request.id}: ${response?.statusCode} ${response?.body}');
         throw Exception('Failed to migrate object');
       }
     } catch (e, stackTrace) {
-      Logger.error('Error migrating object ${object.id}: $e\n$stackTrace');
+      Logger.error('Error migrating object ${request.id}: $e\n$stackTrace');
+      rethrow;
+    }
+  }
+
+  static Future<void> migrateObjectsBatch(List<MigrationRequest> requests) async {
+    try {
+      final response = await makeApiCall(
+        url: '${Env.apiBaseUrl}v1/users/migration/batch-requests',
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'requests': requests.map((r) => r.toJson()).toList()}),
+      );
+      if (response == null || response.statusCode != 200) {
+        Logger.error('Failed to migrate batch: ${response?.statusCode} ${response?.body}');
+        throw Exception('Failed to migrate batch');
+      }
+    } catch (e, stackTrace) {
+      Logger.error('Error migrating batch: $e\n$stackTrace');
       rethrow;
     }
   }
@@ -91,7 +134,7 @@ class PrivacyApi {
   static Future<void> finalizeMigration(String targetLevel) async {
     try {
       final response = await makeApiCall(
-        url: '${Env.apiBaseUrl}v1/users/settings/privacy/finalize_migration',
+        url: '${Env.apiBaseUrl}v1/users/migration/requests/data-protection-level/finalize',
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'target_level': targetLevel}),

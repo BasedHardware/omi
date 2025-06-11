@@ -68,6 +68,46 @@ class DataProtectionSection extends StatelessWidget {
         final isMigrating = provider.isMigrating;
         final selectedLevel = _levelFromString(provider.dataProtectionLevel);
 
+        final options = {
+          DataProtectionLevel.standard: {
+            'title': 'Level 1: Standard',
+            'subtitle':
+                'Your data is encrypted on our secure cloud. To improve Omi, authorized personnel may access data for support and diagnostics. We never use it for training.',
+          },
+          DataProtectionLevel.enhanced: {
+            'title': 'Level 2: Enhanced',
+            'subtitle':
+                'Your data is encrypted with a key unique to you. This prevents Omi staff from accessing your conversation content. We never use it for training.',
+          },
+          DataProtectionLevel.e2ee: {
+            'title': 'Level 3: Maximum (E2EE)',
+            'subtitle':
+                'End-to-end encrypted. Only you can access your data. Some features like app integrations are disabled, and data is unrecoverable if you lose access.',
+          },
+        };
+
+        final selectedOptionData = options[selectedLevel]!;
+
+        final allOptionsWidgets = DataProtectionLevel.values.map((level) {
+          if (level == DataProtectionLevel.enhanced) {
+            return _EnhancedProtectionOption(
+              enabled: !isMigrating,
+              currentLevel: selectedLevel,
+              onChanged: (l) => _onLevelChanged(context, l),
+              title: options[level]!['title'] as String,
+              subtitle: options[level]!['subtitle'] as String,
+            );
+          }
+          return _buildOption(
+            context: context,
+            level: level,
+            title: options[level]!['title'] as String,
+            subtitle: options[level]!['subtitle'] as String,
+            currentLevel: selectedLevel,
+            enabled: level == DataProtectionLevel.e2ee ? false : !isMigrating,
+          );
+        }).toList();
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -137,30 +177,63 @@ class DataProtectionSection extends StatelessWidget {
                   ],
                 ),
               ),
-            _buildOption(
-              context: context,
-              level: DataProtectionLevel.standard,
-              title: 'Standard Protection',
-              subtitle:
-                  'Your data is stored and encrypted on Google Cloud. We do not use your data for training models. To help us improve our service, authorized Omi personnel may access data.',
-              currentLevel: selectedLevel,
-              enabled: !isMigrating,
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A1A1A),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade700, width: 1),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10.5),
+                child: ExpansionTile(
+                  iconColor: Colors.white,
+                  collapsedIconColor: Colors.white,
+                  backgroundColor: const Color(0xFF1A1A1A),
+                  collapsedBackgroundColor: const Color(0xFF1A1A1A),
+                  title: Text(
+                    selectedOptionData['title'] as String,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  children: allOptionsWidgets,
+                ),
+              ),
             ),
-            const SizedBox(height: 16),
-            _EnhancedProtectionOption(
-              enabled: !isMigrating,
-              currentLevel: selectedLevel,
-              onChanged: (l) => _onLevelChanged(context, l),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 0.0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.shield_outlined, color: Colors.grey, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      selectedOptionData['subtitle'] as String,
+                      style: const TextStyle(color: Colors.grey, fontSize: 14),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 16),
-            _buildOption(
-              context: context,
-              level: DataProtectionLevel.e2ee,
-              title: 'Maximum Protection (E2EE)',
-              subtitle:
-                  'Maximum privacy. Your data is encrypted on your device before being sent to our servers, and only you can decrypt it. This disables some server features like external app integrations. Data is unrecoverable if you lose your password.',
-              enabled: false,
-              currentLevel: selectedLevel,
+            const SizedBox(height: 12),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 0.0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.lock_outline, color: Colors.grey, size: 16),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Regardless of the level, your data is always encrypted at rest and in transit.',
+                      style: TextStyle(color: Colors.grey, fontSize: 14),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         );
@@ -180,11 +253,7 @@ class DataProtectionSection extends StatelessWidget {
     return Opacity(
       opacity: enabled ? 1.0 : 0.5,
       child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.circular(12),
-          border: isSelected ? Border.all(color: Colors.white, width: 1.5) : null,
-        ),
+        color: isSelected ? Colors.deepPurple.withOpacity(0.2) : Colors.transparent,
         child: RadioListTile<DataProtectionLevel>(
           value: level,
           groupValue: currentLevel,
@@ -242,8 +311,15 @@ class _EnhancedProtectionOption extends StatefulWidget {
   final bool enabled;
   final DataProtectionLevel currentLevel;
   final Function(DataProtectionLevel?) onChanged;
+  final String title;
+  final String subtitle;
 
-  const _EnhancedProtectionOption({required this.enabled, required this.currentLevel, required this.onChanged});
+  const _EnhancedProtectionOption(
+      {required this.enabled,
+      required this.currentLevel,
+      required this.onChanged,
+      required this.title,
+      required this.subtitle});
 
   @override
   State<_EnhancedProtectionOption> createState() => _EnhancedProtectionOptionState();
@@ -276,34 +352,35 @@ class _EnhancedProtectionOptionState extends State<_EnhancedProtectionOption> {
   @override
   Widget build(BuildContext context) {
     final isSelected = widget.currentLevel == DataProtectionLevel.enhanced;
-    String subtitle =
-        'All your conversations and memories are encrypted on our servers with a key that is unique to you. This prevents anyone at Omi from seeing your data\'s content. We do not use your data for training models.';
 
+    Widget? additionalInfoWidget;
     if (widget.currentLevel == DataProtectionLevel.standard) {
       if (_isLoadingCount) {
-        subtitle = 'Checking for data to protect...';
+        additionalInfoWidget = const Text(
+          'Checking for data to protect...',
+          style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+        );
       } else if (_migrationCount != null && _migrationCount! > 0) {
-        subtitle = 'This will encrypt all $_migrationCount of your conversations and memories.';
+        additionalInfoWidget = Text(
+          'This will encrypt all $_migrationCount of your conversations and memories.',
+          style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold),
+        );
       }
     }
 
     return Opacity(
       opacity: widget.enabled ? 1.0 : 0.5,
       child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.circular(12),
-          border: isSelected ? Border.all(color: Colors.white, width: 1.5) : null,
-        ),
+        color: isSelected ? Colors.deepPurple.withOpacity(0.2) : Colors.transparent,
         child: RadioListTile<DataProtectionLevel>(
           value: DataProtectionLevel.enhanced,
           groupValue: widget.currentLevel,
           onChanged: widget.enabled ? (value) => widget.onChanged(value) : null,
-          title: const Row(
+          title: Row(
             children: [
               Text(
-                'Enhanced Protection',
-                style: TextStyle(
+                widget.title,
+                style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
                 ),
@@ -312,9 +389,18 @@ class _EnhancedProtectionOptionState extends State<_EnhancedProtectionOption> {
           ),
           subtitle: Padding(
             padding: const EdgeInsets.only(top: 4.0),
-            child: Text(
-              subtitle,
-              style: const TextStyle(color: Colors.grey),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.subtitle,
+                  style: const TextStyle(color: Colors.grey),
+                ),
+                if (additionalInfoWidget != null) ...[
+                  const SizedBox(height: 8),
+                  additionalInfoWidget,
+                ],
+              ],
             ),
           ),
           activeColor: Colors.white,
