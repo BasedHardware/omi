@@ -194,7 +194,6 @@ class ServerConversation {
 
   String getTag() {
     if (source == ConversationSource.screenpipe) return 'Screenpipe';
-    if (source == ConversationSource.openglass) return 'Openglass';
     if (source == ConversationSource.sdcard) return 'SD Card';
     if (discarded) return 'Discarded';
     return structured.category.substring(0, 1).toUpperCase() + structured.category.substring(1);
