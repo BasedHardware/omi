@@ -13,11 +13,11 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/apps/page.dart';
-import 'package:omi/pages/chat/page.dart';
 import 'conversations/desktop_conversations_page.dart';
+import 'chat/desktop_chat_page.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
 import 'package:omi/pages/home/widgets/chat_apps_dropdown_widget.dart';
-import 'package:omi/pages/memories/page.dart';
+import 'memories/desktop_memories_page.dart';
 import 'package:omi/pages/settings/page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -173,8 +173,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
       if (mounted) {
-        await Provider.of<CaptureProvider>(context, listen: false)
-            .streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
+        await Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
       }
 
       // Handle navigation
@@ -352,8 +351,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                                 physics: const NeverScrollableScrollPhysics(),
                                 children: const [
                                   DesktopConversationsPage(),
-                                  ChatPage(isPivotBottom: false),
-                                  MemoriesPage(),
+                                  DesktopChatPage(),
+                                  DesktopMemoriesPage(),
                                   ActionItemsPage(),
                                   AppsPage(),
                                 ],
@@ -420,7 +419,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                         children: [
                           // Main navigation items
                           _buildNavItem(
-                            icon: Icons.inbox_rounded,
+                            icon: FontAwesomeIcons.inbox,
                             label: 'Conversations',
                             index: 0,
                             isSelected: homeProvider.selectedIndex == 0,
@@ -428,7 +427,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                           ),
                           const SizedBox(height: 4),
                           _buildNavItem(
-                            icon: Icons.chat_bubble_rounded,
+                            icon: FontAwesomeIcons.solidMessage,
                             label: 'Chat',
                             index: 1,
                             isSelected: homeProvider.selectedIndex == 1,
@@ -436,7 +435,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                           ),
                           const SizedBox(height: 4),
                           _buildNavItem(
-                            icon: Icons.auto_awesome_rounded,
+                            icon: FontAwesomeIcons.brain,
                             label: 'Memories',
                             index: 2,
                             isSelected: homeProvider.selectedIndex == 2,
@@ -444,7 +443,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                           ),
                           const SizedBox(height: 4),
                           _buildNavItem(
-                            icon: Icons.checklist_rounded,
+                            icon: FontAwesomeIcons.listCheck,
                             label: 'Actions',
                             index: 3,
                             isSelected: homeProvider.selectedIndex == 3,
@@ -452,7 +451,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                           ),
                           const SizedBox(height: 4),
                           _buildNavItem(
-                            icon: Icons.explore_rounded,
+                            icon: FontAwesomeIcons.store,
                             label: 'Apps',
                             index: 4,
                             isSelected: homeProvider.selectedIndex == 4,
@@ -537,37 +536,17 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
       margin: const EdgeInsets.symmetric(vertical: 1),
       child: Stack(
         children: [
-          // Selection accent line (like red line in reference)
-          if (isSelected)
-            Positioned(
-              right: 0,
-              top: 0,
-              bottom: 0,
-              child: Container(
-                width: 3,
-                decoration: BoxDecoration(
-                  color: ResponsiveHelper.purplePrimary,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(2),
-                    bottomLeft: Radius.circular(2),
-                  ),
-                ),
-              ),
-            ),
-
-          // Navigation item
+          // Navigation item with full container
           Material(
             color: Colors.transparent,
             child: InkWell(
               onTap: () {
-                MixpanelManager()
-                    .bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Actions', 'Apps'][index]);
+                MixpanelManager().bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Actions', 'Apps'][index]);
                 onTap();
               },
               borderRadius: BorderRadius.circular(8),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                margin: const EdgeInsets.only(right: 8), // Space for accent line
                 decoration: BoxDecoration(
                   color: isSelected ? ResponsiveHelper.backgroundTertiary.withOpacity(0.8) : Colors.transparent,
                   borderRadius: BorderRadius.circular(8),
@@ -595,6 +574,23 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
               ),
             ),
           ),
+          // Selection accent line spanning full item height
+          if (isSelected)
+            Positioned(
+              right: 0,
+              top: 0,
+              bottom: 0,
+              child: Container(
+                width: 5,
+                decoration: BoxDecoration(
+                  color: ResponsiveHelper.purplePrimary,
+                  borderRadius: const BorderRadius.only(
+                    topRight: Radius.circular(8),
+                    bottomRight: Radius.circular(8),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -688,9 +684,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
             color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: isConnected
-                  ? ResponsiveHelper.purplePrimary.withOpacity(0.3)
-                  : ResponsiveHelper.backgroundTertiary.withOpacity(0.5),
+              color: isConnected ? ResponsiveHelper.purplePrimary.withOpacity(0.3) : ResponsiveHelper.backgroundTertiary.withOpacity(0.5),
               width: 1,
             ),
           ),
