@@ -8,7 +8,7 @@ including Redis message handling and conversation transition logic.
 import json
 from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime, timezone, timedelta
-from database.redis_db import r
+import database.redis_db as redis_db
 import database.conversations as conversations_db
 from models.conversation import Conversation, ConversationPhoto, ConversationStatus, Structured, TranscriptSegment
 import uuid
@@ -26,16 +26,15 @@ async def handle_clear_live_images_message(websocket, uid: str) -> None:
         uid: User ID
     """
     try:
-        clear_images_key = f"clear_live_images:{uid}"
-        clear_message_data = r.get(clear_images_key)
+        # Use proper helper function to get clear live images message
+        clear_message = redis_db.get_clear_live_images_message(uid)
         
-        if clear_message_data:
+        if clear_message:
             # Send clear_live_images message to client
-            clear_message = json.loads(clear_message_data)
             await websocket.send_json(clear_message)
             
-            # Delete the message from Redis after sending
-            r.delete(clear_images_key)
+            # Delete the message from Redis after sending using helper function
+            redis_db.delete_clear_live_images_message(uid)
             
     except Exception as e:
         print(f"Error handling clear_live_images message: {e}")

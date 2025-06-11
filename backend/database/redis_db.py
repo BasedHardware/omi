@@ -501,6 +501,68 @@ def delete_in_progress_conversation_id(uid: str):
     except Exception as e:
         print(f"Error deleting in-progress conversation ID for {uid}: {e}")
 
+
+# Active Transcription Session Management
+
+@try_catch_decorator
+def get_active_transcription_session(uid: str) -> Optional[dict]:
+    """Get active transcription session data for a user"""
+    session_data = r.get(f'active_transcription_session:{uid}')
+    if not session_data:
+        return None
+    
+    try:
+        return json.loads(session_data)
+    except json.JSONDecodeError as e:
+        print(f"Error parsing session data for {uid}: {e}")
+        delete_active_transcription_session(uid)  # Clean up corrupted data
+        return None
+
+
+@try_catch_decorator  
+def set_active_transcription_session(uid: str, session_data: dict, ttl: int = 3600):
+    """Set active transcription session data for a user"""
+    r.set(f'active_transcription_session:{uid}', json.dumps(session_data, default=str), ex=ttl)
+
+
+@try_catch_decorator
+def delete_active_transcription_session(uid: str):
+    """Delete active transcription session for a user"""
+    r.delete(f'active_transcription_session:{uid}')
+
+
+@try_catch_decorator
+def active_transcription_session_exists(uid: str) -> bool:
+    """Check if user has an active transcription session"""
+    return r.exists(f'active_transcription_session:{uid}') > 0
+
+
+@try_catch_decorator
+def set_clear_live_images_message(uid: str, message_data: dict, ttl: int = 60):
+    """Store clear live images message for WebSocket clients"""
+    r.setex(f'clear_live_images:{uid}', ttl, json.dumps(message_data, default=str))
+
+
+@try_catch_decorator
+def get_clear_live_images_message(uid: str) -> Optional[dict]:
+    """Get clear live images message for WebSocket clients"""
+    message_data = r.get(f'clear_live_images:{uid}')
+    if not message_data:
+        return None
+    
+    try:
+        return json.loads(message_data)
+    except json.JSONDecodeError as e:
+        print(f"Error parsing clear live images message for {uid}: {e}")
+        return None
+
+
+@try_catch_decorator
+def delete_clear_live_images_message(uid: str):
+    """Delete clear live images message after it's been processed"""
+    r.delete(f'clear_live_images:{uid}')
+
+
 def cleanup_stale_sessions(max_age_hours: int = 24):
     """Simple cleanup of stale Redis sessions"""
     try:
