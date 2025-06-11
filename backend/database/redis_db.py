@@ -14,8 +14,6 @@ r = redis.Redis(
     port=int(os.getenv('REDIS_DB_PORT')) if os.getenv('REDIS_DB_PORT') is not None else 6379,
     username='default',
     password=os.getenv('REDIS_DB_PASSWORD'),
-    ssl=os.getenv('REDIS_DB_SSL', 'false').lower() == 'true',
-    ssl_cert_reqs=None,
     health_check_interval=30
 )
 
