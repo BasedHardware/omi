@@ -249,19 +249,18 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     
     if (isHavingRecordingDevice) {
       // Device is recording - PRIORITY: glasses take precedence over phone mic
-      if (transcriptServiceStateOk) {
-        var lastEvent = captureProvider.transcriptionServiceStatuses.lastOrNull;
-        if (lastEvent?.status == "ready") {
-          stateText = "Capturing";
-          statusIndicator = const RecordingStatusIndicator();
+      bool hasActiveCapture = captureProvider.allImages.isNotEmpty || 
+                             (transcriptServiceStateOk && captureProvider.transcriptionServiceStatuses.lastOrNull?.status == "ready");
+      
+      if (hasActiveCapture) {
+        stateText = "Capturing";
+        statusIndicator = const RecordingStatusIndicator();
+      } else if (!internetConnectionStateOk) {
+        stateText = "Waiting for network";
       } else {
         bool transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
-        stateText = transcriptionDiagnosticEnabled ? (lastEvent?.statusText ?? "") : "Connecting";
-      }
-    } else if (!internetConnectionStateOk) {
-      stateText = "Waiting for network";
-      } else {
-      stateText = "Connecting";
+        var lastEvent = captureProvider.transcriptionServiceStatuses.lastOrNull;
+        stateText = transcriptionDiagnosticEnabled ? (lastEvent?.statusText ?? "Connecting") : "Connecting";
       }
     } else if (isUsingPhoneMic) {
       // Phone mic is actively recording - only if no device connected
