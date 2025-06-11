@@ -341,40 +341,40 @@ def upload_file_chat(files: List[UploadFile] = File(...), uid: str = Depends(aut
             detail=f"OpenGlass files detected: {openglass_files}. Please use /openglass/v1/images endpoint for OpenGlass image uploads."
         )
     
-        # Process regular files using the existing FileChatTool workflow
-        processed_files = []
-        
+    # Process regular files using the existing FileChatTool workflow
+    processed_files = []
+    
     for file in files:
-            try:
-                # Create temp file with original extension
-                file_ext = os.path.splitext(file.filename)[1] if file.filename else ''
-                temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=file_ext)
-                temp_path = temp_file.name
-                
-                # Save uploaded file to temp path
-                with open(temp_path, 'wb') as buffer:
-                    shutil.copyfileobj(file.file, buffer)
-                
-                # Use FileChatTool to upload to OpenAI and get file info
-                file_info = fc.upload(temp_path)
-                
-                # Add additional info needed for the response
-                file_info.update({
-                    'id': str(uuid.uuid4()),
-                    'name': file.filename or 'unknown',
-                    'created_at': datetime.now(timezone.utc).isoformat(),
-                    'deleted': False,
-                })
-                
-                processed_files.append(file_info)
-                
-                # Clean up temp file
-                os.unlink(temp_path)
-                
-            except Exception as e:
+        try:
+            # Create temp file with original extension
+            file_ext = os.path.splitext(file.filename)[1] if file.filename else ''
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=file_ext)
+            temp_path = temp_file.name
+            
+            # Save uploaded file to temp path
+            with open(temp_path, 'wb') as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            
+            # Use FileChatTool to upload to OpenAI and get file info
+            file_info = fc.upload(temp_path)
+            
+            # Add additional info needed for the response
+            file_info.update({
+                'id': str(uuid.uuid4()),
+                'name': file.filename or 'unknown',
+                'created_at': datetime.now(timezone.utc).isoformat(),
+                'deleted': False,
+            })
+            
+            processed_files.append(file_info)
+            
+            # Clean up temp file
+            os.unlink(temp_path)
+            
+        except Exception as e:
             print(f"Error processing file {file.filename}: {e}")
-                continue
-        
+            continue
+    
     if not processed_files:
         raise HTTPException(status_code=500, detail="Failed to process any files")
     
