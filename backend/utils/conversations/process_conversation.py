@@ -225,65 +225,53 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
             from utils.llm.conversation_processing import get_transcript_structure, get_combined_transcript_and_photos_structure
             import database.notifications as notification_db
             
+            # ELEGANT: Unified content extraction - treat photos and transcript equally
             transcript = conversation.get_transcript(False)
+            has_transcript = transcript.strip()
+            has_photos = conversation.photos and any(photo.description and photo.description.strip() for photo in conversation.photos)
             
-            # Handle combined conversations (transcript + photos) in fallback
-            if conversation.photos and transcript.strip():
-                # Combined conversation: use the same logic as _get_structured
+            if has_transcript and has_photos:
+                # Combined conversation: transcript + photos
                 tz = notification_db.get_user_time_zone(uid)
-                
                 basic_summary = get_combined_transcript_and_photos_structure(
                     transcript, conversation.photos, conversation.started_at, 'en', tz
                 )
                 
-                # Create a fallback app result that includes both transcript and photo context
                 fallback_result = AppResult(
                     app_id='fallback_combined_summary',
                     content=f"**Summary:** {basic_summary.overview}\n\n**Key Points:** Generated from combined conversation and visual analysis."
                 )
                 
-                conversation.apps_results = [fallback_result]
-                return
-                
-            elif transcript.strip():  # Only transcript, no photos
-                # Get user timezone for proper processing
+            elif has_transcript:
+                # Transcript-only conversation
                 tz = notification_db.get_user_time_zone(uid)
-                
-                # Generate basic summary using existing LLM structure
-                # This ensures consistent formatting with other summaries
                 basic_summary = get_transcript_structure(transcript, conversation.started_at, 'en', tz)
                 
-                # Create a fallback app result
                 fallback_result = AppResult(
                     app_id='fallback_summary',
                     content=f"**Summary:** {basic_summary.overview}\n\n**Key Points:** Generated from conversation analysis."
                 )
                 
-                conversation.apps_results = [fallback_result]
-                return
-            
-            elif conversation.photos:
-                # Photos-only conversation fallback with full structured processing
-                
-                # Create pseudo-transcript from photo descriptions for full processing
-                photos_as_transcript = "Visual Experience Description:\n" + "\n".join([
+            elif has_photos:
+                # Photos-only conversation - same quality as combined conversations
+                photos_as_transcript = "Visual Experience:\n" + "\n".join([
                     f"Scene {i+1}: {photo.description}" for i, photo in enumerate(conversation.photos)
+                    if photo.description and photo.description.strip()
                 ])
                 
-                # Get user timezone for proper processing
                 tz = notification_db.get_user_time_zone(uid)
-                
-                # Use full transcript structure processing to extract action items, events, etc.
                 basic_summary = get_transcript_structure(photos_as_transcript, conversation.started_at, 'en', tz)
                 
-                # Create a fallback app result for photos-only with full structured content
                 fallback_result = AppResult(
-                    app_id='fallback_photos_structured_summary',
-                    content=f"**Summary:** {basic_summary.overview}\n\n**Key Points:** Generated from visual analysis with action items and events extracted."
+                    app_id='fallback_photos_summary',
+                    content=f"**Summary:** {basic_summary.overview}\n\n**Key Points:** Generated from visual analysis."
                 )
-                
-                conversation.apps_results = [fallback_result]
+            else:
+                # No content available
                 return
+                
+            conversation.apps_results = [fallback_result]
+            return
         except Exception as e:
             # Keep error logging for fallback failures - this is important for debugging
             print(f"Error generating fallback summary: {e}")
@@ -298,28 +286,32 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
     threads = []
 
     def execute_app(app):
-        # Handle both transcript and photo descriptions
+        # ELEGANT: Same unified content logic as fallback
         transcript = conversation.get_transcript(False)
+        has_transcript = transcript.strip()
+        has_photos = conversation.photos and any(photo.description and photo.description.strip() for photo in conversation.photos)
         
-        # Determine what content to pass to the app
-        if transcript.strip():
-            # Has transcript (with or without photos)
-            if conversation.photos:
-                # Combined: transcript + photo descriptions
-                photos_text = "\n\nVisual Context:\n" + "\n".join([f"- {photo.description}" for photo in conversation.photos])
-                content_for_app = transcript + photos_text
-            else:
-                # Transcript only
-                content_for_app = transcript
-        elif conversation.photos:
-            # Photos only - create text from photo descriptions
-            content_for_app = "Visual Descriptions:\n" + "\n".join([f"- {photo.description}" for photo in conversation.photos])
+        if has_transcript and has_photos:
+            # Combined: transcript + visual context
+            photos_text = "\n\nVisual Context:\n" + "\n".join([
+                f"- {photo.description}" for photo in conversation.photos 
+                if photo.description and photo.description.strip()
+            ])
+            content_for_app = transcript + photos_text
+        elif has_transcript:
+            # Transcript only
+            content_for_app = transcript
+        elif has_photos:
+            # Photos only - consistent format
+            content_for_app = "Visual Experience:\n" + "\n".join([
+                f"Scene {i+1}: {photo.description}" for i, photo in enumerate(conversation.photos)
+                if photo.description and photo.description.strip()
+            ])
         else:
             # No content
             content_for_app = ""
         
         result = get_app_result(content_for_app, app).strip()
-
         conversation.apps_results.append(AppResult(app_id=app.id, content=result))
         if not is_reprocess:
             record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, conversation_id=conversation.id)
