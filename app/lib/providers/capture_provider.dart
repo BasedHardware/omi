@@ -99,6 +99,7 @@ class CaptureProvider extends ChangeNotifier
 
   /// flag you referenced earlier but never declared
   bool conversationCreating = false;
+  Timer? _conversationCreatingTimeout;
 
   StreamSubscription? _bleBytesStream;
   StreamSubscription? _imageStream;
@@ -128,8 +129,7 @@ class CaptureProvider extends ChangeNotifier
   List<TranscriptSegment> _inProgressSegments = [];
   bool _hasActiveConversation = false;
 
-  StreamSubscription? _speechProfileStream;
-  Timer? _blinkTimer;
+
 
   // ───────────────────────────────── getters for widgets ────────────────────────────────
   StreamSubscription? get bleBytesStream => _bleBytesStream;
@@ -154,11 +154,29 @@ class CaptureProvider extends ChangeNotifier
 
   void setConversationCreating(bool value) {
     conversationCreating = value;
+    
+    _conversationCreatingTimeout?.cancel();
+    
+    if (value) {
+      _conversationCreatingTimeout = Timer(const Duration(seconds: 30), () {
+        if (conversationCreating) {
+          _resetConversationFlags();
+        }
+      });
+    }
+    
     notifyListeners();
   }
 
   void setConversationCompleted(bool value) {
     _conversationCompleted = value;
+    notifyListeners();
+  }
+
+  void _resetConversationFlags() {
+    conversationCreating = false;
+    _conversationCompleted = false;
+    _conversationCreatingTimeout?.cancel();
     notifyListeners();
   }
 
@@ -192,6 +210,7 @@ class CaptureProvider extends ChangeNotifier
     _bleBytesStream?.cancel();
     _bleButtonStream?.cancel();
     _storageStream?.cancel();
+    _conversationCreatingTimeout?.cancel();
     _socket?.unsubscribe(this);
     _keepAliveTimer?.cancel();
     _internetStatusListener?.cancel();
@@ -355,8 +374,7 @@ class CaptureProvider extends ChangeNotifier
 
   @override
   void onError(Object err) {
-    // Handle WebSocket errors if needed.
-    // Depending on the error, you might want to update the UI or try to reconnect.
+    _resetConversationFlags();
   }
 
   // ─────────────────────────── event-stream from transcript socket ──────────────────────
@@ -378,6 +396,7 @@ class CaptureProvider extends ChangeNotifier
         event.conversation!.isNew = true;
         conversationProvider?.removeProcessingConversation(event.conversation!.id);
         _processConversationCreated(event.conversation, event.messages ?? []);
+        _resetConversationFlags();
         break;
 
       case MessageEventType.lastConversation:
@@ -403,7 +422,7 @@ class CaptureProvider extends ChangeNotifier
         break;
 
       case MessageEventType.newConversationCreateFailed:
-        // Handle conversation creation failure if needed
+        _resetConversationFlags();
         break;
 
       case MessageEventType.newProcessingConversationCreated:
@@ -854,15 +873,17 @@ class CaptureProvider extends ChangeNotifier
 
   // ────────────────────────── mic (phone) streaming helpers ─────────────────────────────
   Future<void> stopStreamRecording() async {
-    // Set conversation creating flag to prevent new images during stopping
     setConversationCreating(true);
 
     await _cleanupCurrentState();
     ServiceManager.instance().mic.stop();
     await _socket?.stop(reason: 'stop stream recording');
 
-    // Don't finalize the in-progress conversation yet - let the API call process it first
-    // finalizeInProgressConversation will be called after successful conversation creation
+    Timer(const Duration(seconds: 10), () {
+      if (conversationCreating) {
+        _resetConversationFlags();
+      }
+    });
   }
 
   Future _stopStreamRecordingLegacy({bool cleanDevice = false}) async {
@@ -903,22 +924,21 @@ class CaptureProvider extends ChangeNotifier
   Future<void> stopStreamDeviceRecording({bool cleanDevice = false}) async {
     if (cleanDevice) _updateRecordingDevice(null);
 
-    // Set conversation creating flag to prevent new images during stopping
     setConversationCreating(true);
 
-    // Use appropriate cleanup based on connected device type
     if (_recordingDevice?.type == DeviceType.openglass) {
-      // For OpenGlass, only clean up audio streams but preserve image streams
       await _cleanupCurrentState();
     } else {
-      // For regular devices, clean up everything
       await _cleanupDeviceState();
     }
 
     await _socket?.stop(reason: 'stop stream device recording');
 
-    // Don't finalize the in-progress conversation yet - let the API call process it first
-    // finalizeInProgressConversation will be called after successful conversation creation
+    Timer(const Duration(seconds: 10), () {
+      if (conversationCreating) {
+        _resetConversationFlags();
+      }
+    });
   }
 
   // ─────────────────────────── helper: update recording flag ────────────────────────────
@@ -1084,22 +1104,16 @@ class CaptureProvider extends ChangeNotifier
   }
 
   void addCapturedImage(Map<String, dynamic> imageData) {
-    // Simple blocking check - only block during conversation creation
-    if (conversationCreating) {
+    if (conversationCreating && capturedImages.length >= 5) {
       return;
     }
 
-    // Simple deduplication by ID
     final imageId = imageData['id']?.toString() ?? 'unknown_${DateTime.now().millisecondsSinceEpoch}';
     bool alreadyExists = capturedImages.any((img) => img['id']?.toString() == imageId);
 
     if (!alreadyExists) {
       capturedImages.add(imageData);
-
-      // Add to in-progress conversation for timeline display
       addImageToInProgressConversation(imageData);
-    } else {
-      // Skipping duplicate image
     }
 
     notifyListeners();
