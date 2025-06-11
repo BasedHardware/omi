@@ -3,12 +3,14 @@ import uuid
 import asyncio
 import struct
 import time
+import json
 from datetime import datetime, timezone, timedelta
 from enum import Enum
 from typing import List
 
 import opuslib
 import webrtcvad
+import websockets.exceptions
 from fastapi import APIRouter, Depends
 from fastapi.websockets import WebSocketDisconnect, WebSocket
 from pydub import AudioSegment
@@ -25,6 +27,14 @@ from models.transcript_segment import Translation
 from utils.apps import is_audio_bytes_app_enabled
 from utils.conversations.location import get_google_maps_location
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
+from utils.conversations.websocket_utils import (
+    handle_clear_live_images_message,
+    check_for_existing_image_conversation,
+    transfer_photos_to_conversation,
+    create_new_audio_conversation,
+    ensure_conversation_fields,
+    parse_datetime_safely
+)
 from utils.other.task import safe_create_task
 from utils.app_integrations import trigger_external_integrations
 from utils.webhooks import get_audio_bytes_webhook_seconds
@@ -114,23 +124,7 @@ async def _listen(
                     break
 
                 # Check for clear_live_images messages from Redis
-                try:
-                    import json
-                    from database.redis_db import r
-                    
-                    clear_images_key = f"clear_live_images:{uid}"
-                    clear_message_data = r.get(clear_images_key)
-                    
-                    if clear_message_data:
-                        # Send clear_live_images message to client
-                        clear_message = json.loads(clear_message_data)
-                        await websocket.send_json(clear_message)
-                        
-                        # Delete the message from Redis after sending
-                        r.delete(clear_images_key)
-                        
-                except Exception as e:
-                    print(f"Error handling clear_live_images message: {e}")
+                await handle_clear_live_images_message(websocket, uid)
 
                 # timeout
                 if has_timeout and time.time() - started_at >= timeout_seconds:
@@ -179,17 +173,9 @@ async def _listen(
                 return
             
             # Safely access finished_at field
-            conversation_finished_at = conversation.get('finished_at')
-            if conversation_finished_at:
-                # Handle both string and datetime objects
-                if isinstance(conversation_finished_at, str):
-                    finished_at_parsed = datetime.fromisoformat(conversation_finished_at)
-                else:
-                    # Already a datetime object
-                    finished_at_parsed = conversation_finished_at
-                
-                if finished_at_parsed > finished_at:
-                    return
+            conversation_finished_at = parse_datetime_safely(conversation.get('finished_at'))
+            if conversation_finished_at and conversation_finished_at > finished_at:
+                return
                 
             await _create_current_conversation()
         except asyncio.CancelledError:
@@ -261,7 +247,6 @@ async def _listen(
         has_photos = False
         if conversation.get('id'):
             try:
-                from database import conversations as conversations_db
                 photos = conversations_db.get_conversation_photos(uid, conversation['id'])
                 has_photos = photos and len(photos) > 0
             except Exception as e:
@@ -286,25 +271,14 @@ async def _listen(
         nonlocal conversation_creation_timeout
         # Determine previous disconnected socket seconds to add + start processing timer if a conversation in progress
         if existing_conversation := retrieve_in_progress_conversation(uid):
-            # segments seconds alignment - handle both string and datetime objects
-            started_at_value = existing_conversation['started_at']
-            if isinstance(started_at_value, str):
-                started_at = datetime.fromisoformat(started_at_value)
-            else:
-                # Already a datetime object
-                started_at = started_at_value
-            
-            seconds_to_add = (datetime.now(timezone.utc) - started_at).total_seconds()
+            # segments seconds alignment
+            started_at = parse_datetime_safely(existing_conversation['started_at'])
+            if started_at:
+                seconds_to_add = (datetime.now(timezone.utc) - started_at).total_seconds()
 
-            # processing if needed logic - handle missing finished_at field
-            finished_at_value = existing_conversation.get('finished_at')
-            if finished_at_value:
-                if isinstance(finished_at_value, str):
-                    finished_at = datetime.fromisoformat(finished_at_value)
-                else:
-                    # Already a datetime object
-                    finished_at = finished_at_value
-            else:
+            # processing if needed logic
+            finished_at = parse_datetime_safely(existing_conversation.get('finished_at'))
+            if not finished_at:
                 # Fallback to current time if finished_at is missing
                 finished_at = datetime.now(timezone.utc)
                 print('Warning: missing finished_at field, using current time as fallback', uid)
@@ -326,75 +300,25 @@ async def _listen(
         if existing := retrieve_in_progress_conversation(uid):
             # Check if this is an active session (fake conversation ID)
             if existing.get('id', '').startswith('active_session_'):
-                # CRITICAL FIX: Check for existing image-only conversation before creating new one
-                # This prevents loss of OpenGlass images when transitioning to audio+image
-                
-                # Look for real in-progress conversations that might have photos
-                real_existing = conversations_db.get_in_progress_conversation(uid)
-                existing_photos = []
-                existing_conversation_id = None
-                
-                if real_existing and not real_existing.get('id', '').startswith('active_session_'):
-                    # Check if this existing conversation has photos
-                    try:
-                        photos = conversations_db.get_conversation_photos(uid, real_existing['id'])
-                        if photos and len(photos) > 0:
-                            existing_photos = photos
-                            existing_conversation_id = real_existing['id']
-                            print(f"Found existing image-only conversation {existing_conversation_id} with {len(existing_photos)} photos - will merge with audio")
-                    except Exception as e:
-                        print(f"Error checking existing conversation photos: {e}")
+                # Handle transition from active session to real conversation
+                # Check for existing image-only conversations that need to be merged
+                existing_photos, existing_conversation_id = check_for_existing_image_conversation(uid)
                 
                 # Create a new real conversation
-                started_at = datetime.now(timezone.utc) - timedelta(seconds=segments[0].end - segments[0].start)
-                conversation = Conversation(
-                    id=str(uuid.uuid4()),
-                    uid=uid,
-                    structured=Structured(),
-                    language=language,
-                    created_at=started_at,
-                    started_at=started_at,
-                    finished_at=finished_at,
-                    transcript_segments=segments,
-                    status=ConversationStatus.in_progress,
-                )
+                conversation = create_new_audio_conversation(uid, language, segments, finished_at)
                 
                 # Save the new conversation first
                 conversations_db.upsert_conversation(uid, conversation_data=conversation.dict())
                 
-                # CRITICAL: Transfer photos from existing image-only conversation if any
+                # Transfer photos from existing image-only conversation if any
                 if existing_photos and existing_conversation_id:
-                    try:
-                        # Transfer photos to the new conversation
-                        from models.conversation import ConversationPhoto
-                        conversation_photos = [ConversationPhoto(**photo) for photo in existing_photos]
-                        conversations_db.store_conversation_photos(uid, conversation.id, conversation_photos)
-                        print(f"Transferred {len(existing_photos)} photos from conversation {existing_conversation_id} to new audio+image conversation {conversation.id}")
-                        
-                        # Mark the old image-only conversation as discarded to prevent duplicate processing
-                        conversations_db.set_conversation_as_discarded(uid, existing_conversation_id)
-                        print(f"Marked old image-only conversation {existing_conversation_id} as discarded")
-                        
-                    except Exception as e:
-                        print(f"Error transferring photos from existing conversation: {e}")
+                    transfer_photos_to_conversation(uid, conversation.id, existing_photos, existing_conversation_id)
                 
                 redis_db.set_in_progress_conversation_id(uid, conversation.id)
                 return conversation, (0, len(segments))
             else:
                 # Normal existing conversation - update it
-                # Ensure all required fields are present before creating Conversation object
-                if 'finished_at' not in existing or existing['finished_at'] is None:
-                    existing['finished_at'] = finished_at
-                
-                if 'created_at' not in existing or existing['created_at'] is None:
-                    existing['created_at'] = datetime.now(timezone.utc)
-                
-                if 'started_at' not in existing or existing['started_at'] is None:
-                    existing['started_at'] = datetime.now(timezone.utc)
-                
-                # Ensure status is set
-                if 'status' not in existing:
-                    existing['status'] = ConversationStatus.in_progress
+                existing = ensure_conversation_fields(existing, finished_at)
                 
                 conversation = Conversation(**existing)
                 conversation.transcript_segments, (starts, ends) = TranscriptSegment.combine_segments(
@@ -534,9 +458,6 @@ async def _listen(
     #
     def create_pusher_task_handler():
         nonlocal websocket_active
-        
-        # Import json here to ensure it's in scope
-        import json
 
         pusher_ws = None
         pusher_connect_lock = asyncio.Lock()
