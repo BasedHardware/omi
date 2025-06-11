@@ -30,7 +30,6 @@ from utils.llm.conversation_processing import get_transcript_structure, \
     get_reprocess_transcript_structure, get_combined_transcript_and_photos_structure
 from utils.llm.memories import extract_memories_from_text, new_memories_extractor
 from utils.llm.external_integrations import summarize_experience_text
-
 from utils.llm.trends import trends_extractor
 from utils.llm.chat import retrieve_metadata_from_text, retrieve_metadata_from_message, retrieve_metadata_fields_from_transcript, obtain_emotional_message
 from utils.llm.external_integrations import get_message_structure
@@ -39,6 +38,20 @@ from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
 from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
+
+# Import new utility modules for photo processing and content preparation
+from utils.conversations.photo_processing import (
+    has_photos_with_descriptions,
+    photos_to_text_simple,
+    get_valid_photos
+)
+from utils.conversations.content_preparation import (
+    prepare_content_for_apps,
+    prepare_content_for_memory_extraction,
+    has_meaningful_content,
+    get_conversation_transcript
+)
+from utils.conversations.fallback_summary import apply_fallback_summary
 
 
 def _get_structured(
@@ -64,13 +77,13 @@ def _get_structured(
             # not supported conversation source
             raise HTTPException(status_code=400, detail=f'Invalid conversation source: {conversation.text_source}')
 
-        # ELEGANT: Handle photo conversations properly - check photos BEFORE OpenGlass source check
+        # Handle photo conversations properly - check photos BEFORE OpenGlass source check
         # This ensures photo conversations get proper titles from photo descriptions
-        if conversation.photos:
+        if has_photos_with_descriptions(conversation.photos):
             # Check if this is a combined conversation (has both transcript and photos)
-            transcript = conversation.get_transcript(False) if hasattr(conversation, 'get_transcript') else ""
+            transcript = get_conversation_transcript(conversation)
             
-            if transcript and transcript.strip():
+            if transcript.strip():
                 # Combined conversation: transcript + photos (audio+photo)
                 structured = get_combined_transcript_and_photos_structure(
                     transcript, conversation.photos, conversation.started_at, language_code, tz
@@ -79,12 +92,8 @@ def _get_structured(
                 # Never discard conversations with photos - visual content is always valuable
                 return structured, False
             else:
-                # Photos-only conversation - use same smart processing as regular conversations
-                # Convert photo descriptions to text format for full transcript structure processing
-                photos_as_transcript = "Visual Experience Description:\n" + "\n".join([
-                    f"Scene {i+1}: {photo.description}" for i, photo in enumerate(conversation.photos)
-                    if photo.description and photo.description.strip()
-                ])
+                # Photos-only conversation - use smart processing for better titles and structure
+                photos_as_transcript = photos_to_text_simple(conversation.photos)
                 
                 # Use full transcript structure processing to get smart tags, action items, events, etc.
                 structured = get_transcript_structure(photos_as_transcript, conversation.started_at, language_code, tz)
@@ -92,7 +101,7 @@ def _get_structured(
                 # Never discard photo conversations - they have valuable visual content
                 return structured, False
 
-        # ELEGANT: Only use generic OpenGlass fallback when NO photos exist
+        # Only use generic OpenGlass fallback when NO photos exist
         if conversation.source == ConversationSource.openglass:
             # This ensures empty OpenGlass conversations are never marked as discarded
             # But only used when no photos are available for proper processing
@@ -122,11 +131,9 @@ def _get_structured(
 
 def _get_conversation_obj(uid: str, structured: Structured,
                           conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation]):
-    # ELEGANT: Never discard photo conversations - they have valuable visual content
+    # Never discard photo conversations - they have valuable visual content
     # Only discard based on empty title for non-photo conversations
-    has_photos = False
-    if hasattr(conversation, 'photos') and conversation.photos:
-        has_photos = True
+    has_photos = has_photos_with_descriptions(conversation.photos)
     
     discarded = structured.title == '' and not has_photos  # Don't discard if has photos
     if isinstance(conversation, CreateConversation):
@@ -218,66 +225,8 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
         # filtered_apps = list(set(filtered_apps))
 
     if len(filtered_apps) == 0:
-        # Remove debug message - fallback handling works regardless
-        
-        # Generate basic summary when no apps are available
-        try:
-            from utils.llm.conversation_processing import get_transcript_structure, get_combined_transcript_and_photos_structure
-            import database.notifications as notification_db
-            
-            # ELEGANT: Unified content extraction - treat photos and transcript equally
-            transcript = conversation.get_transcript(False)
-            has_transcript = transcript.strip()
-            has_photos = conversation.photos and any(photo.description and photo.description.strip() for photo in conversation.photos)
-            
-            if has_transcript and has_photos:
-                # Combined conversation: transcript + photos
-                tz = notification_db.get_user_time_zone(uid)
-                basic_summary = get_combined_transcript_and_photos_structure(
-                    transcript, conversation.photos, conversation.started_at, 'en', tz
-                )
-                
-                fallback_result = AppResult(
-                    app_id='fallback_combined_summary',
-                    content=f"**Summary:** {basic_summary.overview}\n\n**Key Points:** Generated from combined conversation and visual analysis."
-                )
-                
-            elif has_transcript:
-                # Transcript-only conversation
-                tz = notification_db.get_user_time_zone(uid)
-                basic_summary = get_transcript_structure(transcript, conversation.started_at, 'en', tz)
-                
-                fallback_result = AppResult(
-                    app_id='fallback_summary',
-                    content=f"**Summary:** {basic_summary.overview}\n\n**Key Points:** Generated from conversation analysis."
-                )
-                
-            elif has_photos:
-                # Photos-only conversation - same quality as combined conversations
-                photos_as_transcript = "Visual Experience:\n" + "\n".join([
-                    f"Scene {i+1}: {photo.description}" for i, photo in enumerate(conversation.photos)
-                    if photo.description and photo.description.strip()
-                ])
-                
-                tz = notification_db.get_user_time_zone(uid)
-                basic_summary = get_transcript_structure(photos_as_transcript, conversation.started_at, 'en', tz)
-                
-                fallback_result = AppResult(
-                    app_id='fallback_photos_summary',
-                    content=f"**Summary:** {basic_summary.overview}\n\n**Key Points:** Generated from visual analysis."
-                )
-            else:
-                # No content available
-                return
-                
-            conversation.apps_results = [fallback_result]
-            return
-        except Exception as e:
-            # Keep error logging for fallback failures - this is important for debugging
-            print(f"Error generating fallback summary: {e}")
-
-        # If fallback fails, ensure empty results
-        conversation.apps_results = []
+        # No apps available - apply fallback summary
+        apply_fallback_summary(conversation)
         return
 
     # Clear existing app results
@@ -286,30 +235,8 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
     threads = []
 
     def execute_app(app):
-        # ELEGANT: Same unified content logic as fallback
-        transcript = conversation.get_transcript(False)
-        has_transcript = transcript.strip()
-        has_photos = conversation.photos and any(photo.description and photo.description.strip() for photo in conversation.photos)
-        
-        if has_transcript and has_photos:
-            # Combined: transcript + visual context
-            photos_text = "\n\nVisual Context:\n" + "\n".join([
-                f"- {photo.description}" for photo in conversation.photos 
-                if photo.description and photo.description.strip()
-            ])
-            content_for_app = transcript + photos_text
-        elif has_transcript:
-            # Transcript only
-            content_for_app = transcript
-        elif has_photos:
-            # Photos only - consistent format
-            content_for_app = "Visual Experience:\n" + "\n".join([
-                f"Scene {i+1}: {photo.description}" for i, photo in enumerate(conversation.photos)
-                if photo.description and photo.description.strip()
-            ])
-        else:
-            # No content
-            content_for_app = ""
+        # Prepare unified content using the content preparation utility
+        content_for_app = prepare_content_for_apps(conversation)
         
         result = get_app_result(content_for_app, app).strip()
         conversation.apps_results.append(AppResult(app_id=app.id, content=result))
@@ -336,35 +263,23 @@ def _extract_memories(uid: str, conversation: Conversation):
             text_source = conversation.external_data.get('text_source', 'other')
             new_memories = extract_memories_from_text(uid, text_content, text_source)
     else:
-        # For regular conversations - handle transcript, photos, or both
-        transcript = conversation.get_transcript(False) if hasattr(conversation, 'get_transcript') else ""
+        # For regular conversations - handle transcript, photos, or both using utilities
+        transcript_content, photo_content = prepare_content_for_memory_extraction(conversation)
         
-        # Support image-only and combined conversations
-        if conversation.photos and len(conversation.photos) > 0:
-            # Create text content from photo descriptions for memory extraction
-            photos_text = "Visual Experience Analysis:\n" + "\n".join([
-                f"Scene {i+1}: {photo.description}" for i, photo in enumerate(conversation.photos) 
-                if photo.description and photo.description.strip()
-            ])
-            
-            if transcript.strip():
-                # Combined conversation: transcript + photos
-                
-                # Extract memories from transcript segments (traditional way)
-                transcript_memories = new_memories_extractor(uid, conversation.transcript_segments)
-                
-                # Extract additional memories from photo descriptions
-                photo_memories = extract_memories_from_text(uid, photos_text, "visual_experience")
-                
-                # Combine both sources
-                new_memories = transcript_memories + photo_memories
-                
-            else:
-                # Photos-only conversation
-                new_memories = extract_memories_from_text(uid, photos_text, "visual_experience")
-        else:
+        if transcript_content and photo_content:
+            # Combined conversation: extract from both sources
+            transcript_memories = new_memories_extractor(uid, conversation.transcript_segments)
+            photo_memories = extract_memories_from_text(uid, photo_content, "visual_experience")
+            new_memories = transcript_memories + photo_memories
+        elif transcript_content:
             # Transcript-only conversation (traditional)
             new_memories = new_memories_extractor(uid, conversation.transcript_segments)
+        elif photo_content:
+            # Photos-only conversation
+            new_memories = extract_memories_from_text(uid, photo_content, "visual_experience")
+        else:
+            # No content for memory extraction
+            new_memories = []
 
     parsed_memories = []
     for memory in new_memories:
@@ -462,14 +377,19 @@ def process_conversation(
         from database.redis_db import r
         
         # Store clear_live_images message in Redis for active WebSocket sessions to pick up
+        photo_count = len(conversation.photos) if conversation.photos else 0
         clear_message = {
-            "type": "clear_live_images",
+            "type": "clear_live_images", 
             "data": {
                 "conversation_id": conversation.id,
                 "reason": "conversation_created",
-                "processed_image_count": len(conversation.photos) if conversation.photos else 0
+                "processed_image_count": photo_count
             }
         }
+        
+        # Log conversation completion details for debugging
+        transcript_length = len(conversation.transcript_segments) if conversation.transcript_segments else 0
+        print(f"✅ Conversation {conversation.id} completed - Photos: {photo_count}, Transcript segments: {transcript_length}, Status: {conversation.status}")
         
         # Store message with TTL of 60 seconds
         clear_images_key = f"clear_live_images:{uid}"
