@@ -1,0 +1,367 @@
+import 'package:flutter/material.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/backend/preferences.dart';
+
+class DesktopNameScreen extends StatefulWidget {
+  final VoidCallback onNext;
+  final VoidCallback onBack;
+
+  const DesktopNameScreen({
+    super.key,
+    required this.onNext,
+    required this.onBack,
+  });
+
+  @override
+  State<DesktopNameScreen> createState() => _DesktopNameScreenState();
+}
+
+class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTickerProviderStateMixin {
+  final TextEditingController _nameController = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
+
+  bool _isValid = true;
+  String _errorMessage = '';
+  bool _hasInteracted = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _fadeController,
+      curve: Curves.easeOut,
+    ));
+
+    // Load existing name if available
+    final currentName = SharedPreferencesUtil().givenName;
+    if (currentName.isNotEmpty) {
+      _nameController.text = currentName;
+      _hasInteracted = true;
+    }
+
+    _fadeController.forward();
+
+    // Auto-focus the input field after animation
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (mounted) _focusNode.requestFocus();
+    });
+
+    _focusNode.addListener(_onFocusChanged);
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _focusNode.dispose();
+    _fadeController.dispose();
+    super.dispose();
+  }
+
+  void _onFocusChanged() {
+    setState(() {});
+  }
+
+  void _validateAndProceed() {
+    setState(() {
+      _hasInteracted = true;
+    });
+
+    final name = _nameController.text.trim();
+
+    if (name.isEmpty) {
+      setState(() {
+        _isValid = false;
+        _errorMessage = 'Please enter your name';
+      });
+      return;
+    }
+
+    if (name.length < 2) {
+      setState(() {
+        _isValid = false;
+        _errorMessage = 'Name must be at least 2 characters';
+      });
+      return;
+    }
+
+    // Save the name
+    SharedPreferencesUtil().givenName = name;
+
+    setState(() {
+      _isValid = true;
+      _errorMessage = '';
+    });
+
+    widget.onNext();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Expanded(
+            child: FadeTransition(
+              opacity: _fadeAnimation,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Simple minimal icon
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A1A1A),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Icon(
+                      Icons.person_rounded,
+                      color: Colors.white,
+                      size: 28,
+                    ),
+                  ),
+
+                  const SizedBox(height: 32),
+
+                  // Clean title
+                  const Text(
+                    'What\'s your name?',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                      letterSpacing: -0.5,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  // Clean subtitle
+                  Container(
+                    constraints: const BoxConstraints(maxWidth: 480),
+                    padding: const EdgeInsets.symmetric(horizontal: 40),
+                    child: const Text(
+                      'Tell us how you\'d like to be addressed. This helps personalize your Omi experience.',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w400,
+                        color: Color(0xFF9CA3AF),
+                        height: 1.5,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+
+                  const SizedBox(height: 48),
+
+                  // Clean input field
+                  Container(
+                    constraints: const BoxConstraints(maxWidth: 400),
+                    margin: const EdgeInsets.symmetric(horizontal: 40),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1A1A1A),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: _focusNode.hasFocus
+                                  ? ResponsiveHelper.purplePrimary.withOpacity(0.6)
+                                  : _isValid
+                                      ? const Color(0xFF2A2A2A)
+                                      : const Color(0xFFDC2626),
+                              width: 1,
+                            ),
+                          ),
+                          child: TextField(
+                            controller: _nameController,
+                            focusNode: _focusNode,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            textAlign: TextAlign.center,
+                            decoration: const InputDecoration(
+                              hintText: 'Enter your name',
+                              hintStyle: TextStyle(
+                                color: Color(0xFF6B7280),
+                                fontSize: 16,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 18,
+                              ),
+                            ),
+                            onChanged: (value) {
+                              if (_hasInteracted) {
+                                setState(() {
+                                  _isValid = value.trim().isNotEmpty && value.trim().length >= 2;
+                                  _errorMessage = '';
+                                });
+                              }
+                            },
+                            onSubmitted: (_) => _validateAndProceed(),
+                          ),
+                        ),
+
+                        // Error message
+                        if (_errorMessage.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.error_outline_rounded,
+                                color: Color(0xFFDC2626),
+                                size: 16,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                _errorMessage,
+                                style: const TextStyle(
+                                  color: Color(0xFFDC2626),
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+
+                        // Character counter
+                        if (_nameController.text.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              '${_nameController.text.length} characters',
+                              style: const TextStyle(
+                                color: Color(0xFF6B7280),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 32),
+
+                  // Minimal tip
+                  Container(
+                    constraints: const BoxConstraints(maxWidth: 400),
+                    margin: const EdgeInsets.symmetric(horizontal: 40),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A1A1A),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFF2A2A2A),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.lightbulb_outline_rounded,
+                          color: ResponsiveHelper.purplePrimary,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'Use your first name or how you\'d like Omi to address you',
+                            style: TextStyle(
+                              color: Color(0xFF9CA3AF),
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Clean minimal navigation
+          Container(
+            padding: const EdgeInsets.all(40),
+            child: Row(
+              children: [
+                // Clean minimal back button
+                TextButton.icon(
+                  onPressed: widget.onBack,
+                  icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                  label: const Text('Back'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFF9CA3AF),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                ),
+
+                const Spacer(),
+
+                // Premium continue button
+                Container(
+                  height: 44,
+                  decoration: BoxDecoration(
+                    gradient: _nameController.text.trim().isNotEmpty
+                        ? LinearGradient(
+                            colors: [
+                              ResponsiveHelper.purplePrimary,
+                              ResponsiveHelper.purplePrimary.withOpacity(0.8),
+                            ],
+                          )
+                        : null,
+                    color: _nameController.text.trim().isEmpty ? const Color(0xFF2A2A2A) : null,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: ElevatedButton.icon(
+                    onPressed: _nameController.text.trim().isNotEmpty ? _validateAndProceed : null,
+                    icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                    label: const Text('Continue'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      foregroundColor: _nameController.text.trim().isNotEmpty ? Colors.white : const Color(0xFF6B7280),
+                      shadowColor: Colors.transparent,
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
