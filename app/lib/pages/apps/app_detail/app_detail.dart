@@ -149,6 +149,64 @@ class _AppDetailPageState extends State<AppDetailPage> {
     });
   }
 
+  Widget _buildPermissionsCard(App app) {
+    if (!app.worksExternally()) {
+      return const SizedBox.shrink();
+    }
+
+    final permissions = <Widget>[];
+    final actions = app.externalIntegration?.actions ?? [];
+    final trigger = app.externalIntegration?.getTriggerOnString();
+
+    if (actions.any((a) => a.action == 'read_conversations')) {
+      permissions.add(const _PermissionTile(text: 'Read access to your conversations'));
+    }
+    if (actions.any((a) => a.action == 'create_conversation')) {
+      permissions.add(const _PermissionTile(text: 'Create new conversations'));
+    }
+    if (actions.any((a) => a.action == 'read_memories')) {
+      permissions.add(const _PermissionTile(text: 'Read access to your memories'));
+    }
+    if (actions.any((a) => a.action == 'create_facts')) {
+      permissions.add(const _PermissionTile(text: 'Create new memories'));
+    }
+
+    if (permissions.isEmpty && (trigger == null || trigger == 'Unknown')) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16.0),
+      margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade900,
+        borderRadius: BorderRadius.circular(16.0),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Permissions & Triggers', style: TextStyle(color: Colors.white, fontSize: 18)),
+          const SizedBox(height: 4),
+          const Text(
+            'This app has been granted the following permissions and will be triggered by the following events:',
+            style: TextStyle(color: Colors.grey, fontSize: 14),
+          ),
+          if (permissions.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            ...permissions,
+          ],
+          if (trigger != null && trigger != 'Unknown') ...[
+            const Divider(color: Colors.grey, height: 24),
+            const Text('Triggers when:', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
+            const SizedBox(height: 8),
+            _PermissionTile(text: trigger),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     bool isIntegration = app.worksExternally();
@@ -741,7 +799,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                     .toList(),
                 connectionChips: app.getConnectedAccountNames(),
               ),
-
+              _buildPermissionsCard(app),
               app.conversationPrompt != null
                   ? InfoCardWidget(
                       onTap: () {
@@ -1041,6 +1099,26 @@ class RecentReviewsSection extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _PermissionTile extends StatelessWidget {
+  final String text;
+  const _PermissionTile({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.check, color: Colors.green, size: 20),
+          const SizedBox(width: 12),
+          Expanded(child: Text(text, style: const TextStyle(fontSize: 15))),
+        ],
+      ),
     );
   }
 }

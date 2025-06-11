@@ -1,9 +1,11 @@
 import threading
 import uuid
-from typing import List
+from typing import List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 
+from database import conversations as conversations_db
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import cache_user_geolocation, set_user_webhook_db, get_user_webhook_db, disable_user_webhook_db, \
     enable_user_webhook_db, user_webhook_status_db, set_user_preferred_app
@@ -19,6 +21,21 @@ from utils.other.storage import delete_all_conversation_recordings, get_user_per
 from utils.webhooks import webhook_first_time_setup
 
 router = APIRouter()
+
+
+class MigrateObjectRequest(BaseModel):
+    type: str
+    id: str
+    target_level: str
+
+
+@router.get('/v1/users/profile', tags=['v1'])
+def get_user_profile_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+    """Gets the full user profile, including data protection and migration status."""
+    profile = get_user_profile(uid)
+    if not profile:
+        raise HTTPException(status_code=404, detail="User not found")
+    return profile
 
 
 @router.delete('/v1/users/delete-account', tags=['v1'])
@@ -248,6 +265,59 @@ def set_user_language(data: dict, uid: str = Depends(auth.get_current_user_uid))
     if not language:
         raise HTTPException(status_code=400, detail="Language is required")
     set_user_language_preference(uid, language)
+    return {'status': 'ok'}
+
+
+# **************************************
+# ********* Data Protection ************
+# **************************************
+
+@router.post('/v1/users/settings/privacy/start_migration', tags=['v1'])
+def start_data_migration(data: Dict[str, Any], uid: str = Depends(auth.get_current_user_uid)):
+    """Initiates the data migration process by setting the status on the user's profile."""
+    target_level = data.get('target_level')
+    if not target_level or target_level not in ['standard', 'enhanced']:
+        raise HTTPException(status_code=400, detail="Invalid or missing target_level.")
+    
+    set_migration_status(uid, target_level)
+    return {'status': 'ok', 'message': 'Migration status set.'}
+
+
+@router.get('/v1/users/settings/privacy/migration_check', tags=['v1'])
+def check_migration_status(target_level: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Checks which documents need to be migrated to the target level."""
+    if target_level not in ['standard', 'enhanced']:
+        raise HTTPException(status_code=400, detail="Invalid target_level.")
+
+    # This should be extended to check memories, chats, etc.
+    conversations_to_migrate = conversations_db.get_conversations_to_migrate(uid, target_level)
+    # In the future, combine lists from other data types (memories, chats).
+    needs_migration = conversations_to_migrate
+    return {"needs_migration": needs_migration}
+
+
+@router.post('/v1/users/settings/privacy/migrate_object', tags=['v1'])
+def migrate_single_object(request: MigrateObjectRequest, uid: str = Depends(auth.get_current_user_uid)):
+    """Migrates a single data object to the target protection level."""
+    if request.type == 'conversation':
+        try:
+            conversations_db.migrate_conversation_level(uid, request.id, request.target_level)
+            return {'status': 'ok'}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to migrate conversation {request.id}: {e}")
+    # Add handlers for 'memory', 'chat', etc. in the future
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown object type for migration: {request.type}")
+
+
+@router.post('/v1/users/settings/privacy/finalize_migration', tags=['v1'])
+def finalize_data_migration(data: Dict[str, Any], uid: str = Depends(auth.get_current_user_uid)):
+    """Finalizes the migration by setting the user's global protection level."""
+    target_level = data.get('target_level')
+    if not target_level or target_level not in ['standard', 'enhanced']:
+        raise HTTPException(status_code=400, detail="Invalid or missing target_level.")
+
+    finalize_migration(uid, target_level)
     return {'status': 'ok'}
 
 

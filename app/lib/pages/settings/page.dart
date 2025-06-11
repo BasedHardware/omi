@@ -4,6 +4,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/pages/settings/about.dart';
+import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/profile.dart';
 import 'package:omi/pages/settings/widgets.dart';
@@ -80,6 +81,20 @@ class _SettingsPageState extends State<SettingsPage> {
             );
           },
           icon: const Icon(Icons.bluetooth_connected_sharp, color: Colors.white, size: 22),
+        ),
+        const SizedBox(height: 12),
+
+        // Data & Privacy
+        getItemAddOn2(
+          'Data & Privacy',
+          () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => const DataPrivacyPage(),
+              ),
+            );
+          },
+          icon: const Icon(Icons.shield_outlined, color: Colors.white, size: 22),
         ),
         const SizedBox(height: 12),
 

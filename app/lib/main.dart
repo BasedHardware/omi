@@ -39,6 +39,7 @@ import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
+import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
@@ -229,6 +230,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => PaymentMethodProvider()),
           ChangeNotifierProvider(create: (context) => PersonaProvider()),
           ChangeNotifierProvider(create: (context) => MemoriesProvider()),
+          ChangeNotifierProvider(create: (context) => UserProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(
@@ -355,6 +357,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
       if (context.read<AuthenticationProvider>().isSignedIn()) {
         context.read<HomeProvider>().setupHasSpeakerProfile();
         context.read<HomeProvider>().setupUserPrimaryLanguage();
+        context.read<UserProvider>().initialize();
         try {
           await PlatformManager.instance.intercom.loginIdentifiedUser(SharedPreferencesUtil().uid);
         } catch (e) {
