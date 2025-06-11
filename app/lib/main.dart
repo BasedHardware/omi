@@ -24,6 +24,7 @@ import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart'
 import 'package:omi/pages/onboarding/device_selection.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/pages/persona/persona_profile.dart';
+import 'package:omi/core/app_shell.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
@@ -54,6 +55,7 @@ import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/debugging/instabug_manager.dart';
+import 'package:window_manager/window_manager.dart';
 
 Future<bool> _init() async {
   // Service manager
@@ -100,8 +102,15 @@ Future<void> initPostHog() async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  if (PlatformService.isDesktop) {
+    await windowManager.ensureInitialized();
+    windowManager.waitUntilReadyToShow().then((_) async {
+      await windowManager.setAsFrameless();
+    });
+  }
+
   if (PlatformService.isWindows) {
-    // Windows does not support flavors
+    // Windows does not support flavors`
     Env.init(ProdEnv());
   } else {
     if (F.env == Environment.prod) {
@@ -112,7 +121,7 @@ void main() async {
   }
 
   FlutterForegroundTask.initCommunicationPort();
-  if (Env.posthogApiKey != null) {
+  if (Env.posthogApiKey != null && !PlatformService.isDesktop) {
     await initPostHog();
   }
   // _setupAudioSession();
@@ -296,7 +305,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     return LoggerSnackbar(exception: data);
                   },
                 ),
-                child: const DeciderWidget(),
+                child: const AppShell(), // Use AppShell instead of DeciderWidget
               ),
             ),
           );
