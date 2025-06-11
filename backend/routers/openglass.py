@@ -22,8 +22,8 @@ from utils.other import endpoints as auth, storage
 router = APIRouter()
 
 # Response Models for API Documentation
-class OpenGlassImageResponse(BaseModel):
-    """Response model for processed OpenGlass image"""
+class OmiGlassImageResponse(BaseModel):
+    """Response model for processed OmiGlass image"""
     id: str
     name: str
     description: str
@@ -39,32 +39,48 @@ class ErrorResponse(BaseModel):
     """Error response model"""
     detail: str
 
-# Simple in-memory cache to prevent reprocessing the same images repeatedly
-# Maps image_id -> (timestamp, description) to track recently processed images
+# Simple cache to prevent reprocessing the same images repeatedly
 _image_processing_cache = {}
 _CACHE_DURATION_SECONDS = 300  # 5 minutes
+_MAX_CACHE_SIZE = 500  # Keep it reasonable
+
+
+def _cleanup_cache():
+    """Simple cache cleanup"""
+    current_time = time.time()
+    
+    # Remove expired entries
+    expired_keys = [
+        key for key, (timestamp, _) in _image_processing_cache.items() 
+        if current_time - timestamp > _CACHE_DURATION_SECONDS
+    ]
+    for key in expired_keys:
+        del _image_processing_cache[key]
+    
+    # Keep cache size manageable
+    if len(_image_processing_cache) > _MAX_CACHE_SIZE:
+        # Remove oldest entries
+        sorted_items = sorted(_image_processing_cache.items(), key=lambda x: x[1][0])
+        for key, _ in sorted_items[:50]:  # Remove oldest 50
+            del _image_processing_cache[key]
 
 
 def _is_image_recently_processed(image_id: str, description: str) -> bool:
-    """Check if an image was recently processed with the same description"""
+    """Check if an image was recently processed"""
     if not image_id or not description:
         return False
     
     current_time = time.time()
     
-    # Clean old cache entries first
-    expired_keys = [key for key, (timestamp, _) in _image_processing_cache.items() 
-                   if current_time - timestamp > _CACHE_DURATION_SECONDS]
-    for key in expired_keys:
-        del _image_processing_cache[key]
+    # Periodic cleanup
+    if len(_image_processing_cache) > _MAX_CACHE_SIZE * 0.8:
+        _cleanup_cache()
     
     # Check if this image was recently processed
     if image_id in _image_processing_cache:
         timestamp, cached_description = _image_processing_cache[image_id]
         
-        # If processed recently with the same description, it's a duplicate
         if current_time - timestamp < _CACHE_DURATION_SECONDS:
-            # Check if descriptions are similar
             if _descriptions_are_similar(description.lower().strip(), cached_description.lower().strip()):
                 return True
     
@@ -74,21 +90,16 @@ def _is_image_recently_processed(image_id: str, description: str) -> bool:
 
 
 def _descriptions_are_similar(desc1: str, desc2: str, threshold: float = 0.8) -> bool:
-    """
-    Check if two image descriptions are similar enough to be considered duplicates.
-    Uses simple word overlap for similarity detection.
-    """
+    """Check if two image descriptions are similar"""
     if not desc1 or not desc2:
         return False
     
-    # Convert to sets of words for comparison
     words1 = set(desc1.split())
     words2 = set(desc2.split())
     
     if not words1 or not words2:
         return False
     
-    # Calculate Jaccard similarity (intersection over union)
     intersection = len(words1.intersection(words2))
     union = len(words1.union(words2))
     
@@ -96,17 +107,7 @@ def _descriptions_are_similar(desc1: str, desc2: str, threshold: float = 0.8) ->
         return False
     
     similarity = intersection / union
-    
-    # Also check if one description is a subset of another (for different length descriptions)
-    smaller_set = words1 if len(words1) < len(words2) else words2
-    larger_set = words2 if len(words1) < len(words2) else words1
-    
-    subset_ratio = len(smaller_set.intersection(larger_set)) / len(smaller_set) if smaller_set else 0
-    
-    # Consider similar if either high overall similarity or high subset similarity
-    is_similar = similarity >= threshold or subset_ratio >= 0.9
-    
-    return is_similar
+    return similarity >= threshold
 
 
 def get_openai_image_description(base64_image: str) -> str:
@@ -114,10 +115,9 @@ def get_openai_image_description(base64_image: str) -> str:
     try:
         from openai import OpenAI
         
-        # Check if API key is available
         api_key = os.getenv('OPENAI_API_KEY')
         if not api_key:
-            return "Image captured by OpenGlass (AI description unavailable)"
+            return "Image captured by OmiGlass (AI description unavailable)"
         
         client = OpenAI(
             api_key=api_key,
@@ -151,23 +151,23 @@ def get_openai_image_description(base64_image: str) -> str:
         if description and description.strip():
             return description.strip()
         else:
-            return "Image captured by OpenGlass"
+            return "Image captured by OmiGlass"
             
     except Exception as e:
         print(f"Error getting OpenAI image description: {e}")
-        return "Image captured by OpenGlass (AI description failed)"
+        return "Image captured by OmiGlass (AI description failed)"
 
 
 def is_image_interesting_for_summary(description: str) -> bool:
     """Determine if image is interesting enough for conversation summaries"""
-    from openai import OpenAI
-    
-    client = OpenAI(
-        api_key=os.getenv('OPENAI_API_KEY'),
-        timeout=30.0
-    )
-    
     try:
+        from openai import OpenAI
+        
+        client = OpenAI(
+            api_key=os.getenv('OPENAI_API_KEY'),
+            timeout=15.0
+        )
+        
         filter_response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
@@ -187,148 +187,64 @@ def is_image_interesting_for_summary(description: str) -> bool:
 
 
 def upload_image_to_bucket(image_data: bytes, uid: str, original_filename: str) -> str:
-    """Upload image to cloud storage and return signed URL"""
+    """Upload image to dedicated OmiGlass bucket"""
     try:
-        import tempfile
-        
-        # Save to temporary file
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as temp_file:
-            temp_file.write(image_data)
-            temp_file_path = temp_file.name
-        
-        try:
-            # Use direct blob upload instead of transfer_manager to avoid FFI pickling issues
-            bucket = storage._get_bucket_safely(storage.chat_files_bucket, "openglass image upload")
-            if not bucket:
-                return ""
-            
-            # Use original filename for blob name (matching upload_multi_chat_files structure)
-            blob_name = f'{uid}/{original_filename}'
-            blob = bucket.blob(blob_name)
-            
-            # Upload directly using blob
-            blob.upload_from_filename(temp_file_path)
-            
-            # Clean up temp file
-            os.unlink(temp_file_path)
-            
-            # Return signed URL for private bucket access (24 hour expiry)
-            try:
-                return storage._get_signed_url(blob, 1440)
-            except Exception as url_error:
-                print(f"Warning: Could not generate signed URL for full image: {url_error}")
-                # Return empty string but don't fail - image still processed with description
-                return ""
-            
-        except Exception as e:
-            print(f"Warning: Could not upload image to cloud storage: {e}")
-            # Clean up temp file even on error
-            try:
-                os.unlink(temp_file_path)
-            except:
-                pass
-            return ""
-            
+        return storage.upload_omiglass_image(image_data, uid, original_filename)
     except Exception as e:
         print(f"Error in upload_image_to_bucket: {e}")
         return ""
 
 
 def upload_thumbnail(image_bytes: bytes, image_name: str, uid: str) -> str:
-    """Generate and upload thumbnail from image bytes"""
+    """Generate and upload thumbnail to dedicated OmiGlass bucket"""
     try:
-        from PIL import Image
-        import tempfile
-        import io
-        
-        # Create thumbnail from bytes directly
-        with Image.open(io.BytesIO(image_bytes)) as img:
-            img.thumbnail((128, 128))
-            
-            # Save thumbnail to temporary file
-            thumbnail_path = f"/tmp/{uuid.uuid4()}_thumb_{image_name}"
-            img.save(thumbnail_path, format='JPEG')
-            
-            try:
-                # Get bucket for direct upload (avoiding transfer_manager)
-                bucket = storage._get_bucket_safely(storage.chat_files_bucket, "openglass thumbnail upload")
-                if not bucket:
-                    return ""
-                
-                # Create blob with proper path structure
-                blob_name = f'{uid}/thumbnails/{os.path.basename(thumbnail_path)}'
-                blob = bucket.blob(blob_name)
-                
-                # Upload directly
-                blob.upload_from_filename(thumbnail_path)
-                
-                # Clean up local thumbnail file
-                Path(thumbnail_path).unlink()
-                
-                # Return signed URL for private bucket access (24 hour expiry)
-                try:
-                    return storage._get_signed_url(blob, 1440)
-                except Exception as url_error:
-                    print(f"Warning: Could not generate signed URL for thumbnail: {url_error}")
-                    return ""
-                
-            except Exception as upload_error:
-                print(f"Warning: Could not upload thumbnail to cloud storage: {upload_error}")
-                # Clean up local thumbnail file
-                try:
-                    Path(thumbnail_path).unlink()
-                except:
-                    pass
-                return ""
-            
+        thumbnail_filename = f"{uuid.uuid4()}_thumb_{image_name}"
+        return storage.upload_omiglass_thumbnail(image_bytes, uid, thumbnail_filename)
     except Exception as e:
         print(f"Error generating thumbnail: {e}")
         return ""
 
 
 def upload_single_image_sync(image_data: dict, uid: str) -> dict:
-    """Upload a single image synchronously - used within ThreadPoolExecutor"""
+    """Upload a single image with error handling"""
+    image_name = image_data.get('name', 'unknown.jpg')
+    
     try:
-        image_bytes = image_data.pop('image_data', None)  # Remove from dict after use
-        image_name = image_data.get('name', 'unknown.jpg')
+        image_bytes = image_data.pop('image_data', None)
         
-        # Always determine if interesting for summaries first (regardless of upload success)
-        is_interesting = is_image_interesting_for_summary(image_data.get('description', ''))
+        # Determine if interesting for summaries
+        is_interesting = True
+        try:
+            is_interesting = is_image_interesting_for_summary(image_data.get('description', ''))
+        except Exception as e:
+            print(f"Error determining if image is interesting: {e}")
         
-        # Set default values
         signed_url = ""
         thumbnail_url = ""
         
-        # Attempt cloud storage upload only if we have image bytes
         if image_bytes:
             try:
-                # Upload to cloud storage
                 signed_url = upload_image_to_bucket(image_bytes, uid, image_name)
-                
-                # Generate and upload thumbnail from bytes (no temp file needed)
-                thumbnail_url = upload_thumbnail(image_bytes, image_name, uid)
-                
+                if signed_url:
+                    thumbnail_url = upload_thumbnail(image_bytes, image_name, uid)
             except Exception as upload_error:
                 print(f"Warning: Upload failed for image {image_name}: {upload_error}")
-                # Continue processing - we still have the description
         
-        # Update image data with upload results (empty strings if upload failed)
         image_data.update({
             'thumbnail': thumbnail_url,
             'url': signed_url,
             'is_interesting': is_interesting,
-            'upload_success': bool(signed_url),  # Track upload status for debugging
+            'upload_success': bool(signed_url),
         })
         
         return image_data
         
     except Exception as e:
-        print(f"Error processing image {image_data.get('name', 'unknown')}: {e}")
-        # Still return the image data with description, just mark upload as failed
+        print(f"Error processing image {image_name}: {e}")
         image_data.update({
             'thumbnail': '',
             'url': '',
-            'is_interesting': True,  # Default to interesting
+            'is_interesting': True,
             'upload_success': False,
         })
         return image_data
@@ -438,31 +354,60 @@ def _create_new_photo_conversation(uid: str, images: List[dict]) -> Optional[str
         return None
 
 
-def _handle_openglass_images(files: List[UploadFile], uid: str):
+def _handle_omiglass_images(files: List[UploadFile], uid: str):
     """
-    SIMPLIFIED: Handle OpenGlass images elegantly using existing conversation architecture.
-    Supports all three scenarios: audio-only, image-only, audio+image without redundancy.
+    Handle OmiGlass images with basic error handling.
+    Supports all three scenarios: audio-only, image-only, audio+image.
     """
+    
+    # Simple limit to prevent overload
+    MAX_IMAGES_PER_REQUEST = 50
+    if len(files) > MAX_IMAGES_PER_REQUEST:
+        raise HTTPException(
+            status_code=413, 
+            detail=f"Too many images in single request. Maximum allowed: {MAX_IMAGES_PER_REQUEST}"
+        )
+    
     def process_single_image(file: UploadFile) -> dict:
         """Process a single image and return complete image data with description"""
         try:
+            if not file.filename:
+                return None
+                
             # Read and validate image
             image_data = file.file.read()
             if len(image_data) == 0:
+                print(f"Empty image file: {file.filename}")
+                return None
+            
+            # Simple size limit
+            MAX_IMAGE_SIZE = 20 * 1024 * 1024  # 20MB
+            if len(image_data) > MAX_IMAGE_SIZE:
+                print(f"Image too large: {file.filename} ({len(image_data)} bytes)")
                 return None
             
             # Convert to base64 for processing
             base64_image = base64.b64encode(image_data).decode('utf-8')
             
             # Extract timestamp from filename for consistent ID
-            timestamp_match = re.search(r'openglass_(\d+)', file.filename)
+            timestamp_match = re.search(r'omiglass_(\d+)', file.filename)
             if timestamp_match:
-                consistent_id = f"openglass_{timestamp_match.group(1)}"
+                consistent_id = f"omiglass_{timestamp_match.group(1)}"
             else:
-                consistent_id = f"openglass_{int(time.time() * 1000)}"
+                consistent_id = f"omiglass_{int(time.time() * 1000)}"
+            
+            # Check cache before expensive AI processing
+            if _is_image_recently_processed(consistent_id, ""):
+                print(f"Skipping recently processed image: {consistent_id}")
+                return None
             
             # Get AI description
             description = get_openai_image_description(base64_image)
+            
+            # Final cache check with actual description
+            if _is_image_recently_processed(consistent_id, description):
+                print(f"Skipping duplicate image: {consistent_id}")
+                return None
             
             result = {
                 'id': consistent_id,
@@ -476,27 +421,29 @@ def _handle_openglass_images(files: List[UploadFile], uid: str):
             return result
             
         except Exception as e:
-            print(f"Error processing OpenGlass image {file.filename}: {e}")
+            print(f"Error processing OmiGlass image {file.filename}: {e}")
             return None
 
     # Process all images concurrently
     processed_images = []
+    
     try:
         with ThreadPoolExecutor(max_workers=3) as executor:
             future_to_file = {executor.submit(process_single_image, file): file for file in files}
             
-            for future in concurrent.futures.as_completed(future_to_file, timeout=60):
+            for future in concurrent.futures.as_completed(future_to_file, timeout=120):
                 try:
-                    result = future.result(timeout=30)
+                    result = future.result(timeout=45)
                     if result:
                         processed_images.append(result)
                 except Exception as e:
                     file = future_to_file[future]
                     print(f"Error processing {file.filename}: {e}")
+                    
     except Exception as e:
         print(f"Error in concurrent processing: {e}")
     
-    # Simple duplicate detection within current batch only
+    # Simple duplicate detection within current batch
     unique_images = []
     for image in processed_images:
         is_duplicate = any(
@@ -506,6 +453,8 @@ def _handle_openglass_images(files: List[UploadFile], uid: str):
         if not is_duplicate:
             unique_images.append(image)
     
+    print(f"Processed {len(unique_images)} unique images from {len(files)} total files")
+    
     # Upload unique images to cloud storage
     uploaded_images = []
     if unique_images:
@@ -513,7 +462,7 @@ def _handle_openglass_images(files: List[UploadFile], uid: str):
             with ThreadPoolExecutor(max_workers=3) as executor:
                 upload_futures = [executor.submit(upload_single_image_sync, img.copy(), uid) for img in unique_images]
                 
-                for future in concurrent.futures.as_completed(upload_futures, timeout=60):
+                for future in concurrent.futures.as_completed(upload_futures, timeout=90):
                     try:
                         result = future.result(timeout=30)
                         uploaded_images.append(result)
@@ -523,8 +472,12 @@ def _handle_openglass_images(files: List[UploadFile], uid: str):
         except Exception as e:
             print(f"Error in concurrent upload processing: {e}")
     
-    # ELEGANT: Use existing conversation architecture - much simpler!
-    conversation_id = _integrate_with_existing_conversation(uid, uploaded_images)
+    # Use existing conversation architecture
+    conversation_id = None
+    try:
+        conversation_id = _integrate_with_existing_conversation(uid, uploaded_images)
+    except Exception as e:
+        print(f"Error integrating with conversation: {e}")
     
     # Add conversation context to response
     for image in uploaded_images:
@@ -535,17 +488,17 @@ def _handle_openglass_images(files: List[UploadFile], uid: str):
 
 @router.post(
     '/v1/images', 
-    tags=['openglass'], 
-    response_model=List[OpenGlassImageResponse],
+    tags=['omiglass'], 
+    response_model=List[OmiGlassImageResponse],
     responses={
         200: {
-            "description": "Successfully processed OpenGlass images",
+            "description": "Successfully processed OmiGlass images",
             "content": {
                 "application/json": {
                     "example": [
                         {
-                            "id": "openglass_1703123456789",
-                            "name": "openglass_1703123456789.jpg",
+                            "id": "omiglass_1703123456789",
+                            "name": "omiglass_1703123456789.jpg",
                             "description": "A person sitting at a desk with a laptop, typing in what appears to be an office environment. There are books visible on shelves in the background.",
                             "mime_type": "application/octet-stream",
                             "created_at": "2023-12-21T10:30:56.789Z",
@@ -560,7 +513,7 @@ def _handle_openglass_images(files: List[UploadFile], uid: str):
             }
         },
         400: {
-            "description": "Bad request - invalid files or non-OpenGlass images",
+            "description": "Bad request - invalid files or non-OmiGlass images",
             "model": ErrorResponse
         },
         500: {
@@ -568,9 +521,9 @@ def _handle_openglass_images(files: List[UploadFile], uid: str):
             "model": ErrorResponse
         }
     },
-    summary="Upload and process OpenGlass images",
+    summary="Upload and process OmiGlass images",
     description="""
-    Process OpenGlass images with AI-powered description generation and conversation integration.
+    Process OmiGlass images with AI-powered description generation and conversation integration.
     
     **Features:**
     - 🤖 **AI Image Descriptions**: Uses GPT-4o Vision to generate detailed descriptions
@@ -585,7 +538,7 @@ def _handle_openglass_images(files: List[UploadFile], uid: str):
     3. **Extended Sessions**: Adds images to existing image-only conversations
     
     **File Requirements:**
-    - Files must have 'openglass' in the filename (case-insensitive)
+    - Files must have 'omiglass' in the filename (case-insensitive)
     - Supported formats: JPEG, JPG, PNG
     - File size: Recommended < 10MB per image
     
@@ -594,14 +547,14 @@ def _handle_openglass_images(files: List[UploadFile], uid: str):
     and conversation context for integration with the Omi platform.
     """,
 )
-def upload_openglass_images(
-    files: List[UploadFile] = File(..., description="OpenGlass image files to process. Must contain 'openglass' in filename."), 
+def upload_omiglass_images(
+    files: List[UploadFile] = File(..., description="OmiGlass image files to process. Must contain 'omiglass' in filename."), 
     uid: str = Depends(auth.get_current_user_uid)
 ):
     """
-    **OpenGlass Image Upload & Processing Endpoint**
+    **OmiGlass Image Upload & Processing Endpoint**
     
-    This endpoint is specifically designed for OpenGlass device images and provides:
+    This endpoint is specifically designed for OmiGlass device images and provides:
     - AI-powered image descriptions using GPT-4o Vision
     - Intelligent duplicate detection and removal
     - Cloud storage with thumbnail generation  
@@ -612,21 +565,21 @@ def upload_openglass_images(
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
     
-    # Validate that all files are OpenGlass images
-    non_openglass_files = [
+    # Validate that all files are OmiGlass images
+    non_omiglass_files = [
         file.filename for file in files 
-        if not (file.filename and 'openglass' in file.filename.lower())
+        if not (file.filename and 'omiglass' in file.filename.lower())
     ]
     
-    if non_openglass_files:
+    if non_omiglass_files:
         raise HTTPException(
             status_code=400, 
-            detail=f"Non-OpenGlass files detected: {non_openglass_files}. Use /v2/files for regular file uploads."
+            detail=f"Non-OmiGlass files detected: {non_omiglass_files}. Use /v2/files for regular file uploads."
         )
     
     try:
-        complete_images = _handle_openglass_images(files, uid)
+        complete_images = _handle_omiglass_images(files, uid)
         return complete_images
     except Exception as e:
-        print(f"Error processing OpenGlass images: {e}")
-        raise HTTPException(status_code=500, detail="Failed to process OpenGlass images") 
+        print(f"Error processing OmiGlass images: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process OmiGlass images") 

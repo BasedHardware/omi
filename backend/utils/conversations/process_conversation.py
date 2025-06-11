@@ -590,12 +590,15 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
 
 
 def retrieve_in_progress_conversation(uid):
+    """Retrieve in-progress conversation with basic session management"""
     conversation_id = redis_db.get_in_progress_conversation_id(uid)
     existing = None
 
     if conversation_id:
         existing = conversations_db.get_conversation(uid, conversation_id)
         if existing and existing['status'] != 'in_progress':
+            # Clean up stale Redis reference
+            redis_db.delete_in_progress_conversation_id(uid)
             existing = None
 
     if not existing:
@@ -603,51 +606,71 @@ def retrieve_in_progress_conversation(uid):
     
     # Check for active WebSocket recording sessions
     if not existing:
-        # Check if user has an active transcription WebSocket session
-        active_session_key = f"active_transcription_session:{uid}"
-        session_data = redis_db.r.get(active_session_key)
-        
-        if session_data:
-            # User has active recording session, create a temporary conversation object
-            # This will be used to signal that images should be held for the active session
-            import json
-            try:
-                session_info = json.loads(session_data)
-                
-                # Return a temporary conversation object to indicate active session
-                # The actual conversation will be created when recording stops
-                from datetime import datetime, timezone
-                from models.conversation import Structured, ConversationStatus
-                import uuid
-                
-                now = datetime.now(timezone.utc)
-                started_at = session_info.get('started_at', now.isoformat())
-                if isinstance(started_at, str):
-                    started_at_dt = datetime.fromisoformat(started_at.replace('Z', '+00:00'))
-                else:
-                    started_at_dt = started_at
-                
-                existing = {
-                    'id': f'active_session_{uid}',
-                    'uid': uid,
-                    'status': ConversationStatus.in_progress.value,  # Convert enum to string value
-                    'is_active_session': True,  # Flag to indicate this is a live session
-                    'started_at': started_at_dt.isoformat(),  # Store as ISO string
-                    'created_at': started_at_dt.isoformat(),  # Store as ISO string
-                    'finished_at': now.isoformat(),  # Store as ISO string
-                    'structured': Structured().dict(),
-                    'language': session_info.get('language', 'en'),
-                    'transcript_segments': [],
-                    'geolocation': None,
-                    'photos': [],
-                    'plugins_results': [],
-                    'discarded': False,
-                    'processing_memory_id': None,
-                    'visibility': 'private'
-                }
-                return existing
-            except Exception as e:
-                print(f"Error parsing active session data: {e}")
-                # Fall through to normal conversation retrieval
+        try:
+            # Check if user has an active transcription WebSocket session
+            active_session_key = f"active_transcription_session:{uid}"
+            session_data = redis_db.r.get(active_session_key)
+            
+            if session_data:
+                import json
+                try:
+                    session_info = json.loads(session_data)
+                    
+                    if not isinstance(session_info, dict):
+                        print(f"Invalid session data format for user {uid}")
+                        redis_db.r.delete(active_session_key)
+                        return None
+                    
+                    from datetime import datetime, timezone
+                    from models.conversation import Structured, ConversationStatus
+                    import uuid
+                    
+                    now = datetime.now(timezone.utc)
+                    started_at = session_info.get('started_at', now.isoformat())
+                    
+                    # Safe datetime parsing
+                    try:
+                        if isinstance(started_at, str):
+                            started_at_dt = datetime.fromisoformat(started_at.replace('Z', '+00:00'))
+                        else:
+                            started_at_dt = started_at
+                    except (ValueError, TypeError) as e:
+                        print(f"Invalid started_at format: {e}")
+                        started_at_dt = now
+                    
+                    # Simple session age check
+                    session_age_hours = (now - started_at_dt).total_seconds() / 3600
+                    if session_age_hours > 24:
+                        print(f"Cleaning up stale session for user {uid}")
+                        redis_db.r.delete(active_session_key)
+                        return None
+                    
+                    existing = {
+                        'id': f'active_session_{uid}',
+                        'uid': uid,
+                        'status': ConversationStatus.in_progress.value,
+                        'is_active_session': True,
+                        'started_at': started_at_dt.isoformat(),
+                        'created_at': started_at_dt.isoformat(),
+                        'finished_at': now.isoformat(),
+                        'structured': Structured().dict(),
+                        'language': session_info.get('language', 'en'),
+                        'transcript_segments': [],
+                        'geolocation': None,
+                        'photos': [],
+                        'plugins_results': [],
+                        'discarded': False,
+                        'processing_memory_id': None,
+                        'visibility': 'private'
+                    }
+                    return existing
+                    
+                except (json.JSONDecodeError, KeyError, TypeError) as e:
+                    print(f"Error parsing session data: {e}")
+                    redis_db.r.delete(active_session_key)
+                    return None
+                    
+        except Exception as e:
+            print(f"Error checking active session: {e}")
     
     return existing
