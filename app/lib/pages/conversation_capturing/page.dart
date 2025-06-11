@@ -262,10 +262,6 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   Widget _buildImageGallery(List<Map<String, dynamic>> images) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16.0),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade800, // Same grey as transcript boxes
-        borderRadius: BorderRadius.circular(8.0),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -429,7 +425,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
       margin: const EdgeInsets.only(bottom: 12.0),
       padding: const EdgeInsets.all(12.0),
       decoration: BoxDecoration(
-        color: Colors.grey.shade800,
+        color: Colors.grey.shade900,
         borderRadius: BorderRadius.circular(8.0),
         border: Border.all(color: speakerColor.withOpacity(0.3), width: 1),
       ),
