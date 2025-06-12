@@ -65,8 +65,8 @@ def _get_structured(
             raise HTTPException(status_code=400, detail=f'Invalid conversation source: {conversation.text_source}')
 
         # from OpenGlass
-        if conversation.photos:
-            return summarize_open_glass(conversation.photos), False
+        if getattr(conversation, 'photos', None):
+            return summarize_open_glass(getattr(conversation, 'photos', [])), False
 
         # from Omi
         if force_process:
@@ -96,8 +96,8 @@ def _get_conversation_obj(uid: str, structured: Structured,
             created_at=datetime.now(timezone.utc),
             discarded=discarded,
         )
-        if conversation.photos:
-            conversations_db.store_conversation_photos(uid, conversation.id, conversation.photos)
+        if getattr(conversation, 'photos', None):
+            conversations_db.store_conversation_photos(uid, conversation.id, getattr(conversation, 'photos', []))
     elif isinstance(conversation, ExternalIntegrationCreateConversation):
         create_conversation = conversation
         conversation = Conversation(
