@@ -79,21 +79,21 @@ def _get_structured(
 
         # Handle photo conversations properly - check photos BEFORE OpenGlass source check
         # This ensures photo conversations get proper titles from photo descriptions
-        if has_photos_with_descriptions(conversation.photos):
+        if has_photos_with_descriptions(getattr(conversation, 'photos', None)):
             # Check if this is a combined conversation (has both transcript and photos)
             transcript = get_conversation_transcript(conversation)
             
             if transcript.strip():
                 # Combined conversation: transcript + photos (audio+photo)
                 structured = get_combined_transcript_and_photos_structure(
-                    transcript, conversation.photos, conversation.started_at, language_code, tz
+                    transcript, getattr(conversation, 'photos', []), conversation.started_at, language_code, tz
                 )
                 
                 # Never discard conversations with photos - visual content is always valuable
                 return structured, False
             else:
                 # Photos-only conversation - use smart processing for better titles and structure
-                photos_as_transcript = photos_to_text_simple(conversation.photos)
+                photos_as_transcript = photos_to_text_simple(getattr(conversation, 'photos', []))
                 
                 # Use full transcript structure processing to get smart tags, action items, events, etc.
                 structured = get_transcript_structure(photos_as_transcript, conversation.started_at, language_code, tz)
@@ -133,7 +133,7 @@ def _get_conversation_obj(uid: str, structured: Structured,
                           conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation]):
     # Never discard photo conversations - they have valuable visual content
     # Only discard based on empty title for non-photo conversations
-    has_photos = has_photos_with_descriptions(conversation.photos)
+    has_photos = has_photos_with_descriptions(getattr(conversation, 'photos', None))
     
     discarded = structured.title == '' and not has_photos  # Don't discard if has photos
     if isinstance(conversation, CreateConversation):
@@ -145,8 +145,8 @@ def _get_conversation_obj(uid: str, structured: Structured,
             created_at=datetime.now(timezone.utc),
             discarded=discarded,
         )
-        if conversation.photos:
-            conversations_db.store_conversation_photos(uid, conversation.id, conversation.photos)
+        if getattr(conversation, 'photos', None):
+            conversations_db.store_conversation_photos(uid, conversation.id, getattr(conversation, 'photos', []))
     elif isinstance(conversation, ExternalIntegrationCreateConversation):
         create_conversation = conversation
         conversation = Conversation(
