@@ -84,12 +84,12 @@ class FloatingRecordingOverlay: NSWindow {
         setupIndicatorShadow(recordingIndicator)
         statusContainer.addSubview(recordingIndicator)
         
-        // Content container (center with expanded width)
-        let contentContainer = NSView(frame: NSRect(x: 64, y: 0, width: 310, height: 60))
+        // Content container (center with reduced width to prevent overflow on buttons)
+        let contentContainer = NSView(frame: NSRect(x: 64, y: 0, width: 250, height: 60))
         pillContainer.addSubview(contentContainer)
         
         // Transcript text label (centered vertically, single line)
-        transcriptLabel = NSTextField(frame: NSRect(x: 0, y: 19, width: 310, height: 22))
+        transcriptLabel = NSTextField(frame: NSRect(x: 0, y: 19, width: 250, height: 22))
         transcriptLabel.isBezeled = false
         transcriptLabel.isEditable = false
         transcriptLabel.isSelectable = false
@@ -106,8 +106,8 @@ class FloatingRecordingOverlay: NSWindow {
         segmentCountLabel = NSTextField(frame: .zero)
         segmentCountLabel.isHidden = true
         
-        // Controls container (right side with generous margin)
-        controlsContainer = NSView(frame: NSRect(x: 382, y: 16, width: 52, height: 28))
+        // Controls container (right side with generous margin) - positioned after reduced content width
+        controlsContainer = NSView(frame: NSRect(x: 326, y: 16, width: 108, height: 28))
         setupControls()
         pillContainer.addSubview(controlsContainer)
         
@@ -228,20 +228,8 @@ class FloatingRecordingOverlay: NSWindow {
         styleModernButton(playPauseButton, isPrimary: true)
         controlsContainer.addSubview(playPauseButton)
         
-        // Expand button (secondary action)
-        expandButton = NSButton(frame: NSRect(x: 36, y: 0, width: 28, height: 28))
-        expandButton.isBordered = false
-        expandButton.bezelStyle = .circular
-        expandButton.imageScaling = .scaleProportionallyDown
-        let expandConfig = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
-        expandButton.image = NSImage(systemSymbolName: "arrow.up.left.and.arrow.down.right", accessibilityDescription: "Expand")?.withSymbolConfiguration(expandConfig)
-        expandButton.target = self
-        expandButton.action = #selector(expandClicked)
-        styleModernButton(expandButton, isPrimary: false)
-        controlsContainer.addSubview(expandButton)
-        
-        // Stop button (initially hidden, appears when recording)
-        stopButton = NSButton(frame: NSRect(x: 36, y: 0, width: 28, height: 28))
+        // Stop button (initially hidden, appears when recording with content)
+        stopButton = NSButton(frame: NSRect(x: 32, y: 0, width: 28, height: 28))
         stopButton.isBordered = false
         stopButton.bezelStyle = .circular
         stopButton.imageScaling = .scaleProportionallyDown
@@ -252,6 +240,18 @@ class FloatingRecordingOverlay: NSWindow {
         stopButton.isHidden = true
         styleStopButton(stopButton)
         controlsContainer.addSubview(stopButton)
+        
+        // Expand/Maximize button (always visible, positioned after stop button)
+        expandButton = NSButton(frame: NSRect(x: 64, y: 0, width: 28, height: 28))
+        expandButton.isBordered = false
+        expandButton.bezelStyle = .circular
+        expandButton.imageScaling = .scaleProportionallyDown
+        let expandConfig = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
+        expandButton.image = NSImage(systemSymbolName: "arrow.up.left.and.arrow.down.right", accessibilityDescription: "Maximize")?.withSymbolConfiguration(expandConfig)
+        expandButton.target = self
+        expandButton.action = #selector(expandClicked)
+        styleModernButton(expandButton, isPrimary: false)
+        controlsContainer.addSubview(expandButton)
     }
     
     private func styleModernButton(_ button: NSButton, isPrimary: Bool) {
@@ -391,14 +391,22 @@ class FloatingRecordingOverlay: NSWindow {
     }
     
     func updateTranscript(_ text: String, segmentCount: Int) {
-        // Display latest transcript with more space for the wider container
-        let truncatedText = text.count > 90 ? String(text.prefix(90)) + "..." : text
+        // Display latest transcript showing newest words (suffix) instead of oldest words (prefix)
+        let maxLength = 60  // Reduced to fit smaller container width
+        let truncatedText: String
+        if text.count > maxLength {
+            truncatedText = "..." + String(text.suffix(maxLength))
+        } else {
+            truncatedText = text
+        }
         transcriptLabel.stringValue = truncatedText.isEmpty ? "Listening for audio..." : truncatedText
+        
+        // Expand/Maximize button is always visible
+        expandButton.isHidden = false
         
         // Show stop button when there are segments (recording has content)
         if segmentCount > 0 {
             stopButton.isHidden = false
-            expandButton.isHidden = true
             
             // Animate stop button entrance smoothly
             if stopButton.layer?.opacity == 0 {
@@ -413,13 +421,8 @@ class FloatingRecordingOverlay: NSWindow {
                 CATransaction.commit()
             }
         } else {
-            // No segments - show expand button only
+            // No segments - hide stop button but keep expand button visible
             stopButton.isHidden = true
-            expandButton.isHidden = false
-            
-            // Reset button states
-            expandButton.layer?.opacity = 1.0
-            expandButton.layer?.transform = CATransform3DIdentity
         }
     }
     

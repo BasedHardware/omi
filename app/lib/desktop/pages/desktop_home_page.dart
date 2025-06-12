@@ -626,7 +626,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
     final recordingState = captureProvider.recordingState;
     final isRecording = recordingState == RecordingState.systemAudioRecord;
-    final isPaused = !isRecording && captureProvider.segments.isNotEmpty;
+    final isPaused = captureProvider.recordingState == RecordingState.pause;
 
     _updateOverlayState(isRecording: isRecording, isPaused: isPaused);
 
@@ -718,7 +718,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
   void _updateNativeOverlayFromProvider(CaptureProvider captureProvider) {
     final recordingState = captureProvider.recordingState;
     final isRecording = recordingState == RecordingState.systemAudioRecord;
-    final isPaused = !isRecording && captureProvider.segments.isNotEmpty;
+    final isPaused = captureProvider.recordingState == RecordingState.pause;
 
     // Update overlay state
     _updateOverlayState(isRecording: isRecording, isPaused: isPaused);

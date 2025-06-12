@@ -309,6 +309,7 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                     ),
                     child: DesktopPremiumRecordingWidget(
                       onMinimize: widget.onMinimizeRecording,
+                      hasConversations: convoProvider.groupedConversations.isNotEmpty,
                     ),
                   ),
                 ),

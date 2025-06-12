@@ -29,7 +29,6 @@ class DesktopPremiumRecordingWidget extends StatefulWidget {
 
 class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingWidget> {
   bool _isHovered = false;
-  bool _isPaused = false;
 
   Future<void> _toggleRecording(BuildContext context, CaptureProvider provider) async {
     var recordingState = provider.recordingState;
@@ -45,13 +44,10 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
 
       if (recordingState == RecordingState.systemAudioRecord) {
         await provider.pauseSystemAudioRecording();
-        if (mounted) setState(() => _isPaused = true);
-      } else if (_isPaused) {
+      } else if (recordingState == RecordingState.pause) {
         await provider.resumeSystemAudioRecording();
-        if (mounted) setState(() => _isPaused = false);
       } else {
         await provider.streamSystemAudioRecording();
-        if (mounted) setState(() => _isPaused = false);
       }
     }
   }
@@ -61,7 +57,6 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
       await provider.stopSystemAudioRecording();
       // Force processing and shrink container
       await provider.forceProcessingCurrentConversation();
-      setState(() => _isPaused = false);
     }
   }
 
@@ -339,8 +334,9 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
         final recordingState = captureProvider.recordingState;
         final isRecording = recordingState == RecordingState.systemAudioRecord;
         final isInitializing = recordingState == RecordingState.initialising;
+        final isPaused = recordingState == RecordingState.pause;
         final hasTranscripts = captureProvider.segments.isNotEmpty;
-        final isRecordingOrInitializing = isRecording || isInitializing || _isPaused;
+        final isRecordingOrInitializing = isRecording || isInitializing || isPaused;
 
         return Container(
           width: isRecordingOrInitializing
@@ -433,7 +429,7 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               // Pause/Resume button
-                              if (isRecording || _isPaused)
+                              if (isRecording || isPaused)
                                 MouseRegion(
                                   onEnter: (_) => setState(() => _isHovered = true),
                                   onExit: (_) => setState(() => _isHovered = false),
@@ -445,7 +441,7 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
                                         width: 48,
                                         height: 48,
                                         decoration: BoxDecoration(
-                                          gradient: _isPaused
+                                          gradient: isPaused
                                               ? LinearGradient(
                                                   colors: [
                                                     ResponsiveHelper.purplePrimary,
@@ -463,7 +459,7 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
                                           borderRadius: BorderRadius.circular(24),
                                           boxShadow: [
                                             BoxShadow(
-                                              color: _isPaused
+                                              color: isPaused
                                                   ? ResponsiveHelper.purplePrimary.withOpacity(0.15)
                                                   : Colors.orange.withOpacity(0.15),
                                               blurRadius: 12,
@@ -483,7 +479,7 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
                                                 ),
                                               )
                                             : Icon(
-                                                _isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                                                isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
                                                 size: 20,
                                                 color: Colors.white,
                                               ),
@@ -492,7 +488,7 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
                                   ),
                                 ),
 
-                              if ((isRecording || _isPaused) && hasTranscripts) ...[
+                              if ((isRecording || isPaused) && hasTranscripts) ...[
                                 const SizedBox(width: 16),
 
                                 // Stop button
@@ -529,7 +525,7 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
                               ],
 
                               // Initial recording button (when not recording)
-                              if (!isRecording && !_isPaused)
+                              if (!isRecording && !isPaused)
                                 MouseRegion(
                                   onEnter: (_) => setState(() => _isHovered = true),
                                   onExit: (_) => setState(() => _isHovered = false),
@@ -572,7 +568,7 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
 
                           // Status text
                           Text(
-                            _getStatusText(recordingState, _isPaused),
+                            _getStatusText(recordingState, isPaused),
                             style: TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.w600,
@@ -584,7 +580,7 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
                           const SizedBox(height: 8),
 
                           Text(
-                            _getSubtitleText(recordingState, _isPaused),
+                            _getSubtitleText(recordingState, isPaused),
                             style: TextStyle(
                               fontSize: 16,
                               color: ResponsiveHelper.textTertiary,
