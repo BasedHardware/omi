@@ -189,7 +189,7 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
         // Category chip (moved from left side)
         if (widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
               borderRadius: BorderRadius.circular(12),
@@ -201,7 +201,7 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
             child: Text(
               widget.conversation.getTag(),
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 11,
                 fontWeight: FontWeight.w600,
                 color: ResponsiveHelper.purplePrimary,
                 letterSpacing: 0.3,
@@ -284,24 +284,6 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
           ),
           const SizedBox(width: 8),
         ],
-
-        // Chevron indicator
-        AnimatedRotation(
-          turns: _isHovered ? 0.25 : 0,
-          duration: const Duration(milliseconds: 200),
-          child: Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: _isHovered ? ResponsiveHelper.purplePrimary.withOpacity(0.15) : ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Icon(
-              FontAwesomeIcons.chevronRight,
-              size: 10,
-              color: _isHovered ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textTertiary,
-            ),
-          ),
-        ),
       ],
     );
   }

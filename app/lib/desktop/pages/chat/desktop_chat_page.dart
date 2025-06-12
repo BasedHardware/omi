@@ -508,7 +508,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
         double topPadding = chatIndex == provider.messages.length - 1 ? 16 : 16;
         if (chatIndex != 0) message.askForNps = false;
 
-        double bottomPadding = chatIndex == 0 ? 140 : 0;
+        double bottomPadding = 0;
 
         Widget messageWidget = Container(
           margin: EdgeInsets.only(
