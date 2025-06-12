@@ -30,13 +30,14 @@ import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/utils/enums.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
-
+import 'package:flutter/services.dart';
 import '../../pages/conversations/sync_page.dart';
 import 'home/widgets/battery_info_widget.dart';
 
@@ -56,6 +57,14 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
   late AnimationController _sidebarAnimationController;
   late Animation<double> _sidebarSlideAnimation;
   final GlobalKey _profileCardKey = GlobalKey();
+
+  // Global floating recording widget state
+  bool _isRecordingMinimized = false;
+  Offset _floatingPosition = const Offset(50, 50); // Default position
+  final GlobalKey _floatingKey = GlobalKey();
+
+  // Native overlay platform channel
+  static const _overlayChannel = MethodChannel('overlayPlatform');
 
   void _initiateApps() {
     context.read<AppProvider>().getApps();
@@ -154,7 +163,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
       if (mounted) {
-        await Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
+        await Provider.of<CaptureProvider>(context, listen: false)
+            .streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
       }
 
       // Handle navigation
@@ -190,6 +200,10 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     });
 
     _listenToMessagesFromNotification();
+
+    // Setup overlay channel method handler for callbacks from native side
+    _overlayChannel.setMethodCallHandler(_handleOverlayMethod);
+
     super.initState();
   }
 
@@ -286,63 +300,79 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
           }
           return child!;
         },
-        child: Consumer<HomeProvider>(
-          builder: (context, homeProvider, _) {
+        child: Consumer2<HomeProvider, CaptureProvider>(
+          builder: (context, homeProvider, captureProvider, _) {
+            final recordingState = captureProvider.recordingState;
+            final isRecording = recordingState == RecordingState.systemAudioRecord;
+            final isInitializing = recordingState == RecordingState.initialising;
+            final isRecordingOrInitializing = isRecording || isInitializing || captureProvider.isPaused;
+            final showFloatingWidget = isRecordingOrInitializing && _isRecordingMinimized;
+
             return Scaffold(
               backgroundColor: ResponsiveHelper.backgroundPrimary,
-              body: Container(
-                decoration: BoxDecoration(
-                  gradient: responsive.backgroundGradient,
-                ),
-                child: Row(
-                  children: [
-                    // Premium sidebar with device widget
-                    _buildSidebar(responsive, homeProvider),
+              body: Stack(
+                children: [
+                  // Main app content
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: responsive.backgroundGradient,
+                    ),
+                    child: Row(
+                      children: [
+                        // Premium sidebar with device widget
+                        _buildSidebar(responsive, homeProvider),
 
-                    // Main content area with rounded container
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: ResponsiveHelper.backgroundSecondary.withOpacity(0.4),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
-                              width: 1,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.05),
-                                blurRadius: 20,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(16),
-                            child: GestureDetector(
-                              onTap: () {
-                                primaryFocus?.unfocus();
-                              },
-                              child: PageView(
-                                controller: _controller,
-                                physics: const NeverScrollableScrollPhysics(),
-                                children: const [
-                                  DesktopConversationsPage(),
-                                  DesktopChatPage(),
-                                  DesktopMemoriesPage(),
-                                  DesktopActionsPage(),
-                                  DesktopAppsPage(),
+                        // Main content area with rounded container
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: ResponsiveHelper.backgroundSecondary.withOpacity(0.4),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                                  width: 1,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.05),
+                                    blurRadius: 20,
+                                    offset: const Offset(0, 4),
+                                  ),
                                 ],
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(16),
+                                child: GestureDetector(
+                                  onTap: () {
+                                    primaryFocus?.unfocus();
+                                  },
+                                  child: PageView(
+                                    controller: _controller,
+                                    physics: const NeverScrollableScrollPhysics(),
+                                    children: [
+                                      DesktopConversationsPage(
+                                        onMinimizeRecording: minimizeRecording,
+                                        isRecordingMinimized: _isRecordingMinimized,
+                                      ),
+                                      const DesktopChatPage(),
+                                      const DesktopMemoriesPage(),
+                                      const DesktopActionsPage(),
+                                      const DesktopAppsPage(),
+                                    ],
+                                  ),
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+
+                  // Native overlay replaces Flutter floating widget
+                ],
               ),
             );
           },
@@ -520,7 +550,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
             color: Colors.transparent,
             child: InkWell(
               onTap: () {
-                MixpanelManager().bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Actions', 'Apps'][index]);
+                MixpanelManager()
+                    .bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Actions', 'Apps'][index]);
                 onTap();
               },
               borderRadius: BorderRadius.circular(8),
@@ -585,6 +616,128 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
       curve: Curves.easeInOut,
     );
   }
+
+  // Global floating recording widget methods
+  void minimizeRecording() {
+    setState(() {
+      _isRecordingMinimized = true;
+    });
+    _showNativeOverlay(); // Show native overlay when minimizing
+
+    // Update overlay with current state
+    final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
+    final recordingState = captureProvider.recordingState;
+    final isRecording = recordingState == RecordingState.systemAudioRecord;
+    final isPaused = !isRecording && captureProvider.segments.isNotEmpty;
+
+    _updateOverlayState(isRecording: isRecording, isPaused: isPaused);
+
+    // Update with latest transcript if available
+    if (captureProvider.segments.isNotEmpty) {
+      final latestSegment = captureProvider.segments.last;
+      _updateOverlayTranscript(
+        transcript: latestSegment.text.trim(),
+        segmentCount: captureProvider.segments.length,
+      );
+    } else {
+      _updateOverlayStatus(_getStatusText(recordingState, isPaused));
+    }
+  }
+
+  void expandRecording() {
+    setState(() {
+      _isRecordingMinimized = false;
+    });
+    _hideNativeOverlay(); // Hide native overlay when expanding
+  }
+
+  void updateFloatingPosition(Offset newPosition) {
+    // Not needed for native overlay, but keeping for compatibility
+    setState(() {
+      _floatingPosition = newPosition;
+    });
+  }
+
+  Future<void> toggleRecordingFromFloat(CaptureProvider provider) async {
+    var recordingState = provider.recordingState;
+
+    if (recordingState == RecordingState.systemAudioRecord) {
+      await provider.pauseSystemAudioRecording();
+    } else {
+      await provider.resumeSystemAudioRecording();
+    }
+
+    // Update overlay state
+    final isRecording = provider.recordingState == RecordingState.systemAudioRecord;
+    final isPaused = !isRecording && provider.segments.isNotEmpty;
+    await _updateOverlayState(isRecording: isRecording, isPaused: isPaused);
+  }
+
+  Future<void> stopRecordingFromFloat(CaptureProvider provider) async {
+    await provider.stopSystemAudioRecording();
+    await provider.forceProcessingCurrentConversation();
+    _hideNativeOverlay(); // Hide overlay when stopping
+    setState(() {
+      _isRecordingMinimized = false;
+    });
+  }
+
+  String _getStatusText(RecordingState state, bool isPaused) {
+    if (isPaused) return 'Recording paused';
+    switch (state) {
+      case RecordingState.initialising:
+        return 'Initializing recording...';
+      case RecordingState.systemAudioRecord:
+        return 'Listening for audio...';
+      default:
+        return 'Ready to record';
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reset minimized state when recording stops completely
+    final captureProvider = Provider.of<CaptureProvider>(context);
+    if (captureProvider.recordingState == RecordingState.stop && _isRecordingMinimized) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _isRecordingMinimized = false;
+          });
+        }
+      });
+    }
+
+    // Update native overlay with real-time transcript and state changes
+    if (_isRecordingMinimized) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _updateNativeOverlayFromProvider(captureProvider);
+      });
+    }
+  }
+
+  void _updateNativeOverlayFromProvider(CaptureProvider captureProvider) {
+    final recordingState = captureProvider.recordingState;
+    final isRecording = recordingState == RecordingState.systemAudioRecord;
+    final isPaused = !isRecording && captureProvider.segments.isNotEmpty;
+
+    // Update overlay state
+    _updateOverlayState(isRecording: isRecording, isPaused: isPaused);
+
+    // Update transcript or status
+    if (captureProvider.segments.isNotEmpty) {
+      final latestSegment = captureProvider.segments.last;
+      _updateOverlayTranscript(
+        transcript: latestSegment.text.trim(),
+        segmentCount: captureProvider.segments.length,
+      );
+    } else {
+      _updateOverlayStatus(_getStatusText(recordingState, isPaused));
+    }
+  }
+
+  // Legacy Flutter floating widget removed - now using native macOS overlay
 
   Widget _buildWindowControls() {
     return Container(
@@ -897,7 +1050,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     );
   }
 
-  PopupMenuItem<String> _buildPopupMenuItem(String value, IconData icon, String title, double width, {bool isDestructive = false}) {
+  PopupMenuItem<String> _buildPopupMenuItem(String value, IconData icon, String title, double width,
+      {bool isDestructive = false}) {
     return PopupMenuItem<String>(
       value: value,
       padding: EdgeInsets.zero,
@@ -1020,6 +1174,79 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
       _controller!.dispose();
       _controller = null;
     }
+    _hideNativeOverlay(); // Clean up overlay when page is disposed
     super.dispose();
+  }
+
+  // Handle method calls from native overlay
+  Future<void> _handleOverlayMethod(MethodCall call) async {
+    final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
+
+    switch (call.method) {
+      case 'onPlayPause':
+        await toggleRecordingFromFloat(captureProvider);
+        break;
+      case 'onStop':
+        await stopRecordingFromFloat(captureProvider);
+        break;
+      case 'onExpand':
+        expandRecording();
+        break;
+    }
+  }
+
+  // Native overlay methods
+  Future<void> _showNativeOverlay() async {
+    try {
+      await _overlayChannel.invokeMethod('showOverlay');
+    } catch (e) {
+      print('Error showing native overlay: $e');
+    }
+  }
+
+  Future<void> _hideNativeOverlay() async {
+    try {
+      await _overlayChannel.invokeMethod('hideOverlay');
+    } catch (e) {
+      print('Error hiding native overlay: $e');
+    }
+  }
+
+  Future<void> _updateOverlayState({
+    required bool isRecording,
+    required bool isPaused,
+  }) async {
+    try {
+      await _overlayChannel.invokeMethod('updateOverlayState', {
+        'isRecording': isRecording,
+        'isPaused': isPaused,
+      });
+    } catch (e) {
+      print('Error updating overlay state: $e');
+    }
+  }
+
+  Future<void> _updateOverlayTranscript({
+    required String transcript,
+    required int segmentCount,
+  }) async {
+    try {
+      await _overlayChannel.invokeMethod('updateOverlayTranscript', {
+        'transcript': transcript,
+        'segmentCount': segmentCount,
+      });
+    } catch (e) {
+      print('Error updating overlay transcript: $e');
+    }
+  }
+
+  Future<void> _updateOverlayStatus(String status) async {
+    try {
+      await _overlayChannel.invokeMethod('updateOverlayStatus', {
+        'status': status,
+      });
+    } catch (e) {
+      print('Error updating overlay status: $e');
+    }
   }
 }
