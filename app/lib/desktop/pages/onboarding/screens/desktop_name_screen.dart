@@ -289,7 +289,6 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
                   ),
                   child: ElevatedButton.icon(
                     onPressed: _nameController.text.trim().isNotEmpty ? _validateAndProceed : null,
-                    icon: const Icon(Icons.arrow_forward_rounded, size: 18),
                     label: const Text('Continue'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.transparent,

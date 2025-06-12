@@ -19,7 +19,8 @@ class DesktopPermissionsScreen extends StatefulWidget {
   State<DesktopPermissionsScreen> createState() => _DesktopPermissionsScreenState();
 }
 
-class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> with WidgetsBindingObserver, TickerProviderStateMixin {
+class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen>
+    with WidgetsBindingObserver, TickerProviderStateMixin {
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
 
@@ -41,7 +42,7 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
       curve: Curves.easeOut,
     ));
 
-    // Initial permission check
+    // Initial permission check - same as permissions_desktop_widget.dart
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = Provider.of<OnboardingProvider>(context, listen: false);
       provider.updatePermissions();
@@ -219,7 +220,8 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
                             if (!provider.hasBluetoothPermission) {
                               _showPermissionDialog(
                                 title: 'Bluetooth Access',
-                                description: 'This app uses Bluetooth to connect and communicate with your device. Your device data stays private and secure.',
+                                description:
+                                    'This app uses Bluetooth to connect and communicate with your device. Your device data stays private and secure.',
                                 onContinue: () async {
                                   await provider.askForBluetoothPermissions();
                                 },
@@ -242,7 +244,8 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
                             if (!provider.hasLocationPermission) {
                               _showPermissionDialog(
                                 title: 'Location Services',
-                                description: 'This app may use your location to tag your conversations and improve your experience.',
+                                description:
+                                    'This app may use your location to tag your conversations and improve your experience.',
                                 onContinue: () async {
                                   await provider.askForLocationPermissions();
                                 },
@@ -265,7 +268,8 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
                             if (!provider.hasNotificationPermission) {
                               _showPermissionDialog(
                                 title: 'Notifications',
-                                description: 'This app would like to send you notifications to keep you informed about important updates and activities.',
+                                description:
+                                    'This app would like to send you notifications to keep you informed about important updates and activities.',
                                 onContinue: () async {
                                   await provider.askForNotificationPermissions();
                                 },
@@ -317,10 +321,12 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
                                       valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                     ),
                                   )
-                                : const Icon(Icons.arrow_forward_rounded, size: 18),
+                                : null,
                             label: Text(provider.isLoading
                                 ? 'Please wait...'
-                                : (provider.hasBluetoothPermission || provider.hasLocationPermission || provider.hasNotificationPermission)
+                                : (provider.hasBluetoothPermission ||
+                                        provider.hasLocationPermission ||
+                                        provider.hasNotificationPermission)
                                     ? 'Continue'
                                     : 'Skip'),
                             style: ElevatedButton.styleFrom(

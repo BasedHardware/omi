@@ -86,9 +86,14 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final homeProvider = Provider.of<HomeProvider>(context, listen: false);
-      setState(() {
-        selectedLanguage = homeProvider.userPrimaryLanguage ?? 'en';
-      });
+      // Only set selected language if user has previously saved one
+      final savedLanguage = homeProvider.userPrimaryLanguage;
+      if (savedLanguage != null && savedLanguage.isNotEmpty) {
+        setState(() {
+          selectedLanguage = savedLanguage;
+        });
+      }
+      // Don't default to 'en' - require explicit selection like mobile
       _buildLanguageList();
       _fadeController.forward();
     });
@@ -143,15 +148,27 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
     setState(() {
       selectedLanguage = languageCode;
     });
-
-    final homeProvider = Provider.of<HomeProvider>(context, listen: false);
-    homeProvider.updateUserPrimaryLanguage(languageCode);
   }
 
-  void _continueWithLanguage() {
+  void _continueWithLanguage() async {
     if (selectedLanguage == null) {
-      _selectLanguage('en');
+      // Show error message like mobile version
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Please select your primary language'),
+          backgroundColor: ResponsiveHelper.errorColor,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
+      return;
     }
+
+    // Save the language like mobile version
+    final homeProvider = Provider.of<HomeProvider>(context, listen: false);
+    await homeProvider.updateUserPrimaryLanguage(selectedLanguage!);
+
     widget.onNext();
   }
 
@@ -236,7 +253,9 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
                   color: const Color(0xFF1A1A1A),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: _searchFocusNode.hasFocus ? ResponsiveHelper.purplePrimary.withOpacity(0.6) : const Color(0xFF2A2A2A),
+                    color: _searchFocusNode.hasFocus
+                        ? ResponsiveHelper.purplePrimary.withOpacity(0.6)
+                        : const Color(0xFF2A2A2A),
                     width: 1,
                   ),
                 ),
@@ -325,8 +344,7 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
                       ),
                       child: ElevatedButton.icon(
                         onPressed: selectedLanguage != null ? _continueWithLanguage : null,
-                        icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-                        label: const Text('Continue'),
+                        label: Text(selectedLanguage != null ? 'Continue' : 'Select a language'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.transparent,
                           foregroundColor: selectedLanguage != null ? Colors.white : const Color(0xFF6B7280),
