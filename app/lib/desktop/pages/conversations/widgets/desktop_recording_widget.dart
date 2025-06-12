@@ -14,7 +14,14 @@ import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
 
 class DesktopPremiumRecordingWidget extends StatefulWidget {
-  const DesktopPremiumRecordingWidget({super.key});
+  final VoidCallback? onMinimize;
+  final bool hasConversations;
+
+  const DesktopPremiumRecordingWidget({
+    super.key,
+    this.onMinimize,
+    this.hasConversations = false,
+  });
 
   @override
   State<DesktopPremiumRecordingWidget> createState() => _DesktopPremiumRecordingWidgetState();
@@ -58,6 +65,271 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
     }
   }
 
+  Widget _buildProminentStartButton(
+      bool isInitializing, RecordingState recordingState, CaptureProvider captureProvider) {
+    return Container(
+      width: double.infinity,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Main prominent record button
+          MouseRegion(
+            onEnter: (_) => setState(() => _isHovered = true),
+            onExit: (_) => setState(() => _isHovered = false),
+            child: GestureDetector(
+              onTap: isInitializing ? null : () => _toggleRecording(context, captureProvider),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeInOut,
+                transform: Matrix4.identity()..scale(_isHovered ? 1.03 : 1.0),
+                child: Container(
+                  width: 120,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        ResponsiveHelper.purplePrimary,
+                        ResponsiveHelper.purplePrimary.withOpacity(0.8),
+                        const Color(0xFF6366F1),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(60),
+                    boxShadow: [
+                      BoxShadow(
+                        color: ResponsiveHelper.purplePrimary.withOpacity(0.25),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                        spreadRadius: 2,
+                      ),
+                      BoxShadow(
+                        color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
+                        blurRadius: 40,
+                        offset: const Offset(0, 16),
+                        spreadRadius: 0,
+                      ),
+                    ],
+                  ),
+                  child: Stack(
+                    children: [
+                      // Pulsing ring effect
+                      if (!isInitializing)
+                        Positioned.fill(
+                          child: AnimatedContainer(
+                            duration: const Duration(seconds: 2),
+                            curve: Curves.easeInOut,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(60),
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.2),
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                        ),
+
+                      // Center content
+                      Center(
+                        child: isInitializing
+                            ? SizedBox(
+                                width: 32,
+                                height: 32,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 3,
+                                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
+                            : Icon(
+                                Icons.mic_rounded,
+                                size: 48,
+                                color: Colors.white,
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // Call-to-action text
+          Column(
+            children: [
+              Text(
+                isInitializing ? 'Setting up...' : 'Start Your First Recording',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: ResponsiveHelper.textPrimary,
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                isInitializing
+                    ? 'Preparing system audio capture'
+                    : 'Click the button above to begin capturing audio and create live transcripts',
+                style: const TextStyle(
+                  fontSize: 15,
+                  color: ResponsiveHelper.textTertiary,
+                  height: 1.3,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Feature highlights
+          if (!isInitializing)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildFeatureChip(Icons.transcribe_rounded, 'Live Transcript'),
+                const SizedBox(width: 12),
+                _buildFeatureChip(Icons.psychology_rounded, 'AI Insights'),
+                const SizedBox(width: 12),
+                _buildFeatureChip(Icons.cloud_sync_rounded, 'Auto Save'),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImprovedCompactRecording(
+      bool isInitializing, RecordingState recordingState, CaptureProvider captureProvider) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: ResponsiveHelper.backgroundQuaternary.withOpacity(0.6),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Simple recording button
+          MouseRegion(
+            onEnter: (_) => setState(() => _isHovered = true),
+            onExit: (_) => setState(() => _isHovered = false),
+            child: GestureDetector(
+              onTap: isInitializing ? null : () => _toggleRecording(context, captureProvider),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                transform: Matrix4.identity()..scale(_isHovered ? 1.05 : 1.0),
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: ResponsiveHelper.purplePrimary,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Center(
+                    child: isInitializing
+                        ? SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : Icon(
+                            Icons.mic_rounded,
+                            size: 20,
+                            color: Colors.white,
+                          ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 16),
+
+          // Simple status text
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isInitializing ? 'Setting up...' : 'Start Recording',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: ResponsiveHelper.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  isInitializing ? 'Preparing audio capture' : 'Click to begin recording',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: ResponsiveHelper.textTertiary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFeatureChip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: ResponsiveHelper.backgroundQuaternary.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 14,
+            color: ResponsiveHelper.purplePrimary,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: ResponsiveHelper.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
@@ -77,32 +349,85 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
           height: isRecordingOrInitializing
               ? screenSize.height - 24 // Full height minus padding
               : null,
-          margin: isRecordingOrInitializing ? const EdgeInsets.all(12) : const EdgeInsets.symmetric(horizontal: 32),
+          margin: isRecordingOrInitializing ? const EdgeInsets.all(12) : EdgeInsets.zero,
           decoration: BoxDecoration(
-            color: ResponsiveHelper.backgroundSecondary.withOpacity(isRecordingOrInitializing ? 0.95 : 0.6),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isRecording
-                  ? ResponsiveHelper.purplePrimary.withOpacity(0.2)
-                  : ResponsiveHelper.backgroundTertiary.withOpacity(0.5),
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: isRecording ? ResponsiveHelper.purplePrimary.withOpacity(0.08) : Colors.black.withOpacity(0.04),
-                blurRadius: isRecordingOrInitializing ? 20 : 15,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            color: isRecordingOrInitializing
+                ? ResponsiveHelper.backgroundSecondary.withOpacity(0.95)
+                : widget.hasConversations
+                    ? Colors.transparent
+                    : ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
+            borderRadius: BorderRadius.circular(isRecordingOrInitializing
+                ? 16
+                : widget.hasConversations
+                    ? 0
+                    : 16),
+            border: isRecordingOrInitializing || !widget.hasConversations
+                ? Border.all(
+                    color: isRecording
+                        ? ResponsiveHelper.purplePrimary.withOpacity(0.2)
+                        : ResponsiveHelper.backgroundTertiary.withOpacity(0.5),
+                    width: 1,
+                  )
+                : null,
+            boxShadow: isRecordingOrInitializing || !widget.hasConversations
+                ? [
+                    BoxShadow(
+                      color: isRecording
+                          ? ResponsiveHelper.purplePrimary.withOpacity(0.08)
+                          : Colors.black.withOpacity(0.04),
+                      blurRadius: isRecordingOrInitializing ? 20 : 15,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
           ),
           child: Column(
             children: [
               // Recording header
               Container(
-                padding: EdgeInsets.all(isRecordingOrInitializing ? 32 : 20),
+                padding: EdgeInsets.all(isRecordingOrInitializing
+                    ? 32
+                    : widget.hasConversations
+                        ? 0
+                        : 20),
                 child: isRecordingOrInitializing
                     ? Column(
                         children: [
+                          // Header with minimize button
+                          if (widget.onMinimize != null)
+                            Container(
+                              width: double.infinity,
+                              margin: const EdgeInsets.only(bottom: 24),
+                              child: Row(
+                                children: [
+                                  const Spacer(),
+                                  MouseRegion(
+                                    cursor: SystemMouseCursors.click,
+                                    child: GestureDetector(
+                                      onTap: widget.onMinimize,
+                                      child: Container(
+                                        width: 36,
+                                        height: 36,
+                                        decoration: BoxDecoration(
+                                          color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+                                          borderRadius: BorderRadius.circular(18),
+                                          border: Border.all(
+                                            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                                            width: 1,
+                                          ),
+                                        ),
+                                        child: const Icon(
+                                          Icons.minimize_rounded,
+                                          size: 20,
+                                          color: ResponsiveHelper.textSecondary,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
                           // Recording controls row
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -268,98 +593,9 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
                           ),
                         ],
                       )
-                    : Row(
-                        children: [
-                          // Recording button
-                          MouseRegion(
-                            onEnter: (_) => setState(() => _isHovered = true),
-                            onExit: (_) => setState(() => _isHovered = false),
-                            child: GestureDetector(
-                              onTap: isInitializing ? null : () => _toggleRecording(context, captureProvider),
-                              child: Transform.scale(
-                                scale: _isHovered ? 1.05 : 1.0,
-                                child: Container(
-                                  width: 48,
-                                  height: 48,
-                                  decoration: BoxDecoration(
-                                    gradient: isRecording
-                                        ? LinearGradient(
-                                            colors: [
-                                              ResponsiveHelper.purplePrimary,
-                                              ResponsiveHelper.purplePrimary.withOpacity(0.9),
-                                            ],
-                                            begin: Alignment.topLeft,
-                                            end: Alignment.bottomRight,
-                                          )
-                                        : LinearGradient(
-                                            colors: [
-                                              ResponsiveHelper.backgroundTertiary,
-                                              ResponsiveHelper.backgroundTertiary.withOpacity(0.9),
-                                            ],
-                                          ),
-                                    borderRadius: BorderRadius.circular(24),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: isRecording
-                                            ? ResponsiveHelper.purplePrimary.withOpacity(0.15)
-                                            : Colors.black.withOpacity(0.06),
-                                        blurRadius: isRecording ? 12 : 6,
-                                        offset: const Offset(0, 1),
-                                      ),
-                                    ],
-                                  ),
-                                  child: isInitializing
-                                      ? Center(
-                                          child: SizedBox(
-                                            width: 16,
-                                            height: 16,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              valueColor: AlwaysStoppedAnimation<Color>(
-                                                isRecording ? Colors.white : ResponsiveHelper.textSecondary,
-                                              ),
-                                            ),
-                                          ),
-                                        )
-                                      : Icon(
-                                          isRecording ? Icons.stop_rounded : Icons.mic_rounded,
-                                          size: 20,
-                                          color: isRecording ? Colors.white : ResponsiveHelper.textSecondary,
-                                        ),
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(width: 16),
-
-                          // Status info
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _getStatusText(recordingState, _isPaused),
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    color: isRecording ? ResponsiveHelper.textPrimary : ResponsiveHelper.textSecondary,
-                                    letterSpacing: -0.2,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  _getSubtitleText(recordingState, _isPaused),
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: ResponsiveHelper.textTertiary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+                    : widget.hasConversations
+                        ? _buildImprovedCompactRecording(isInitializing, recordingState, captureProvider)
+                        : _buildProminentStartButton(isInitializing, recordingState, captureProvider),
               ),
 
               // Live transcript section

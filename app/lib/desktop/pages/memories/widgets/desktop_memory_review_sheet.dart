@@ -31,13 +31,6 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
   late Animation<Offset> _slideAnimation;
   late Animation<double> _fadeAnimation;
 
-  // Animation controllers
-  late AnimationController _fadeController;
-  late AnimationController _slideController;
-  late AnimationController _pulseController;
-
-  late Animation<double> _pulseAnimation;
-
   @override
   void initState() {
     super.initState();
@@ -113,6 +106,19 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
 
     if (!mounted) return;
 
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          approve ? 'Saved $count memories' : 'Discarded $count memories',
+          style: const TextStyle(color: Colors.white),
+        ),
+        backgroundColor: ResponsiveHelper.backgroundTertiary,
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+
     if (remainingMemories.isEmpty) {
       await _handleClose();
     }
@@ -132,6 +138,19 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
     });
 
     if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          approve ? 'Memory saved' : 'Memory discarded',
+          style: const TextStyle(color: Colors.white),
+        ),
+        backgroundColor: ResponsiveHelper.backgroundTertiary,
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
 
     if (remainingMemories.isEmpty) {
       await _handleClose();
@@ -238,7 +257,6 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
               ],
             ),
           ),
-
           // Close button
           Material(
             color: Colors.transparent,
@@ -615,7 +633,6 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
     if (selectedCategory == null) {
       return '${displayedMemories.length} memories to review';
     }
-
     String categoryName = _getCategoryName(selectedCategory!);
     return '${displayedMemories.length} $categoryName memories to review';
   }
