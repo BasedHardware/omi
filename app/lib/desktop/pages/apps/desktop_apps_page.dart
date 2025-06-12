@@ -422,7 +422,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
             onTap: () {
               appProvider.removeFilter(key);
             },
-            child: Icon(
+            child: const Icon(
               Icons.close,
               size: 14,
               color: ResponsiveHelper.purplePrimary,
@@ -467,7 +467,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
           children: [
             Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.trending_up_rounded,
                   color: ResponsiveHelper.purplePrimary,
                   size: 20,
@@ -722,7 +722,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
             // Category header with name and view all button
             Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.category_rounded,
                   color: ResponsiveHelper.purplePrimary,
                   size: 20,
@@ -811,7 +811,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
           children: [
             Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.apps_rounded,
                   color: ResponsiveHelper.textTertiary,
                   size: 20,

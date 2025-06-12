@@ -25,7 +25,10 @@ class DesktopActionItem extends StatefulWidget {
   State<DesktopActionItem> createState() => _DesktopActionItemState();
 }
 
-class _DesktopActionItemState extends State<DesktopActionItem> {
+class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   bool _isEditing = false;
   late TextEditingController _textController;
   late FocusNode _focusNode;
@@ -33,7 +36,8 @@ class _DesktopActionItemState extends State<DesktopActionItem> {
   @override
   void initState() {
     super.initState();
-    debugPrint('🔧 DesktopActionItem.initState() - Item: "${widget.actionItem.description}", Index: ${widget.itemIndex}');
+    debugPrint(
+        '🔧 DesktopActionItem.initState() - Item: "${widget.actionItem.description}", Index: ${widget.itemIndex}');
     _textController = TextEditingController();
     _focusNode = FocusNode();
   }
@@ -41,9 +45,11 @@ class _DesktopActionItemState extends State<DesktopActionItem> {
   @override
   void didUpdateWidget(DesktopActionItem oldWidget) {
     super.didUpdateWidget(oldWidget);
-    debugPrint('🔧 DesktopActionItem.didUpdateWidget() - Old: "${oldWidget.actionItem.description}", New: "${widget.actionItem.description}"');
+    debugPrint(
+        '🔧 DesktopActionItem.didUpdateWidget() - Old: "${oldWidget.actionItem.description}", New: "${widget.actionItem.description}"');
     if (oldWidget.actionItem.description != widget.actionItem.description) {
-      debugPrint('🔧 Action item description changed from "${oldWidget.actionItem.description}" to "${widget.actionItem.description}"');
+      debugPrint(
+          '🔧 Action item description changed from "${oldWidget.actionItem.description}" to "${widget.actionItem.description}"');
     }
   }
 
@@ -133,7 +139,8 @@ class _DesktopActionItemState extends State<DesktopActionItem> {
       (c) => c.id == widget.conversation.id,
       orElse: () => throw Exception('Conversation not found'),
     );
-    debugPrint('🔧 Before provider update - Action item at index ${widget.itemIndex}: "${conversation.structured.actionItems[widget.itemIndex].description}"');
+    debugPrint(
+        '🔧 Before provider update - Action item at index ${widget.itemIndex}: "${conversation.structured.actionItems[widget.itemIndex].description}"');
 
     convoProvider.updateActionItemDescriptionInConversation(
       widget.conversation.id,
@@ -146,7 +153,8 @@ class _DesktopActionItemState extends State<DesktopActionItem> {
       (c) => c.id == widget.conversation.id,
       orElse: () => throw Exception('Conversation not found'),
     );
-    debugPrint('🔧 After provider update - Action item at index ${widget.itemIndex}: "${updatedConversation.structured.actionItems[widget.itemIndex].description}"');
+    debugPrint(
+        '🔧 After provider update - Action item at index ${widget.itemIndex}: "${updatedConversation.structured.actionItems[widget.itemIndex].description}"');
 
     // Exit editing mode
     debugPrint('🔧 Exiting edit mode...');
@@ -221,7 +229,9 @@ class _DesktopActionItemState extends State<DesktopActionItem> {
 
   @override
   Widget build(BuildContext context) {
-    debugPrint('🔧 DesktopActionItem.build() - Current description: "${widget.actionItem.description}", Is editing: $_isEditing');
+    super.build(context);
+    debugPrint(
+        '🔧 DesktopActionItem.build() - Current description: "${widget.actionItem.description}", Is editing: $_isEditing');
 
     return Container(
       margin: const EdgeInsets.only(left: 20, right: 20, bottom: 12),
@@ -231,7 +241,9 @@ class _DesktopActionItemState extends State<DesktopActionItem> {
           color: ResponsiveHelper.backgroundSecondary.withOpacity(0.8),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: _isEditing ? ResponsiveHelper.purplePrimary.withOpacity(0.5) : ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+            color: _isEditing
+                ? ResponsiveHelper.purplePrimary.withOpacity(0.5)
+                : ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
             width: 1,
           ),
           boxShadow: [
@@ -306,7 +318,9 @@ class _DesktopActionItemState extends State<DesktopActionItem> {
                           child: Text(
                             widget.actionItem.description,
                             style: TextStyle(
-                              color: widget.actionItem.completed ? ResponsiveHelper.textTertiary : ResponsiveHelper.textPrimary,
+                              color: widget.actionItem.completed
+                                  ? ResponsiveHelper.textTertiary
+                                  : ResponsiveHelper.textPrimary,
                               decoration: widget.actionItem.completed ? TextDecoration.lineThrough : null,
                               decorationColor: ResponsiveHelper.textTertiary,
                               fontSize: 15,
@@ -321,7 +335,9 @@ class _DesktopActionItemState extends State<DesktopActionItem> {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          widget.conversation.structured.title.isNotEmpty ? widget.conversation.structured.title : 'Untitled Conversation',
+                          widget.conversation.structured.title.isNotEmpty
+                              ? widget.conversation.structured.title
+                              : 'Untitled Conversation',
                           style: TextStyle(
                             color: ResponsiveHelper.textTertiary,
                             fontSize: 12,
@@ -345,7 +361,8 @@ class _DesktopActionItemState extends State<DesktopActionItem> {
                     child: Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: _hasChanges ? Colors.green.shade600 : ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+                        color:
+                            _hasChanges ? Colors.green.shade600 : ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(

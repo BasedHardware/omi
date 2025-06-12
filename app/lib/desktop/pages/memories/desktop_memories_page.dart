@@ -1,16 +1,13 @@
-import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/memory.dart';
-import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/extensions/functions.dart';
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
 
 import 'widgets/desktop_memory_item.dart';
 import 'widgets/desktop_memory_dialog.dart';
@@ -26,7 +23,8 @@ class DesktopMemoriesPage extends StatefulWidget {
   State<DesktopMemoriesPage> createState() => DesktopMemoriesPageState();
 }
 
-class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with AutomaticKeepAliveClientMixin, TickerProviderStateMixin {
+class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
+    with AutomaticKeepAliveClientMixin, TickerProviderStateMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -49,6 +47,13 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
   // Default will be set in initState based on current date
   late FilterOption _currentFilter;
 
+  // Memory review panel state - using ValueNotifier to avoid full rebuilds
+  final ValueNotifier<List<Memory>?> _reviewMemoriesNotifier = ValueNotifier<List<Memory>?>(null);
+
+  // Track unreviewed memories and notification state
+  List<Memory> _unreviewedMemories = [];
+  final ValueNotifier<bool> _showReviewIndicator = ValueNotifier<bool>(false);
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -56,6 +61,8 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
     _fadeController.dispose();
     _slideController.dispose();
     _pulseController.dispose();
+    _reviewMemoriesNotifier.dispose();
+    _showReviewIndicator.dispose();
     super.dispose();
   }
 
@@ -106,23 +113,31 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
     }
 
     (() async {
-      final provider = context.read<MemoriesProvider>();
-      await provider.init();
-
-      // Apply the date-based default filter
-      _applyFilter(_currentFilter);
-
-      if (!mounted) return;
-      final unreviewedMemories = provider.unreviewed;
-      final home = context.read<HomeProvider>();
-      if (unreviewedMemories.isNotEmpty && home.selectedIndex == 2) {
-        _showReviewSheet(context, unreviewedMemories, provider);
-      }
+      await _handleRefresh();
 
       // Start animations
       _fadeController.forward();
       _slideController.forward();
     }).withPostFrameCallback();
+  }
+
+  void _checkUnreviewedMemories() {
+    if (!mounted) return;
+    final provider = context.read<MemoriesProvider>();
+    _unreviewedMemories = provider.unreviewed;
+    _showReviewIndicator.value = _unreviewedMemories.isNotEmpty && _reviewMemoriesNotifier.value == null;
+  }
+
+  Future<void> _handleRefresh() async {
+    final provider = context.read<MemoriesProvider>();
+    await provider.init();
+
+    // Apply the date-based default filter after refreshing data
+    _applyFilter(_currentFilter);
+
+    if (mounted) {
+      _checkUnreviewedMemories();
+    }
   }
 
   void _applyFilter(FilterOption option) {
@@ -167,54 +182,107 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
     super.build(context);
     return Consumer<MemoriesProvider>(
       builder: (context, provider, _) {
-        return Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                ResponsiveHelper.backgroundPrimary,
-                ResponsiveHelper.backgroundSecondary.withOpacity(0.8),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: Stack(
-              children: [
-                // Animated background pattern
-                _buildAnimatedBackground(),
-
-                // Main content with glassmorphism
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.02),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Column(
-                    children: [
-                      // Modern header with controls
-                      _buildModernHeader(provider),
-
-                      // Main memories area
-                      Expanded(
-                        child: _animationsInitialized
-                            ? FadeTransition(
-                                opacity: _fadeAnimation,
-                                child: SlideTransition(
-                                  position: _slideAnimation,
-                                  child: _buildMemoriesContent(provider),
-                                ),
-                              )
-                            : _buildMemoriesContent(provider),
-                      ),
-                    ],
-                  ),
+        return Stack(
+          children: [
+            // Main content - this won't rebuild when panel state changes
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    ResponsiveHelper.backgroundPrimary,
+                    ResponsiveHelper.backgroundSecondary.withOpacity(0.8),
+                  ],
                 ),
-              ],
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Stack(
+                  children: [
+                    // Animated background pattern
+                    _buildAnimatedBackground(),
+
+                    // Main content with glassmorphism
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.02),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Column(
+                        children: [
+                          // Modern header with controls
+                          _buildModernHeader(provider),
+
+                          // Review indicator notification
+                          _buildReviewIndicator(),
+
+                          // Main memories area
+                          Expanded(
+                            child: _animationsInitialized
+                                ? FadeTransition(
+                                    opacity: _fadeAnimation,
+                                    child: SlideTransition(
+                                      position: _slideAnimation,
+                                      child: _buildMemoriesContent(provider),
+                                    ),
+                                  )
+                                : _buildMemoriesContent(provider),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
+
+            // Panel overlay - only this part rebuilds when panel state changes
+            ValueListenableBuilder<List<Memory>?>(
+              valueListenable: _reviewMemoriesNotifier,
+              builder: (context, reviewMemories, child) {
+                if (reviewMemories == null) return const SizedBox.shrink();
+
+                return Stack(
+                  children: [
+                    // Backdrop blur overlay
+                    Positioned.fill(
+                      child: GestureDetector(
+                        onTap: () {
+                          _reviewMemoriesNotifier.value = null;
+                        },
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: ResponsiveHelper.backgroundPrimary.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Memory review panel
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: DesktopMemoryReviewSheet(
+                        memories: reviewMemories,
+                        provider: provider,
+                        onClose: () {
+                          _reviewMemoriesNotifier.value = null;
+                          _checkUnreviewedMemories();
+                        },
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
         );
       },
     );
@@ -270,18 +338,18 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
               ),
               child: TextField(
                 controller: _searchController,
-                style: TextStyle(
+                style: const TextStyle(
                   color: ResponsiveHelper.textPrimary,
                   fontSize: 14,
                 ),
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   hintText: '🔍 Search memories...',
                   hintStyle: TextStyle(
                     color: ResponsiveHelper.textTertiary,
                     fontSize: 14,
                   ),
                   border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(
+                  contentPadding: EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 12,
                   ),
@@ -313,7 +381,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
                   color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.add,
                   color: ResponsiveHelper.purplePrimary,
                   size: 20,
@@ -337,7 +405,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
                   color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.more_vert,
                   color: ResponsiveHelper.textSecondary,
                   size: 20,
@@ -369,7 +437,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
+              const Icon(
                 Icons.filter_list,
                 color: ResponsiveHelper.textSecondary,
                 size: 16,
@@ -377,13 +445,13 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
               const SizedBox(width: 6),
               Text(
                 _getFilterText(),
-                style: TextStyle(
+                style: const TextStyle(
                   color: ResponsiveHelper.textSecondary,
                   fontSize: 12,
                 ),
               ),
               const SizedBox(width: 6),
-              Icon(
+              const Icon(
                 Icons.keyboard_arrow_down,
                 color: ResponsiveHelper.textSecondary,
                 size: 16,
@@ -437,15 +505,30 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
   }
 
   Widget _buildMemoriesContent(MemoriesProvider provider) {
-    if (provider.loading) {
+    if (provider.loading && provider.filteredMemories.isEmpty) {
       return _buildModernLoadingState();
     }
 
     if (provider.filteredMemories.isEmpty) {
-      return _buildModernEmptyState(provider);
+      return RefreshIndicator(
+        onRefresh: _handleRefresh,
+        backgroundColor: ResponsiveHelper.backgroundTertiary,
+        color: ResponsiveHelper.purplePrimary,
+        child: Stack(
+          children: [
+            ListView(), // Needed to make RefreshIndicator work on a non-scrollable child
+            _buildModernEmptyState(provider),
+          ],
+        ),
+      );
     }
 
-    return _buildMemoriesList(provider);
+    return RefreshIndicator(
+      onRefresh: _handleRefresh,
+      backgroundColor: ResponsiveHelper.backgroundTertiary,
+      color: ResponsiveHelper.purplePrimary,
+      child: _buildMemoriesList(provider),
+    );
   }
 
   Widget _buildModernLoadingState() {
@@ -504,7 +587,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
                     ),
                   ),
             const SizedBox(height: 16),
-            Text(
+            const Text(
               'Loading your memories...',
               textAlign: TextAlign.center,
               style: TextStyle(
@@ -553,7 +636,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
                           color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: Icon(
+                        child: const Icon(
                           FontAwesomeIcons.brain,
                           size: 48,
                           color: ResponsiveHelper.purplePrimary,
@@ -568,7 +651,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
                     color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: Icon(
+                  child: const Icon(
                     FontAwesomeIcons.brain,
                     size: 48,
                     color: ResponsiveHelper.purplePrimary,
@@ -577,7 +660,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
           const SizedBox(height: 24),
           Text(
             provider.searchQuery.isEmpty && _selectedCategory == null ? '🧠 No memories yet' : '🔍 No memories found',
-            style: TextStyle(
+            style: const TextStyle(
               color: ResponsiveHelper.textPrimary,
               fontSize: 20,
               fontWeight: FontWeight.w600,
@@ -585,9 +668,11 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
           ),
           const SizedBox(height: 8),
           Text(
-            provider.searchQuery.isEmpty && _selectedCategory == null ? 'Create your first memory to get started' : 'Try adjusting your search or filter',
+            provider.searchQuery.isEmpty && _selectedCategory == null
+                ? 'Create your first memory to get started'
+                : 'Try adjusting your search or filter',
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
               color: ResponsiveHelper.textSecondary,
               fontSize: 14,
               height: 1.5,
@@ -613,7 +698,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
                       ),
                     ],
                   ),
-                  child: Text(
+                  child: const Text(
                     'Add your first memory',
                     style: TextStyle(
                       color: Colors.white,
@@ -700,14 +785,158 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
     );
   }
 
-  void _showReviewSheet(BuildContext context, List<Memory> memories, MemoriesProvider existingProvider) async {
+  void _showReviewSheet(BuildContext context, List<Memory> memories, MemoriesProvider existingProvider) {
     if (memories.isEmpty || !mounted) return;
-    await showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return DesktopMemoryReviewSheet(
-          memories: memories,
-          provider: existingProvider,
+    _reviewMemoriesNotifier.value = memories;
+    _showReviewIndicator.value = false; // Hide indicator when panel is open
+  }
+
+  Widget _buildReviewIndicator() {
+    return ValueListenableBuilder<bool>(
+      valueListenable: _showReviewIndicator,
+      builder: (context, showIndicator, child) {
+        if (!showIndicator || _unreviewedMemories.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        return Container(
+          margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    ResponsiveHelper.purplePrimary.withOpacity(0.15),
+                    ResponsiveHelper.purplePrimary.withOpacity(0.05),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: ResponsiveHelper.purplePrimary.withOpacity(0.1),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  // Notification icon
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      FontAwesomeIcons.bell,
+                      color: ResponsiveHelper.purplePrimary,
+                      size: 16,
+                    ),
+                  ),
+
+                  const SizedBox(width: 12),
+
+                  // Message text
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Review your memories',
+                          style: TextStyle(
+                            color: ResponsiveHelper.textPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${_unreviewedMemories.length} new ${_unreviewedMemories.length == 1 ? 'memory' : 'memories'} waiting for review. Review them to keep or discard.',
+                          style: const TextStyle(
+                            color: ResponsiveHelper.textSecondary,
+                            fontSize: 12,
+                            height: 1.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(width: 12),
+
+                  // Action buttons
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Review button
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () {
+                            final provider = context.read<MemoriesProvider>();
+                            _showReviewSheet(context, _unreviewedMemories, provider);
+                          },
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: ResponsiveHelper.purplePrimary,
+                              borderRadius: BorderRadius.circular(8),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: const Text(
+                              'Review',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(width: 8),
+
+                      // Dismiss button
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () {
+                            _showReviewIndicator.value = false;
+                          },
+                          borderRadius: BorderRadius.circular(6),
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            child: const Icon(
+                              Icons.close,
+                              color: ResponsiveHelper.textTertiary,
+                              size: 16,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
         );
       },
     );
