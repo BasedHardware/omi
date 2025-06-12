@@ -14,6 +14,7 @@ import 'package:shimmer/shimmer.dart';
 
 import 'widgets/desktop_memory_item.dart';
 import 'widgets/desktop_memory_dialog.dart';
+import 'widgets/desktop_memory_review_sheet.dart';
 
 // Filter options for the dropdown
 enum FilterOption { interesting, system, all }
@@ -701,15 +702,14 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
 
   void _showReviewSheet(BuildContext context, List<Memory> memories, MemoriesProvider existingProvider) async {
     if (memories.isEmpty || !mounted) return;
-    // TODO: Implement desktop memory review sheet
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${memories.length} unreviewed memories found'),
-        backgroundColor: ResponsiveHelper.purplePrimary,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(milliseconds: 2000),
-      ),
+    await showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return DesktopMemoryReviewSheet(
+          memories: memories,
+          provider: existingProvider,
+        );
+      },
     );
   }
 
