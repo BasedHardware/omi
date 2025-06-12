@@ -261,68 +261,17 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
                       ],
                     ),
                   ),
-
-                  const SizedBox(height: 32),
-
-                  // Minimal tip
-                  Container(
-                    constraints: const BoxConstraints(maxWidth: 400),
-                    margin: const EdgeInsets.symmetric(horizontal: 40),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1A1A1A),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: const Color(0xFF2A2A2A),
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.lightbulb_outline_rounded,
-                          color: ResponsiveHelper.purplePrimary,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Text(
-                            'Use your first name or how you\'d like Omi to address you',
-                            style: TextStyle(
-                              color: Color(0xFF9CA3AF),
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ],
               ),
             ),
           ),
 
-          // Clean minimal navigation
+          // Clean minimal navigation - centered continue button only
           Container(
             padding: const EdgeInsets.all(40),
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Clean minimal back button
-                TextButton.icon(
-                  onPressed: widget.onBack,
-                  icon: const Icon(Icons.arrow_back_rounded, size: 18),
-                  label: const Text('Back'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: const Color(0xFF9CA3AF),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                  ),
-                ),
-
-                const Spacer(),
-
                 // Premium continue button
                 Container(
                   height: 44,

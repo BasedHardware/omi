@@ -23,8 +23,7 @@ class DesktopMemoriesPage extends StatefulWidget {
   State<DesktopMemoriesPage> createState() => DesktopMemoriesPageState();
 }
 
-class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
-    with AutomaticKeepAliveClientMixin, TickerProviderStateMixin {
+class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with AutomaticKeepAliveClientMixin, TickerProviderStateMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -668,9 +667,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
           ),
           const SizedBox(height: 8),
           Text(
-            provider.searchQuery.isEmpty && _selectedCategory == null
-                ? 'Create your first memory to get started'
-                : 'Try adjusting your search or filter',
+            provider.searchQuery.isEmpty && _selectedCategory == null ? 'Create your first memory to get started' : 'Try adjusting your search or filter',
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: ResponsiveHelper.textSecondary,
