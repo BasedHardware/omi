@@ -44,7 +44,7 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
 
       if (recordingState == RecordingState.systemAudioRecord) {
         await provider.pauseSystemAudioRecording();
-      } else if (recordingState == RecordingState.pause) {
+      } else if (provider.isPaused) {
         await provider.resumeSystemAudioRecording();
       } else {
         await provider.streamSystemAudioRecording();
@@ -62,7 +62,7 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
 
   Widget _buildProminentStartButton(
       bool isInitializing, RecordingState recordingState, CaptureProvider captureProvider) {
-    return Container(
+    return SizedBox(
       width: double.infinity,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -127,15 +127,15 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
                       // Center content
                       Center(
                         child: isInitializing
-                            ? SizedBox(
+                            ? const SizedBox(
                                 width: 32,
                                 height: 32,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 3,
-                                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                 ),
                               )
-                            : Icon(
+                            : const Icon(
                                 Icons.mic_rounded,
                                 size: 48,
                                 color: Colors.white,
@@ -242,15 +242,15 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
                   ),
                   child: Center(
                     child: isInitializing
-                        ? SizedBox(
+                        ? const SizedBox(
                             width: 16,
                             height: 16,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                             ),
                           )
-                        : Icon(
+                        : const Icon(
                             Icons.mic_rounded,
                             size: 20,
                             color: Colors.white,
@@ -334,7 +334,7 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
         final recordingState = captureProvider.recordingState;
         final isRecording = recordingState == RecordingState.systemAudioRecord;
         final isInitializing = recordingState == RecordingState.initialising;
-        final isPaused = recordingState == RecordingState.pause;
+        final isPaused = captureProvider.isPaused;
         final hasTranscripts = captureProvider.segments.isNotEmpty;
         final isRecordingOrInitializing = isRecording || isInitializing || isPaused;
 
@@ -468,7 +468,7 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
                                           ],
                                         ),
                                         child: isInitializing
-                                            ? Center(
+                                            ? const Center(
                                                 child: SizedBox(
                                                   width: 16,
                                                   height: 16,
@@ -514,7 +514,7 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
                                           ),
                                         ],
                                       ),
-                                      child: Icon(
+                                      child: const Icon(
                                         Icons.stop_rounded,
                                         size: 20,
                                         color: Colors.white,
@@ -552,7 +552,7 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
                                             ),
                                           ],
                                         ),
-                                        child: Icon(
+                                        child: const Icon(
                                           Icons.mic_rounded,
                                           size: 20,
                                           color: ResponsiveHelper.textSecondary,
@@ -581,7 +581,7 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
 
                           Text(
                             _getSubtitleText(recordingState, isPaused),
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 16,
                               color: ResponsiveHelper.textTertiary,
                             ),
@@ -640,7 +640,7 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
                 const Spacer(),
                 Text(
                   '${segments.length} segment${segments.length == 1 ? '' : 's'}',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 12,
                     color: ResponsiveHelper.textQuaternary,
                   ),
@@ -773,7 +773,7 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
                       duration: const Duration(milliseconds: 300),
                       child: Text(
                         segment.text.trim(),
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 14,
                           height: 1.4,
                           color: ResponsiveHelper.textPrimary,

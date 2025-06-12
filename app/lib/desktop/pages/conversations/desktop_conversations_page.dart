@@ -180,11 +180,11 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                       opacity: _fadeAnimation,
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 32),
-                        child: Column(
+                        child: const Column(
                           children: [
-                            const SpeechProfileCardWidget(),
-                            const SizedBox(height: 12),
-                            const UpdateFirmwareCardWidget(),
+                            SpeechProfileCardWidget(),
+                            SizedBox(height: 12),
+                            UpdateFirmwareCardWidget(),
                           ],
                         ),
                       ),
@@ -233,7 +233,7 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                     SliverToBoxAdapter(
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 80),
-                        child: Center(
+                        child: const Center(
                           child: CircularProgressIndicator(
                             valueColor: AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary),
                             strokeWidth: 2,
@@ -268,7 +268,7 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(vertical: 32),
                                   child: convoProvider.isLoadingConversations
-                                      ? Center(
+                                      ? const Center(
                                           child: CircularProgressIndicator(
                                             valueColor: AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary),
                                             strokeWidth: 2,
@@ -353,32 +353,12 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                   ),
                 ),
                 SizedBox(height: responsive.spacing(baseSpacing: 4)),
-                Consumer<ConversationProvider>(
-                  builder: (context, convoProvider, _) {
-                    if (convoProvider.isLoadingConversations) {
-                      return Text(
-                        'Loading conversations...',
-                        style: responsive.bodyMedium.copyWith(
-                          color: ResponsiveHelper.textTertiary,
-                        ),
-                      );
-                    }
-
-                    final totalConversations = convoProvider.groupedConversations.values
-                        .fold<int>(0, (sum, conversations) => sum + conversations.length);
-
-                    return Text(
-                      convoProvider.previousQuery.isNotEmpty
-                          ? 'Search results for "${convoProvider.previousQuery}"'
-                          : totalConversations > 0
-                              ? 'Your conversation history'
-                              : 'No conversations yet',
-                      style: responsive.bodyMedium.copyWith(
-                        color: ResponsiveHelper.textTertiary,
-                      ),
-                    );
-                  },
-                ),
+                Text(
+                  'Your conversation history',
+                  style: responsive.bodyMedium.copyWith(
+                    color: ResponsiveHelper.textTertiary,
+                  ),
+                )
               ],
             ),
           ),
