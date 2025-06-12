@@ -486,7 +486,11 @@ class CaptureProvider extends ChangeNotifier
         updateRecordingState(RecordingState.systemAudioRecord);
         debugPrint('System audio recording started successfully - permissions were actually granted');
       }, onStop: () {
-        updateRecordingState(RecordingState.stop);
+        if (_isPaused) {
+          updateRecordingState(RecordingState.pause);
+        } else {
+          updateRecordingState(RecordingState.stop);
+        }
         _socket?.stop(reason: 'system audio stream ended from native');
       }, onError: (error) {
         debugPrint('System audio failed to start, error: $error');
@@ -575,7 +579,11 @@ class CaptureProvider extends ChangeNotifier
             updateRecordingState(RecordingState.systemAudioRecord);
             debugPrint('Second attempt succeeded - macOS permission bug confirmed');
           }, onStop: () {
-            updateRecordingState(RecordingState.stop);
+            if (_isPaused) {
+              updateRecordingState(RecordingState.pause);
+            } else {
+              updateRecordingState(RecordingState.stop);
+            }
             _socket?.stop(reason: 'system audio stream ended from native');
           }, onError: (error) {
             debugPrint('Second attempt also failed: $error');
@@ -612,7 +620,6 @@ class CaptureProvider extends ChangeNotifier
   Future<void> stopSystemAudioRecording() async {
     if (!Platform.isMacOS) return;
     ServiceManager.instance().systemAudio.stop();
-    updateRecordingState(RecordingState.stop);
     _isPaused = false; // Clear paused state when stopping
     await _socket?.stop(reason: 'stop system audio recording from Flutter');
     await _cleanupCurrentState();
@@ -621,7 +628,6 @@ class CaptureProvider extends ChangeNotifier
   Future<void> pauseSystemAudioRecording() async {
     if (!Platform.isMacOS) return;
     ServiceManager.instance().systemAudio.stop();
-    updateRecordingState(RecordingState.pause); // Use pause state instead of stop
     _isPaused = true; // Set paused state
     await _socket?.stop(reason: 'pause system audio recording from Flutter');
     await _cleanupCurrentState();

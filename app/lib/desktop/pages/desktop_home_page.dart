@@ -163,7 +163,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
       if (mounted) {
-        await Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
+        await Provider.of<CaptureProvider>(context, listen: false)
+            .streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
       }
 
       // Handle navigation
@@ -549,7 +550,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
             color: Colors.transparent,
             child: InkWell(
               onTap: () {
-                MixpanelManager().bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Actions', 'Apps'][index]);
+                MixpanelManager()
+                    .bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Actions', 'Apps'][index]);
                 onTap();
               },
               borderRadius: BorderRadius.circular(8),
@@ -626,7 +628,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
     final recordingState = captureProvider.recordingState;
     final isRecording = recordingState == RecordingState.systemAudioRecord;
-    final isPaused = captureProvider.recordingState == RecordingState.pause;
+    final isPaused = captureProvider.isPaused;
 
     _updateOverlayState(isRecording: isRecording, isPaused: isPaused);
 
@@ -667,7 +669,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
 
     // Update overlay state
     final isRecording = provider.recordingState == RecordingState.systemAudioRecord;
-    final isPaused = !isRecording && provider.segments.isNotEmpty;
+    final isPaused = provider.isPaused;
     await _updateOverlayState(isRecording: isRecording, isPaused: isPaused);
   }
 
@@ -718,7 +720,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
   void _updateNativeOverlayFromProvider(CaptureProvider captureProvider) {
     final recordingState = captureProvider.recordingState;
     final isRecording = recordingState == RecordingState.systemAudioRecord;
-    final isPaused = captureProvider.recordingState == RecordingState.pause;
+    final isPaused = captureProvider.isPaused;
 
     // Update overlay state
     _updateOverlayState(isRecording: isRecording, isPaused: isPaused);
@@ -841,7 +843,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                   child: Center(
                     child: Text(
                       userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: ResponsiveHelper.purplePrimary,
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -859,7 +861,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                     children: [
                       Text(
                         userName.isNotEmpty ? userName : 'User',
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: ResponsiveHelper.textPrimary,
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
@@ -870,7 +872,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                       const SizedBox(height: 2),
                       Text(
                         userEmail.isNotEmpty ? userEmail : 'No email set',
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: ResponsiveHelper.textTertiary,
                           fontSize: 11,
                         ),
@@ -882,7 +884,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                 ),
 
                 // Chevron icon
-                Icon(
+                const Icon(
                   FontAwesomeIcons.chevronUp,
                   color: ResponsiveHelper.textSecondary,
                   size: 12,
@@ -1003,7 +1005,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
             child: Center(
               child: Text(
                 userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
-                style: TextStyle(
+                style: const TextStyle(
                   color: ResponsiveHelper.purplePrimary,
                   fontSize: 20,
                   fontWeight: FontWeight.w600,
@@ -1021,7 +1023,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
               children: [
                 Text(
                   userName.isNotEmpty ? userName : 'User',
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: ResponsiveHelper.textPrimary,
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -1032,7 +1034,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                 const SizedBox(height: 4),
                 Text(
                   userEmail.isNotEmpty ? userEmail : 'No email set',
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: ResponsiveHelper.textTertiary,
                     fontSize: 12,
                   ),
@@ -1047,7 +1049,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     );
   }
 
-  PopupMenuItem<String> _buildPopupMenuItem(String value, IconData icon, String title, double width, {bool isDestructive = false}) {
+  PopupMenuItem<String> _buildPopupMenuItem(String value, IconData icon, String title, double width,
+      {bool isDestructive = false}) {
     return PopupMenuItem<String>(
       value: value,
       padding: EdgeInsets.zero,
@@ -1115,7 +1118,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
-        title: Text(
+        title: const Text(
           'Sign Out?',
           style: TextStyle(
             color: ResponsiveHelper.textPrimary,
@@ -1123,7 +1126,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
             fontWeight: FontWeight.w600,
           ),
         ),
-        content: Text(
+        content: const Text(
           'Are you sure you want to sign out?',
           style: TextStyle(
             color: ResponsiveHelper.textSecondary,
@@ -1133,7 +1136,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(
+            child: const Text(
               'Cancel',
               style: TextStyle(
                 color: ResponsiveHelper.textSecondary,
