@@ -1,20 +1,85 @@
+import copy
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from database import users as users_db
 from models.chat import Message
+from utils import encryption
 from utils.other.endpoints import timeit
 from ._client import db
 
 
-@timeit
+# *********************************
+# ******* ENCRYPTION HELPERS ******
+# *********************************
+
+def _encrypt_chat_data(chat_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
+    """
+    Encrypts sensitive fields in a chat message dictionary.
+    Operates on a copy of the data to avoid side effects.
+    """
+    data = copy.deepcopy(chat_data)
+    if 'text' in data and isinstance(data['text'], str):
+        data['text'] = encryption.encrypt(data['text'], uid)
+    return data
+
+
+def _decrypt_chat_data(chat_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
+    """
+    Decrypts sensitive fields in a chat message dictionary.
+    Operates on a copy of the data to avoid side effects.
+    """
+    data = copy.deepcopy(chat_data)
+    if 'text' in data and isinstance(data['text'], str):
+        try:
+            data['text'] = encryption.decrypt(data['text'], uid)
+        except Exception:
+            pass  # Ignore decryption errors
+    return data
+
+
+def _prepare_data_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
+    """
+    Prepares data for writing to Firestore by encrypting it if the protection level is 'enhanced'.
+    For 'standard' and 'e2ee', data is returned as is.
+    """
+    if level == 'enhanced':
+        return _encrypt_chat_data(data, uid)
+    return data
+
+
+def _prepare_message_for_read(message_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
+    """
+    Prepares a message document for reading by decrypting it based on its protection level.
+    For 'standard' and 'e2ee', data is returned as is.
+    """
+    if not message_data:
+        return None
+
+    level = message_data.get('data_protection_level')
+    if level == 'enhanced':
+        return _decrypt_chat_data(message_data, uid)
+
+    return message_data
+
+
+# *****************************
+# ********** CRUD *************
+# *****************************
+
 def add_message(uid: str, message_data: dict):
     del message_data['memories']
+
+    current_level = users_db.get_data_protection_level(uid)
+    message_data['data_protection_level'] = current_level
+    prepared_data = _prepare_data_for_write(message_data, uid, current_level)
+
     user_ref = db.collection('users').document(uid)
-    user_ref.collection('messages').add(message_data)
+    user_ref.collection('messages').add(prepared_data)
     return message_data
 
 
@@ -68,8 +133,10 @@ def get_app_messages(uid: str, app_id: str, limit: int = 20, offset: int = 0, in
         messages.append(message)
         conversations_id.update(message.get('memories_id', []))
 
+    decrypted_messages = [_prepare_message_for_read(msg, uid) for msg in messages]
+
     if not include_conversations:
-        return messages
+        return decrypted_messages
 
     # Fetch all conversations at once
     conversations = {}
@@ -82,16 +149,15 @@ def get_app_messages(uid: str, app_id: str, limit: int = 20, offset: int = 0, in
             conversations[conversation['id']] = conversation
 
     # Attach conversations to messages
-    for message in messages:
+    for message in decrypted_messages:
         message['memories'] = [
             conversations[conversation_id] for conversation_id in message.get('memories_id', []) if
             conversation_id in conversations
         ]
 
-    return messages
+    return decrypted_messages
 
 
-@timeit
 def get_messages(
         uid: str, limit: int = 20, offset: int = 0, include_conversations: bool = False, app_id: Optional[str] = None,
         chat_session_id: Optional[str] = None
@@ -122,8 +188,10 @@ def get_messages(
         conversations_id.update(message.get('memories_id', []))
         files_id.update(message.get('files_id', []))
 
+    decrypted_messages = [_prepare_message_for_read(msg, uid) for msg in messages]
+
     if not include_conversations:
-        return messages
+        return decrypted_messages
 
     # Fetch all conversations at once
     conversations = {}
@@ -136,7 +204,7 @@ def get_messages(
             conversations[conversation['id']] = conversation
 
     # Attach conversations to messages
-    for message in messages:
+    for message in decrypted_messages:
         message['memories'] = [
             conversations[conversation_id] for conversation_id in message.get('memories_id', []) if
             conversation_id in conversations
@@ -153,19 +221,23 @@ def get_messages(
             files[file['id']] = file
 
     # Attach files to messages
-    for message in messages:
+    for message in decrypted_messages:
         message['files'] = [
             files[file_id] for file_id in message.get('files_id', []) if file_id in files
         ]
 
-    return messages
+    return decrypted_messages
 
 
 def get_message(uid: str, message_id: str) -> tuple[Message, str] | None:
     user_ref = db.collection('users').document(uid)
     message_ref = user_ref.collection('messages').where('id', '==', message_id).limit(1).stream()
     message_doc = next(message_ref, None)
-    message = Message(**message_doc.to_dict()) if message_doc else None
+    if not message_doc:
+        return None
+
+    message_data = _prepare_message_for_read(message_doc.to_dict(), uid)
+    message = Message(**message_data) if message_data else None
 
     if not message:
         return None
@@ -296,3 +368,47 @@ def add_files_to_chat_session(uid: str, chat_session_id: str, file_ids: List[str
     user_ref = db.collection('users').document(uid)
     session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
     session_ref.update({"file_ids": firestore.ArrayUnion(file_ids)})
+
+
+# **************************************
+# ********* MIGRATION HELPERS **********
+# **************************************
+
+def get_chats_to_migrate(uid: str, target_level: str) -> List[dict]:
+    """
+    Finds all chat messages that are not at the target protection level by fetching all documents
+    and filtering them in memory. This simplifies the code but may be less performant for
+    users with a very large number of documents.
+    """
+    messages_ref = db.collection('users').document(uid).collection('messages')
+    all_messages = messages_ref.select(['data_protection_level']).stream()
+
+    to_migrate = []
+    for doc in all_messages:
+        doc_data = doc.to_dict()
+        current_level = doc_data.get('data_protection_level', 'standard')
+        if target_level != current_level:
+            to_migrate.append({'id': doc.id, 'type': 'chat'})
+
+    return to_migrate
+
+
+def migrate_chat_level(uid: str, message_doc_id: str, target_level: str):
+    """
+    Migrates a single chat message to the target protection level.
+    """
+    doc_ref = db.collection('users').document(uid).collection('messages').document(message_doc_id)
+    doc_snapshot = doc_ref.get()
+    if not doc_snapshot.exists:
+        raise ValueError("Message not found")
+
+    message_data = doc_snapshot.to_dict()
+    current_level = message_data.get('data_protection_level', 'standard')
+
+    if current_level == target_level:
+        return
+
+    plain_data = _prepare_message_for_read(message_data, uid)
+    migrated_data = _prepare_data_for_write(plain_data, uid, target_level)
+    migrated_data['data_protection_level'] = target_level
+    doc_ref.update(migrated_data)

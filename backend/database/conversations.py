@@ -1,12 +1,12 @@
 import asyncio
+import copy
 import json
 import uuid
 from datetime import datetime, timedelta
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict, Any
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
-from google.cloud.firestore_v1.base_query import Or
 from google.cloud.firestore_v1.async_client import AsyncClient
 
 import utils.other.hume as hume
@@ -23,42 +23,72 @@ conversations_collection = 'conversations'
 # ******* ENCRYPTION HELPERS ******
 # *********************************
 
-def _encrypt_conversation_data(conversation_data: dict, uid: str):
-    """Encrypts sensitive fields in a conversation dictionary."""
-    if 'transcript_segments' in conversation_data and isinstance(conversation_data['transcript_segments'], list):
-        segments_json = json.dumps(conversation_data['transcript_segments'])
-        conversation_data['transcript_segments'] = encryption.encrypt(segments_json, uid)
+def _encrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
+    """
+    Encrypts sensitive fields in a conversation dictionary.
+    Operates on a copy of the data to avoid side effects.
+    """
+    data = copy.deepcopy(conversation_data)
+    if 'transcript_segments' in data and isinstance(data['transcript_segments'], list):
+        segments_json = json.dumps(data['transcript_segments'])
+        data['transcript_segments'] = encryption.encrypt(segments_json, uid)
 
-    if 'structured' in conversation_data and conversation_data.get('structured'):
-        structured = conversation_data['structured']
-        if 'title' in structured and structured.get('title'):
-            structured['title'] = encryption.encrypt(structured['title'], uid)
-        if 'summary' in structured and structured.get('summary'):
-            structured['summary'] = encryption.encrypt(structured['summary'], uid)
-
-    return conversation_data
+    return data
 
 
-def _decrypt_conversation_data(conversation_data: dict, uid: str):
-    """Decrypts sensitive fields in a conversation dictionary."""
-    if not conversation_data:
-        return conversation_data
+def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
+    """
+    Decrypts sensitive fields in a conversation dictionary.
+    Operates on a copy of the data to avoid side effects.
+    """
+    data = copy.deepcopy(conversation_data)
 
-    if 'transcript_segments' in conversation_data and isinstance(conversation_data['transcript_segments'], str):
-        decrypted_segments_json = encryption.decrypt(conversation_data['transcript_segments'], uid)
+    if 'transcript_segments' in data and isinstance(data['transcript_segments'], str):
         try:
-            conversation_data['transcript_segments'] = json.loads(decrypted_segments_json)
+            decrypted_segments_json = encryption.decrypt(data['transcript_segments'], uid)
+            data['transcript_segments'] = json.loads(decrypted_segments_json)
         except (json.JSONDecodeError, TypeError):
             # If decryption failed, it might return the original string, which is not valid JSON.
             # Keep it as is for debugging.
             pass
 
-    if 'structured' in conversation_data and conversation_data.get('structured'):
-        structured = conversation_data['structured']
+    if 'structured' in data and data.get('structured'):
+        structured = data['structured']
         if 'title' in structured and structured.get('title'):
-            structured['title'] = encryption.decrypt(structured['title'], uid)
+            try:
+                structured['title'] = encryption.decrypt(structured['title'], uid)
+            except Exception:
+                pass  # Ignore decryption errors
         if 'summary' in structured and structured.get('summary'):
-            structured['summary'] = encryption.decrypt(structured['summary'], uid)
+            try:
+                structured['summary'] = encryption.decrypt(structured['summary'], uid)
+            except Exception:
+                pass  # Ignore decryption errors
+
+    return data
+
+
+def _prepare_data_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
+    """
+    Prepares data for writing to Firestore by encrypting it if the protection level is 'enhanced'.
+    For 'standard' and 'e2ee', data is returned as is.
+    """
+    if level == 'enhanced':
+        return _encrypt_conversation_data(data, uid)
+    return data
+
+
+def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
+    """
+    Prepares a conversation document for reading by decrypting it based on its protection level.
+    For 'standard' and 'e2ee', data is returned as is.
+    """
+    if not conversation_data:
+        return None
+
+    level = conversation_data.get('data_protection_level')
+    if level == 'enhanced':
+        return _decrypt_conversation_data(conversation_data, uid)
 
     return conversation_data
 
@@ -69,38 +99,25 @@ def _decrypt_conversation_data(conversation_data: dict, uid: str):
 
 def upsert_conversation(uid: str, conversation_data: dict):
     current_level = users_db.get_data_protection_level(uid)
-    conversation_data['data_protection_level'] = current_level
-
-    if current_level == 'enhanced':
-        conversation_data = _encrypt_conversation_data(conversation_data, uid)
 
     if 'audio_base64_url' in conversation_data:
         del conversation_data['audio_base64_url']
     if 'photos' in conversation_data:
         del conversation_data['photos']
 
+    conversation_data['data_protection_level'] = current_level
+    prepared_data = _prepare_data_for_write(conversation_data, uid, current_level)
+
     user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
-    conversation_ref.set(conversation_data)
+    conversation_ref = user_ref.collection(conversations_collection).document(prepared_data['id'])
+    conversation_ref.set(prepared_data)
 
 
-def get_conversation(uid, conversation_id, expected_level: str = None):
+def get_conversation(uid, conversation_id):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_data = conversation_ref.get().to_dict()
-
-    if not conversation_data:
-        return None
-
-    # Determine the encryption level to use for decryption.
-    # If an expected_level is passed (during migration), use that.
-    # Otherwise, use the document's own level, or the user's global level as a fallback.
-    level_for_decryption = expected_level or conversation_data.get('data_protection_level') or users_db.get_data_protection_level(uid)
-
-    if level_for_decryption == 'enhanced':
-        conversation_data = _decrypt_conversation_data(conversation_data, uid)
-
-    return conversation_data
+    return _prepare_conversation_for_read(conversation_data, uid)
 
 
 def get_conversations(uid: str, limit: int = 100, offset: int = 0, include_discarded: bool = False,
@@ -129,42 +146,30 @@ def get_conversations(uid: str, limit: int = 100, offset: int = 0, include_disca
 
     # Limits
     conversations_ref = conversations_ref.limit(limit).offset(offset)
-    
+
     conversations = [doc.to_dict() for doc in conversations_ref.stream()]
-
-    # Decrypt each conversation based on its own protection level
-    decrypted_conversations = []
-    for conv in conversations:
-        if conv.get('data_protection_level') == 'enhanced':
-            decrypted_conversations.append(_decrypt_conversation_data(conv, uid))
-        else:
-            decrypted_conversations.append(conv)
-    
-    return decrypted_conversations
+    return [_prepare_conversation_for_read(conv, uid) for conv in conversations]
 
 
-def update_conversation(uid: str, conversation_id: str, memory_data: dict):
-    # When updating, we respect the document's own protection level.
+def update_conversation(uid: str, conversation_id: str, update_data: dict):
     doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
     doc_snapshot = doc_ref.get()
     if not doc_snapshot.exists:
         return
 
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
-
-    if doc_level == 'enhanced':
-        memory_data = _encrypt_conversation_data(memory_data.copy(), uid)
-
-    doc_ref.update(memory_data)
+    prepared_data = _prepare_data_for_write(update_data, uid, doc_level)
+    doc_ref.update(prepared_data)
 
 
 def update_conversation_title(uid: str, conversation_id: str, title: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    
-    if users_db.get_data_protection_level(uid) == 'enhanced':
-        title = encryption.encrypt(title, uid)
-        
+
+    doc_snapshot = conversation_ref.get()
+    if not doc_snapshot.exists:
+        return
+
     conversation_ref.update({'structured.title': title})
 
 
@@ -184,15 +189,7 @@ def filter_conversations_by_date(uid, start_date, end_date):
         .order_by('created_at', direction=firestore.Query.DESCENDING)
     )
     conversations = [doc.to_dict() for doc in query.stream()]
-
-    decrypted_conversations = []
-    for conv in conversations:
-        if conv.get('data_protection_level') == 'enhanced':
-            decrypted_conversations.append(_decrypt_conversation_data(conv, uid))
-        else:
-            decrypted_conversations.append(conv)
-
-    return decrypted_conversations
+    return [_prepare_conversation_for_read(conv, uid) for conv in conversations]
 
 
 def get_conversations_by_id(uid, conversation_ids):
@@ -210,14 +207,7 @@ def get_conversations_by_id(uid, conversation_ids):
                 continue
             conversations.append(data)
 
-    decrypted_conversations = []
-    for conv in conversations:
-        if conv.get('data_protection_level') == 'enhanced':
-            decrypted_conversations.append(_decrypt_conversation_data(conv, uid))
-        else:
-            decrypted_conversations.append(conv)
-
-    return decrypted_conversations
+    return [_prepare_conversation_for_read(conv, uid) for conv in conversations]
 
 
 # **************************************
@@ -226,27 +216,21 @@ def get_conversations_by_id(uid, conversation_ids):
 
 def get_conversations_to_migrate(uid: str, target_level: str) -> List[dict]:
     """
-    Finds all conversations that are not at the target protection level using efficient queries.
+    Finds all conversations that are not at the target protection level by fetching all documents
+    and filtering them in memory. This simplifies the code but may be less performant for
+    users with a very large number of documents.
     """
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
-    
-    if target_level == 'enhanced':
-        # Find documents where level is 'standard' OR null (missing)
-        # Using two separate queries because Firestore OR is limited.
-        # This is still more efficient than fetching all documents.
-        query_standard = conversations_ref.where(filter=FieldFilter('data_protection_level', '==', 'standard'))
-        query_null = conversations_ref.where(filter=FieldFilter('data_protection_level', '==', None))
-        
-        standard_docs = [{'id': doc.id, 'type': 'conversation'} for doc in query_standard.stream()]
-        null_docs = [{'id': doc.id, 'type': 'conversation'} for doc in query_null.stream()]
-        return standard_docs + null_docs
+    all_conversations = conversations_ref.select(['data_protection_level']).stream()
 
-    elif target_level == 'standard':
-        # Find documents that are 'enhanced'
-        query = conversations_ref.where(filter=FieldFilter('data_protection_level', '==', 'enhanced'))
-        return [{'id': doc.id, 'type': 'conversation'} for doc in query.stream()]
-    
-    return []
+    to_migrate = []
+    for doc in all_conversations:
+        doc_data = doc.to_dict()
+        current_level = doc_data.get('data_protection_level', 'standard')
+        if target_level != current_level:
+            to_migrate.append({'id': doc.id, 'type': 'conversation'})
+
+    return to_migrate
 
 
 def migrate_conversation_level(uid: str, conversation_id: str, target_level: str):
@@ -264,15 +248,11 @@ def migrate_conversation_level(uid: str, conversation_id: str, target_level: str
     if current_level == target_level:
         return  # Nothing to do
 
-    # Decrypt the data first, regardless of target, to get a clean slate.
-    if current_level == 'enhanced':
-        conversation_data = _decrypt_conversation_data(conversation_data, uid)
+    # Decrypt the data first (if needed) to get a clean slate.
+    plain_data = _prepare_conversation_for_read(conversation_data, uid)
 
     # Now, encrypt if the target is 'enhanced'.
-    if target_level == 'enhanced':
-        migrated_data = _encrypt_conversation_data(conversation_data.copy(), uid)
-    else: # target is 'standard'
-        migrated_data = conversation_data.copy()
+    migrated_data = _prepare_data_for_write(plain_data, uid, target_level)
 
     # Update the document with the migrated data and the new protection level.
     migrated_data['data_protection_level'] = target_level
@@ -291,11 +271,7 @@ def get_in_progress_conversation(uid: str):
     )
     docs = [doc.to_dict() for doc in conversations_ref.stream()]
     conversation = docs[0] if docs else None
-
-    if conversation and conversation.get('data_protection_level') == 'enhanced':
-        return _decrypt_conversation_data(conversation, uid)
-
-    return conversation
+    return _prepare_conversation_for_read(conversation, uid)
 
 
 def get_processing_conversations(uid: str):
@@ -305,15 +281,7 @@ def get_processing_conversations(uid: str):
         .where(filter=FieldFilter('status', '==', 'processing'))
     )
     conversations = [doc.to_dict() for doc in conversations_ref.stream()]
-
-    decrypted_conversations = []
-    for conv in conversations:
-        if conv.get('data_protection_level') == 'enhanced':
-            decrypted_conversations.append(_decrypt_conversation_data(conv, uid))
-        else:
-            decrypted_conversations.append(conv)
-
-    return decrypted_conversations
+    return [_prepare_conversation_for_read(conv, uid) for conv in conversations]
 
 
 def update_conversation_status(uid: str, conversation_id: str, status: str):
@@ -333,9 +301,7 @@ def set_conversation_as_discarded(uid: str, conversation_id: str):
 # *********************************
 
 def update_conversation_events(uid: str, conversation_id: str, events: List[dict]):
-    user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_ref.update({'structured.events': events})
+    update_conversation(uid, conversation_id, {'structured.events': events})
 
 
 # *********************************
@@ -343,9 +309,7 @@ def update_conversation_events(uid: str, conversation_id: str, events: List[dict
 # *********************************
 
 def update_conversation_action_items(uid: str, conversation_id: str, action_items: List[dict]):
-    user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_ref.update({'structured.action_items': action_items})
+    update_conversation(uid, conversation_id, {'structured.action_items': action_items})
 
 
 # ******************************
@@ -360,16 +324,14 @@ def update_conversation_finished_at(uid: str, conversation_id: str, finished_at:
 
 def update_conversation_segments(uid: str, conversation_id: str, segments: List[dict]):
     doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
-    doc_level = doc_ref.get().to_dict().get('data_protection_level', 'standard')
+    doc_snapshot = doc_ref.get()
+    if not doc_snapshot.exists:
+        return
 
-    if doc_level == 'enhanced':
-        segments_json = json.dumps(segments)
-        encrypted_segments = encryption.encrypt(segments_json, uid)
-        update_data = {'transcript_segments': encrypted_segments}
-    else:
-        update_data = {'transcript_segments': segments}
-
-    doc_ref.update(update_data)
+    doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
+    update_payload = {'transcript_segments': segments}
+    prepared_payload = _prepare_data_for_write(update_payload, uid, doc_level)
+    doc_ref.update(prepared_payload)
 
 
 # ***********************************
@@ -382,22 +344,19 @@ def set_conversation_visibility(uid: str, conversation_id: str, visibility: str)
     conversation_ref.update({'visibility': visibility})
 
 
-async def _get_public_conversation(db: AsyncClient, uid: str, conversation_id: str):
-    conversation_ref = db.collection('users').document(uid).collection('conversations').document(conversation_id)
+async def _get_public_conversation(db_client: AsyncClient, uid: str, conversation_id: str):
+    conversation_ref = db_client.collection('users').document(uid).collection('conversations').document(conversation_id)
     conversation_doc = await conversation_ref.get()
     if conversation_doc.exists:
         conversation_data = conversation_doc.to_dict()
         if conversation_data.get('visibility') in ['public']:
-            # Decrypt if necessary before returning
-            if conversation_data.get('data_protection_level') == 'enhanced':
-                return _decrypt_conversation_data(conversation_data, uid)
-            return conversation_data
+            return _prepare_conversation_for_read(conversation_data, uid)
     return None
 
 
 async def _get_public_conversations(data: List[Tuple[str, str]]):
-    db = AsyncClient()
-    tasks = [_get_public_conversation(db, uid, conversation_id) for uid, conversation_id in data]
+    db_client = AsyncClient()
+    tasks = [_get_public_conversation(db_client, uid, conversation_id) for uid, conversation_id in data]
     conversations = await asyncio.gather(*tasks)
     return [conversation for conversation in conversations if conversation is not None]
 
@@ -547,11 +506,7 @@ def get_closest_conversation_to_timestamps(
             closest_conversation = conversation
 
     print('get_closest_conversation_to_timestamps closest_conversation:', closest_conversation['id'])
-    
-    if closest_conversation and closest_conversation.get('data_protection_level') == 'enhanced':
-        return _decrypt_conversation_data(closest_conversation, uid)
-
-    return closest_conversation
+    return _prepare_conversation_for_read(closest_conversation, uid)
 
 
 def get_last_completed_conversation(uid: str) -> Optional[dict]:
@@ -563,8 +518,4 @@ def get_last_completed_conversation(uid: str) -> Optional[dict]:
     )
     conversations = [doc.to_dict() for doc in query.stream()]
     conversation = conversations[0] if conversations else None
-
-    if conversation and conversation.get('data_protection_level') == 'enhanced':
-        return _decrypt_conversation_data(conversation, uid)
-        
-    return conversation
+    return _prepare_conversation_for_read(conversation, uid)

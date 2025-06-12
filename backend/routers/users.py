@@ -6,7 +6,7 @@ import hashlib
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from database import conversations as conversations_db
+from database import conversations as conversations_db, memories as memories_db, chat as chat_db
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import cache_user_geolocation, set_user_webhook_db, get_user_webhook_db, disable_user_webhook_db, \
     enable_user_webhook_db, user_webhook_status_db, set_user_preferred_app
@@ -299,7 +299,18 @@ def handle_migration_requests(
                 return {'status': 'ok'}
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Failed to migrate conversation {request.id}: {e}")
-        # Add handlers for 'memory', 'chat', etc. in the future
+        elif request.type == 'memory':
+            try:
+                memories_db.migrate_memory_level(uid, request.id, request.target_level)
+                return {'status': 'ok'}
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Failed to migrate memory {request.id}: {e}")
+        elif request.type == 'chat':
+            try:
+                chat_db.migrate_chat_level(uid, request.id, request.target_level)
+                return {'status': 'ok'}
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Failed to migrate chat message {request.id}: {e}")
         else:
             raise HTTPException(status_code=400, detail=f"Unknown object type for migration: {request.type}")
     elif isinstance(request, MigrationTargetRequest):
@@ -317,10 +328,12 @@ def get_migration_requests(target_level: str, uid: str = Depends(auth.get_curren
     if target_level not in ['standard', 'enhanced']:
         raise HTTPException(status_code=400, detail="Invalid target_level.")
 
-    # This should be extended to check memories, chats, etc.
     conversations_to_migrate = conversations_db.get_conversations_to_migrate(uid, target_level)
-    # In the future, combine lists from other data types (memories, chats).
-    needs_migration = conversations_to_migrate
+    memories_to_migrate = memories_db.get_memories_to_migrate(uid, target_level)
+    chats_to_migrate = chat_db.get_chats_to_migrate(uid, target_level)
+    needs_migration = conversations_to_migrate + memories_to_migrate + chats_to_migrate
+    # needs_migration = memories_to_migrate + chats_to_migrate
+    #print(needs_migration)
     return {"needs_migration": needs_migration}
 
 
@@ -337,6 +350,20 @@ def handle_batch_migration_requests(
                 conversations_db.migrate_conversation_level(uid, request.id, request.target_level)
             except Exception as e:
                 error_detail = f"Failed to migrate conversation {request.id}: {e}"
+                print(error_detail)
+                errors.append(error_detail)
+        elif request.type == 'memory':
+            try:
+                memories_db.migrate_memory_level(uid, request.id, request.target_level)
+            except Exception as e:
+                error_detail = f"Failed to migrate memory {request.id}: {e}"
+                print(error_detail)
+                errors.append(error_detail)
+        elif request.type == 'chat':
+            try:
+                chat_db.migrate_chat_level(uid, request.id, request.target_level)
+            except Exception as e:
+                error_detail = f"Failed to migrate chat message {request.id}: {e}"
                 print(error_detail)
                 errors.append(error_detail)
         else:

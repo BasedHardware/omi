@@ -53,6 +53,19 @@ class UserProvider with ChangeNotifier {
     return '';
   }
 
+  String _getMigrationItemName(String type) {
+    switch (type) {
+      case 'conversation':
+        return 'conversations';
+      case 'memory':
+        return 'memories';
+      case 'chat':
+        return 'chats';
+      default:
+        return 'data';
+    }
+  }
+
   Future<void> initialize() async {
     _isLoading = true;
     notifyListeners();
@@ -123,17 +136,18 @@ class UserProvider with ChangeNotifier {
       for (var i = 0; i < _migrationQueue.length; i += batchSize) {
         final end = (i + batchSize > _migrationQueue.length) ? _migrationQueue.length : i + batchSize;
         final batch = _migrationQueue.sublist(i, end);
+        final itemType = _getMigrationItemName(batch.first.type);
 
         await PrivacyApi.migrateObjectsBatch(batch);
 
         _processedCount += batch.length;
         final percentage = ((_processedCount / migrationTotalCount) * 100).toInt();
-        _migrationMessage = 'Migrating... $percentage%';
+        _migrationMessage = 'Migrating $itemType... $percentage%';
 
         NotificationService.instance.showNotification(
           id: _migrationNotificationId,
           title: 'Data Migration in Progress',
-          body: '$_processedCount of $migrationTotalCount objects migrated ($percentage%)',
+          body: 'Migrating $itemType... $_processedCount of $migrationTotalCount migrated ($percentage%)',
           layout: NotificationLayout.ProgressBar,
           payload: {'navigate_to': '/settings/data-privacy', 'progress': percentage.toString()},
         );
