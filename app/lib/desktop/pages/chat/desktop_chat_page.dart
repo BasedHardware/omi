@@ -22,6 +22,7 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
@@ -30,6 +31,9 @@ import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:omi/widgets/dialog.dart';
 
 import 'widgets/desktop_message_action_menu.dart';
 
@@ -155,8 +159,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   Widget build(BuildContext context) {
     super.build(context);
 
-    return Consumer2<MessageProvider, ConnectivityProvider>(
-      builder: (context, provider, connectivityProvider, child) {
+    return Consumer3<MessageProvider, ConnectivityProvider, AppProvider>(
+      builder: (context, provider, connectivityProvider, appProvider, child) {
         return Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -184,6 +188,9 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                   ),
                   child: Column(
                     children: [
+                      // Modern header with app selection
+                      _buildModernHeader(appProvider),
+
                       // Modern loading indicator
                       if (provider.isLoadingMessages) _buildModernLoadingBar(),
 
@@ -245,6 +252,177 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
           ),
         );
       },
+    );
+  }
+
+  Widget _buildModernHeader(AppProvider appProvider) {
+    final selectedApp = appProvider.selectedChatAppId.isEmpty || appProvider.selectedChatAppId == 'no_selected' ? null : appProvider.getSelectedApp();
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+      child: Row(
+        children: [
+          // App selection dropdown
+          Expanded(
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => _showAppSelectionSheet(context, appProvider),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: ResponsiveHelper.backgroundQuaternary.withOpacity(0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      // App avatar
+                      selectedApp != null
+                          ? CachedNetworkImage(
+                              imageUrl: selectedApp.getImageUrl(),
+                              imageBuilder: (context, imageProvider) {
+                                return Container(
+                                  width: 24,
+                                  height: 24,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(6),
+                                    image: DecorationImage(
+                                      image: imageProvider,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                );
+                              },
+                              errorWidget: (context, url, error) {
+                                return Container(
+                                  width: 24,
+                                  height: 24,
+                                  decoration: BoxDecoration(
+                                    color: ResponsiveHelper.backgroundTertiary,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Icon(Icons.error_outline, size: 16),
+                                );
+                              },
+                              progressIndicatorBuilder: (context, url, progress) => Container(
+                                width: 24,
+                                height: 24,
+                                decoration: BoxDecoration(
+                                  color: ResponsiveHelper.backgroundTertiary,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                              ),
+                            )
+                          : Container(
+                              width: 24,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                image: DecorationImage(
+                                  image: AssetImage(Assets.images.background.path),
+                                  fit: BoxFit.cover,
+                                ),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Center(
+                                child: Image.asset(
+                                  Assets.images.herologo.path,
+                                  width: 16,
+                                  height: 16,
+                                ),
+                              ),
+                            ),
+
+                      const SizedBox(width: 12),
+
+                      // App name and description
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              selectedApp?.name ?? 'Omi',
+                              style: TextStyle(
+                                color: ResponsiveHelper.textPrimary,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (selectedApp != null) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                'Chat with ${selectedApp.name}',
+                                style: TextStyle(
+                                  color: ResponsiveHelper.textTertiary,
+                                  fontSize: 11,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ] else ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                'Default AI Assistant',
+                                style: TextStyle(
+                                  color: ResponsiveHelper.textTertiary,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(width: 8),
+
+                      // Dropdown arrow
+                      Icon(
+                        FontAwesomeIcons.chevronDown,
+                        color: ResponsiveHelper.textSecondary,
+                        size: 12,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 12),
+
+          // Clear chat button
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => _showClearChatDialog(context),
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  FontAwesomeIcons.trash,
+                  color: ResponsiveHelper.textSecondary,
+                  size: 16,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1396,5 +1574,341 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
         );
       }
     });
+  }
+
+  void _showAppSelectionSheet(BuildContext context, AppProvider appProvider) {
+    final selectedApp = appProvider.selectedChatAppId.isEmpty || appProvider.selectedChatAppId == 'no_selected' ? null : appProvider.getSelectedApp();
+    final availableApps = appProvider.apps.where((app) => app.worksWithChat() && app.enabled).toList();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.7,
+        decoration: BoxDecoration(
+          color: ResponsiveHelper.backgroundSecondary,
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(20),
+          ),
+          border: Border.all(
+            color: ResponsiveHelper.backgroundTertiary,
+            width: 1,
+          ),
+        ),
+        child: Column(
+          children: [
+            // Handle bar
+            Container(
+              margin: const EdgeInsets.only(top: 8),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: ResponsiveHelper.textQuaternary,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            // Header
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                children: [
+                  Icon(
+                    FontAwesomeIcons.robot,
+                    color: ResponsiveHelper.textSecondary,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Select Chat Assistant',
+                    style: TextStyle(
+                      color: ResponsiveHelper.textPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: Icon(
+                      FontAwesomeIcons.xmark,
+                      color: ResponsiveHelper.textSecondary,
+                      size: 16,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Apps list
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                children: [
+                  // Default Omi option
+                  _buildAppSelectionItem(
+                    app: null,
+                    isSelected: selectedApp == null,
+                    onTap: () => _handleAppSelection(context, appProvider, null),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  // Available chat apps
+                  ...availableApps.map((app) => _buildAppSelectionItem(
+                        app: app,
+                        isSelected: selectedApp?.id == app.id,
+                        onTap: () => _handleAppSelection(context, appProvider, app),
+                      )),
+
+                  const SizedBox(height: 16),
+
+                  // Enable more apps option
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () {
+                          Navigator.pop(context);
+                          final homeProvider = context.read<HomeProvider>();
+                          homeProvider.setIndex(4); // Navigate to apps page
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                FontAwesomeIcons.store,
+                                color: ResponsiveHelper.purplePrimary,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Enable More Apps',
+                                style: TextStyle(
+                                  color: ResponsiveHelper.textPrimary,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const Spacer(),
+                              Icon(
+                                FontAwesomeIcons.chevronRight,
+                                color: ResponsiveHelper.textTertiary,
+                                size: 12,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAppSelectionItem({
+    required App? app,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: isSelected ? ResponsiveHelper.purplePrimary.withOpacity(0.15) : ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected ? ResponsiveHelper.purplePrimary.withOpacity(0.3) : ResponsiveHelper.backgroundQuaternary.withOpacity(0.3),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                // App avatar
+                app != null
+                    ? CachedNetworkImage(
+                        imageUrl: app.getImageUrl(),
+                        imageBuilder: (context, imageProvider) {
+                          return Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              image: DecorationImage(
+                                image: imageProvider,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          );
+                        },
+                        errorWidget: (context, url, error) {
+                          return Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: ResponsiveHelper.backgroundTertiary,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.error_outline, size: 20),
+                          );
+                        },
+                        progressIndicatorBuilder: (context, url, progress) => Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: ResponsiveHelper.backgroundTertiary,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                      )
+                    : Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          image: DecorationImage(
+                            image: AssetImage(Assets.images.background.path),
+                            fit: BoxFit.cover,
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Center(
+                          child: Image.asset(
+                            Assets.images.herologo.path,
+                            width: 24,
+                            height: 24,
+                          ),
+                        ),
+                      ),
+
+                const SizedBox(width: 16),
+
+                // App details
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        app?.name ?? 'Omi',
+                        style: TextStyle(
+                          color: ResponsiveHelper.textPrimary,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        app?.description ?? 'Default AI Assistant',
+                        style: TextStyle(
+                          color: ResponsiveHelper.textSecondary,
+                          fontSize: 12,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(width: 12),
+
+                // Selection indicator
+                if (isSelected)
+                  Icon(
+                    FontAwesomeIcons.check,
+                    color: ResponsiveHelper.purplePrimary,
+                    size: 16,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _handleAppSelection(BuildContext context, AppProvider appProvider, App? app) async {
+    Navigator.pop(context);
+
+    final String selectedAppId = app?.id ?? 'no_selected';
+    final String currentAppId = appProvider.selectedChatAppId.isEmpty ? 'no_selected' : appProvider.selectedChatAppId;
+
+    if (selectedAppId != currentAppId) {
+      appProvider.setSelectedChatAppId(app?.id);
+
+      final messageProvider = context.read<MessageProvider>();
+      await messageProvider.refreshMessages(dropdownSelected: true);
+
+      if (messageProvider.messages.isEmpty) {
+        messageProvider.sendInitialAppMessage(app);
+      }
+
+      // Show confirmation
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Now chatting with ${app?.name ?? 'Omi'}'),
+          backgroundColor: ResponsiveHelper.purplePrimary,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+
+      scrollToBottom();
+    }
+  }
+
+  void _showClearChatDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => getDialog(
+        context,
+        () => Navigator.of(context).pop(),
+        () {
+          context.read<MessageProvider>().clearChat();
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Chat cleared'),
+              backgroundColor: ResponsiveHelper.backgroundTertiary,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        },
+        'Clear Chat?',
+        'Are you sure you want to clear the chat? This action cannot be undone.',
+      ),
+    );
   }
 }

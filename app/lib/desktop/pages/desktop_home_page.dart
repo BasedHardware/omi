@@ -3,9 +3,15 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/main.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
+import 'package:omi/pages/settings/about.dart';
+import 'package:omi/pages/settings/developer.dart';
+import 'package:omi/pages/settings/device_settings.dart';
+import 'package:omi/pages/settings/profile.dart';
 import 'apps/desktop_apps_page.dart';
 import 'conversations/desktop_conversations_page.dart';
 import 'chat/desktop_chat_page.dart';
@@ -29,6 +35,7 @@ import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:intercom_flutter/intercom_flutter.dart';
 
 import '../../pages/conversations/sync_page.dart';
 import 'home/widgets/battery_info_widget.dart';
@@ -48,6 +55,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
   PageController? _controller;
   late AnimationController _sidebarAnimationController;
   late Animation<double> _sidebarSlideAnimation;
+  final GlobalKey _profileCardKey = GlobalKey();
 
   void _initiateApps() {
     context.read<AppProvider>().getApps();
@@ -146,8 +154,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
       if (mounted) {
-        await Provider.of<CaptureProvider>(context, listen: false)
-            .streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
+        await Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
       }
 
       // Handle navigation
@@ -432,8 +439,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
 
                           const Spacer(),
 
-                          // Device connection status at bottom
-                          _buildDeviceStatus(),
+                          // Profile card at bottom
+                          _buildProfileCard(),
 
                           // Sync notification when available
                           Consumer<ConversationProvider>(builder: (context, convoProvider, child) {
@@ -513,8 +520,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
             color: Colors.transparent,
             child: InkWell(
               onTap: () {
-                MixpanelManager()
-                    .bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Actions', 'Apps'][index]);
+                MixpanelManager().bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Actions', 'Apps'][index]);
                 onTap();
               },
               borderRadius: BorderRadius.circular(8),
@@ -645,66 +651,363 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     );
   }
 
-  Widget _buildDeviceStatus() {
-    return Consumer<DeviceProvider>(
-      builder: (context, deviceProvider, child) {
-        final isConnected = deviceProvider.connectedDevice != null;
+  Widget _buildProfileCard() {
+    final userName = SharedPreferencesUtil().givenName;
+    final userEmail = SharedPreferencesUtil().email;
 
-        return Container(
-          margin: const EdgeInsets.fromLTRB(8, 0, 8, 16),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: isConnected
-                  ? ResponsiveHelper.purplePrimary.withOpacity(0.3)
-                  : ResponsiveHelper.backgroundTertiary.withOpacity(0.5),
-              width: 1,
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: isConnected ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textQuaternary,
-                  borderRadius: BorderRadius.circular(4),
-                ),
+    return Container(
+      key: _profileCardKey,
+      margin: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _showProfilePopup(context),
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: ResponsiveHelper.backgroundQuaternary.withOpacity(0.3),
+                width: 1,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      isConnected ? 'Device Connected' : 'Device Offline',
+            ),
+            child: Row(
+              children: [
+                // Profile picture
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
                       style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: isConnected ? ResponsiveHelper.textPrimary : ResponsiveHelper.textTertiary,
+                        color: ResponsiveHelper.purplePrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    if (isConnected && deviceProvider.connectedDevice != null) ...[
+                  ),
+                ),
+
+                const SizedBox(width: 12),
+
+                // User info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        userName.isNotEmpty ? userName : 'User',
+                        style: TextStyle(
+                          color: ResponsiveHelper.textPrimary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       const SizedBox(height: 2),
                       Text(
-                        deviceProvider.connectedDevice!.name,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: ResponsiveHelper.textQuaternary,
+                        userEmail.isNotEmpty ? userEmail : 'No email set',
+                        style: TextStyle(
+                          color: ResponsiveHelper.textTertiary,
+                          fontSize: 11,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
-                  ],
+                  ),
+                ),
+
+                // Chevron icon
+                Icon(
+                  FontAwesomeIcons.chevronUp,
+                  color: ResponsiveHelper.textSecondary,
+                  size: 12,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showProfilePopup(BuildContext context) {
+    final RenderBox? profileCardBox = _profileCardKey.currentContext?.findRenderObject() as RenderBox?;
+    if (profileCardBox == null) return;
+
+    final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final Offset profileCardPosition = profileCardBox.localToGlobal(Offset.zero, ancestor: overlay);
+    final Size profileCardSize = profileCardBox.size;
+
+    // Calculate profile card width - exact same width as the profile card
+    final profileCardWidth = profileCardSize.width;
+
+    // Menu height estimate (profile header + dividers + 7 menu items)
+    const double menuHeight = 320.0;
+    const double gap = 8.0; // Gap between popup and profile card
+
+    showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        profileCardPosition.dx, // Left edge aligned with profile card
+        profileCardPosition.dy - menuHeight - gap, // Top edge positioned so bottom is gap pixels above profile card
+        profileCardPosition.dx + profileCardWidth, // Right edge aligned with profile card
+        profileCardPosition.dy - gap, // Bottom edge positioned gap pixels above profile card top
+      ),
+      color: ResponsiveHelper.backgroundSecondary.withOpacity(0.95),
+      elevation: 12,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      // Add custom animation for bottom-up slide
+      popUpAnimationStyle: AnimationStyle(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutCubic,
+      ),
+      items: [
+        // Profile header
+        PopupMenuItem<String>(
+          enabled: false,
+          padding: EdgeInsets.zero,
+          child: _buildProfileHeader(profileCardWidth),
+        ),
+
+        // Divider
+        PopupMenuItem<String>(
+          enabled: false,
+          height: 1,
+          padding: EdgeInsets.zero,
+          child: Container(
+            height: 1,
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+          ),
+        ),
+
+        // Settings options
+        _buildPopupMenuItem('profile', Icons.person, 'Profile', profileCardWidth),
+        _buildPopupMenuItem('device', Icons.bluetooth_connected, 'Device Settings', profileCardWidth),
+        _buildPopupMenuItem('developer', Icons.code, 'Developer Mode', profileCardWidth),
+        _buildPopupMenuItem('help', Icons.help_outline, 'Help & Support', profileCardWidth),
+        _buildPopupMenuItem('about', Icons.info_outline, 'About Omi', profileCardWidth),
+
+        // Divider before sign out
+        PopupMenuItem<String>(
+          enabled: false,
+          height: 1,
+          padding: EdgeInsets.zero,
+          child: Container(
+            height: 1,
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+          ),
+        ),
+
+        _buildPopupMenuItem('signout', Icons.logout, 'Sign Out', profileCardWidth, isDestructive: true),
+      ],
+    ).then((String? result) {
+      if (result != null) {
+        _handleProfileMenuSelection(result);
+      }
+    });
+  }
+
+  Widget _buildProfileHeader(double width) {
+    final userName = SharedPreferencesUtil().givenName;
+    final userEmail = SharedPreferencesUtil().email;
+
+    return Container(
+      width: width,
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          // Profile picture
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
+                width: 2,
+              ),
+            ),
+            child: Center(
+              child: Text(
+                userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
+                style: TextStyle(
+                  color: ResponsiveHelper.purplePrimary,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              // Battery info integration
-              if (isConnected) const DesktopBatteryInfoWidget(),
-            ],
+            ),
+          ),
+
+          const SizedBox(width: 12),
+
+          // User info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  userName.isNotEmpty ? userName : 'User',
+                  style: TextStyle(
+                    color: ResponsiveHelper.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  userEmail.isNotEmpty ? userEmail : 'No email set',
+                  style: TextStyle(
+                    color: ResponsiveHelper.textTertiary,
+                    fontSize: 12,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  PopupMenuItem<String> _buildPopupMenuItem(String value, IconData icon, String title, double width, {bool isDestructive = false}) {
+    return PopupMenuItem<String>(
+      value: value,
+      padding: EdgeInsets.zero,
+      child: Container(
+        width: width,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              color: isDestructive ? Colors.red.shade400 : ResponsiveHelper.textSecondary,
+              size: 18,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  color: isDestructive ? Colors.red.shade400 : ResponsiveHelper.textPrimary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _handleProfileMenuSelection(String value) {
+    switch (value) {
+      case 'profile':
+        routeToPage(context, const ProfilePage());
+        break;
+      case 'device':
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => const DeviceSettings(),
           ),
         );
-      },
+        break;
+      case 'developer':
+        routeToPage(context, const DeveloperSettingsPage());
+        break;
+      case 'help':
+        if (PlatformService.isIntercomSupported) {
+          Intercom.instance.displayHelpCenter();
+        }
+        break;
+      case 'about':
+        routeToPage(context, const AboutOmiPage());
+        break;
+      case 'signout':
+        _showSignOutDialog();
+        break;
+    }
+  }
+
+  void _showSignOutDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: ResponsiveHelper.backgroundSecondary,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Text(
+          'Sign Out?',
+          style: TextStyle(
+            color: ResponsiveHelper.textPrimary,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        content: Text(
+          'Are you sure you want to sign out?',
+          style: TextStyle(
+            color: ResponsiveHelper.textSecondary,
+            fontSize: 14,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color: ResponsiveHelper.textSecondary,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () async {
+              await SharedPreferencesUtil().clearUserPreferences();
+              await signOut();
+              if (mounted) {
+                Navigator.of(context).pop();
+                routeToPage(context, const DeciderWidget(), replace: true);
+              }
+            },
+            child: Text(
+              'Sign Out',
+              style: TextStyle(
+                color: Colors.red.shade400,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

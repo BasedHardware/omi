@@ -3,8 +3,9 @@ import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class DesktopCompleteScreen extends StatefulWidget {
   final VoidCallback onComplete;
+  final VoidCallback? onBack;
 
-  const DesktopCompleteScreen({super.key, required this.onComplete});
+  const DesktopCompleteScreen({super.key, required this.onComplete, this.onBack});
 
   @override
   State<DesktopCompleteScreen> createState() => _DesktopCompleteScreenState();
@@ -92,144 +93,124 @@ class _DesktopCompleteScreenState extends State<DesktopCompleteScreen> with Tick
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // Success Icon with animation
+                      // Simple minimal success icon matching other pages
                       ScaleTransition(
                         scale: _scaleAnimation,
                         child: Container(
-                          width: responsive.iconSize(baseSize: 120, minSize: 80, maxSize: 140),
-                          height: responsive.iconSize(baseSize: 120, minSize: 80, maxSize: 140),
+                          width: 56,
+                          height: 56,
                           decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                Color(0xFF4CAF50),
-                                Color(0xFF45A049),
-                                Color(0xFF66BB6A),
-                              ],
-                            ),
-                            borderRadius: BorderRadius.circular(
-                                responsive.spacing(baseSpacing: 30, minSpacing: 20, maxSpacing: 40)),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF4CAF50).withOpacity(0.4),
-                                blurRadius: responsive.spacing(baseSpacing: 20, minSpacing: 15, maxSpacing: 25),
-                                offset: Offset(0, responsive.spacing(baseSpacing: 10, minSpacing: 8, maxSpacing: 12)),
-                              ),
-                            ],
+                            color: const Color(0xFF1A1A1A),
+                            borderRadius: BorderRadius.circular(16),
                           ),
-                          child: Icon(
-                            Icons.check,
+                          child: const Icon(
+                            Icons.check_rounded,
                             color: Colors.white,
-                            size: responsive.iconSize(baseSize: 60, minSize: 40, maxSize: 70),
+                            size: 28,
                           ),
                         ),
                       ),
 
-                      SizedBox(height: responsive.spacing(baseSpacing: 48, minSpacing: 32, maxSpacing: 64)),
+                      const SizedBox(height: 32),
 
-                      // Success Title
-                      Text(
+                      // Clean title
+                      const Text(
                         'You\'re all set!',
-                        style: responsive.titleLarge,
-                        textAlign: TextAlign.center,
-                      ),
-
-                      SizedBox(height: responsive.spacing(baseSpacing: 16, minSpacing: 12, maxSpacing: 24)),
-
-                      // Success Subtitle
-                      Text(
-                        'Welcome to Omi! Your AI companion is ready to assist you with conversations, tasks, and more.',
-                        style: responsive.bodyLarge,
-                        textAlign: TextAlign.center,
-                      ),
-
-                      SizedBox(height: responsive.spacing(baseSpacing: 48, minSpacing: 32, maxSpacing: 64)),
-
-                      // Feature highlights
-                      _buildFeatureHighlights(responsive),
-
-                      SizedBox(height: responsive.spacing(baseSpacing: 64, minSpacing: 40, maxSpacing: 80)),
-
-                      // Get Started button
-                      Container(
-                        width: double.infinity,
-                        height: responsive.buttonHeight(),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [
-                              Color(0xFF667EEA),
-                              Color(0xFF764BA2),
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(
-                              responsive.spacing(baseSpacing: 16, minSpacing: 12, maxSpacing: 20)),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF667EEA).withOpacity(0.3),
-                              blurRadius: responsive.spacing(baseSpacing: 12, minSpacing: 8, maxSpacing: 16),
-                              offset: Offset(0, responsive.spacing(baseSpacing: 4, minSpacing: 3, maxSpacing: 6)),
-                            ),
-                          ],
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                          letterSpacing: -0.5,
                         ),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(
-                                responsive.spacing(baseSpacing: 16, minSpacing: 12, maxSpacing: 20)),
-                            onTap: widget.onComplete,
-                            child: Center(
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    'Start Using Omi',
-                                    style: responsive.titleMedium,
-                                  ),
-                                  SizedBox(width: responsive.spacing(baseSpacing: 8, minSpacing: 6, maxSpacing: 10)),
-                                  Icon(
-                                    Icons.arrow_forward,
-                                    color: Colors.white,
-                                    size: responsive.iconSize(baseSize: 20, minSize: 16, maxSize: 24),
-                                  ),
-                                ],
+                        textAlign: TextAlign.center,
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      // Clean subtitle
+                      Container(
+                        constraints: const BoxConstraints(maxWidth: 480),
+                        padding: const EdgeInsets.symmetric(horizontal: 40),
+                        child: const Text(
+                          'Welcome to Omi! Your AI companion is ready to assist you with conversations, tasks, and more.',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w400,
+                            color: Color(0xFF9CA3AF),
+                            height: 1.5,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+
+                      const SizedBox(height: 48),
+
+                      // Clean button
+                      Container(
+                        constraints: const BoxConstraints(maxWidth: 400),
+                        margin: const EdgeInsets.symmetric(horizontal: 40),
+                        child: Container(
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1A1A1A),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: const Color(0xFF2A2A2A),
+                              width: 1,
+                            ),
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: widget.onComplete,
+                              child: const Padding(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                  vertical: 18,
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      'Start Using Omi',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    SizedBox(width: 8),
+                                    Icon(
+                                      Icons.arrow_forward_rounded,
+                                      color: Colors.white,
+                                      size: 20,
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
 
-                      SizedBox(height: responsive.spacing(baseSpacing: 32, minSpacing: 24, maxSpacing: 40)),
+                      const SizedBox(height: 16),
 
-                      // Additional info
-                      Container(
-                        padding: responsive.cardPadding(),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.05),
-                          borderRadius: BorderRadius.circular(
-                              responsive.spacing(baseSpacing: 16, minSpacing: 12, maxSpacing: 20)),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.1),
-                            width: 1,
+                      // Small back button
+                      if (widget.onBack != null)
+                        TextButton(
+                          onPressed: widget.onBack,
+                          child: const Text(
+                            'Back',
+                            style: TextStyle(
+                              color: Color(0xFF6B7280),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
+                            ),
                           ),
                         ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.info_outline,
-                              color: const Color(0xFF667EEA),
-                              size: responsive.iconSize(baseSize: 24, minSize: 20, maxSize: 28),
-                            ),
-                            SizedBox(width: responsive.spacing(baseSpacing: 12, minSpacing: 8, maxSpacing: 16)),
-                            Expanded(
-                              child: Text(
-                                'You can always change your preferences later in the settings.',
-                                style: responsive.bodySmall,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+
+                      const SizedBox(height: 16),
                     ],
                   ),
                 ),
@@ -281,8 +262,7 @@ class _DesktopCompleteScreenState extends State<DesktopCompleteScreen> with Tick
         children: features
             .map((feature) => Expanded(
                   child: Container(
-                    margin: EdgeInsets.symmetric(
-                        horizontal: responsive.spacing(baseSpacing: 8, minSpacing: 6, maxSpacing: 12)),
+                    margin: EdgeInsets.symmetric(horizontal: responsive.spacing(baseSpacing: 8, minSpacing: 6, maxSpacing: 12)),
                     child: _buildFeatureCard(
                       icon: feature['icon'] as IconData,
                       title: feature['title'] as String,

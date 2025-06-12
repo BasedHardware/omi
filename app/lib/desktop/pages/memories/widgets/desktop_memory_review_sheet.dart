@@ -79,9 +79,7 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
   void _filterByCategory(MemoryCategory? category) {
     setState(() {
       selectedCategory = category;
-      displayedMemories = category == null
-          ? List.from(remainingMemories)
-          : remainingMemories.where((f) => f.category == category).toList();
+      displayedMemories = category == null ? List.from(remainingMemories) : remainingMemories.where((f) => f.category == category).toList();
     });
   }
 
@@ -98,9 +96,7 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
 
     setState(() => _isProcessing = true);
 
-    List<Memory> memoriesToProcess = selectedCategory == null
-        ? List.from(remainingMemories)
-        : remainingMemories.where((f) => f.category == selectedCategory).toList();
+    List<Memory> memoriesToProcess = selectedCategory == null ? List.from(remainingMemories) : remainingMemories.where((f) => f.category == selectedCategory).toList();
 
     final count = memoriesToProcess.length;
 
@@ -111,9 +107,7 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
 
     setState(() {
       remainingMemories.removeWhere((f) => memoriesToProcess.contains(f));
-      displayedMemories = selectedCategory == null
-          ? List.from(remainingMemories)
-          : remainingMemories.where((f) => f.category == selectedCategory).toList();
+      displayedMemories = selectedCategory == null ? List.from(remainingMemories) : remainingMemories.where((f) => f.category == selectedCategory).toList();
       _isProcessing = false;
     });
 
@@ -133,9 +127,7 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
 
     setState(() {
       remainingMemories.remove(memory);
-      displayedMemories = selectedCategory == null
-          ? List.from(remainingMemories)
-          : remainingMemories.where((f) => f.category == selectedCategory).toList();
+      displayedMemories = selectedCategory == null ? List.from(remainingMemories) : remainingMemories.where((f) => f.category == selectedCategory).toList();
       _isProcessing = false;
     });
 
@@ -325,14 +317,10 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
             vertical: responsive.spacing(baseSpacing: 8),
           ),
           decoration: BoxDecoration(
-            color: isSelected
-                ? ResponsiveHelper.purplePrimary.withOpacity(0.15)
-                : ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
+            color: isSelected ? ResponsiveHelper.purplePrimary.withOpacity(0.15) : ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: isSelected
-                  ? ResponsiveHelper.purplePrimary.withOpacity(0.4)
-                  : ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+              color: isSelected ? ResponsiveHelper.purplePrimary.withOpacity(0.4) : ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
               width: 1,
             ),
           ),
@@ -397,9 +385,7 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
             ),
             SizedBox(height: responsive.spacing(baseSpacing: 8)),
             Text(
-              selectedCategory == null
-                  ? 'Great work! All memories have been processed.'
-                  : 'Try switching to a different category.',
+              selectedCategory == null ? 'Great work! All memories have been processed.' : 'Try switching to a different category.',
               style: responsive.bodyMedium.copyWith(
                 color: ResponsiveHelper.textTertiary,
               ),

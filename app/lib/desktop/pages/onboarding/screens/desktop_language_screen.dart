@@ -236,9 +236,7 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
                   color: const Color(0xFF1A1A1A),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: _searchFocusNode.hasFocus
-                        ? ResponsiveHelper.purplePrimary.withOpacity(0.6)
-                        : const Color(0xFF2A2A2A),
+                    color: _searchFocusNode.hasFocus ? ResponsiveHelper.purplePrimary.withOpacity(0.6) : const Color(0xFF2A2A2A),
                     width: 1,
                   ),
                 ),
@@ -302,58 +300,62 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
             ),
           ),
 
-          // Clean minimal navigation
+          // Clean minimal navigation - centered continue button
           Container(
             padding: const EdgeInsets.all(40),
-            child: Row(
+            child: Column(
               children: [
-                // Clean minimal back button
-                TextButton.icon(
-                  onPressed: widget.onBack,
-                  icon: const Icon(Icons.arrow_back_rounded, size: 18),
-                  label: const Text('Back'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: const Color(0xFF9CA3AF),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                  ),
-                ),
-
-                const Spacer(),
-
-                // Premium continue button
-                Container(
-                  height: 44,
-                  decoration: BoxDecoration(
-                    gradient: selectedLanguage != null
-                        ? LinearGradient(
-                            colors: [
-                              ResponsiveHelper.purplePrimary,
-                              ResponsiveHelper.purplePrimary.withOpacity(0.8),
-                            ],
-                          )
-                        : null,
-                    color: selectedLanguage == null ? const Color(0xFF2A2A2A) : null,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: ElevatedButton.icon(
-                    onPressed: selectedLanguage != null ? _continueWithLanguage : null,
-                    icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-                    label: const Text('Continue'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      foregroundColor: selectedLanguage != null ? Colors.white : const Color(0xFF6B7280),
-                      shadowColor: Colors.transparent,
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      shape: RoundedRectangleBorder(
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Premium continue button
+                    Container(
+                      height: 44,
+                      decoration: BoxDecoration(
+                        gradient: selectedLanguage != null
+                            ? LinearGradient(
+                                colors: [
+                                  ResponsiveHelper.purplePrimary,
+                                  ResponsiveHelper.purplePrimary.withOpacity(0.8),
+                                ],
+                              )
+                            : null,
+                        color: selectedLanguage == null ? const Color(0xFF2A2A2A) : null,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      textStyle: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
+                      child: ElevatedButton.icon(
+                        onPressed: selectedLanguage != null ? _continueWithLanguage : null,
+                        icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                        label: const Text('Continue'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          foregroundColor: selectedLanguage != null ? Colors.white : const Color(0xFF6B7280),
+                          shadowColor: Colors.transparent,
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          textStyle: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 8),
+
+                // Small back button
+                TextButton(
+                  onPressed: widget.onBack,
+                  child: const Text(
+                    'Back',
+                    style: TextStyle(
+                      color: Color(0xFF6B7280),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w400,
                     ),
                   ),
                 ),
