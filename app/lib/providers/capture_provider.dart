@@ -621,7 +621,7 @@ class CaptureProvider extends ChangeNotifier
   Future<void> pauseSystemAudioRecording() async {
     if (!Platform.isMacOS) return;
     ServiceManager.instance().systemAudio.stop();
-    updateRecordingState(RecordingState.stop);
+    updateRecordingState(RecordingState.pause); // Use pause state instead of stop
     _isPaused = true; // Set paused state
     await _socket?.stop(reason: 'pause system audio recording from Flutter');
     await _cleanupCurrentState();
