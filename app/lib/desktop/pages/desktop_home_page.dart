@@ -163,8 +163,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
       if (mounted) {
-        await Provider.of<CaptureProvider>(context, listen: false)
-            .streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
+        await Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
       }
 
       // Handle navigation
@@ -550,8 +549,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
             color: Colors.transparent,
             child: InkWell(
               onTap: () {
-                MixpanelManager()
-                    .bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Actions', 'Apps'][index]);
+                MixpanelManager().bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Actions', 'Apps'][index]);
                 onTap();
               },
               borderRadius: BorderRadius.circular(8),
@@ -901,8 +899,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     final RenderBox? profileCardBox = _profileCardKey.currentContext?.findRenderObject() as RenderBox?;
     if (profileCardBox == null) return;
 
-    final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-    final Offset profileCardPosition = profileCardBox.localToGlobal(Offset.zero, ancestor: overlay);
+    final Offset profileCardPosition = profileCardBox.localToGlobal(Offset.zero);
     final Size profileCardSize = profileCardBox.size;
 
     // Calculate profile card width - exact same width as the profile card
@@ -916,7 +913,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
       context: context,
       position: RelativeRect.fromLTRB(
         profileCardPosition.dx, // Left edge aligned with profile card
-        profileCardPosition.dy - menuHeight - gap, // Top edge positioned so bottom is gap pixels above profile card
+        profileCardPosition.dy - menuHeight - gap, // Position above the profile card (menuHeight + gap pixels up)
         profileCardPosition.dx + profileCardWidth, // Right edge aligned with profile card
         profileCardPosition.dy - gap, // Bottom edge positioned gap pixels above profile card top
       ),
@@ -1050,8 +1047,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     );
   }
 
-  PopupMenuItem<String> _buildPopupMenuItem(String value, IconData icon, String title, double width,
-      {bool isDestructive = false}) {
+  PopupMenuItem<String> _buildPopupMenuItem(String value, IconData icon, String title, double width, {bool isDestructive = false}) {
     return PopupMenuItem<String>(
       value: value,
       padding: EdgeInsets.zero,
