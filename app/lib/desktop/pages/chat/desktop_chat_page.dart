@@ -10,10 +10,13 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/chat/select_text_screen.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/animated_mini_banner.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
+import 'package:omi/pages/chat/widgets/typing_indicator.dart';
+import 'package:omi/pages/chat/widgets/markdown_message_widget.dart';
 import 'package:omi/desktop/pages/chat/widgets/desktop_voice_recorder_widget.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -26,6 +29,7 @@ import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shimmer/shimmer.dart';
 
 import 'widgets/desktop_message_action_menu.dart';
 
@@ -501,7 +505,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
       itemCount: provider.messages.length,
       itemBuilder: (context, chatIndex) {
         final message = provider.messages[chatIndex];
-        double topPadding = chatIndex == provider.messages.length - 1 ? 16 : 8;
+        double topPadding = chatIndex == provider.messages.length - 1 ? 16 : 16;
         if (chatIndex != 0) message.askForNps = false;
 
         double bottomPadding = chatIndex == 0 ? 140 : 0;
@@ -553,62 +557,91 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
           maxWidth: MediaQuery.of(context).size.width * 0.7 * 0.7, // 70% of available chat width
         ),
         child: message.sender == MessageSender.ai
-            ? Container(
-                decoration: BoxDecoration(
-                  color: const Color.fromARGB(255, 255, 255, 255).withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
-                    width: 1,
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // AI message with profile picture outside
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // AI profile picture outside the bubble (restored original Omi image)
+                      Container(
+                        decoration: BoxDecoration(
+                          image: DecorationImage(
+                            image: AssetImage(Assets.images.background.path),
+                            fit: BoxFit.cover,
+                          ),
+                          borderRadius: const BorderRadius.all(Radius.circular(16.0)),
+                        ),
+                        height: 32,
+                        width: 32,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Image.asset(
+                              Assets.images.herologo.path,
+                              height: 24,
+                              width: 24,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      // AI message bubble
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color.fromARGB(255, 255, 255, 255).withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                              width: 1,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.05),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          padding: const EdgeInsets.all(16),
+                          child: _buildAIMessageContent(message, provider, chatIndex),
+                        ),
+                      ),
+                    ],
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                padding: const EdgeInsets.all(16),
-                child: AIMessage(
-                  showTypingIndicator: provider.showTypingIndicator && chatIndex == 0,
-                  message: message,
-                  sendMessage: _sendMessageUtil,
-                  displayOptions: provider.messages.length <= 1 && provider.messageSenderApp(message.appId)?.isNotPersona() == true,
-                  appSender: provider.messageSenderApp(message.appId),
-                  updateConversation: (ServerConversation conversation) {
-                    context.read<ConversationProvider>().updateConversation(conversation);
-                  },
-                  setMessageNps: (int value) {
-                    provider.setMessageNps(message, value);
-                  },
-                ),
-              )
-            : Container(
-                decoration: BoxDecoration(
-                  color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
+                  // Timestamp outside and below the bubble (with 2pts more left margin)
+                  Container(
+                    margin: const EdgeInsets.only(left: 50, top: 6),
+                    child: Text(
                       formatChatTimestamp(message.createdAt),
                       style: TextStyle(
-                        color: ResponsiveHelper.textTertiary,
-                        fontSize: 12,
+                        color: ResponsiveHelper.textTertiary.withOpacity(0.5),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w400,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
+                  ),
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
                       message.text.decodeString,
                       style: TextStyle(
                         color: ResponsiveHelper.textPrimary,
@@ -616,9 +649,149 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                         height: 1.4,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  // Add 5pts margin below user messages
+                  const SizedBox(height: 5),
+                ],
               ),
+      ),
+    );
+  }
+
+  Widget _buildAIMessageContent(ServerMessage message, MessageProvider provider, int chatIndex) {
+    // Custom AI message content without profile picture and timestamp
+    if (message.memories.isNotEmpty) {
+      return MemoriesMessageWidget(
+        showTypingIndicator: provider.showTypingIndicator && chatIndex == 0,
+        messageMemories: message.memories.length > 3 ? message.memories.sublist(0, 3) : message.memories,
+        messageText: message.isEmpty ? '...' : message.text.decodeString,
+        updateConversation: (ServerConversation conversation) {
+          context.read<ConversationProvider>().updateConversation(conversation);
+        },
+        message: message,
+        setMessageNps: (int value) {
+          provider.setMessageNps(message, value);
+        },
+        date: message.createdAt,
+      );
+    } else if (message.type == MessageType.daySummary) {
+      return DaySummaryWidget(
+        showTypingIndicator: provider.showTypingIndicator && chatIndex == 0,
+        messageText: message.text.decodeString,
+        date: message.createdAt,
+      );
+    } else if (provider.messages.length <= 1 && provider.messageSenderApp(message.appId)?.isNotPersona() == true) {
+      return InitialMessageWidget(
+        showTypingIndicator: provider.showTypingIndicator && chatIndex == 0,
+        messageText: message.text.decodeString,
+        sendMessage: _sendMessageUtil,
+      );
+    } else {
+      // Custom normal message widget without timestamp
+      return _buildCustomNormalMessageWidget(message, provider, chatIndex);
+    }
+  }
+
+  Widget _buildCustomNormalMessageWidget(ServerMessage message, MessageProvider provider, int chatIndex) {
+    var previousThinkingText = message.thinkings.length > 1 ? message.thinkings.sublist(message.thinkings.length - 2 >= 0 ? message.thinkings.length - 2 : 0).first.decodeString : null;
+    var thinkingText = message.thinkings.isNotEmpty ? message.thinkings.last.decodeString : null;
+    bool showTypingIndicator = provider.showTypingIndicator && chatIndex == 0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        showTypingIndicator && message.text.isEmpty
+            ? Container(
+                margin: EdgeInsets.only(top: previousThinkingText != null ? 0 : 8),
+                child: Row(
+                  children: [
+                    thinkingText != null
+                        ? Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.start,
+                              children: [
+                                previousThinkingText != null
+                                    ? Text(
+                                        overflow: TextOverflow.fade,
+                                        maxLines: 1,
+                                        softWrap: false,
+                                        previousThinkingText,
+                                        style: const TextStyle(color: Colors.white60, fontSize: 14),
+                                      )
+                                    : const SizedBox.shrink(),
+                                Shimmer.fromColors(
+                                  baseColor: Colors.white,
+                                  highlightColor: Colors.grey,
+                                  child: Text(
+                                    overflow: TextOverflow.fade,
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    thinkingText,
+                                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                                  ),
+                                )
+                              ],
+                            ),
+                          )
+                        : const SizedBox(
+                            height: 16,
+                            child: TypingIndicator(),
+                          ),
+                  ],
+                ))
+            : const SizedBox.shrink(),
+        message.text.isEmpty ? const SizedBox.shrink() : getMarkdownWidget(context, message.text.decodeString),
+        _getNpsWidget(context, message, (int value) {
+          provider.setMessageNps(message, value);
+        }),
+      ],
+    );
+  }
+
+  Widget _getNpsWidget(BuildContext context, ServerMessage message, Function(int) setMessageNps) {
+    if (!message.askForNps) return const SizedBox();
+
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(top: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text('Was this helpful?', style: TextStyle(fontWeight: FontWeight.w500, color: Colors.grey.shade300)),
+          IconButton(
+            onPressed: () {
+              setMessageNps(0);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('Thank you for your feedback!'),
+                  backgroundColor: ResponsiveHelper.backgroundTertiary,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            },
+            icon: const Icon(Icons.thumb_down_alt_outlined, size: 20, color: Colors.grey),
+          ),
+          IconButton(
+            onPressed: () {
+              setMessageNps(1);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('Thank you for your feedback!'),
+                  backgroundColor: ResponsiveHelper.backgroundTertiary,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            },
+            icon: const Icon(Icons.thumb_up_alt_outlined, size: 20, color: Colors.grey),
+          ),
+        ],
       ),
     );
   }

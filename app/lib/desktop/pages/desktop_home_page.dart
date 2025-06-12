@@ -5,11 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
-import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/apps/page.dart';
 import 'conversations/desktop_conversations_page.dart';
 import 'chat/desktop_chat_page.dart';
 import 'memories/desktop_memories_page.dart';
+import 'actions/desktop_actions_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -145,8 +145,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
       if (mounted) {
-        await Provider.of<CaptureProvider>(context, listen: false)
-            .streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
+        await Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
       }
 
       // Handle navigation
@@ -324,7 +323,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                                   DesktopConversationsPage(),
                                   DesktopChatPage(),
                                   DesktopMemoriesPage(),
-                                  ActionItemsPage(),
+                                  DesktopActionsPage(),
                                   AppsPage(),
                                 ],
                               ),
@@ -512,8 +511,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
             color: Colors.transparent,
             child: InkWell(
               onTap: () {
-                MixpanelManager()
-                    .bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Actions', 'Apps'][index]);
+                MixpanelManager().bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Actions', 'Apps'][index]);
                 onTap();
               },
               borderRadius: BorderRadius.circular(8),
@@ -656,9 +654,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
             color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: isConnected
-                  ? ResponsiveHelper.purplePrimary.withOpacity(0.3)
-                  : ResponsiveHelper.backgroundTertiary.withOpacity(0.5),
+              color: isConnected ? ResponsiveHelper.purplePrimary.withOpacity(0.3) : ResponsiveHelper.backgroundTertiary.withOpacity(0.5),
               width: 1,
             ),
           ),
