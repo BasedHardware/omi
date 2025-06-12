@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:omi/desktop/pages/desktop_home_page.dart';
+import 'package:omi/desktop/pages/onboarding/screens/desktop_auth_screen.dart';
 import 'package:omi/desktop/pages/onboarding/screens/desktop_name_screen.dart';
 import 'package:omi/desktop/pages/onboarding/screens/desktop_language_screen.dart';
 import 'package:omi/desktop/pages/onboarding/screens/desktop_permissions_screen.dart';
 import 'package:omi/desktop/pages/onboarding/screens/desktop_complete_screen.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/home/page.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:provider/provider.dart';
 
 /// Clean desktop onboarding wrapper without sidebar
 class DesktopOnboardingWrapper extends StatefulWidget {
@@ -27,6 +33,12 @@ class _DesktopOnboardingWrapperState extends State<DesktopOnboardingWrapper> wit
   late Animation<Offset> _slideAnimation;
 
   final List<OnboardingStep> _steps = [
+    OnboardingStep(
+      id: 'auth',
+      title: 'Sign In',
+      description: 'Welcome to Omi',
+      icon: Icons.login_rounded,
+    ),
     OnboardingStep(
       id: 'name',
       title: 'Your Name',
@@ -54,6 +66,7 @@ class _DesktopOnboardingWrapperState extends State<DesktopOnboardingWrapper> wit
   ];
 
   List<Widget> get _screens => [
+        DesktopAuthScreen(onSignIn: _handleSignIn),
         DesktopNameScreen(onNext: _nextStep, onBack: _previousStep),
         DesktopLanguageScreen(onNext: _nextStep, onBack: _previousStep),
         DesktopPermissionsScreen(onNext: _nextStep, onBack: _previousStep),
@@ -126,6 +139,20 @@ class _DesktopOnboardingWrapperState extends State<DesktopOnboardingWrapper> wit
     _slideController.forward();
   }
 
+  void _handleSignIn() {
+    SharedPreferencesUtil().hasOmiDevice = true;
+    SharedPreferencesUtil().verifiedPersonaId = null;
+    MixpanelManager().onboardingStepCompleted('Auth');
+    context.read<HomeProvider>().setupHasSpeakerProfile();
+    IntercomManager.instance.loginIdentifiedUser(SharedPreferencesUtil().uid);
+    IntercomManager.instance.updateUser(
+      FirebaseAuth.instance.currentUser!.email,
+      FirebaseAuth.instance.currentUser!.displayName,
+      FirebaseAuth.instance.currentUser!.uid,
+    );
+    _nextStep(); // Go to Name page
+  }
+
   void _completeOnboarding() {
     SharedPreferencesUtil().onboardingCompleted = true;
     routeToPage(context, const DesktopHomePage(), replace: true);
@@ -151,6 +178,7 @@ class _DesktopOnboardingWrapperState extends State<DesktopOnboardingWrapper> wit
                   position: _slideAnimation,
                   child: PageView.builder(
                     controller: _pageController,
+                    physics: const NeverScrollableScrollPhysics(), // Disable swiping
                     onPageChanged: (index) {
                       setState(() {
                         _currentStep = index;
