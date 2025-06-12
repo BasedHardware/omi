@@ -38,10 +38,13 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
 
       if (recordingState == RecordingState.systemAudioRecord) {
         await provider.pauseSystemAudioRecording();
+        if (mounted) setState(() => _isPaused = true);
       } else if (_isPaused) {
         await provider.resumeSystemAudioRecording();
+        if (mounted) setState(() => _isPaused = false);
       } else {
         await provider.streamSystemAudioRecording();
+        if (mounted) setState(() => _isPaused = false);
       }
     }
   }
@@ -366,12 +369,6 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
                     margin: const EdgeInsets.fromLTRB(32, 0, 32, 32),
                     child: _buildAnimatedTranscript(captureProvider.segments, isRecording, isRecordingOrInitializing),
                   ),
-                )
-              else
-                Container(
-                  margin: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                  height: 120,
-                  child: _buildAnimatedTranscript(captureProvider.segments, isRecording, isRecordingOrInitializing),
                 ),
             ],
           ),
