@@ -1,15 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
+import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
+import 'desktop_conversation_detail_page.dart';
 import 'widgets/desktop_conversation_card.dart';
 import 'widgets/desktop_empty_conversations.dart';
 import 'widgets/desktop_search_widget.dart';
@@ -24,13 +31,19 @@ class DesktopConversationsPage extends StatefulWidget {
   State<DesktopConversationsPage> createState() => _DesktopConversationsPageState();
 }
 
-class _DesktopConversationsPageState extends State<DesktopConversationsPage>
-    with AutomaticKeepAliveClientMixin, TickerProviderStateMixin {
+class _DesktopConversationsPageState extends State<DesktopConversationsPage> with AutomaticKeepAliveClientMixin, TickerProviderStateMixin {
   @override
   bool get wantKeepAlive => true;
 
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
+
+  // State for inline conversation detail viewing
+  bool _showingConversationDetail = false;
+  ServerConversation? _selectedConversation;
+  int? _selectedConversationIndex;
+  DateTime? _selectedDate;
+  ConversationDetailProvider? _conversationDetailProvider;
 
   @override
   void initState() {
@@ -61,20 +74,69 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
   @override
   void dispose() {
     _fadeController.dispose();
+    _conversationDetailProvider?.dispose();
     super.dispose();
+  }
+
+  void _navigateToConversationDetail(ServerConversation conversation, int index, DateTime date) async {
+    // Create and setup the conversation detail provider
+    final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
+    final appProvider = Provider.of<AppProvider>(context, listen: false);
+
+    final detailProvider = ConversationDetailProvider();
+    detailProvider.conversationIdx = index;
+    detailProvider.selectedDate = date;
+    detailProvider.conversationProvider = conversationProvider;
+    detailProvider.appProvider = appProvider;
+
+    await detailProvider.initConversation();
+
+    // If conversation has no app results, update details
+    if (detailProvider.conversation.appResults.isEmpty) {
+      await conversationProvider.updateSearchedConvoDetails(detailProvider.conversation.id, date, index);
+      detailProvider.updateConversation(index, date);
+    }
+
+    setState(() {
+      _showingConversationDetail = true;
+      _selectedConversation = conversation;
+      _selectedConversationIndex = index;
+      _selectedDate = date;
+      _conversationDetailProvider = detailProvider;
+    });
+  }
+
+  void _navigateBackToConversationsList() {
+    setState(() {
+      _showingConversationDetail = false;
+      _selectedConversation = null;
+      _selectedConversationIndex = null;
+      _selectedDate = null;
+      _conversationDetailProvider?.dispose();
+      _conversationDetailProvider = null;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
 
-    return Consumer2<ConversationProvider, CaptureProvider>(
-      builder: (context, convoProvider, captureProvider, child) {
+    return Consumer3<ConversationProvider, CaptureProvider, DeviceProvider>(
+      builder: (context, convoProvider, captureProvider, deviceProvider, child) {
         final recordingState = captureProvider.recordingState;
         final isRecording = recordingState == RecordingState.systemAudioRecord;
         final isInitializing = recordingState == RecordingState.initialising;
         final isRecordingOrInitializing = isRecording || isInitializing || captureProvider.isPaused;
 
+        // If showing conversation detail, display it instead of the conversations list
+        if (_showingConversationDetail && _selectedConversation != null && _conversationDetailProvider != null) {
+          return ChangeNotifierProvider.value(
+            value: _conversationDetailProvider!,
+            child: _buildConversationDetailView(),
+          );
+        }
+
+        // Otherwise show the normal conversations list view
         return Container(
           color: ResponsiveHelper.backgroundSecondary.withOpacity(0.85),
           child: Stack(
@@ -158,9 +220,7 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                                   onVisibilityChanged: (visibilityInfo) {
                                     var provider = Provider.of<ConversationProvider>(context, listen: false);
                                     if (provider.previousQuery.isNotEmpty) {
-                                      if (visibilityInfo.visibleFraction > 0 &&
-                                          !provider.isLoadingConversations &&
-                                          (provider.totalSearchPages > provider.currentSearchPage)) {
+                                      if (visibilityInfo.visibleFraction > 0 && !provider.isLoadingConversations && (provider.totalSearchPages > provider.currentSearchPage)) {
                                         provider.searchMoreConversations();
                                       }
                                     } else {
@@ -219,6 +279,14 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
     );
   }
 
+  Widget _buildConversationDetailView() {
+    return DesktopConversationDetailPage(
+      conversation: _selectedConversation!,
+      showBackButton: true,
+      onBackPressed: _navigateBackToConversationsList,
+    );
+  }
+
   Widget _buildConversationGroup(
     DateTime date,
     List<ServerConversation> conversations,
@@ -255,9 +323,7 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
               margin: EdgeInsets.only(bottom: index == conversations.length - 1 ? 0 : 8),
               child: DesktopConversationCard(
                 conversation: conversation,
-                onTap: () {
-                  // Navigate to conversation details
-                },
+                onTap: () => _navigateToConversationDetail(conversation, index, date),
               ),
             );
           }).toList(),
