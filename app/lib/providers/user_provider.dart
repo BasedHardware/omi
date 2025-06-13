@@ -184,6 +184,8 @@ class UserProvider with ChangeNotifier {
     _migrationFailed = false;
     _migrationMessage = 'Migration complete!';
     _startTime = null;
+    _processedCount = 0;
+    _migrationQueue = [];
 
     NotificationService.instance.showNotification(
       id: _migrationNotificationId,
