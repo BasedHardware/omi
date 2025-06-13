@@ -9,13 +9,11 @@ import UserNotifications
 // MARK: - Floating Overlay Window
 class FloatingRecordingOverlay: NSWindow {
     private var dragOffset: NSPoint = NSPoint.zero
-    private var recordingIndicator: NSView!
-    private var transcriptLabel: NSTextField!
+    private var logoImageView: NSImageView!
     private var controlsContainer: NSView!
     private var playPauseButton: NSButton!
     private var stopButton: NSButton!
     private var expandButton: NSButton!
-    private var segmentCountLabel: NSTextField!
     
     // Callback for button actions
     var onPlayPause: (() -> Void)?
@@ -60,10 +58,10 @@ class FloatingRecordingOverlay: NSWindow {
         let containerView = NSView(frame: self.contentView!.bounds)
         containerView.autoresizingMask = [.width, .height]
         
-        // Main pill container with generous spacing
-        let pillContainer = NSView(frame: NSRect(x: 0, y: 0, width: 460, height: 60))
+        // Main pill container - optimized width with better proportions
+        let pillContainer = NSView(frame: NSRect(x: 0, y: 0, width: 220, height: 52))
         pillContainer.wantsLayer = true
-        pillContainer.layer?.cornerRadius = 30
+        pillContainer.layer?.cornerRadius = 26
         pillContainer.layer?.masksToBounds = false  // Allow shadows to show
         
         // Add blur effect background
@@ -72,42 +70,29 @@ class FloatingRecordingOverlay: NSWindow {
         // Set initial background overlay (we'll update this based on state)
         setupPillBackground(pillContainer, isRecording: false, isPaused: false)
         
-        // Status indicator container (left side with more space)
-        let statusContainer = NSView(frame: NSRect(x: 24, y: 0, width: 32, height: 60))
-        pillContainer.addSubview(statusContainer)
+        // Logo container (left side)
+        let logoContainer = NSView(frame: NSRect(x: 16, y: 0, width: 52, height: 52))
+        pillContainer.addSubview(logoContainer)
         
-        // Recording indicator (centered vertically)
-        recordingIndicator = NSView(frame: NSRect(x: 10, y: 24, width: 12, height: 12))
-        recordingIndicator.wantsLayer = true
-        recordingIndicator.layer?.cornerRadius = 6
-        recordingIndicator.layer?.backgroundColor = NSColor.tertiaryLabelColor.cgColor
-        setupIndicatorShadow(recordingIndicator)
-        statusContainer.addSubview(recordingIndicator)
+        // App logo (centered and slightly larger)
+        logoImageView = NSImageView(frame: NSRect(x: 14, y: 14, width: 24, height: 24))
+        if let appIcon = NSImage(named: "app_launcher_icon") {
+            appIcon.size = NSSize(width: 24, height: 24)
+            logoImageView.image = appIcon
+        } else {
+            // Fallback to system mic icon if app icon not found
+            let fallbackIcon = NSImage(systemSymbolName: "mic.circle.fill", accessibilityDescription: "Recording")
+            fallbackIcon?.size = NSSize(width: 24, height: 24)
+            logoImageView.image = fallbackIcon
+        }
+        logoImageView.wantsLayer = true
+        logoImageView.layer?.cornerRadius = 12
+        logoImageView.imageScaling = .scaleProportionallyUpOrDown
+        setupLogoShadow(logoImageView)
+        logoContainer.addSubview(logoImageView)
         
-        // Content container (center with reduced width to prevent overflow on buttons)
-        let contentContainer = NSView(frame: NSRect(x: 64, y: 0, width: 250, height: 60))
-        pillContainer.addSubview(contentContainer)
-        
-        // Transcript text label (centered vertically, single line)
-        transcriptLabel = NSTextField(frame: NSRect(x: 0, y: 19, width: 250, height: 22))
-        transcriptLabel.isBezeled = false
-        transcriptLabel.isEditable = false
-        transcriptLabel.isSelectable = false
-        transcriptLabel.backgroundColor = NSColor.clear
-        transcriptLabel.textColor = NSColor.labelColor
-        transcriptLabel.font = NSFont.systemFont(ofSize: 15, weight: .medium)  // Slightly larger and lighter weight
-        transcriptLabel.stringValue = "Ready to record"
-        transcriptLabel.lineBreakMode = .byTruncatingTail
-        transcriptLabel.cell?.backgroundStyle = .lowered
-        transcriptLabel.alignment = .left
-        contentContainer.addSubview(transcriptLabel)
-        
-        // Remove segment count label entirely - not needed as per user request
-        segmentCountLabel = NSTextField(frame: .zero)
-        segmentCountLabel.isHidden = true
-        
-        // Controls container (right side with generous margin) - positioned after reduced content width
-        controlsContainer = NSView(frame: NSRect(x: 326, y: 16, width: 108, height: 28))
+        // Controls container (right side) - better spacing and positioning
+        controlsContainer = NSView(frame: NSRect(x: 76, y: 12, width: 132, height: 28))
         setupControls()
         pillContainer.addSubview(controlsContainer)
         
@@ -144,11 +129,12 @@ class FloatingRecordingOverlay: NSWindow {
         container.addSubview(blurView, positioned: .below, relativeTo: nil)
     }
     
-    private func setupIndicatorShadow(_ indicator: NSView) {
-        indicator.layer?.shadowColor = NSColor.black.cgColor
-        indicator.layer?.shadowOpacity = 0.3
-        indicator.layer?.shadowRadius = 4
-        indicator.layer?.shadowOffset = CGSize(width: 0, height: 1)
+    private func setupLogoShadow(_ logoView: NSImageView) {
+        logoView.layer?.shadowColor = NSColor.black.cgColor
+        logoView.layer?.shadowOpacity = 0.08
+        logoView.layer?.shadowRadius = 3
+        logoView.layer?.shadowOffset = CGSize(width: 0, height: 1)
+        logoView.layer?.masksToBounds = false
     }
     
     private func setupPillBackground(_ container: NSView, isRecording: Bool, isPaused: Bool) {
@@ -157,99 +143,93 @@ class FloatingRecordingOverlay: NSWindow {
             layer.name == "colorOverlay" || layer.name == "borderLayer"
         }
         
-        // Create subtle color overlay on top of blur
+        // Create subtle color overlay on top of blur - more minimal approach
         let overlay = CALayer()
         overlay.name = "colorOverlay"
         overlay.frame = container.bounds
-        overlay.cornerRadius = 30
+        overlay.cornerRadius = 26
         overlay.masksToBounds = true
         
         if isRecording {
-            // Vibrant purple overlay for recording
-            overlay.backgroundColor = NSColor.systemPurple.withAlphaComponent(0.25).cgColor
+            // Very subtle purple tint for recording
+            overlay.backgroundColor = NSColor.systemPurple.withAlphaComponent(0.08).cgColor
         } else if isPaused {
-            // Warm orange overlay for paused
-            overlay.backgroundColor = NSColor.systemOrange.withAlphaComponent(0.22).cgColor
+            // Very subtle orange tint for paused
+            overlay.backgroundColor = NSColor.systemOrange.withAlphaComponent(0.06).cgColor
         } else {
-            // Minimal overlay for idle state
-            overlay.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.08).cgColor
+            // Nearly transparent for idle state
+            overlay.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.03).cgColor
         }
         
         container.layer?.addSublayer(overlay)
         
-        // Add premium border
+        // Minimal border following native macOS principles
         let borderLayer = CALayer()
         borderLayer.name = "borderLayer"
         borderLayer.frame = container.bounds
-        borderLayer.cornerRadius = 30
-        borderLayer.borderWidth = 1.5
+        borderLayer.cornerRadius = 26
+        borderLayer.borderWidth = 0.5
         borderLayer.masksToBounds = true
         
         if isRecording {
-            borderLayer.borderColor = NSColor.systemPurple.withAlphaComponent(0.4).cgColor
+            borderLayer.borderColor = NSColor.systemPurple.withAlphaComponent(0.15).cgColor
         } else if isPaused {
-            borderLayer.borderColor = NSColor.systemOrange.withAlphaComponent(0.4).cgColor
+            borderLayer.borderColor = NSColor.systemOrange.withAlphaComponent(0.12).cgColor
         } else {
-            borderLayer.borderColor = NSColor.separatorColor.withAlphaComponent(0.6).cgColor
+            borderLayer.borderColor = NSColor.separatorColor.withAlphaComponent(0.3).cgColor
         }
         
         container.layer?.addSublayer(borderLayer)
         
-        // Enhanced shadow system
+        // Subtle shadow system
         setupContainerShadow(container, isRecording: isRecording, isPaused: isPaused)
     }
     
     private func setupContainerShadow(_ container: NSView, isRecording: Bool, isPaused: Bool) {
-        // Main shadow
+        // Subtle shadow following native macOS design
         container.layer?.shadowColor = NSColor.black.cgColor
-        container.layer?.shadowOpacity = 0.15
-        container.layer?.shadowRadius = 24
-        container.layer?.shadowOffset = CGSize(width: 0, height: 8)
+        container.layer?.shadowOpacity = 0.08
+        container.layer?.shadowRadius = 12
+        container.layer?.shadowOffset = CGSize(width: 0, height: 2)
         
-        // Add colored glow for active states
+        // Very minimal glow for active states - more native feeling
         if isRecording || isPaused {
             let glowColor = isRecording ? NSColor.systemPurple : NSColor.systemOrange
-            container.layer?.shadowColor = glowColor.withAlphaComponent(0.3).cgColor
-            container.layer?.shadowOpacity = 0.4
-            container.layer?.shadowRadius = 32
+            container.layer?.shadowColor = glowColor.withAlphaComponent(0.08).cgColor
+            container.layer?.shadowOpacity = 0.12
+            container.layer?.shadowRadius = 16
         }
     }
     
     private func setupControls() {
-        // Play/Pause button (primary action)
+        // Play/Pause button (primary action) - better spacing
         playPauseButton = NSButton(frame: NSRect(x: 0, y: 0, width: 28, height: 28))
         playPauseButton.isBordered = false
         playPauseButton.bezelStyle = .circular
         playPauseButton.imageScaling = .scaleProportionallyDown
-        let playConfig = NSImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
+        let playConfig = NSImage.SymbolConfiguration(pointSize: 11, weight: .medium)
         playPauseButton.image = NSImage(systemSymbolName: "play.fill", accessibilityDescription: "Play")?.withSymbolConfiguration(playConfig)
-        playPauseButton.target = self
-        playPauseButton.action = #selector(playPauseClicked)
         styleModernButton(playPauseButton, isPrimary: true)
         controlsContainer.addSubview(playPauseButton)
         
-        // Stop button (initially hidden, appears when recording with content)
-        stopButton = NSButton(frame: NSRect(x: 32, y: 0, width: 28, height: 28))
+        // Stop button (initially hidden, appears when recording with content) - increased spacing
+        stopButton = NSButton(frame: NSRect(x: 36, y: 0, width: 28, height: 28))
         stopButton.isBordered = false
         stopButton.bezelStyle = .circular
         stopButton.imageScaling = .scaleProportionallyDown
-        let stopConfig = NSImage.SymbolConfiguration(pointSize: 10, weight: .semibold)
+        let stopConfig = NSImage.SymbolConfiguration(pointSize: 9, weight: .medium)
         stopButton.image = NSImage(systemSymbolName: "stop.fill", accessibilityDescription: "Stop")?.withSymbolConfiguration(stopConfig)
-        stopButton.target = self
-        stopButton.action = #selector(stopClicked)
         stopButton.isHidden = true
         styleStopButton(stopButton)
         controlsContainer.addSubview(stopButton)
         
-        // Expand/Maximize button (always visible, positioned after stop button)
-        expandButton = NSButton(frame: NSRect(x: 64, y: 0, width: 28, height: 28))
+        // Expand/Maximize button (always visible) - proper spacing from other buttons
+        expandButton = NSButton(frame: NSRect(x: 72, y: 0, width: 28, height: 28))
         expandButton.isBordered = false
         expandButton.bezelStyle = .circular
         expandButton.imageScaling = .scaleProportionallyDown
-        let expandConfig = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
-        expandButton.image = NSImage(systemSymbolName: "arrow.up.left.and.arrow.down.right", accessibilityDescription: "Maximize")?.withSymbolConfiguration(expandConfig)
-        expandButton.target = self
-        expandButton.action = #selector(expandClicked)
+        let expandConfig = NSImage.SymbolConfiguration(pointSize: 9, weight: .medium)
+        expandButton.image = NSImage(systemSymbolName: "arrow.up.backward.and.arrow.down.forward", accessibilityDescription: "Restore App")?.withSymbolConfiguration(expandConfig)
         styleModernButton(expandButton, isPrimary: false)
         controlsContainer.addSubview(expandButton)
     }
@@ -260,22 +240,22 @@ class FloatingRecordingOverlay: NSWindow {
         button.layer?.masksToBounds = true
         
         if isPrimary {
-            // Primary button - more prominent
-            button.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.15).cgColor
-            button.layer?.borderWidth = 1.2
-            button.layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.3).cgColor
+            // Primary button - very subtle, native macOS style
+            button.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.08).cgColor
+            button.layer?.borderWidth = 0.5
+            button.layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.15).cgColor
         } else {
-            // Secondary button - subtle
-            button.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.6).cgColor
-            button.layer?.borderWidth = 1
-            button.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.4).cgColor
+            // Secondary button - extremely subtle
+            button.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.3).cgColor
+            button.layer?.borderWidth = 0.5
+            button.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.2).cgColor
         }
         
-        // Add subtle shadow
+        // Very minimal shadow - native macOS approach
         button.layer?.shadowColor = NSColor.black.cgColor
-        button.layer?.shadowOpacity = 0.1
-        button.layer?.shadowRadius = 4
-        button.layer?.shadowOffset = CGSize(width: 0, height: 1)
+        button.layer?.shadowOpacity = 0.04
+        button.layer?.shadowRadius = 2
+        button.layer?.shadowOffset = CGSize(width: 0, height: 0.5)
         
         // Add hover effect
         setupButtonHoverEffect(button)
@@ -285,15 +265,15 @@ class FloatingRecordingOverlay: NSWindow {
         button.wantsLayer = true
         button.layer?.cornerRadius = 14
         button.layer?.masksToBounds = true
-        button.layer?.backgroundColor = NSColor.systemRed.withAlphaComponent(0.15).cgColor
-        button.layer?.borderWidth = 1.2
-        button.layer?.borderColor = NSColor.systemRed.withAlphaComponent(0.4).cgColor
+        button.layer?.backgroundColor = NSColor.systemRed.withAlphaComponent(0.08).cgColor
+        button.layer?.borderWidth = 0.5
+        button.layer?.borderColor = NSColor.systemRed.withAlphaComponent(0.2).cgColor
         
-        // Distinctive red shadow
+        // Minimal red shadow - native approach
         button.layer?.shadowColor = NSColor.systemRed.cgColor
-        button.layer?.shadowOpacity = 0.2
-        button.layer?.shadowRadius = 6
-        button.layer?.shadowOffset = CGSize(width: 0, height: 2)
+        button.layer?.shadowOpacity = 0.06
+        button.layer?.shadowRadius = 3
+        button.layer?.shadowOffset = CGSize(width: 0, height: 0.5)
         
         setupButtonHoverEffect(button)
     }
@@ -306,26 +286,93 @@ class FloatingRecordingOverlay: NSWindow {
             userInfo: ["button": button]
         )
         button.addTrackingArea(trackingArea)
+        
+        // Add target-action for pressed state feedback
+        button.target = self
+        if button == playPauseButton {
+            button.action = #selector(playPausePressed)
+        } else if button == stopButton {
+            button.action = #selector(stopPressed)
+        } else if button == expandButton {
+            button.action = #selector(expandPressed)
+        }
+    }
+    
+    @objc private func playPausePressed() {
+        animateButtonPress(playPauseButton)
+        // Small delay to show the press animation before calling the actual action
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            self.playPauseClicked()
+        }
+    }
+    
+    @objc private func stopPressed() {
+        animateButtonPress(stopButton)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            self.stopClicked()
+        }
+    }
+    
+    @objc private func expandPressed() {
+        animateButtonPress(expandButton)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            self.expandClicked()
+        }
+    }
+    
+    private func animateButtonPress(_ button: NSButton) {
+        // Scale down briefly to show press feedback
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(0.1)
+        button.layer?.transform = CATransform3DMakeScale(0.95, 0.95, 1.0)
+        CATransaction.setCompletionBlock {
+            CATransaction.begin()
+            CATransaction.setAnimationDuration(0.1)
+            button.layer?.transform = CATransform3DIdentity
+            CATransaction.commit()
+        }
+        CATransaction.commit()
     }
     
     override func mouseEntered(with event: NSEvent) {
         if let button = event.trackingArea?.userInfo?["button"] as? NSButton {
-            // Scale up slightly on hover
+            // Enhanced hover feedback - more noticeable but still native feeling
             CATransaction.begin()
             CATransaction.setAnimationDuration(0.15)
-            button.layer?.transform = CATransform3DMakeScale(1.1, 1.1, 1.0)
-            button.layer?.shadowOpacity = (button.layer?.shadowOpacity ?? 0) * 1.5
+            
+            // Slight scale and brightness change for better button feel
+            button.layer?.transform = CATransform3DMakeScale(1.05, 1.05, 1.0)
+            
+            // Increase background opacity for more prominent hover effect
+            if button == playPauseButton {
+                button.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.15).cgColor
+            } else if button == stopButton {
+                button.layer?.backgroundColor = NSColor.systemRed.withAlphaComponent(0.15).cgColor
+            } else {
+                button.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.5).cgColor
+            }
+            
             CATransaction.commit()
         }
     }
     
     override func mouseExited(with event: NSEvent) {
         if let button = event.trackingArea?.userInfo?["button"] as? NSButton {
-            // Scale back to normal
+            // Return to normal state
             CATransaction.begin()
             CATransaction.setAnimationDuration(0.15)
+            
             button.layer?.transform = CATransform3DIdentity
-            button.layer?.shadowOpacity = (button.layer?.shadowOpacity ?? 0) / 1.5
+            
+            // Reset to original background colors
+            if button == playPauseButton {
+                button.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.08).cgColor
+            } else if button == stopButton {
+                button.layer?.backgroundColor = NSColor.systemRed.withAlphaComponent(0.08).cgColor
+            } else {
+                button.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.3).cgColor
+            }
+            
             CATransaction.commit()
         }
     }
@@ -356,8 +403,13 @@ class FloatingRecordingOverlay: NSWindow {
     }
     
     @objc private func expandClicked() {
+        print("DEBUG: Expand button clicked in overlay")
+        
+        // Just call the callback - let the main window handle restoration and hiding
         onExpand?()
     }
+    
+
     
     // Public methods to update the UI
     func updateRecordingState(isRecording: Bool, isPaused: Bool) {
@@ -366,23 +418,11 @@ class FloatingRecordingOverlay: NSWindow {
             setupPillBackground(pillContainer, isRecording: isRecording, isPaused: isPaused)
         }
         
-        // Update recording indicator
-        recordingIndicator.layer?.backgroundColor = (isRecording || isPaused) ? 
-            NSColor.white.cgColor : NSColor.tertiaryLabelColor.cgColor
-        
         // Update button image
         let imageName = isRecording ? "pause.fill" : "play.fill"
         playPauseButton.image = NSImage(systemSymbolName: imageName, accessibilityDescription: isRecording ? "Pause" : "Play")
         
-        // Show/hide stop button based on whether there are segments
-        // This will be updated via updateTranscript method
-        
-        // Update text colors
-        let textColor = (isRecording || isPaused) ? NSColor.white : NSColor.labelColor
-        transcriptLabel.textColor = textColor
-        segmentCountLabel.textColor = textColor.withAlphaComponent(0.7)
-        
-        // Add pulsing animation for recording indicator when recording
+        // Add pulsing animation for logo when recording
         if isRecording {
             startPulsingAnimation()
         } else {
@@ -391,19 +431,6 @@ class FloatingRecordingOverlay: NSWindow {
     }
     
     func updateTranscript(_ text: String, segmentCount: Int) {
-        // Display latest transcript showing newest words (suffix) instead of oldest words (prefix)
-        let maxLength = 60  // Reduced to fit smaller container width
-        let truncatedText: String
-        if text.count > maxLength {
-            truncatedText = "..." + String(text.suffix(maxLength))
-        } else {
-            truncatedText = text
-        }
-        transcriptLabel.stringValue = truncatedText.isEmpty ? "Listening for audio..." : truncatedText
-        
-        // Expand/Maximize button is always visible
-        expandButton.isHidden = false
-        
         // Show stop button when there are segments (recording has content)
         if segmentCount > 0 {
             stopButton.isHidden = false
@@ -421,31 +448,31 @@ class FloatingRecordingOverlay: NSWindow {
                 CATransaction.commit()
             }
         } else {
-            // No segments - hide stop button but keep expand button visible
+            // No segments - hide stop button
             stopButton.isHidden = true
         }
     }
     
     func updateStatusText(_ status: String) {
-        transcriptLabel.stringValue = status
+        // No status text display needed since we removed the transcript label
     }
     
     private func startPulsingAnimation() {
         let animation = CABasicAnimation(keyPath: "opacity")
-        animation.fromValue = 0.3
+        animation.fromValue = 0.6
         animation.toValue = 1.0
-        animation.duration = 1.0
+        animation.duration = 1.2
         animation.autoreverses = true
         animation.repeatCount = .infinity
-        recordingIndicator.layer?.add(animation, forKey: "pulsing")
+        logoImageView.layer?.add(animation, forKey: "pulsing")
     }
     
     private func stopPulsingAnimation() {
-        recordingIndicator.layer?.removeAnimation(forKey: "pulsing")
+        logoImageView.layer?.removeAnimation(forKey: "pulsing")
     }
 }
 
-class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralManagerDelegate, CLLocationManagerDelegate {
+class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralManagerDelegate, CLLocationManagerDelegate, NSWindowDelegate {
 
     enum AudioQuality: Int {
         case normal = 128, good = 192, high = 256, extreme = 320
@@ -1003,6 +1030,9 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
         let windowFrame = self.frame
         self.contentViewController = flutterViewController
         self.setFrame(windowFrame, display: true)
+        
+        // Set self as delegate to detect window events
+        self.delegate = self
 
         // Configure window for rounded corners
         self.titlebarAppearsTransparent = true
@@ -1631,62 +1661,125 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
     
     private func showOverlay() {
         DispatchQueue.main.async {
-            if self.floatingOverlay == nil {
-                // Position overlay in top-right corner of main screen
-                            guard let screen = NSScreen.main else { return }
+            print("DEBUG: showOverlay called")
+            
+            if self.floatingOverlay != nil {
+                print("DEBUG: Overlay already exists, updating instead of creating new one")
+                self.floatingOverlay?.makeKeyAndOrderFront(nil)
+                return
+            }
+            
+            print("DEBUG: Creating new overlay window")
+            
+            // Position overlay in top-right corner of main screen
+            guard let screen = NSScreen.main else { 
+                print("ERROR: Could not get main screen for overlay positioning")
+                return 
+            }
+            
             let screenFrame = screen.visibleFrame
             let overlayFrame = NSRect(
-                x: screenFrame.maxX - 480, // 460 width + 20 margin
-                y: screenFrame.maxY - 80,  // 60 height + 20 margin
-                width: 460,
-                height: 60
+                x: screenFrame.maxX - 240, // 220 width + 20 margin
+                y: screenFrame.maxY - 72,  // 52 height + 20 margin
+                width: 220,
+                height: 52
             )
+            
+            print("DEBUG: Overlay frame: \(overlayFrame)")
                 
-                self.floatingOverlay = FloatingRecordingOverlay(
-                    contentRect: overlayFrame,
-                    styleMask: [.borderless],
-                    backing: .buffered,
-                    defer: false
-                )
-                
-                // Setup callbacks
-                self.floatingOverlay?.onPlayPause = { [weak self] in
-                    guard let self = self, let overlayChannel = self.overlayChannel else {
-                        print("WARNING: Overlay channel not available for onPlayPause")
-                        return
-                    }
-                    overlayChannel.invokeMethod("onPlayPause", arguments: nil)
+            self.floatingOverlay = FloatingRecordingOverlay(
+                contentRect: overlayFrame,
+                styleMask: [.borderless],
+                backing: .buffered,
+                defer: false
+            )
+            
+            // Configure overlay window properties for stability
+            self.floatingOverlay?.isReleasedWhenClosed = false
+            self.floatingOverlay?.hidesOnDeactivate = false
+            
+            print("DEBUG: Overlay window created successfully")
+            
+            // Setup callbacks
+            self.floatingOverlay?.onPlayPause = { [weak self] in
+                guard let self = self, let overlayChannel = self.overlayChannel else {
+                    print("WARNING: Overlay channel not available for onPlayPause")
+                    return
                 }
-                
-                self.floatingOverlay?.onStop = { [weak self] in
-                    guard let self = self, let overlayChannel = self.overlayChannel else {
-                        print("WARNING: Overlay channel not available for onStop")
-                        return
-                    }
-                    overlayChannel.invokeMethod("onStop", arguments: nil)
+                print("DEBUG: Overlay play/pause callback triggered")
+                overlayChannel.invokeMethod("onPlayPause", arguments: nil)
+            }
+            
+            self.floatingOverlay?.onStop = { [weak self] in
+                guard let self = self, let overlayChannel = self.overlayChannel else {
+                    print("WARNING: Overlay channel not available for onStop")
+                    return
                 }
+                print("DEBUG: Overlay stop callback triggered")
+                overlayChannel.invokeMethod("onStop", arguments: nil)
+            }
+            
+            self.floatingOverlay?.onExpand = { [weak self] in
+                guard let self = self else {
+                    print("WARNING: MainFlutterWindow reference lost in onExpand")
+                    return
+                }
+                print("DEBUG: Overlay expand callback triggered - restoring main window")
                 
-                self.floatingOverlay?.onExpand = { [weak self] in
-                    guard let self = self, let overlayChannel = self.overlayChannel else {
-                        print("WARNING: Overlay channel not available for onExpand")
-                        return
+                // Prevent delegate callbacks during restoration to avoid conflicts
+                self.delegate = nil
+                
+                // Hide the overlay first to prevent visual conflicts
+                self.hideOverlay()
+                
+                // Restore the main window after hiding overlay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self.restoreMainWindow()
+                    
+                    // Re-enable delegate after restoration is complete
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        self.delegate = self
                     }
-                    overlayChannel.invokeMethod("onExpand", arguments: nil)
+                    
+                    // Notify Flutter after restoration is complete
+                    if let overlayChannel = self.overlayChannel {
+                        overlayChannel.invokeMethod("onExpand", arguments: nil)
+                    }
                 }
             }
             
             self.floatingOverlay?.makeKeyAndOrderFront(nil)
             
-            print("Floating overlay shown")
+            print("DEBUG: Floating overlay shown successfully")
         }
     }
     
     private func hideOverlay() {
+        // Ensure we're on the main thread and prevent concurrent access
         DispatchQueue.main.async {
-            self.floatingOverlay?.orderOut(nil)
+            guard let overlay = self.floatingOverlay else {
+                print("DEBUG: No overlay to hide")
+                return
+            }
+            
+            print("DEBUG: Hiding floating overlay...")
+            
+            // Clear the reference first to prevent recursive calls
             self.floatingOverlay = nil
             
-            print("Floating overlay hidden")
+            // Safely close the overlay with error handling
+            do {
+                overlay.orderOut(nil)
+                overlay.close()
+                print("DEBUG: Floating overlay hidden successfully")
+            } catch {
+                print("DEBUG: Error closing overlay: \(error)")
+            }
+            
+            // Notify Flutter that overlay was hidden (with error handling)
+            if let overlayChannel = self.overlayChannel {
+                overlayChannel.invokeMethod("onOverlayHidden", arguments: nil)
+            }
         }
     }
     
@@ -1726,6 +1819,105 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
         DispatchQueue.main.async {
             let newOrigin = NSPoint(x: x, y: y)
             self.floatingOverlay?.setFrameOrigin(newOrigin)
+        }
+    }
+    
+    private func restoreMainWindow() {
+        print("DEBUG: Attempting to restore main window from MainFlutterWindow...")
+        
+        // Ensure we're on the main thread for all window operations
+        DispatchQueue.main.async {
+            // Check if window is valid before operating on it
+            guard self.isVisible || self.isMiniaturized else {
+                print("DEBUG: Window is not in a valid state for restoration")
+                NSApp.activate(ignoringOtherApps: true)
+                return
+            }
+            
+            // If this window is minimized, deminiaturize it first
+            if self.isMiniaturized {
+                print("DEBUG: Window is minimized, deminiaturizing...")
+                self.deminiaturize(nil)
+                
+                // Wait a brief moment for deminiaturization to complete
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self.completeWindowRestoration()
+                }
+            } else {
+                self.completeWindowRestoration()
+            }
+        }
+    }
+    
+    private func completeWindowRestoration() {
+        print("DEBUG: Completing window restoration...")
+        
+        // Make this window visible and bring to front
+        self.makeKeyAndOrderFront(nil)
+        self.orderFrontRegardless()
+        
+        // Activate the app
+        NSApp.activate(ignoringOtherApps: true)
+        
+        print("DEBUG: Successfully restored main window")
+    }
+    
+    // MARK: - NSWindowDelegate Methods
+    
+    func windowDidBecomeMain(_ notification: Notification) {
+        guard let notificationWindow = notification.object as? NSWindow,
+              notificationWindow == self else {
+            return
+        }
+        
+        print("DEBUG: Main window became main")
+        
+        // Only hide overlay if it exists and is visible
+        guard let overlay = floatingOverlay, overlay.isVisible else {
+            return
+        }
+        
+        print("DEBUG: Main Flutter window became active, hiding overlay")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            self.hideOverlay()
+        }
+    }
+    
+    func windowDidBecomeKey(_ notification: Notification) {
+        guard let notificationWindow = notification.object as? NSWindow,
+              notificationWindow == self else {
+            return
+        }
+        
+        print("DEBUG: Window became key")
+        
+        // Only hide overlay if it exists and is visible
+        guard let overlay = floatingOverlay, overlay.isVisible else {
+            return
+        }
+        
+        print("DEBUG: Main Flutter window became key, hiding overlay")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            self.hideOverlay()
+        }
+    }
+    
+    func windowDidDeminiaturize(_ notification: Notification) {
+        guard let notificationWindow = notification.object as? NSWindow,
+              notificationWindow == self else {
+            return
+        }
+        
+        print("DEBUG: Window deminiaturized")
+        
+        // Only hide overlay if it exists and is visible
+        guard let overlay = floatingOverlay, overlay.isVisible else {
+            return
+        }
+        
+        print("DEBUG: Main Flutter window deminiaturized, hiding overlay")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            self.hideOverlay()
         }
     }
 }

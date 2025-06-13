@@ -8,7 +8,6 @@ import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/main.dart';
-import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/settings/about.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/device_settings.dart';
@@ -114,7 +113,9 @@ class _MacWindowButtonState extends State<_MacWindowButton> {
               ? Icon(
                   _getButtonIcon(),
                   size: 8,
-                  color: widget.type == MacWindowButtonType.close ? Colors.white.withOpacity(0.9) : Colors.black.withOpacity(0.7),
+                  color: widget.type == MacWindowButtonType.close
+                      ? Colors.white.withOpacity(0.9)
+                      : Colors.black.withOpacity(0.7),
                 )
               : null,
         ),
@@ -163,10 +164,10 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
       event = 'App is resumed';
 
       // // Reload convos
-      // if (mounted) {
-      //   Provider.of<ConversationProvider>(context, listen: false).refreshConversations();
-      //   Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
-      // }
+      if (mounted) {
+        Provider.of<ConversationProvider>(context, listen: false).refreshConversations();
+        Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
+      }
     } else if (state == AppLifecycleState.hidden) {
       event = 'App is hidden';
     } else if (state == AppLifecycleState.detached) {
@@ -245,7 +246,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
       if (mounted) {
-        await Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
+        await Provider.of<CaptureProvider>(context, listen: false)
+            .streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
       }
 
       // Handle navigation
@@ -640,7 +642,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
             color: Colors.transparent,
             child: InkWell(
               onTap: () {
-                MixpanelManager().bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Actions', 'Apps'][index]);
+                MixpanelManager()
+                    .bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Actions', 'Apps'][index]);
                 onTap();
               },
               borderRadius: BorderRadius.circular(8),
@@ -870,6 +873,35 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
             type: MacWindowButtonType.minimize,
             onTap: () async {
               await windowManager.minimize();
+
+              // Show overlay if recording is active
+              final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
+              final recordingState = captureProvider.recordingState;
+              final isRecording = recordingState == RecordingState.systemAudioRecord;
+              final isInitializing = recordingState == RecordingState.initialising;
+              final isPaused = captureProvider.isPaused;
+              final isRecordingOrInitializing = isRecording || isInitializing || isPaused;
+
+              if (isRecordingOrInitializing) {
+                setState(() {
+                  _isRecordingMinimized = true;
+                });
+                _showNativeOverlay();
+
+                // Update overlay with current state
+                _updateOverlayState(isRecording: isRecording, isPaused: isPaused);
+
+                // Update with latest transcript if available
+                if (captureProvider.segments.isNotEmpty) {
+                  final latestSegment = captureProvider.segments.last;
+                  _updateOverlayTranscript(
+                    transcript: latestSegment.text.trim(),
+                    segmentCount: captureProvider.segments.length,
+                  );
+                } else {
+                  _updateOverlayStatus(_getStatusText(recordingState, isPaused));
+                }
+              }
             },
           ),
           const SizedBox(width: 8),
@@ -1148,7 +1180,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     );
   }
 
-  PopupMenuItem<String> _buildPopupMenuItem(String value, IconData icon, String title, double width, {bool isDestructive = false}) {
+  PopupMenuItem<String> _buildPopupMenuItem(String value, IconData icon, String title, double width,
+      {bool isDestructive = false}) {
     return PopupMenuItem<String>(
       value: value,
       padding: EdgeInsets.zero,

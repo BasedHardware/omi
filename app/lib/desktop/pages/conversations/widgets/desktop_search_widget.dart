@@ -58,16 +58,6 @@ class _DesktopSearchWidgetState extends State<DesktopSearchWidget> {
   Widget build(BuildContext context) {
     return Consumer<ConversationProvider>(
       builder: (context, provider, child) {
-        // Sync search controller with provider's query when it changes
-        if (searchController.text != provider.previousQuery) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              searchController.text = provider.previousQuery;
-              setShowClearButton();
-            }
-          });
-        }
-
         return Container(
           constraints: const BoxConstraints(maxWidth: 600),
           child: Row(

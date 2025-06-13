@@ -26,7 +26,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   // Add debounce mechanism for refresh
   Timer? _refreshDebounceTimer;
   DateTime? _lastRefreshTime;
-  static const Duration _refreshCooldown = Duration(seconds: 30); // Minimum time between refreshes
+  static const Duration _refreshCooldown = Duration(seconds: 60); // Minimum time between refreshes
 
   List<ServerConversation> processingConversations = [];
 
