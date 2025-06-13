@@ -110,6 +110,7 @@ void main() async {
       // Width chosen slightly above the small-screen breakpoint (1000px) used in ResponsiveHelper.
       // Height is set to a sensible value to keep vertical content usable.
       await windowManager.setMinimumSize(const Size(1100, 600));
+      await windowManager.setSize(const Size(1100, 700));
     });
   }
 
