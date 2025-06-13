@@ -41,6 +41,86 @@ import 'package:flutter/services.dart';
 import '../../pages/conversations/sync_page.dart';
 import 'home/widgets/battery_info_widget.dart';
 
+/// Enum for macOS window button types
+enum MacWindowButtonType { close, minimize, maximize }
+
+/// macOS-style window button with proper hover states
+class _MacWindowButton extends StatefulWidget {
+  final MacWindowButtonType type;
+  final VoidCallback onTap;
+
+  const _MacWindowButton({
+    required this.type,
+    required this.onTap,
+  });
+
+  @override
+  State<_MacWindowButton> createState() => _MacWindowButtonState();
+}
+
+class _MacWindowButtonState extends State<_MacWindowButton> {
+  bool _isHovered = false;
+
+  Color _getButtonColor() {
+    switch (widget.type) {
+      case MacWindowButtonType.close:
+        return const Color(0xFFFF5F57);
+      case MacWindowButtonType.minimize:
+        return const Color(0xFFFFBD2E);
+      case MacWindowButtonType.maximize:
+        return const Color(0xFF28CA42);
+    }
+  }
+
+  IconData _getButtonIcon() {
+    switch (widget.type) {
+      case MacWindowButtonType.close:
+        return Icons.close;
+      case MacWindowButtonType.minimize:
+        return Icons.remove;
+      case MacWindowButtonType.maximize:
+        return Icons.maximize;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: _isHovered ? _getButtonColor() : const Color(0xFFFFFFFF).withOpacity(0.07),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: _isHovered ? _getButtonColor().withOpacity(0.8) : const Color(0xFFD0D0D0),
+              width: 0.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 1,
+                offset: const Offset(0, 0.5),
+              ),
+            ],
+          ),
+          child: _isHovered
+              ? Icon(
+                  _getButtonIcon(),
+                  size: 8,
+                  color: widget.type == MacWindowButtonType.close ? Colors.white.withOpacity(0.9) : Colors.black.withOpacity(0.7),
+                )
+              : null,
+        ),
+      ),
+    );
+  }
+}
+
 /// Desktop home page - premium minimal design with complete mobile functionality
 class DesktopHomePage extends StatefulWidget {
   final String? navigateToRoute;
@@ -163,8 +243,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
       if (mounted) {
-        await Provider.of<CaptureProvider>(context, listen: false)
-            .streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
+        await Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
       }
 
       // Handle navigation
@@ -550,8 +629,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
             color: Colors.transparent,
             child: InkWell(
               onTap: () {
-                MixpanelManager()
-                    .bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Actions', 'Apps'][index]);
+                MixpanelManager().bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Actions', 'Apps'][index]);
                 onTap();
               },
               borderRadius: BorderRadius.circular(8),
@@ -746,8 +824,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
       child: Row(
         children: [
           // Close button
-          _buildWindowButton(
-            color: const Color(0xFFFF5F57),
+          _buildMacWindowButton(
+            type: MacWindowButtonType.close,
             onTap: () async {
               await windowManager.close();
             },
@@ -755,8 +833,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
           const SizedBox(width: 8),
 
           // Minimize button
-          _buildWindowButton(
-            color: const Color(0xFFFFBD2E),
+          _buildMacWindowButton(
+            type: MacWindowButtonType.minimize,
             onTap: () async {
               await windowManager.minimize();
             },
@@ -764,8 +842,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
           const SizedBox(width: 8),
 
           // Maximize/Restore button
-          _buildWindowButton(
-            color: const Color(0xFF28CA42),
+          _buildMacWindowButton(
+            type: MacWindowButtonType.maximize,
             onTap: () async {
               bool isMaximized = await windowManager.isMaximized();
               if (isMaximized) {
@@ -780,27 +858,13 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     );
   }
 
-  Widget _buildWindowButton({
-    required Color color,
+  Widget _buildMacWindowButton({
+    required MacWindowButtonType type,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
+    return _MacWindowButton(
+      type: type,
       onTap: onTap,
-      child: Container(
-        width: 12,
-        height: 12,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(6),
-          boxShadow: [
-            BoxShadow(
-              color: color.withOpacity(0.3),
-              blurRadius: 2,
-              offset: const Offset(0, 1),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -1049,8 +1113,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     );
   }
 
-  PopupMenuItem<String> _buildPopupMenuItem(String value, IconData icon, String title, double width,
-      {bool isDestructive = false}) {
+  PopupMenuItem<String> _buildPopupMenuItem(String value, IconData icon, String title, double width, {bool isDestructive = false}) {
     return PopupMenuItem<String>(
       value: value,
       padding: EdgeInsets.zero,

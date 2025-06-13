@@ -279,9 +279,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                           );
                         }
 
-                        final totalApps = appProvider.isFilterActive() || appProvider.isSearchActive()
-                            ? appProvider.filteredApps.length
-                            : appProvider.apps.length;
+                        final totalApps = appProvider.isFilterActive() || appProvider.isSearchActive() ? appProvider.filteredApps.length : appProvider.apps.length;
 
                         return Text(
                           'Discover and install apps',
@@ -576,12 +574,13 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
 
                 const SizedBox(width: 16),
 
-                // App info
+                // App info - takes remaining space
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
+                      // App name
                       Text(
                         app.name,
                         maxLines: 1,
@@ -593,10 +592,27 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                           height: 1.2,
                         ),
                       ),
+
                       const SizedBox(height: 6),
-                      if (app.ratingAvg != null)
-                        Row(
-                          children: [
+
+                      // App description - reduced opacity and better spacing
+                      Text(
+                        app.description.decodeString,
+                        maxLines: 2, // Back to 2 lines with increased card height
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: ResponsiveHelper.textTertiary.withOpacity(0.7), // Reduced opacity
+                          height: 1.3,
+                        ),
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      // Rating and install status
+                      Row(
+                        children: [
+                          if (app.ratingAvg != null) ...[
                             const Icon(
                               Icons.star_rounded,
                               color: ResponsiveHelper.purplePrimary,
@@ -612,7 +628,9 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                               ),
                             ),
                             const Spacer(),
-                            // Add "Popular" badge for visual distinction
+                          ] else
+                            const Spacer(),
+                          if (app.enabled)
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 8,
@@ -623,7 +641,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: const Text(
-                                'Popular',
+                                'Installed',
                                 style: TextStyle(
                                   color: ResponsiveHelper.purplePrimary,
                                   fontSize: 10,
@@ -632,8 +650,8 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                                 ),
                               ),
                             ),
-                          ],
-                        ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -708,8 +726,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
     return slivers;
   }
 
-  Widget _buildCategorySection(
-      ResponsiveHelper responsive, AppProvider appProvider, dynamic category, List<App> categoryApps) {
+  Widget _buildCategorySection(ResponsiveHelper responsive, AppProvider appProvider, dynamic category, List<App> categoryApps) {
     // Show up to 8 apps from this category
     final displayApps = categoryApps.take(8).toList();
 
@@ -1025,8 +1042,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
   }
 
   Widget _buildAppsGrid(ResponsiveHelper responsive, AppProvider appProvider) {
-    final apps =
-        appProvider.isFilterActive() || appProvider.isSearchActive() ? appProvider.filteredApps : appProvider.apps;
+    final apps = appProvider.isFilterActive() || appProvider.isSearchActive() ? appProvider.filteredApps : appProvider.apps;
 
     if (apps.isEmpty) {
       return SliverFillRemaining(
