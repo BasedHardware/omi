@@ -9,6 +9,7 @@ import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
+import 'desktop_add_app_page.dart';
 import 'widgets/desktop_app_grid.dart';
 import 'widgets/desktop_search_header.dart';
 import 'widgets/desktop_filter_chips.dart';
@@ -16,7 +17,12 @@ import 'widgets/desktop_app_detail.dart';
 
 /// Desktop Apps Page - Optimized for large datasets (4000+ apps)
 class DesktopAppsPage extends StatefulWidget {
-  const DesktopAppsPage({super.key});
+  final VoidCallback? onNavigateToCreateApp;
+
+  const DesktopAppsPage({
+    super.key,
+    this.onNavigateToCreateApp,
+  });
 
   @override
   State<DesktopAppsPage> createState() => _DesktopAppsPageState();
@@ -282,7 +288,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                         final totalApps = appProvider.isFilterActive() || appProvider.isSearchActive() ? appProvider.filteredApps.length : appProvider.apps.length;
 
                         return Text(
-                          'Discover and install apps',
+                          'Browse, install, and create apps',
                           style: responsive.bodyMedium.copyWith(
                             color: ResponsiveHelper.textTertiary,
                           ),
@@ -310,6 +316,47 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                     appProvider.searchApps('');
                     _searchFocusNode.unfocus();
                   },
+                ),
+              ),
+
+              const SizedBox(width: 12),
+
+              // Create App button
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => _navigateToCreateApp(context),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.add_rounded,
+                          color: ResponsiveHelper.purplePrimary,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Create App',
+                          style: TextStyle(
+                            color: ResponsiveHelper.purplePrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -385,9 +432,12 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
     String displayText = '';
     if (value is String) {
       displayText = value;
-    } else if (value.toString().contains('title')) {
-      // Handle Category and Capability objects
-      displayText = value.title ?? value.toString();
+    } else if (value is Category) {
+      // Handle Category objects
+      displayText = value.title;
+    } else if (value is AppCapability) {
+      // Handle AppCapability objects
+      displayText = value.title;
     } else {
       displayText = value.toString();
     }
@@ -1114,4 +1164,11 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
 
   @override
   bool get wantKeepAlive => true;
+
+  void _navigateToCreateApp(BuildContext context) {
+    // Use callback to navigate within the same window structure
+    if (widget.onNavigateToCreateApp != null) {
+      widget.onNavigateToCreateApp!();
+    }
+  }
 }
