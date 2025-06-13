@@ -102,6 +102,17 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
 
   void _showMigrationConfirmationDialog(BuildContext context, DataProtectionLevel value) {
     final provider = Provider.of<UserProvider>(context, listen: false);
+    final targetLevelStr = _levelToString(value);
+
+    Future<int> getCount() {
+      // If migrating to 'enhanced' and we already have the count, use it.
+      if (value == DataProtectionLevel.enhanced && _migrationCount != null) {
+        return Future.value(_migrationCount);
+      }
+      // Otherwise, fetch it. This covers migrating to 'standard' or if _migrationCount is null.
+      return context.read<UserProvider>().getMigrationCountFor(targetLevelStr);
+    }
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -115,20 +126,70 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
             Text('Confirm Migration', style: TextStyle(color: Colors.white)),
           ],
         ),
-        content: RichText(
-          text: TextSpan(
-            style: TextStyle(color: Colors.white.withOpacity(0.8), height: 1.5, fontSize: 15),
-            children: [
-              const TextSpan(text: 'This will migrate your data to the '),
-              TextSpan(
-                text: '${_levelToString(value).capitalize()} Protection',
-                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-              ),
-              const TextSpan(
-                  text:
-                      ' level. This process can take a few minutes and cannot be undone.\n\nAre you sure you want to continue?'),
-            ],
-          ),
+        content: FutureBuilder<int>(
+          future: getCount(),
+          builder: (context, snapshot) {
+            Widget content;
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              content = SizedBox(
+                height: 80,
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const CircularProgressIndicator(),
+                      const SizedBox(height: 16),
+                      Text('Estimating time...', style: TextStyle(color: Colors.white70)),
+                    ],
+                  ),
+                ),
+              );
+            } else if (snapshot.hasError) {
+              content = RichText(
+                text: TextSpan(
+                  style: TextStyle(color: Colors.white.withOpacity(0.8), height: 1.5, fontSize: 15),
+                  children: const [
+                    TextSpan(text: 'Could not estimate migration time. '),
+                    TextSpan(text: 'This action cannot be undone.\n\nAre you sure you want to continue?'),
+                  ],
+                ),
+              );
+            } else {
+              final migrationCount = snapshot.data ?? 0;
+              String estimatedTimeMessage;
+              if (migrationCount == 0) {
+                estimatedTimeMessage = 'This should be quick.';
+              } else {
+                final minutesDouble = migrationCount / 100.0; // 10 minutes per 1000 objects
+                if (minutesDouble < 1) {
+                  estimatedTimeMessage = 'This process should take less than a minute.';
+                } else {
+                  final minutes = minutesDouble.ceil();
+                  if (minutes == 1) {
+                    estimatedTimeMessage = 'This process will take about 1 minute.';
+                  } else {
+                    estimatedTimeMessage = 'This process will take about $minutes minutes.';
+                  }
+                }
+              }
+
+              content = RichText(
+                text: TextSpan(
+                  style: TextStyle(color: Colors.white.withOpacity(0.8), height: 1.5, fontSize: 15),
+                  children: [
+                    const TextSpan(text: 'This will migrate your data to the '),
+                    TextSpan(
+                      text: '${_levelToString(value).capitalize()} Protection',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                    const TextSpan(text: ' level. '),
+                    TextSpan(text: '$estimatedTimeMessage This action cannot be undone.\n\nAre you sure you want to continue?'),
+                  ],
+                ),
+              );
+            }
+            return content;
+          },
         ),
         actions: [
           TextButton(
