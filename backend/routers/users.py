@@ -332,8 +332,6 @@ def get_migration_requests(target_level: str, uid: str = Depends(auth.get_curren
     memories_to_migrate = memories_db.get_memories_to_migrate(uid, target_level)
     chats_to_migrate = chat_db.get_chats_to_migrate(uid, target_level)
     needs_migration = conversations_to_migrate + memories_to_migrate + chats_to_migrate
-    # needs_migration = memories_to_migrate + chats_to_migrate
-    #print(needs_migration)
     return {"needs_migration": needs_migration}
 
 
