@@ -53,11 +53,13 @@ def set_data_protection_level(data_arg_name: str):
                 level = 'standard'
 
             if isinstance(data, dict):
-                data['data_protection_level'] = level
+                if data.get('data_protection_level') is None:
+                    data['data_protection_level'] = level
             elif isinstance(data, list):
                 for item in data:
                     if isinstance(item, dict):
-                        item['data_protection_level'] = level
+                        if item.get('data_protection_level') is None:
+                            item['data_protection_level'] = level
 
             # The arguments were modified in place, so we can just call the original function
             return func(*args, **kwargs)
