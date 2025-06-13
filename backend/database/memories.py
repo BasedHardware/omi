@@ -19,21 +19,14 @@ users_collection = 'users'
 # *********************************
 
 def _encrypt_memory_data(memory_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
-    """
-    Encrypts sensitive fields in a memory dictionary.
-    Operates on a copy of the data to avoid side effects.
-    """
     data = copy.deepcopy(memory_data)
+
     if 'content' in data and isinstance(data['content'], str):
         data['content'] = encryption.encrypt(data['content'], uid)
     return data
 
 
 def _decrypt_memory_data(memory_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
-    """
-    Decrypts sensitive fields in a memory dictionary.
-    Operates on a copy of the data to avoid side effects.
-    """
     data = copy.deepcopy(memory_data)
 
     if 'content' in data and isinstance(data['content'], str):
@@ -45,22 +38,12 @@ def _decrypt_memory_data(memory_data: Dict[str, Any], uid: str) -> Dict[str, Any
 
 
 def _prepare_data_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
-    """
-    Prepares data for writing to Firestore by encrypting it if the protection level is 'enhanced'.
-    For 'standard' and 'e2ee', data is returned as is.
-    This is kept for migration/update functions that cannot use the decorator.
-    """
     if level == 'enhanced':
         return _encrypt_memory_data(data, uid)
     return data
 
 
 def _prepare_memory_for_read(memory_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
-    """
-    Prepares a memory document for reading by decrypting it based on its protection level.
-    For 'standard' and 'e2ee', data is returned as is.
-    This is kept for migration/update functions that cannot use the decorator.
-    """
     if not memory_data:
         return None
 
@@ -280,7 +263,7 @@ def migrate_memory_level(uid: str, memory_id: str, target_level: str):
 
     # Update the document with the migrated data and the new protection level.
     migrated_data['data_protection_level'] = target_level
-    doc_ref.update(migrated_data)
+    doc_ref.update({'data_protection_level': target_level, 'content': migrated_data['content']})
 
 
 def migrate_memories(prev_uid: str, new_uid: str, app_id: str = None):

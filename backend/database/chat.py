@@ -19,21 +19,14 @@ from .helpers import set_data_protection_level, prepare_for_write, prepare_for_r
 # *********************************
 
 def _encrypt_chat_data(chat_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
-    """
-    Encrypts sensitive fields in a chat message dictionary.
-    Operates on a copy of the data to avoid side effects.
-    """
     data = copy.deepcopy(chat_data)
+
     if 'text' in data and isinstance(data['text'], str):
         data['text'] = encryption.encrypt(data['text'], uid)
     return data
 
 
 def _decrypt_chat_data(chat_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
-    """
-    Decrypts sensitive fields in a chat message dictionary.
-    Operates on a copy of the data to avoid side effects.
-    """
     data = copy.deepcopy(chat_data)
 
     if 'text' in data and isinstance(data['text'], str):
@@ -46,22 +39,12 @@ def _decrypt_chat_data(chat_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
 
 
 def _prepare_data_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
-    """
-    Prepares data for writing to Firestore by encrypting it if the protection level is 'enhanced'.
-    For 'standard' and 'e2ee', data is returned as is.
-    This is kept for the migration function that cannot use the decorator.
-    """
     if level == 'enhanced':
         return _encrypt_chat_data(data, uid)
     return data
 
 
 def _prepare_message_for_read(message_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
-    """
-    Prepares a message document for reading by decrypting it based on its protection level.
-    For 'standard' and 'e2ee', data is returned as is.
-    This is kept for the migration function that cannot use the decorator.
-    """
     if not message_data:
         return None
 

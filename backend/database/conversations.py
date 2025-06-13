@@ -25,11 +25,8 @@ conversations_collection = 'conversations'
 # *********************************
 
 def _encrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
-    """
-    Encrypts sensitive fields in a conversation dictionary.
-    Operates on a copy of the data to avoid side effects.
-    """
     data = copy.deepcopy(conversation_data)
+
     if 'transcript_segments' in data and isinstance(data['transcript_segments'], list):
         segments_json = json.dumps(data['transcript_segments'])
         data['transcript_segments'] = encryption.encrypt(segments_json, uid)
@@ -38,10 +35,6 @@ def _encrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
 
 
 def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
-    """
-    Decrypts sensitive fields in a conversation dictionary.
-    Operates on a copy of the data to avoid side effects.
-    """
     data = copy.deepcopy(conversation_data)
 
     if 'transcript_segments' in data and isinstance(data['transcript_segments'], str):
@@ -55,22 +48,12 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
 
 
 def _prepare_data_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
-    """
-    Prepares data for writing to Firestore by encrypting it if the protection level is 'enhanced'.
-    For 'standard' and 'e2ee', data is returned as is.
-    This is kept for migration/update functions that cannot use the decorator.
-    """
     if level == 'enhanced':
         return _encrypt_conversation_data(data, uid)
     return data
 
 
 def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
-    """
-    Prepares a conversation document for reading by decrypting it based on its protection level.
-    For 'standard' and 'e2ee', data is returned as is.
-    This is kept for migration/update functions that cannot use the decorator.
-    """
     if not conversation_data:
         return None
 
