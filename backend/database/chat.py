@@ -393,6 +393,14 @@ def migrate_chat_level(uid: str, message_doc_id: str, target_level: str):
         return
 
     plain_data = _prepare_message_for_read(message_data, uid)
-    migrated_data = _prepare_data_for_write(plain_data, uid, target_level)
-    migrated_data['data_protection_level'] = target_level
-    doc_ref.update(migrated_data)
+    plain_text = plain_data.get('text')
+    migrated_text = plain_text
+    if target_level == 'enhanced':
+        if isinstance(plain_text, str):
+            migrated_text = encryption.encrypt(plain_text, uid)
+
+    update_data = {
+        'data_protection_level': target_level,
+        'text': migrated_text
+    }
+    doc_ref.update(update_data)

@@ -224,11 +224,19 @@ def migrate_conversation_level(uid: str, conversation_id: str, target_level: str
     plain_data = _prepare_conversation_for_read(conversation_data, uid)
 
     # Now, encrypt if the target is 'enhanced'.
-    migrated_data = _prepare_data_for_write(plain_data, uid, target_level)
+    plain_segments = plain_data.get('transcript_segments')
+    migrated_segments = plain_segments
+    if target_level == 'enhanced':
+        if isinstance(plain_segments, list):
+            segments_json = json.dumps(plain_segments)
+            migrated_segments = encryption.encrypt(segments_json, uid)
 
     # Update the document with the migrated data and the new protection level.
-    migrated_data['data_protection_level'] = target_level
-    doc_ref.update(migrated_data)
+    update_data = {
+        'data_protection_level': target_level,
+        'transcript_segments': migrated_segments
+    }
+    doc_ref.update(update_data)
 
 
 # **************************************

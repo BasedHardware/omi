@@ -258,12 +258,18 @@ def migrate_memory_level(uid: str, memory_id: str, target_level: str):
     # Decrypt the data first (if needed) to get a clean slate.
     plain_data = _prepare_memory_for_read(memory_data, uid)
 
-    # Now, encrypt if the target is 'enhanced'.
-    migrated_data = _prepare_data_for_write(plain_data, uid, target_level)
+    plain_content = plain_data.get('content')
+    migrated_content = plain_content
+    if target_level == 'enhanced':
+        if isinstance(plain_content, str):
+            migrated_content = encryption.encrypt(plain_content, uid)
 
     # Update the document with the migrated data and the new protection level.
-    migrated_data['data_protection_level'] = target_level
-    doc_ref.update({'data_protection_level': target_level, 'content': migrated_data['content']})
+    update_data = {
+        'data_protection_level': target_level,
+        'content': migrated_content
+    }
+    doc_ref.update(update_data)
 
 
 def migrate_memories(prev_uid: str, new_uid: str, app_id: str = None):
