@@ -27,8 +27,8 @@ import 'widgets/desktop_recording_widget.dart';
 
 /// Desktop conversations page - premium minimal design
 class DesktopConversationsPage extends StatefulWidget {
-  final VoidCallback? onMinimizeRecording;
-  final bool isRecordingMinimized;
+  final VoidCallback? onMinimizeRecording; // Keep for overlay functionality elsewhere
+  final bool isRecordingMinimized; // Keep for overlay functionality elsewhere
 
   const DesktopConversationsPage({
     super.key,
@@ -56,6 +56,9 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
   int? _selectedConversationIndex;
   DateTime? _selectedDate;
   ConversationDetailProvider? _conversationDetailProvider;
+
+  // State for expanded recording view
+  bool _showExpandedRecording = false;
 
   @override
   void initState() {
@@ -131,6 +134,18 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
     });
   }
 
+  void _showExpandedRecordingView() {
+    setState(() {
+      _showExpandedRecording = true;
+    });
+  }
+
+  void _hideExpandedRecordingView() {
+    setState(() {
+      _showExpandedRecording = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -141,10 +156,16 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
         final isRecording = recordingState == RecordingState.systemAudioRecord;
         final isInitializing = recordingState == RecordingState.initialising;
         final isRecordingOrInitializing = isRecording || isInitializing || captureProvider.isPaused;
-        final showExpandedRecording = isRecordingOrInitializing && !widget.isRecordingMinimized;
         final hasConversations = convoProvider.groupedConversations.isNotEmpty;
         final isSearchActive = convoProvider.previousQuery.isNotEmpty;
         final hasAnyConversationsInSystem = convoProvider.conversations.isNotEmpty;
+
+        // Auto-hide expanded recording when recording stops
+        if (!isRecordingOrInitializing && _showExpandedRecording) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _hideExpandedRecordingView();
+          });
+        }
 
         // If showing conversation detail, display it instead of the conversations list
         if (_showingConversationDetail && _selectedConversation != null && _conversationDetailProvider != null) {
@@ -159,11 +180,12 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
           color: ResponsiveHelper.backgroundSecondary.withOpacity(0.85),
           child: Stack(
             children: [
-              // Case 1: No conversations in system, not recording, and not searching -> show centered start button
-              if (!hasAnyConversationsInSystem && !isRecordingOrInitializing && !isSearchActive)
-                const Center(
+              // Main content layer
+              if (!hasAnyConversationsInSystem && !isSearchActive)
+                Center(
                   child: DesktopPremiumRecordingWidget(
                     hasConversations: false,
+                    onStartRecording: _showExpandedRecordingView,
                   ),
                 )
               else
@@ -200,15 +222,16 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                       ),
 
                     // Recording widget section (compact version)
-                    // Only show if there are conversations in system, not recording, and not searching
-                    if (hasAnyConversationsInSystem && !isRecordingOrInitializing && !isSearchActive)
+                    // Only show if there are conversations in system and not searching
+                    if (hasAnyConversationsInSystem && !isSearchActive && !_showExpandedRecording)
                       SliverToBoxAdapter(
                         child: FadeTransition(
                           opacity: _fadeAnimation,
                           child: Container(
                             padding: const EdgeInsets.fromLTRB(32, 24, 32, 24),
-                            child: const DesktopPremiumRecordingWidget(
+                            child: DesktopPremiumRecordingWidget(
                               hasConversations: true,
+                              onStartRecording: _showExpandedRecordingView,
                             ),
                           ),
                         ),
@@ -327,21 +350,16 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                   ],
                 ),
 
-              // Full-screen recording overlay
-              if (showExpandedRecording)
-                AnimatedOpacity(
-                  opacity: showExpandedRecording ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 400),
-                  child: Container(
-                    width: double.infinity,
-                    height: double.infinity,
-                    decoration: BoxDecoration(
-                      color: ResponsiveHelper.backgroundSecondary.withOpacity(0.98),
-                    ),
-                    child: DesktopPremiumRecordingWidget(
-                      onMinimize: widget.onMinimizeRecording,
-                      hasConversations: convoProvider.groupedConversations.isNotEmpty,
-                    ),
+              // Expanded recording overlay (only shows over main content area)
+              if (_showExpandedRecording)
+                Container(
+                  width: double.infinity,
+                  height: double.infinity,
+                  color: ResponsiveHelper.backgroundSecondary.withOpacity(0.95),
+                  child: DesktopPremiumRecordingWidget(
+                    onBack: _hideExpandedRecordingView,
+                    showTranscript: true,
+                    hasConversations: true,
                   ),
                 ),
             ],

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
 
 /// Premium minimal search result header for desktop
 class DesktopSearchResultHeader extends StatelessWidget {
@@ -22,7 +21,7 @@ class DesktopSearchResultHeader extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
           child: isSearching
-              ? _buildShimmerEffect()
+              ? _buildSearchLoadingIndicator()
               : provider.totalSearchPages > 0
                   ? _buildSearchResults(provider)
                   : const SizedBox.shrink(),
@@ -31,17 +30,40 @@ class DesktopSearchResultHeader extends StatelessWidget {
     );
   }
 
-  Widget _buildShimmerEffect() {
-    return Shimmer.fromColors(
-      baseColor: ResponsiveHelper.textTertiary,
-      highlightColor: ResponsiveHelper.textQuaternary,
-      child: Container(
-        width: 180,
-        height: 16,
-        decoration: BoxDecoration(
-          color: ResponsiveHelper.backgroundTertiary,
-          borderRadius: BorderRadius.circular(4),
+  Widget _buildSearchLoadingIndicator() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
+          width: 1,
         ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 12,
+            height: 12,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                ResponsiveHelper.purplePrimary.withOpacity(0.8),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Text(
+            'Searching...',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: ResponsiveHelper.textSecondary,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -59,7 +81,7 @@ class DesktopSearchResultHeader extends StatelessWidget {
               width: 1,
             ),
           ),
-          child: Row(
+          child: const Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
@@ -67,10 +89,10 @@ class DesktopSearchResultHeader extends StatelessWidget {
                 size: 14,
                 color: ResponsiveHelper.textTertiary,
               ),
-              const SizedBox(width: 6),
+              SizedBox(width: 6),
               Text(
                 'Search results',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                   color: ResponsiveHelper.textTertiary,
