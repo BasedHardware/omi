@@ -11,7 +11,7 @@ from models.chat import Message
 from utils import encryption
 from utils.other.endpoints import timeit
 from ._client import db
-from .helpers import set_data_protection_level
+from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 
 
 # *********************************
@@ -47,6 +47,7 @@ def _prepare_data_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[
     """
     Prepares data for writing to Firestore by encrypting it if the protection level is 'enhanced'.
     For 'standard' and 'e2ee', data is returned as is.
+    This is kept for the migration function that cannot use the decorator.
     """
     if level == 'enhanced':
         return _encrypt_chat_data(data, uid)
@@ -57,6 +58,7 @@ def _prepare_message_for_read(message_data: Optional[Dict[str, Any]], uid: str) 
     """
     Prepares a message document for reading by decrypting it based on its protection level.
     For 'standard' and 'e2ee', data is returned as is.
+    This is kept for the migration function that cannot use the decorator.
     """
     if not message_data:
         return None
@@ -73,14 +75,11 @@ def _prepare_message_for_read(message_data: Optional[Dict[str, Any]], uid: str) 
 # *****************************
 
 @set_data_protection_level(data_arg_name='message_data')
+@prepare_for_write(data_arg_name='message_data', encrypt_func=_encrypt_chat_data)
 def add_message(uid: str, message_data: dict):
     del message_data['memories']
-
-    current_level = message_data['data_protection_level']
-    prepared_data = _prepare_data_for_write(message_data, uid, current_level)
-
     user_ref = db.collection('users').document(uid)
-    user_ref.collection('messages').add(prepared_data)
+    user_ref.collection('messages').add(message_data)
     return message_data
 
 
@@ -114,6 +113,7 @@ def add_summary_message(text: str, uid: str) -> Message:
     return ai_message
 
 
+@prepare_for_read(decrypt_func=_decrypt_chat_data)
 def get_app_messages(uid: str, app_id: str, limit: int = 20, offset: int = 0, include_conversations: bool = False):
     user_ref = db.collection('users').document(uid)
     messages_ref = (
@@ -134,10 +134,8 @@ def get_app_messages(uid: str, app_id: str, limit: int = 20, offset: int = 0, in
         messages.append(message)
         conversations_id.update(message.get('memories_id', []))
 
-    decrypted_messages = [_prepare_message_for_read(msg, uid) for msg in messages]
-
     if not include_conversations:
-        return decrypted_messages
+        return messages
 
     # Fetch all conversations at once
     conversations = {}
@@ -150,15 +148,16 @@ def get_app_messages(uid: str, app_id: str, limit: int = 20, offset: int = 0, in
             conversations[conversation['id']] = conversation
 
     # Attach conversations to messages
-    for message in decrypted_messages:
+    for message in messages:
         message['memories'] = [
             conversations[conversation_id] for conversation_id in message.get('memories_id', []) if
             conversation_id in conversations
         ]
 
-    return decrypted_messages
+    return messages
 
 
+@prepare_for_read(decrypt_func=_decrypt_chat_data)
 def get_messages(
         uid: str, limit: int = 20, offset: int = 0, include_conversations: bool = False, app_id: Optional[str] = None,
         chat_session_id: Optional[str] = None
@@ -189,10 +188,8 @@ def get_messages(
         conversations_id.update(message.get('memories_id', []))
         files_id.update(message.get('files_id', []))
 
-    decrypted_messages = [_prepare_message_for_read(msg, uid) for msg in messages]
-
     if not include_conversations:
-        return decrypted_messages
+        return messages
 
     # Fetch all conversations at once
     conversations = {}
@@ -205,7 +202,7 @@ def get_messages(
             conversations[conversation['id']] = conversation
 
     # Attach conversations to messages
-    for message in decrypted_messages:
+    for message in messages:
         message['memories'] = [
             conversations[conversation_id] for conversation_id in message.get('memories_id', []) if
             conversation_id in conversations
@@ -222,14 +219,15 @@ def get_messages(
             files[file['id']] = file
 
     # Attach files to messages
-    for message in decrypted_messages:
+    for message in messages:
         message['files'] = [
             files[file_id] for file_id in message.get('files_id', []) if file_id in files
         ]
 
-    return decrypted_messages
+    return messages
 
 
+@prepare_for_read(decrypt_func=_decrypt_chat_data)
 def get_message(uid: str, message_id: str) -> tuple[Message, str] | None:
     user_ref = db.collection('users').document(uid)
     message_ref = user_ref.collection('messages').where('id', '==', message_id).limit(1).stream()
@@ -237,7 +235,7 @@ def get_message(uid: str, message_id: str) -> tuple[Message, str] | None:
     if not message_doc:
         return None
 
-    message_data = _prepare_message_for_read(message_doc.to_dict(), uid)
+    message_data = message_doc.to_dict()
     message = Message(**message_data) if message_data else None
 
     if not message:

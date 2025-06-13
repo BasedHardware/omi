@@ -8,7 +8,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from ._client import db
 from database import users as users_db
 from utils import encryption
-from .helpers import set_data_protection_level
+from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 
 memories_collection = 'memories'
 users_collection = 'users'
@@ -47,6 +47,7 @@ def _prepare_data_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[
     """
     Prepares data for writing to Firestore by encrypting it if the protection level is 'enhanced'.
     For 'standard' and 'e2ee', data is returned as is.
+    This is kept for migration/update functions that cannot use the decorator.
     """
     if level == 'enhanced':
         return _encrypt_memory_data(data, uid)
@@ -57,6 +58,7 @@ def _prepare_memory_for_read(memory_data: Optional[Dict[str, Any]], uid: str) ->
     """
     Prepares a memory document for reading by decrypting it based on its protection level.
     For 'standard' and 'e2ee', data is returned as is.
+    This is kept for migration/update functions that cannot use the decorator.
     """
     if not memory_data:
         return None
@@ -72,6 +74,7 @@ def _prepare_memory_for_read(memory_data: Optional[Dict[str, Any]], uid: str) ->
 # ********** CRUD *************
 # *****************************
 
+@prepare_for_read(decrypt_func=_decrypt_memory_data)
 def get_memories(uid: str, limit: int = 100, offset: int = 0, categories: List[str] = []):
     print('get_memories db', uid, limit, offset, categories)
     memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
@@ -90,9 +93,10 @@ def get_memories(uid: str, limit: int = 100, offset: int = 0, categories: List[s
     memories = [doc.to_dict() for doc in memories_ref.stream()]
     print("get_memories", len(memories))
     result = [memory for memory in memories if memory['user_review'] is not False]
-    return [_prepare_memory_for_read(mem, uid) for mem in result]
+    return result
 
 
+@prepare_for_read(decrypt_func=_decrypt_memory_data)
 def get_user_public_memories(uid: str, limit: int = 100, offset: int = 0):
     print('get_public_memories', limit, offset)
 
@@ -109,9 +113,10 @@ def get_user_public_memories(uid: str, limit: int = 100, offset: int = 0):
     # Consider visibility as 'public' if it's missing
     public_memories = [memory for memory in memories if memory.get('visibility', 'public') == 'public']
 
-    return [_prepare_memory_for_read(mem, uid) for mem in public_memories]
+    return public_memories
 
 
+@prepare_for_read(decrypt_func=_decrypt_memory_data)
 def get_non_filtered_memories(uid: str, limit: int = 100, offset: int = 0):
     print('get_non_filtered_memories', uid, limit, offset)
     memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
@@ -120,33 +125,30 @@ def get_non_filtered_memories(uid: str, limit: int = 100, offset: int = 0):
     )
     memories_ref = memories_ref.limit(limit).offset(offset)
     memories = [doc.to_dict() for doc in memories_ref.stream()]
-    return [_prepare_memory_for_read(mem, uid) for mem in memories]
+    return memories
 
 
 @set_data_protection_level(data_arg_name='data')
+@prepare_for_write(data_arg_name='data', encrypt_func=_encrypt_memory_data)
 def create_memory(uid: str, data: dict):
-    current_level = data['data_protection_level']
-    prepared_data = _prepare_data_for_write(data, uid, current_level)
-
     user_ref = db.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
-    memory_ref = memories_ref.document(prepared_data['id'])
-    memory_ref.set(prepared_data)
+    memory_ref = memories_ref.document(data['id'])
+    memory_ref.set(data)
 
 
 @set_data_protection_level(data_arg_name='data')
+@prepare_for_write(data_arg_name='data', encrypt_func=_encrypt_memory_data)
 def save_memories(uid: str, data: List[dict]):
     if not data:
         return
 
-    current_level = data[0]['data_protection_level']
     batch = db.batch()
     user_ref = db.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
     for memory in data:
-        prepared_data = _prepare_data_for_write(memory, uid, current_level)
-        memory_ref = memories_ref.document(prepared_data['id'])
-        batch.set(memory_ref, prepared_data)
+        memory_ref = memories_ref.document(memory['id'])
+        batch.set(memory_ref, memory)
     batch.commit()
 
 
@@ -159,12 +161,13 @@ def delete_memories(uid: str):
     batch.commit()
 
 
+@prepare_for_read(decrypt_func=_decrypt_memory_data)
 def get_memory(uid: str, memory_id: str):
     user_ref = db.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
     memory_ref = memories_ref.document(memory_id)
     memory_data = memory_ref.get().to_dict()
-    return _prepare_memory_for_read(memory_data, uid)
+    return memory_data
 
 
 def review_memory(uid: str, memory_id: str, value: bool):

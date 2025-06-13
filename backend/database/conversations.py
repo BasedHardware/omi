@@ -15,7 +15,7 @@ from models.conversation import ConversationPhoto, PostProcessingStatus, PostPro
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
 from ._client import db
-from .helpers import set_data_protection_level
+from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 
 conversations_collection = 'conversations'
 
@@ -73,6 +73,7 @@ def _prepare_data_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[
     """
     Prepares data for writing to Firestore by encrypting it if the protection level is 'enhanced'.
     For 'standard' and 'e2ee', data is returned as is.
+    This is kept for migration/update functions that cannot use the decorator.
     """
     if level == 'enhanced':
         return _encrypt_conversation_data(data, uid)
@@ -83,6 +84,7 @@ def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], 
     """
     Prepares a conversation document for reading by decrypting it based on its protection level.
     For 'standard' and 'e2ee', data is returned as is.
+    This is kept for migration/update functions that cannot use the decorator.
     """
     if not conversation_data:
         return None
@@ -99,27 +101,27 @@ def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], 
 # *****************************
 
 @set_data_protection_level(data_arg_name='conversation_data')
+@prepare_for_write(data_arg_name='conversation_data', encrypt_func=_encrypt_conversation_data)
 def upsert_conversation(uid: str, conversation_data: dict):
     if 'audio_base64_url' in conversation_data:
         del conversation_data['audio_base64_url']
     if 'photos' in conversation_data:
         del conversation_data['photos']
 
-    current_level = conversation_data['data_protection_level']
-    prepared_data = _prepare_data_for_write(conversation_data, uid, current_level)
-
     user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection(conversations_collection).document(prepared_data['id'])
-    conversation_ref.set(prepared_data)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
+    conversation_ref.set(conversation_data)
 
 
+@prepare_for_read(decrypt_func=_decrypt_conversation_data)
 def get_conversation(uid, conversation_id):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_data = conversation_ref.get().to_dict()
-    return _prepare_conversation_for_read(conversation_data, uid)
+    return conversation_data
 
 
+@prepare_for_read(decrypt_func=_decrypt_conversation_data)
 def get_conversations(uid: str, limit: int = 100, offset: int = 0, include_discarded: bool = False,
                       statuses: List[str] = [], start_date: Optional[datetime] = None,
                       end_date: Optional[datetime] = None, categories: Optional[List[str]] = None):
@@ -148,7 +150,7 @@ def get_conversations(uid: str, limit: int = 100, offset: int = 0, include_disca
     conversations_ref = conversations_ref.limit(limit).offset(offset)
 
     conversations = [doc.to_dict() for doc in conversations_ref.stream()]
-    return [_prepare_conversation_for_read(conv, uid) for conv in conversations]
+    return conversations
 
 
 def update_conversation(uid: str, conversation_id: str, update_data: dict):
@@ -179,6 +181,7 @@ def delete_conversation(uid, conversation_id):
     conversation_ref.delete()
 
 
+@prepare_for_read(decrypt_func=_decrypt_conversation_data)
 def filter_conversations_by_date(uid, start_date, end_date):
     user_ref = db.collection('users').document(uid)
     query = (
@@ -189,9 +192,10 @@ def filter_conversations_by_date(uid, start_date, end_date):
         .order_by('created_at', direction=firestore.Query.DESCENDING)
     )
     conversations = [doc.to_dict() for doc in query.stream()]
-    return [_prepare_conversation_for_read(conv, uid) for conv in conversations]
+    return conversations
 
 
+@prepare_for_read(decrypt_func=_decrypt_conversation_data)
 def get_conversations_by_id(uid, conversation_ids):
     user_ref = db.collection('users').document(uid)
     conversations_ref = user_ref.collection(conversations_collection)
@@ -207,7 +211,7 @@ def get_conversations_by_id(uid, conversation_ids):
                 continue
             conversations.append(data)
 
-    return [_prepare_conversation_for_read(conv, uid) for conv in conversations]
+    return conversations
 
 
 # **************************************
@@ -263,6 +267,7 @@ def migrate_conversation_level(uid: str, conversation_id: str, target_level: str
 # ********** STATUS *************
 # **************************************
 
+@prepare_for_read(decrypt_func=_decrypt_conversation_data)
 def get_in_progress_conversation(uid: str):
     user_ref = db.collection('users').document(uid)
     conversations_ref = (
@@ -271,9 +276,10 @@ def get_in_progress_conversation(uid: str):
     )
     docs = [doc.to_dict() for doc in conversations_ref.stream()]
     conversation = docs[0] if docs else None
-    return _prepare_conversation_for_read(conversation, uid)
+    return conversation
 
 
+@prepare_for_read(decrypt_func=_decrypt_conversation_data)
 def get_processing_conversations(uid: str):
     user_ref = db.collection('users').document(uid)
     conversations_ref = (
@@ -281,7 +287,7 @@ def get_processing_conversations(uid: str):
         .where(filter=FieldFilter('status', '==', 'processing'))
     )
     conversations = [doc.to_dict() for doc in conversations_ref.stream()]
-    return [_prepare_conversation_for_read(conv, uid) for conv in conversations]
+    return conversations
 
 
 def update_conversation_status(uid: str, conversation_id: str, status: str):
@@ -344,13 +350,14 @@ def set_conversation_visibility(uid: str, conversation_id: str, visibility: str)
     conversation_ref.update({'visibility': visibility})
 
 
+@prepare_for_read(decrypt_func=_decrypt_conversation_data)
 async def _get_public_conversation(db_client: AsyncClient, uid: str, conversation_id: str):
     conversation_ref = db_client.collection('users').document(uid).collection('conversations').document(conversation_id)
     conversation_doc = await conversation_ref.get()
     if conversation_doc.exists:
         conversation_data = conversation_doc.to_dict()
         if conversation_data.get('visibility') in ['public']:
-            return _prepare_conversation_for_read(conversation_data, uid)
+            return conversation_data
     return None
 
 
@@ -469,6 +476,7 @@ def get_conversation_photos(uid: str, conversation_id: str):
 # ********** SYNCING *************
 # ********************************
 
+@prepare_for_read(decrypt_func=_decrypt_conversation_data)
 def get_closest_conversation_to_timestamps(
         uid: str, start_timestamp: int, end_timestamp: int
 ) -> Optional[dict]:
@@ -506,9 +514,10 @@ def get_closest_conversation_to_timestamps(
             closest_conversation = conversation
 
     print('get_closest_conversation_to_timestamps closest_conversation:', closest_conversation['id'])
-    return _prepare_conversation_for_read(closest_conversation, uid)
+    return closest_conversation
 
 
+@prepare_for_read(decrypt_func=_decrypt_conversation_data)
 def get_last_completed_conversation(uid: str) -> Optional[dict]:
     query = (
         db.collection('users').document(uid).collection(conversations_collection)
@@ -518,4 +527,4 @@ def get_last_completed_conversation(uid: str) -> Optional[dict]:
     )
     conversations = [doc.to_dict() for doc in query.stream()]
     conversation = conversations[0] if conversations else None
-    return _prepare_conversation_for_read(conversation, uid)
+    return conversation
