@@ -225,6 +225,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
     return Consumer<UserProvider>(
       builder: (context, provider, child) {
         final isMigrating = provider.isMigrating;
+        final migrationFailed = provider.migrationFailed;
         final selectedLevel = _levelFromString(provider.dataProtectionLevel);
 
         final options = {
@@ -269,7 +270,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (isMigrating) _buildMigrationStatus(provider),
+            if (isMigrating || migrationFailed) _buildMigrationStatus(provider),
             if (!_isExpanded)
               _buildOption(
                 context: context,
@@ -337,6 +338,52 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
   }
 
   Widget _buildMigrationStatus(UserProvider provider) {
+    if (provider.migrationFailed) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.only(bottom: 24),
+        decoration: BoxDecoration(
+          color: Colors.red.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.red.shade300),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, color: Colors.red.shade300, size: 20),
+                const SizedBox(width: 8),
+                const Text(
+                  'Migration Failed',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              provider.migrationMessage,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade300, fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () {
+                provider.updateDataProtectionLevel(provider.targetLevel);
+              },
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.secondary,
+                foregroundColor: Colors.white,
+              ),
+            )
+          ],
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.only(bottom: 24),

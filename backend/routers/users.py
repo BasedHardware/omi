@@ -2,6 +2,7 @@ import threading
 import uuid
 from typing import List, Dict, Any, Union
 import hashlib
+import os
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -9,7 +10,7 @@ from pydantic import BaseModel
 from database import conversations as conversations_db, memories as memories_db, chat as chat_db
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import cache_user_geolocation, set_user_webhook_db, get_user_webhook_db, disable_user_webhook_db, \
-    enable_user_webhook_db, user_webhook_status_db, set_user_preferred_app
+    enable_user_webhook_db, user_webhook_status_db, set_user_preferred_app, set_user_data_protection_level
 from database.users import *
 from models.conversation import Geolocation, Conversation
 from models.other import Person, CreatePerson
@@ -379,6 +380,7 @@ def finalize_migration_request(request: MigrationTargetRequest, uid: str = Depen
         raise HTTPException(status_code=400, detail="Invalid or missing target_level.")
 
     finalize_migration(uid, request.target_level)
+    set_user_data_protection_level(uid, request.target_level)
     return {'status': 'ok'}
 
 

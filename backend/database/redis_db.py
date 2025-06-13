@@ -456,10 +456,6 @@ def save_migrated_retrieval_conversation_id(conversation_id: str):
     r.expire('migrated_retrieval_memory_ids', 60 * 60 * 24 * 7)
 
 
-def has_migrated_retrieval_conversation_id(conversation_id: str) -> bool:
-    return r.sismember('migrated_retrieval_memory_ids', conversation_id)
-
-
 def set_proactive_noti_sent_at(uid: str, app_id: str, ts: int, ttl: int = 30):
     r.set(f'{uid}:{app_id}:proactive_noti_sent_at', ts, ex=ttl)
 
@@ -486,6 +482,21 @@ def get_user_preferred_app(uid: str) -> Optional[str]:
     key = f'user:{uid}:preferred_app'
     app_id = r.get(key)
     return app_id.decode() if app_id else None
+
+
+@try_catch_decorator
+def set_user_data_protection_level(uid: str, level: str):
+    """Caches the user's data protection level."""
+    key = f'user:{uid}:data_protection_level'
+    r.set(key, level)
+
+
+@try_catch_decorator
+def get_user_data_protection_level(uid: str) -> Optional[str]:
+    """Retrieves the user's cached data protection level."""
+    key = f'user:{uid}:data_protection_level'
+    level = r.get(key)
+    return level.decode() if level else None
 
 
 # ******************************************************

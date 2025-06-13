@@ -12,6 +12,7 @@ class UserProvider with ChangeNotifier {
   bool _isLoading = false;
 
   bool _isMigrating = false;
+  bool _migrationFailed = false;
   List<MigrationRequest> _migrationQueue = [];
   int _processedCount = 0;
   String _migrationMessage = '';
@@ -24,6 +25,7 @@ class UserProvider with ChangeNotifier {
   String get dataProtectionLevel => _dataProtectionLevel;
   bool get isLoading => _isLoading;
   bool get isMigrating => _isMigrating;
+  bool get migrationFailed => _migrationFailed;
   int get migrationTotalCount => _migrationQueue.length;
   int get migrationProcessedCount => _processedCount;
   String get migrationMessage => _migrationMessage;
@@ -102,6 +104,7 @@ class UserProvider with ChangeNotifier {
     if (_isMigrating) return;
 
     _isMigrating = true;
+    _migrationFailed = false;
     _sourceLevel = _dataProtectionLevel;
     _targetLevel = targetLevel;
     _startTime = DateTime.now();
@@ -158,6 +161,7 @@ class UserProvider with ChangeNotifier {
     } catch (e, stackTrace) {
       Logger.error('Failed to update data protection level: $e\n$stackTrace');
       _isMigrating = false;
+      _migrationFailed = true;
       _migrationMessage = 'An error occurred during migration. Please try again.';
 
       NotificationService.instance.showNotification(
@@ -177,6 +181,7 @@ class UserProvider with ChangeNotifier {
     await PrivacyApi.finalizeMigration(targetLevel);
     _dataProtectionLevel = targetLevel;
     _isMigrating = false;
+    _migrationFailed = false;
     _migrationMessage = 'Migration complete!';
     _startTime = null;
 

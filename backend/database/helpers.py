@@ -2,11 +2,14 @@ import inspect
 from functools import wraps
 from typing import List, Dict, Any, Callable
 
+from database import users as users_db, redis_db
+
+
 def set_data_protection_level(data_arg_name: str):
     """
     Decorator to automatically set 'data_protection_level' on a dictionary or a list of dictionaries.
 
-    It retrieves the user's current data protection level and adds it to the data dictionary
+    It retrieves the user's current data protection level from cache or DB and adds it to the data dictionary
     (or each dictionary in a list). This ensures that all data written to the database has the
     correct protection level set, abstracting this logic away from the individual database functions.
 
@@ -35,16 +38,26 @@ def set_data_protection_level(data_arg_name: str):
             if not isinstance(data, (dict, list)):
                 return func(*args, **kwargs)
 
-            default_level = 'standard'
+            level = redis_db.get_user_data_protection_level(uid)
+
+            if not level:
+                try:
+                    user_profile = users_db.get_user_profile(uid)
+                    level = user_profile.get('data_protection_level', 'standard') if user_profile else 'standard'
+                    redis_db.set_user_data_protection_level(uid, level)
+                except Exception as e:
+                    print(f"Failed to get user profile for {uid}: {e}")
+                    level = 'standard'
+
+            if not level:
+                level = 'standard'
 
             if isinstance(data, dict):
-                if 'data_protection_level' not in data:
-                    data['data_protection_level'] = default_level
+                data['data_protection_level'] = level
             elif isinstance(data, list):
                 for item in data:
                     if isinstance(item, dict):
-                        if 'data_protection_level' not in item:
-                            item['data_protection_level'] = default_level
+                        item['data_protection_level'] = level
 
             # The arguments were modified in place, so we can just call the original function
             return func(*args, **kwargs)
