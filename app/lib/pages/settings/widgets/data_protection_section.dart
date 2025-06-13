@@ -24,6 +24,7 @@ class DataProtectionSection extends StatefulWidget {
 class _DataProtectionSectionState extends State<DataProtectionSection> {
   int? _migrationCount;
   bool _isLoadingCount = false;
+  bool _isExpanded = false;
 
   @override
   void initState() {
@@ -176,19 +177,48 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (isMigrating) _buildMigrationStatus(provider),
-            ...DataProtectionLevel.values.map((level) {
-              bool isEnabled = (level == DataProtectionLevel.e2ee ? false : !isMigrating);
-              return _buildOption(
+            if (!_isExpanded)
+              _buildOption(
                 context: context,
-                level: level,
-                title: options[level]!['title'] as String,
-                subtitle: options[level]!['subtitle'] as String,
+                level: selectedLevel,
+                title: options[selectedLevel]!['title'] as String,
+                subtitle: options[selectedLevel]!['subtitle'] as String,
                 currentLevel: selectedLevel,
-                enabled: isEnabled,
-                onChanged: (l) => _onLevelChanged(context, l),
-                additionalInfo: level == DataProtectionLevel.enhanced ? enhancedAdditionalInfo : null,
-              );
-            }).toList(),
+                enabled: !isMigrating,
+                onChanged: (l) {
+                  if (!isMigrating) setState(() => _isExpanded = true);
+                },
+                isCollapsedView: true,
+              )
+            else ...[
+              ...DataProtectionLevel.values.map((level) {
+                bool isEnabled = (level == DataProtectionLevel.e2ee ? false : !isMigrating);
+                return _buildOption(
+                  context: context,
+                  level: level,
+                  title: options[level]!['title'] as String,
+                  subtitle: options[level]!['subtitle'] as String,
+                  currentLevel: selectedLevel,
+                  enabled: isEnabled,
+                  onChanged: (l) => _onLevelChanged(context, l),
+                  additionalInfo: level == DataProtectionLevel.enhanced ? enhancedAdditionalInfo : null,
+                );
+              }).toList(),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => setState(() => _isExpanded = false),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('Show less', style: TextStyle(color: Theme.of(context).colorScheme.secondary)),
+                      const SizedBox(width: 4),
+                      Icon(Icons.expand_less, color: Theme.of(context).colorScheme.secondary),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             _buildInfoRow(
               Icons.lock_outline,
@@ -280,6 +310,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
     required DataProtectionLevel currentLevel,
     bool enabled = true,
     required Function(DataProtectionLevel) onChanged,
+    bool isCollapsedView = false,
   }) {
     final bool isSelected = currentLevel == level;
     return Opacity(
@@ -290,18 +321,18 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
-            color: isSelected ? Colors.deepPurple.withOpacity(0.15) : const Color(0xFF1A1A1A),
+            color: isSelected && !isCollapsedView ? Colors.deepPurple.withOpacity(0.15) : const Color(0xFF1A1A1A),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: isSelected ? Theme.of(context).colorScheme.secondary : Colors.grey.shade800,
-              width: isSelected ? 1.5 : 1,
+              color: isSelected && !isCollapsedView ? Theme.of(context).colorScheme.secondary : Colors.grey.shade800,
+              width: isSelected && !isCollapsedView ? 1.5 : 1,
             ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Expanded(
                     child: Column(
@@ -339,22 +370,44 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                       ],
                     ),
                   ),
-                  SizedBox(
-                    height: 24,
-                    width: 24,
-                    child: Radio<DataProtectionLevel>(
-                      value: level,
-                      groupValue: currentLevel,
-                      onChanged: enabled ? (l) => onChanged(l!) : null,
-                      activeColor: Theme.of(context).colorScheme.secondary,
-                      fillColor: MaterialStateProperty.resolveWith<Color>((states) {
-                        if (states.contains(MaterialState.selected)) {
-                          return Theme.of(context).colorScheme.secondary;
-                        }
-                        return Colors.grey;
-                      }),
+                  if (isCollapsedView)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 16.0),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Change',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.secondary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.expand_more,
+                            color: Theme.of(context).colorScheme.secondary,
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    SizedBox(
+                      height: 24,
+                      width: 24,
+                      child: Radio<DataProtectionLevel>(
+                        value: level,
+                        groupValue: currentLevel,
+                        onChanged: enabled ? (l) => onChanged(l!) : null,
+                        activeColor: Theme.of(context).colorScheme.secondary,
+                        fillColor: MaterialStateProperty.resolveWith<Color>((states) {
+                          if (states.contains(MaterialState.selected)) {
+                            return Theme.of(context).colorScheme.secondary;
+                          }
+                          return Colors.grey;
+                        }),
+                      ),
                     ),
-                  ),
                 ],
               ),
               if (additionalInfo != null) ...[
