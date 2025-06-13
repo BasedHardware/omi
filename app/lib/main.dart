@@ -46,6 +46,7 @@ import 'package:omi/utils/analytics/growthbook.dart';
 import 'package:omi/utils/features/calendar.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'package:posthog_flutter/posthog_flutter.dart';
@@ -58,11 +59,15 @@ Future<bool> _init() async {
   // Service manager
   ServiceManager.init();
 
-  // Firebase
-  if (F.env == Environment.prod) {
-    await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform, name: 'prod');
+  if (PlatformService.isWindows) {
+    // Windows does not support flavors
+    await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform);
   } else {
-    await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform, name: 'dev');
+    if (F.env == Environment.prod) {
+      await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform);
+    } else {
+      await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform);
+    }
   }
 
   await PlatformManager.initializeServices();
@@ -74,11 +79,13 @@ Future<bool> _init() async {
 
   bool isAuth = (await getIdToken()) != null;
   if (isAuth) PlatformManager.instance.mixpanel.identify();
-  if (!Platform.isMacOS) initOpus(await opus_flutter.load());
+  if (PlatformService.isMobile) initOpus(await opus_flutter.load());
 
   await GrowthbookUtil.init();
   CalendarUtil.init();
-  ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
+  if (!PlatformService.isWindows) {
+    ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
+  }
   return isAuth;
 }
 
@@ -92,16 +99,24 @@ Future<void> initPostHog() async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (F.env == Environment.prod) {
+
+  if (PlatformService.isWindows) {
+    // Windows does not support flavors
     Env.init(ProdEnv());
   } else {
-    Env.init(DevEnv());
+    if (F.env == Environment.prod) {
+      Env.init(ProdEnv());
+    } else {
+      Env.init(DevEnv());
+    }
   }
+
   FlutterForegroundTask.initCommunicationPort();
   if (Env.posthogApiKey != null) {
     await initPostHog();
   }
   // _setupAudioSession();
+
   bool isAuth = await _init();
   if (Env.instabugApiKey != null) {
     await PlatformManager.instance.instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
@@ -341,9 +356,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
         context.read<HomeProvider>().setupHasSpeakerProfile();
         context.read<HomeProvider>().setupUserPrimaryLanguage();
         try {
-          await PlatformManager.instance.intercom.intercom.loginIdentifiedUser(
-            userId: SharedPreferencesUtil().uid,
-          );
+          await PlatformManager.instance.intercom.loginIdentifiedUser(SharedPreferencesUtil().uid);
         } catch (e) {
           debugPrint('Failed to login to Intercom: $e');
         }
@@ -352,8 +365,8 @@ class _DeciderWidgetState extends State<DeciderWidget> {
         context.read<AppProvider>().setAppsFromCache();
         context.read<MessageProvider>().refreshMessages();
       } else {
-        if (!PlatformManager.instance.isMacOS) {
-          await PlatformManager.instance.intercom.intercom.loginUnidentifiedUser();
+        if (!PlatformManager.instance.isAnalyticsSupported) {
+          await PlatformManager.instance.intercom.loginUnidentifiedUser();
         }
       }
       PlatformManager.instance.intercom.setUserAttributes();

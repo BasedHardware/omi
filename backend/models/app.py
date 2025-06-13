@@ -90,7 +90,6 @@ class App(BaseModel):
     rating_avg: Optional[float] = 0
     rating_count: int = 0
     enabled: bool = False
-    deleted: bool = False
     trigger_workflow_memories: bool = True  # default true
     installs: int = 0
     proactive_notification: Optional[ProactiveNotification] = None
@@ -165,7 +164,6 @@ class AppCreate(BaseModel):
     connected_accounts: List[str] = []
     twitter: Optional[dict] = None
     external_integration: Optional[ExternalIntegration] = None
-    deleted: bool = False
     proactive_notification: Optional[ProactiveNotification] = None
     created_at: Optional[datetime] = None
     is_paid: Optional[bool] = False
@@ -191,7 +189,6 @@ class AppUpdate(BaseModel):
     connected_accounts: Optional[List[str]] = None
     twitter: Optional[dict] = None
     external_integration: Optional[ExternalIntegration] = None
-    deleted: Optional[bool] = None
     proactive_notification: Optional[ProactiveNotification] = None
     created_at: Optional[datetime] = None
     is_paid: Optional[bool] = None

@@ -16,8 +16,6 @@
 	<true/>
 	<key>com.apple.security.network.client</key>
 	<true/>
-	<key>com.apple.security.network.server</key>
-	<true/>
 	<key>com.apple.security.personal-information.location</key>
 	<true/>
 	<key>keychain-access-groups</key>
@@ -25,5 +23,7 @@
 		<string>$(AppIdentifierPrefix)com.google.GIDSignIn</string>
 		<string>$(AppIdentifierPrefix)com.friend-app-with-wearable.ios12</string>
 	</array>
+	<key>com.apple.security.network.server</key>
+	<true/>
 </dict>
 </plist>

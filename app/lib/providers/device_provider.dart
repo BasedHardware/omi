@@ -288,6 +288,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     NotificationService.instance.clearNotification(1);
     setConnectedDevice(device);
 
+    if (captureProvider != null) {
+      captureProvider?.updateRecordingDevice(device);
+    }
+
     setIsDeviceV2Connected();
     setIsConnected(true);
 

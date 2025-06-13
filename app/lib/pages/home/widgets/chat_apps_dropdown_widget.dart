@@ -96,8 +96,8 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                 // enable apps
                 if (val == 'enable') {
                   MixpanelManager().pageOpened('Chat Apps');
-                  context.read<HomeProvider>().setIndex(2);
-                  controller?.animateToPage(2, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
+                  context.read<HomeProvider>().setIndex(4);
+                  controller?.animateToPage(4, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                   return;
                 }
 

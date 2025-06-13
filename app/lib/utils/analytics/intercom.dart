@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
@@ -41,6 +40,20 @@ class IntercomManager {
           return await intercom.displayArticle('9907475-how-to-charge-the-device');
         }
       },
+    );
+  }
+
+  Future loginIdentifiedUser(String uid) async {
+    return PlatformService.executeIfSupportedAsync(
+      PlatformService.isIntercomSupported,
+      () => intercom.loginIdentifiedUser(userId: uid),
+    );
+  }
+
+  Future loginUnidentifiedUser() async {
+    return PlatformService.executeIfSupportedAsync(
+      PlatformService.isIntercomSupported,
+      () => intercom.loginUnidentifiedUser(),
     );
   }
 

@@ -9,22 +9,39 @@ interface SummaryProps {
 
 export default function Summary({ memory }: SummaryProps) {
   return (
-    <div className="flex flex-col gap-10">
-      <div className="mt-10 px-4 md:px-12">
-        <h3 className="text-xl font-semibold md:text-2xl">Overview</h3>
-        {memory.structured.overview ? (
-          <p className="mt-3 text-base md:text-lg">{memory.structured.overview}</p>
-        ) : (
-          <p className="mt-4 text-gray-400">No overview available for this memory.</p>
-        )}
+    <div className="flex flex-col gap-12">
+      <div className="mt-8 px-6 md:mt-10 md:px-12">
+        <div className="space-y-4">
+          <h3 className="text-xl font-semibold tracking-tight text-white md:text-2xl">Overview</h3>
+          {memory.structured.overview ? (
+            <p className="text-base leading-relaxed text-zinc-300 md:text-lg">
+              {memory.structured.overview}
+            </p>
+          ) : (
+            <div className="rounded-lg border border-dashed border-zinc-700/50 bg-zinc-900/50 p-4 text-center">
+              <p className="text-sm text-zinc-500">No overview available for this memory.</p>
+            </div>
+          )}
+        </div>
       </div>
+
       {memory?.structured?.action_items?.length > 0 && (
-        <ActionItems items={memory.structured.action_items} />
+        <div className="px-6 md:px-12">
+          <ActionItems items={memory.structured.action_items} />
+        </div>
       )}
+
       {memory?.structured?.events?.length > 0 && (
-        <MemoryEvents events={memory.structured.events} />
+        <div className="px-6 md:px-12">
+          <MemoryEvents events={memory.structured.events} />
+        </div>
       )}
-      {memory.plugins_results.length > 0 && <Plugins plugins={memory.plugins_results} />}
+
+      {memory.apps_results.length > 0 && (
+        <div className="px-6 md:px-12">
+          <Plugins apps={memory.apps_results} />
+        </div>
+      )}
     </div>
   );
 }

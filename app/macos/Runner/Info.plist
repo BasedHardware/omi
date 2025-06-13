@@ -62,15 +62,15 @@
 	<key>NSHumanReadableCopyright</key>
 	<string>$(PRODUCT_COPYRIGHT)</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>When creating your memories, we use your location for determining where they were created.</string>
+	<string>Your location is used to tag where conversations take place, helping provide context in omi memory. This is optional, and your exact location is never stored or shared.</string>
 	<key>NSLocationUsageDescription</key>
-	<string>When creating your memories, we use your location for determining where they were created.</string>
+	<string>Your location is used to tag where conversations take place, helping provide context in omi memory. This is optional, and your exact location is never stored or shared..</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>When creating your memories, we use your location for determining where they were created.</string>
+	<string>Your location is used to tag where conversations take place, helping provide context in omi memory. This is optional, and your exact location is never stored or shared.</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>We need access to your microphone so you can share audio explanations of Bugs you find.</string>
+	<string>Omi records your microphone audio as part of conversation recording feature and transcribes in real-time</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>We need access to your photo library to allow you to upload and share photos through Instabug.</string>
 	<key>NSPrincipalClass</key>

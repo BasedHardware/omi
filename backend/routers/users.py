@@ -127,7 +127,6 @@ def create_new_person(data: CreatePerson, uid: str = Depends(auth.get_current_us
         'name': data.name,
         'created_at': datetime.now(timezone.utc),
         'updated_at': datetime.now(timezone.utc),
-        'deleted': False,
     }
     result = create_person(uid, data)
     return result

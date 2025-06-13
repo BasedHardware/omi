@@ -77,7 +77,7 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
 
     apps: List[App] = get_available_apps(uid)
     filtered_apps = [app for app in apps if
-                     app.triggers_on_conversation_creation() and app.enabled and not app.deleted]
+                     app.triggers_on_conversation_creation() and app.enabled]
     if not filtered_apps:
         return []
 
@@ -248,7 +248,7 @@ def _trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
     apps: List[App] = get_available_apps(uid)
     filtered_apps = [
         app for app in apps if
-        app.triggers_realtime_audio_bytes() and app.enabled and not app.deleted
+        app.triggers_realtime_audio_bytes() and app.enabled
     ]
     if not filtered_apps:
         return {}
@@ -282,7 +282,7 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], c
     apps: List[App] = get_available_apps(uid)
     filtered_apps = [
         app for app in apps if
-        app.triggers_realtime() and app.enabled and not app.deleted
+        app.triggers_realtime() and app.enabled
     ]
     if not filtered_apps:
         return {}

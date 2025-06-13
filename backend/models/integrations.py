@@ -65,7 +65,6 @@ class MemoriesResponse(BaseModel):
 class ActionItem(BaseModel):
     description: str = Field(description="The action item to be completed")
     completed: bool = False
-    deleted: bool = False
 
 
 class Event(BaseModel):

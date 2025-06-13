@@ -22,7 +22,7 @@ def should_discard_conversation(transcript: str) -> bool:
     if len(transcript.split(' ')) > 100:
         return False
 
-    custom_parser = PydanticOutputParser(pydantic_object=DiscardConversation) # Renamed to avoid conflict
+    custom_parser = PydanticOutputParser(pydantic_object=DiscardConversation)  # Renamed to avoid conflict
     prompt = ChatPromptTemplate.from_messages([
         '''
     You will receive a transcript snippet. Length is never a reason to discard.
@@ -121,7 +121,7 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
     {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | llm_medium_experiment | parser # parser is imported from .clients
+    chain = prompt | llm_medium_experiment | parser  # parser is imported from .clients
 
     response = chain.invoke({
         'transcript': transcript.strip(),
@@ -196,7 +196,7 @@ def get_reprocess_transcript_structure(transcript: str, started_at: datetime, la
     {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | llm_medium_experiment | parser # parser is imported from .clients
+    chain = prompt | llm_medium_experiment | parser  # parser is imported from .clients
 
     response = chain.invoke({
         'transcript': transcript.strip(),
@@ -214,12 +214,14 @@ def get_reprocess_transcript_structure(transcript: str, started_at: datetime, la
     return response
 
 
-def get_app_result(transcript: str, app: App) -> str:
+def get_app_result(transcript: str, app: App, language_code: str = 'en') -> str:
     prompt = f'''
     You are an AI with the following characteristics:
     Name: {app.name},
     Description: {app.description},
     Task: ${app.memory_prompt}
+
+    Language: The conversation language is {language_code}. Use the same language {language_code} for your response.
 
     Conversation: ```{transcript.strip()}```,
     '''
@@ -227,29 +229,6 @@ def get_app_result(transcript: str, app: App) -> str:
     response = llm_medium_experiment.invoke(prompt)
     content = response.content.replace('```json', '').replace('```', '')
     return content
-
-
-def get_app_result_v1(transcript: str, app: App) -> str:
-    prompt = f'''
-    You are an AI with the following characteristics:
-    Name: ${app.name},
-    Description: ${app.description},
-    Task: ${app.memory_prompt}
-
-    Note: It is possible that the conversation you are given, has nothing to do with your task, \
-    in that case, output an empty string. (For example, you are given a business conversation, but your task is medical analysis)
-
-    Conversation: ```{transcript.strip()}```,
-
-    Make sure to be concise and clear.
-    '''
-
-    response = llm_mini.invoke(prompt)
-    content = response.content.replace('```json', '').replace('```', '')
-    if len(content) < 5:
-        return ''
-    return content
-
 
 
 class BestAppSelection(BaseModel):

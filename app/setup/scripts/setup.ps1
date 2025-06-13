@@ -1,19 +1,43 @@
 # Set up the Omi Mobile Project(iOS/Android).
-# Prerequisites same as original script
+#
+# Prerequisites (stable versions, use these or higher):
+#
+# Common for all developers:
+# - Flutter SDK (v3.24.1)
+# - Opus Codec: https://opus-codec.org
+#
+# For iOS Developers:
+# - Xcode (v15.2)
+# - CocoaPods (v1.14.3)
+#
+# For Android Developers:
+# - Android Studio (Iguana | 2023.2.1 Patch 2)
+# - Android SDK Platform (API 34)
+# - JDK (v17)
+# - Gradle (v8.10)
+# - NDK (27.0.12077973)
 
 # Enable strict mode
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 Write-Host "👋 Yo folks! Welcome to the OMI Mobile Project - We're hiring! Join us on Discord: http://discord.omi.me"
-Write-Host "Prerequisites:"
-Write-Host "- Flutter SDK"
-Write-Host "- Dart SDK"
-Write-Host "- Xcode (for iOS)"
-Write-Host "- CocoaPods (for iOS dependencies)"
-Write-Host "- Android Studio (for Android)"
-Write-Host "- NDK 26.3.11579264 or above (to build Opus for ARM Devices)"
+Write-Host "Prerequisites (stable versions, use these or higher):"
+Write-Host ""
+Write-Host "Common for all developers:"
+Write-Host "- Flutter SDK (v3.24.1)"
 Write-Host "- Opus Codec: https://opus-codec.org"
+Write-Host ""
+Write-Host "For iOS Developers:"
+Write-Host "- Xcode (v15.2)"
+Write-Host "- CocoaPods (v1.14.3)"
+Write-Host ""
+Write-Host "For Android Developers:"
+Write-Host "- Android Studio (Iguana | 2023.2.1 Patch 2)"
+Write-Host "- Android SDK Platform (API 34)"
+Write-Host "- JDK (v17)"
+Write-Host "- Gradle (v8.10)"
+Write-Host "- NDK (27.0.12077973)"
 Write-Host ""
 
 
