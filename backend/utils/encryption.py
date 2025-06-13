@@ -9,9 +9,10 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 # For local development, you can generate one using: secrets.token_hex(32)
 ENCRYPTION_SECRET = os.getenv('ENCRYPTION_SECRET', '').encode('utf-8')
 if not ENCRYPTION_SECRET or len(ENCRYPTION_SECRET) < 32:
-    # In a real production environment, this should fail loudly if the secret is not set.
-    print("WARNING: ENCRYPTION_SECRET environment variable not set or too short. Using a default, insecure key.")
-    ENCRYPTION_SECRET = b'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv'
+    raise ValueError(
+        "ENCRYPTION_SECRET environment variable not set or is too short. "
+        "It must be a securely managed 32-byte key."
+    )
 
 
 def derive_key(uid: str) -> bytes:
