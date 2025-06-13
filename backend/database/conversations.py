@@ -192,11 +192,14 @@ def get_conversations_to_migrate(uid: str, target_level: str) -> List[dict]:
     users with a very large number of documents.
     """
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
-    all_conversations = conversations_ref.select(['data_protection_level']).stream()
+    all_conversations = conversations_ref.select(['data_protection_level', 'visibility']).stream()
 
     to_migrate = []
     for doc in all_conversations:
         doc_data = doc.to_dict()
+        if doc_data.get('visibility') == 'public':
+            continue
+
         current_level = doc_data.get('data_protection_level', 'standard')
         if target_level != current_level:
             to_migrate.append({'id': doc.id, 'type': 'conversation'})
