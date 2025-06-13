@@ -212,6 +212,7 @@ class Conversation(BaseModel):
     processing_conversation_id: Optional[str] = None
     
     status: Optional[ConversationStatus] = ConversationStatus.completed
+    data_protection_level: str = 'standard'
 
     def __init__(self, **data):
         super().__init__(**data)
