@@ -197,7 +197,7 @@ def get_conversations_to_migrate(uid: str, target_level: str) -> List[dict]:
     to_migrate = []
     for doc in all_conversations:
         doc_data = doc.to_dict()
-        if doc_data.get('visibility') == 'public':
+        if doc_data.get('visibility') in ['public', 'shared']:
             continue
 
         current_level = doc_data.get('data_protection_level', 'standard')
