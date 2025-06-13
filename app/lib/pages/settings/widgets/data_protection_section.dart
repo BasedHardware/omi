@@ -65,7 +65,39 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
   void _onLevelChanged(BuildContext context, DataProtectionLevel value) {
     final provider = Provider.of<UserProvider>(context, listen: false);
     if (_levelFromString(provider.dataProtectionLevel) == value || provider.isMigrating) return;
-    _showMigrationConfirmationDialog(context, value);
+
+    if (value == DataProtectionLevel.e2ee) {
+      _showComingSoonDialog(context);
+    } else {
+      _showMigrationConfirmationDialog(context, value);
+    }
+  }
+
+  void _showComingSoonDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF2c2c2e),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: const Row(
+          children: [
+            Icon(Icons.timelapse_outlined, color: Colors.white),
+            SizedBox(width: 10),
+            Text('Coming Soon', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+        content: Text(
+          'Maximum (E2EE) protection is not yet available, but we are working hard to bring it to you soon. Stay tuned!',
+          style: TextStyle(color: Colors.white.withOpacity(0.8), height: 1.5, fontSize: 15),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showMigrationConfirmationDialog(BuildContext context, DataProtectionLevel value) {
@@ -205,7 +237,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                   ),
                 ),
               ...DataProtectionLevel.values.map((level) {
-                bool isEnabled = (level == DataProtectionLevel.e2ee ? false : !isMigrating);
+                bool isEnabled = !isMigrating;
                 return _buildOption(
                   context: context,
                   level: level,
@@ -361,7 +393,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                                 fontSize: 16,
                               ),
                             ),
-                            if (!enabled && level == DataProtectionLevel.e2ee)
+                            if (level == DataProtectionLevel.e2ee)
                               const Padding(
                                 padding: EdgeInsets.only(left: 8.0),
                                 child: Text(
