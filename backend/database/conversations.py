@@ -15,6 +15,7 @@ from models.conversation import ConversationPhoto, PostProcessingStatus, PostPro
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
 from ._client import db
+from .helpers import set_data_protection_level
 
 conversations_collection = 'conversations'
 
@@ -97,15 +98,14 @@ def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], 
 # ********** CRUD *************
 # *****************************
 
+@set_data_protection_level(data_arg_name='conversation_data')
 def upsert_conversation(uid: str, conversation_data: dict):
-    current_level = users_db.get_data_protection_level(uid)
-
     if 'audio_base64_url' in conversation_data:
         del conversation_data['audio_base64_url']
     if 'photos' in conversation_data:
         del conversation_data['photos']
 
-    conversation_data['data_protection_level'] = current_level
+    current_level = conversation_data['data_protection_level']
     prepared_data = _prepare_data_for_write(conversation_data, uid, current_level)
 
     user_ref = db.collection('users').document(uid)

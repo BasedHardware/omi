@@ -8,6 +8,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from ._client import db
 from database import users as users_db
 from utils import encryption
+from .helpers import set_data_protection_level
 
 memories_collection = 'memories'
 users_collection = 'users'
@@ -122,9 +123,9 @@ def get_non_filtered_memories(uid: str, limit: int = 100, offset: int = 0):
     return [_prepare_memory_for_read(mem, uid) for mem in memories]
 
 
+@set_data_protection_level(data_arg_name='data')
 def create_memory(uid: str, data: dict):
-    current_level = users_db.get_data_protection_level(uid)
-    data['data_protection_level'] = current_level
+    current_level = data['data_protection_level']
     prepared_data = _prepare_data_for_write(data, uid, current_level)
 
     user_ref = db.collection(users_collection).document(uid)
@@ -133,13 +134,16 @@ def create_memory(uid: str, data: dict):
     memory_ref.set(prepared_data)
 
 
+@set_data_protection_level(data_arg_name='data')
 def save_memories(uid: str, data: List[dict]):
-    current_level = users_db.get_data_protection_level(uid)
+    if not data:
+        return
+
+    current_level = data[0]['data_protection_level']
     batch = db.batch()
     user_ref = db.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
     for memory in data:
-        memory['data_protection_level'] = current_level
         prepared_data = _prepare_data_for_write(memory, uid, current_level)
         memory_ref = memories_ref.document(prepared_data['id'])
         batch.set(memory_ref, prepared_data)

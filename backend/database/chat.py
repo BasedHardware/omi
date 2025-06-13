@@ -11,6 +11,7 @@ from models.chat import Message
 from utils import encryption
 from utils.other.endpoints import timeit
 from ._client import db
+from .helpers import set_data_protection_level
 
 
 # *********************************
@@ -71,11 +72,11 @@ def _prepare_message_for_read(message_data: Optional[Dict[str, Any]], uid: str) 
 # ********** CRUD *************
 # *****************************
 
+@set_data_protection_level(data_arg_name='message_data')
 def add_message(uid: str, message_data: dict):
     del message_data['memories']
 
-    current_level = users_db.get_data_protection_level(uid)
-    message_data['data_protection_level'] = current_level
+    current_level = message_data['data_protection_level']
     prepared_data = _prepare_data_for_write(message_data, uid, current_level)
 
     user_ref = db.collection('users').document(uid)
