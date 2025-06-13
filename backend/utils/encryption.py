@@ -6,7 +6,6 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 # Load the master secret from environment variables. This must be a securely managed 32-byte key.
-# For local development, you can generate one using: secrets.token_hex(32)
 ENCRYPTION_SECRET = os.getenv('ENCRYPTION_SECRET', '').encode('utf-8')
 if not ENCRYPTION_SECRET or len(ENCRYPTION_SECRET) < 32:
     raise ValueError(

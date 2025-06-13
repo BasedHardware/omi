@@ -165,7 +165,7 @@ def get_single_person(
 ):
     person = get_person(uid, person_id)
     if not person:
-        raise HTTPException(status_code=410, detail="Person not found")
+        raise HTTPException(status_code=404, detail="Person not found")
     if include_speech_samples:
         person['speech_samples'] = get_user_person_speech_samples(uid, person['id'])
     return person

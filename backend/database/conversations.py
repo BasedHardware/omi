@@ -102,7 +102,6 @@ def get_conversations(uid: str, limit: int = 100, offset: int = 0, include_disca
         conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
 
     if categories:
-        # Note: This query will not work on encrypted fields. 'category' is assumed to be unencrypted.
         conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))
 
     # Apply date range filters if provided
