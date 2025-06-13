@@ -272,6 +272,45 @@ def migrate_memory_level(uid: str, memory_id: str, target_level: str):
     doc_ref.update(update_data)
 
 
+def migrate_memories_level_batch(uid: str, memory_ids: List[str], target_level: str):
+    """
+    Migrates a batch of memories to the target protection level.
+    """
+    batch = db.batch()
+    memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
+    doc_refs = [memories_ref.document(mem_id) for mem_id in memory_ids]
+    doc_snapshots = db.get_all(doc_refs)
+
+    for doc_snapshot in doc_snapshots:
+        if not doc_snapshot.exists:
+            print(f"Memory {doc_snapshot.id} not found, skipping.")
+            continue
+
+        memory_data = doc_snapshot.to_dict()
+        current_level = memory_data.get('data_protection_level', 'standard')
+
+        if current_level == target_level:
+            continue
+
+        # Decrypt the data first (if needed) to get a clean slate.
+        plain_data = _prepare_memory_for_read(memory_data, uid)
+
+        plain_content = plain_data.get('content')
+        migrated_content = plain_content
+        if target_level == 'enhanced':
+            if isinstance(plain_content, str):
+                migrated_content = encryption.encrypt(plain_content, uid)
+
+        # Update the document with the migrated data and the new protection level.
+        update_data = {
+            'data_protection_level': target_level,
+            'content': migrated_content
+        }
+        batch.update(doc_snapshot.reference, update_data)
+
+    batch.commit()
+
+
 def migrate_memories(prev_uid: str, new_uid: str, app_id: str = None):
     """
     Migrate memories from one user to another.

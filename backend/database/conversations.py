@@ -239,6 +239,47 @@ def migrate_conversation_level(uid: str, conversation_id: str, target_level: str
     doc_ref.update(update_data)
 
 
+def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], target_level: str):
+    """
+    Migrates a batch of conversations to the target protection level.
+    """
+    batch = db.batch()
+    conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
+    doc_refs = [conversations_ref.document(conv_id) for conv_id in conversation_ids]
+    doc_snapshots = db.get_all(doc_refs)
+
+    for doc_snapshot in doc_snapshots:
+        if not doc_snapshot.exists:
+            print(f"Conversation {doc_snapshot.id} not found, skipping.")
+            continue
+
+        conversation_data = doc_snapshot.to_dict()
+        current_level = conversation_data.get('data_protection_level', 'standard')
+
+        if current_level == target_level:
+            continue
+
+        # Decrypt the data first (if needed) to get a clean slate.
+        plain_data = _prepare_conversation_for_read(conversation_data, uid)
+
+        # Now, encrypt if the target is 'enhanced'.
+        plain_segments = plain_data.get('transcript_segments')
+        migrated_segments = plain_segments
+        if target_level == 'enhanced':
+            if isinstance(plain_segments, list):
+                segments_json = json.dumps(plain_segments)
+                migrated_segments = encryption.encrypt(segments_json, uid)
+
+        # Update the document with the migrated data and the new protection level.
+        update_data = {
+            'data_protection_level': target_level,
+            'transcript_segments': migrated_segments
+        }
+        batch.update(doc_snapshot.reference, update_data)
+
+    batch.commit()
+
+
 # **************************************
 # ********** STATUS *************
 # **************************************

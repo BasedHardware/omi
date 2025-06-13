@@ -342,30 +342,29 @@ def handle_batch_migration_requests(
 ):
     """Migrates a batch of data objects to the target protection level."""
     errors = []
-    for request in batch_request.requests:
-        if request.type == 'conversation':
-            try:
-                conversations_db.migrate_conversation_level(uid, request.id, request.target_level)
-            except Exception as e:
-                error_detail = f"Failed to migrate conversation {request.id}: {e}"
-                print(error_detail)
-                errors.append(error_detail)
-        elif request.type == 'memory':
-            try:
-                memories_db.migrate_memory_level(uid, request.id, request.target_level)
-            except Exception as e:
-                error_detail = f"Failed to migrate memory {request.id}: {e}"
-                print(error_detail)
-                errors.append(error_detail)
-        elif request.type == 'chat':
-            try:
-                chat_db.migrate_chat_level(uid, request.id, request.target_level)
-            except Exception as e:
-                error_detail = f"Failed to migrate chat message {request.id}: {e}"
-                print(error_detail)
-                errors.append(error_detail)
-        else:
-            errors.append(f"Unknown object type for migration: {request.type}")
+
+    # Group requests by type and target_level
+    grouped_requests: Dict[tuple[str, str], List[str]] = {}
+    for req in batch_request.requests:
+        key = (req.type, req.target_level)
+        if key not in grouped_requests:
+            grouped_requests[key] = []
+        grouped_requests[key].append(req.id)
+
+    for (req_type, target_level), ids in grouped_requests.items():
+        try:
+            if req_type == 'conversation':
+                conversations_db.migrate_conversations_level_batch(uid, ids, target_level)
+            elif req_type == 'memory':
+                memories_db.migrate_memories_level_batch(uid, ids, target_level)
+            elif req_type == 'chat':
+                chat_db.migrate_chats_level_batch(uid, ids, target_level)
+            else:
+                errors.append(f"Unknown object type for migration: {req_type}")
+        except Exception as e:
+            error_detail = f"Failed to migrate batch of type {req_type}: {e}"
+            print(error_detail)
+            errors.append(error_detail)
 
     if errors:
         raise HTTPException(status_code=500, detail={"message": "Some objects failed to migrate.", "errors": errors})
