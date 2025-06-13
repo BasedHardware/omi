@@ -14,6 +14,7 @@ import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/pages/settings/profile.dart';
 import 'apps/desktop_apps_page.dart';
+import 'apps/desktop_add_app_page.dart';
 import 'conversations/desktop_conversations_page.dart';
 import 'chat/desktop_chat_page.dart';
 import 'memories/desktop_memories_page.dart';
@@ -398,7 +399,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                   // Main app content
                   Container(
                     decoration: BoxDecoration(
-                      gradient: responsive.backgroundGradient,
+                      // gradient: responsive.backgroundGradient,
+                      color: ResponsiveHelper.backgroundPrimary,
                     ),
                     child: Row(
                       children: [
@@ -442,7 +444,12 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                                       const DesktopChatPage(),
                                       const DesktopMemoriesPage(),
                                       const DesktopActionsPage(),
-                                      const DesktopAppsPage(),
+                                      DesktopAppsPage(
+                                        onNavigateToCreateApp: navigateToCreateApp,
+                                      ),
+                                      DesktopAddAppPage(
+                                        onNavigateBack: navigateBackToApps,
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -699,6 +706,28 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     );
   }
 
+  /// Navigate to create app page (index 5)
+  void navigateToCreateApp() {
+    final homeProvider = Provider.of<HomeProvider>(context, listen: false);
+    homeProvider.setIndex(5);
+    _controller?.animateToPage(
+      5,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  /// Navigate back to apps page (index 4)
+  void navigateBackToApps() {
+    final homeProvider = Provider.of<HomeProvider>(context, listen: false);
+    homeProvider.setIndex(4);
+    _controller?.animateToPage(
+      4,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeInOut,
+    );
+  }
+
   // Global floating recording widget methods
   void minimizeRecording() {
     setState(() {
@@ -824,7 +853,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
   Widget _buildWindowControls() {
     return Container(
       height: 52,
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      padding: const EdgeInsets.fromLTRB(24, 16, 16, 0),
       child: Row(
         children: [
           // Close button

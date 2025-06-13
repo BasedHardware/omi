@@ -1004,6 +1004,26 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
         self.contentViewController = flutterViewController
         self.setFrame(windowFrame, display: true)
 
+        // Configure window for rounded corners
+        self.titlebarAppearsTransparent = true
+        self.isMovableByWindowBackground = true
+        self.backgroundColor = NSColor.clear
+        self.isOpaque = false
+        
+        // Add rounded corners to the window
+        if let contentView = self.contentView {
+            contentView.wantsLayer = true
+            contentView.layer?.cornerRadius = 18.0
+            contentView.layer?.masksToBounds = true
+            
+            // Add subtle shadow for depth
+            self.hasShadow = true
+            contentView.layer?.shadowColor = NSColor.black.cgColor
+            contentView.layer?.shadowOpacity = 0.1
+            contentView.layer?.shadowRadius = 8.0
+            contentView.layer?.shadowOffset = CGSize(width: 0, height: 4)
+        }
+
         RegisterGeneratedPlugins(registry: flutterViewController)
 
         screenCaptureChannel = FlutterMethodChannel(
