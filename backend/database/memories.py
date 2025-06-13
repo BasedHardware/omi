@@ -35,11 +35,12 @@ def _decrypt_memory_data(memory_data: Dict[str, Any], uid: str) -> Dict[str, Any
     Operates on a copy of the data to avoid side effects.
     """
     data = copy.deepcopy(memory_data)
+
     if 'content' in data and isinstance(data['content'], str):
         try:
             data['content'] = encryption.decrypt(data['content'], uid)
         except Exception:
-            pass  # Ignore decryption errors
+            pass
     return data
 
 

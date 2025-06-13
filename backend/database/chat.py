@@ -35,11 +35,13 @@ def _decrypt_chat_data(chat_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
     Operates on a copy of the data to avoid side effects.
     """
     data = copy.deepcopy(chat_data)
+
     if 'text' in data and isinstance(data['text'], str):
         try:
             data['text'] = encryption.decrypt(data['text'], uid)
         except Exception:
-            pass  # Ignore decryption errors
+            pass
+
     return data
 
 

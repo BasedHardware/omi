@@ -49,22 +49,7 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
             decrypted_segments_json = encryption.decrypt(data['transcript_segments'], uid)
             data['transcript_segments'] = json.loads(decrypted_segments_json)
         except (json.JSONDecodeError, TypeError):
-            # If decryption failed, it might return the original string, which is not valid JSON.
-            # Keep it as is for debugging.
             pass
-
-    if 'structured' in data and data.get('structured'):
-        structured = data['structured']
-        if 'title' in structured and structured.get('title'):
-            try:
-                structured['title'] = encryption.decrypt(structured['title'], uid)
-            except Exception:
-                pass  # Ignore decryption errors
-        if 'summary' in structured and structured.get('summary'):
-            try:
-                structured['summary'] = encryption.decrypt(structured['summary'], uid)
-            except Exception:
-                pass  # Ignore decryption errors
 
     return data
 
