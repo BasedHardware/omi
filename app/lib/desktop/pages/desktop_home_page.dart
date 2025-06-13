@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/auth.dart';
@@ -160,11 +161,11 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     } else if (state == AppLifecycleState.resumed) {
       event = 'App is resumed';
 
-      // Reload convos
-      if (mounted) {
-        Provider.of<ConversationProvider>(context, listen: false).refreshConversations();
-        Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
-      }
+      // // Reload convos
+      // if (mounted) {
+      //   Provider.of<ConversationProvider>(context, listen: false).refreshConversations();
+      //   Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
+      // }
     } else if (state == AppLifecycleState.hidden) {
       event = 'App is hidden';
     } else if (state == AppLifecycleState.detached) {
@@ -368,6 +369,9 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                   if (mounted) {
                     if (ctx.read<ConversationProvider>().conversations.isEmpty) {
                       await ctx.read<ConversationProvider>().getInitialConversations();
+                    } else {
+                      // Force refresh when internet connection is restored
+                      await ctx.read<ConversationProvider>().forceRefreshConversations();
                     }
                     if (ctx.read<MessageProvider>().messages.isEmpty) {
                       await ctx.read<MessageProvider>().refreshMessages();
@@ -905,14 +909,16 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                     ),
                   ),
                   child: Center(
-                    child: Text(
-                      userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
-                      style: const TextStyle(
-                        color: ResponsiveHelper.purplePrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    child: FirebaseAuth.instance.currentUser?.photoURL != null
+                        ? Image.network(FirebaseAuth.instance.currentUser!.photoURL!)
+                        : Text(
+                            userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
+                            style: const TextStyle(
+                              color: ResponsiveHelper.purplePrimary,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                   ),
                 ),
 
@@ -1209,9 +1215,9 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
           TextButton(
             onPressed: () async {
               await SharedPreferencesUtil().clearUserPreferences();
+              Navigator.of(context).pop();
               await signOut();
               if (mounted) {
-                Navigator.of(context).pop();
                 routeToPage(context, const DeciderWidget(), replace: true);
               }
             },
