@@ -80,9 +80,6 @@ def prepare_for_write(data_arg_name: str, encrypt_func: Callable[[Dict[str, Any]
                 func(*args, **kwargs)
                 return original_data
 
-            # This decorator modifies the arguments for the wrapped function.
-            # We need to create a new dictionary for kwargs to avoid modifying the original.
-            new_kwargs = kwargs.copy()
             prepared_data = original_data
 
             if isinstance(original_data, dict):
@@ -95,8 +92,9 @@ def prepare_for_write(data_arg_name: str, encrypt_func: Callable[[Dict[str, Any]
                     if level == 'enhanced':
                         prepared_data = [encrypt_func(item, uid) for item in original_data]
 
-            new_kwargs[data_arg_name] = prepared_data
-            func(*args, **new_kwargs)
+            # Modify the bound arguments with the prepared data and reconstruct the call
+            bound_args.arguments[data_arg_name] = prepared_data
+            func(*bound_args.args, **bound_args.kwargs)
 
             # Return the original, unmodified data from the initial call
             return original_data
