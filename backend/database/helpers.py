@@ -38,6 +38,20 @@ def set_data_protection_level(data_arg_name: str):
             if not isinstance(data, (dict, list)):
                 return func(*args, **kwargs)
 
+            # Check if backfilling is needed before fetching the level from DB/cache for performance.
+            needs_backfill = False
+            if isinstance(data, dict):
+                if data.get('data_protection_level') is None:
+                    needs_backfill = True
+            elif isinstance(data, list):
+                for item in data:
+                    if isinstance(item, dict) and item.get('data_protection_level') is None:
+                        needs_backfill = True
+                        break
+
+            if not needs_backfill:
+                return func(*args, **kwargs)
+
             level = redis_db.get_user_data_protection_level(uid)
 
             if not level:
@@ -61,7 +75,6 @@ def set_data_protection_level(data_arg_name: str):
                         if item.get('data_protection_level') is None:
                             item['data_protection_level'] = level
 
-            # The arguments were modified in place, so we can just call the original function
             return func(*args, **kwargs)
         return wrapper
     return decorator

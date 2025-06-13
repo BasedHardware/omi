@@ -210,9 +210,9 @@ class Conversation(BaseModel):
     processing_memory_id: Optional[str] = None
 
     processing_conversation_id: Optional[str] = None
-    
+
     status: Optional[ConversationStatus] = ConversationStatus.completed
-    data_protection_level: str = 'standard'
+    data_protection_level: Optional[str] = None
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -228,9 +228,9 @@ class Conversation(BaseModel):
                 conversation = Conversation(**conversation)
             formatted_date = conversation.created_at.astimezone(timezone.utc).strftime("%d %b %Y at %H:%M") + " UTC"
             conversation_str = (f"Conversation #{i + 1}\n"
-                          f"{formatted_date} ({str(conversation.structured.category.value).capitalize()})\n"
-                          f"{str(conversation.structured.title).capitalize()}\n"
-                          f"{str(conversation.structured.overview).capitalize()}\n")
+                                f"{formatted_date} ({str(conversation.structured.category.value).capitalize()})\n"
+                                f"{str(conversation.structured.title).capitalize()}\n"
+                                f"{str(conversation.structured.overview).capitalize()}\n")
 
             if conversation.structured.action_items:
                 conversation_str += "Action Items:\n"
