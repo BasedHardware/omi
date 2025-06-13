@@ -362,7 +362,7 @@ class _EnhancedProtectionOptionState extends State<_EnhancedProtectionOption> {
         );
       } else if (_migrationCount != null && _migrationCount! > 0) {
         additionalInfoWidget = Text(
-          'This will encrypt all $_migrationCount of your conversations and memories.',
+          'This will encrypt all $_migrationCount of your conversations, memories and chat messages.',
           style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold),
         );
       }
