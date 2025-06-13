@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:omi/providers/user_provider.dart';
-import 'package:omi/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
 // Re-defining enum and extension here to keep this widget self-contained.
@@ -15,8 +14,36 @@ extension StringExtension on String {
   }
 }
 
-class DataProtectionSection extends StatelessWidget {
+class DataProtectionSection extends StatefulWidget {
   const DataProtectionSection({super.key});
+
+  @override
+  State<DataProtectionSection> createState() => _DataProtectionSectionState();
+}
+
+class _DataProtectionSectionState extends State<DataProtectionSection> {
+  int? _migrationCount;
+  bool _isLoadingCount = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchMigrationCount();
+  }
+
+  void _fetchMigrationCount() {
+    if (mounted) {
+      setState(() => _isLoadingCount = true);
+      context.read<UserProvider>().getMigrationCountFor('enhanced').then((count) {
+        if (mounted) {
+          setState(() {
+            _migrationCount = count;
+            _isLoadingCount = false;
+          });
+        }
+      });
+    }
+  }
 
   DataProtectionLevel _levelFromString(String level) {
     switch (level) {
@@ -34,29 +61,67 @@ class DataProtectionSection extends StatelessWidget {
     return level.toString().split('.').last;
   }
 
-  void _onLevelChanged(BuildContext context, DataProtectionLevel? value) {
+  void _onLevelChanged(BuildContext context, DataProtectionLevel value) {
     final provider = Provider.of<UserProvider>(context, listen: false);
-    if (value == null || _levelFromString(provider.dataProtectionLevel) == value || provider.isMigrating) return;
+    if (_levelFromString(provider.dataProtectionLevel) == value || provider.isMigrating) return;
+    _showMigrationConfirmationDialog(context, value);
+  }
 
+  void _showMigrationConfirmationDialog(BuildContext context, DataProtectionLevel value) {
+    final provider = Provider.of<UserProvider>(context, listen: false);
     showDialog(
       context: context,
-      builder: (ctx) => getDialog(
-        context,
-        () => Navigator.of(ctx).pop(),
-        () async {
-          Navigator.of(ctx).pop();
-          try {
-            await provider.updateDataProtectionLevel(_levelToString(value));
-          } catch (e) {
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Failed to start migration: $e')),
-              );
-            }
-          }
-        },
-        "Confirm Change",
-        "This will migrate all your existing data to the new protection level. This may take a few minutes. Are you sure you want to continue?",
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF2c2c2e), // Dark, slightly transparent
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: const Row(
+          children: [
+            Icon(Icons.shield_moon_outlined, color: Colors.white),
+            SizedBox(width: 10),
+            Text('Confirm Migration', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+        content: RichText(
+          text: TextSpan(
+            style: TextStyle(color: Colors.white.withOpacity(0.8), height: 1.5, fontSize: 15),
+            children: [
+              const TextSpan(text: 'This will migrate your data to the '),
+              TextSpan(
+                text: '${_levelToString(value).capitalize()} Protection',
+                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+              const TextSpan(
+                  text:
+                      ' level. This process can take a few minutes and cannot be undone.\n\nAre you sure you want to continue?'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.secondary, // deepPurple
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              try {
+                await provider.updateDataProtectionLevel(_levelToString(value));
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to start migration: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('Confirm & Migrate', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }
@@ -86,158 +151,123 @@ class DataProtectionSection extends StatelessWidget {
           },
         };
 
-        final selectedOptionData = options[selectedLevel]!;
-
-        final allOptionsWidgets = DataProtectionLevel.values.map((level) {
-          if (level == DataProtectionLevel.enhanced) {
-            return _EnhancedProtectionOption(
-              enabled: !isMigrating,
-              currentLevel: selectedLevel,
-              onChanged: (l) => _onLevelChanged(context, l),
-              title: options[level]!['title'] as String,
-              subtitle: options[level]!['subtitle'] as String,
+        Widget? enhancedAdditionalInfo;
+        if (selectedLevel == DataProtectionLevel.standard) {
+          if (_isLoadingCount) {
+            enhancedAdditionalInfo = const Row(
+              children: [
+                SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+                SizedBox(width: 10),
+                Text(
+                  'Checking for data to protect...',
+                  style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+                ),
+              ],
+            );
+          } else if (_migrationCount != null && _migrationCount! > 0) {
+            enhancedAdditionalInfo = Text(
+              'This will encrypt all $_migrationCount of your conversations, memories and chat messages.',
+              style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold),
             );
           }
-          return _buildOption(
-            context: context,
-            level: level,
-            title: options[level]!['title'] as String,
-            subtitle: options[level]!['subtitle'] as String,
-            currentLevel: selectedLevel,
-            enabled: level == DataProtectionLevel.e2ee ? false : !isMigrating,
-          );
-        }).toList();
+        }
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (isMigrating)
-              Container(
-                padding: const EdgeInsets.all(16),
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade800.withOpacity(0.5),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    RichText(
-                      text: TextSpan(
-                        style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.4),
-                        children: [
-                          const TextSpan(text: 'Migrating from '),
-                          TextSpan(
-                            text: provider.sourceLevel.capitalize(),
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          const TextSpan(text: ' to '),
-                          TextSpan(
-                            text: provider.targetLevel.capitalize(),
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: LinearProgressIndicator(
-                            value: provider.migrationTotalCount > 0
-                                ? provider.migrationProcessedCount / provider.migrationTotalCount
-                                : 0.0,
-                            backgroundColor: Colors.grey.shade700,
-                            color: Colors.deepPurple,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          provider.migrationTotalCount > 0
-                              ? '${(provider.migrationProcessedCount / provider.migrationTotalCount * 100).toInt()}%'
-                              : '0%',
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          provider.migrationETA,
-                          style: const TextStyle(color: Colors.grey, fontSize: 12),
-                        ),
-                        Text(
-                          '${provider.migrationProcessedCount} / ${provider.migrationTotalCount} objects',
-                          style: const TextStyle(color: Colors.grey, fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A1A1A),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade700, width: 1),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(10.5),
-                child: ExpansionTile(
-                  iconColor: Colors.white,
-                  collapsedIconColor: Colors.white,
-                  backgroundColor: const Color(0xFF1A1A1A),
-                  collapsedBackgroundColor: const Color(0xFF1A1A1A),
-                  title: Text(
-                    selectedOptionData['title'] as String,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  children: allOptionsWidgets,
-                ),
-              ),
-            ),
+            if (isMigrating) _buildMigrationStatus(provider),
+            ...DataProtectionLevel.values.map((level) {
+              bool isEnabled = (level == DataProtectionLevel.e2ee ? false : !isMigrating);
+              return _buildOption(
+                context: context,
+                level: level,
+                title: options[level]!['title'] as String,
+                subtitle: options[level]!['subtitle'] as String,
+                currentLevel: selectedLevel,
+                enabled: isEnabled,
+                onChanged: (l) => _onLevelChanged(context, l),
+                additionalInfo: level == DataProtectionLevel.enhanced ? enhancedAdditionalInfo : null,
+              );
+            }).toList(),
             const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 0.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.shield_outlined, color: Colors.grey, size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      selectedOptionData['subtitle'] as String,
-                      style: const TextStyle(color: Colors.grey, fontSize: 14),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 0.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.lock_outline, color: Colors.grey, size: 16),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Regardless of the level, your data is always encrypted at rest and in transit.',
-                      style: TextStyle(color: Colors.grey, fontSize: 14),
-                    ),
-                  ),
-                ],
-              ),
+            _buildInfoRow(
+              Icons.lock_outline,
+              'Regardless of the level, your data is always encrypted at rest and in transit.',
             ),
           ],
         );
       },
+    );
+  }
+
+  Widget _buildMigrationStatus(UserProvider provider) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 24),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade800.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.deepPurple.shade300),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          RichText(
+            text: TextSpan(
+              style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.4),
+              children: [
+                const TextSpan(text: 'Migrating from '),
+                TextSpan(
+                  text: provider.sourceLevel.capitalize(),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const TextSpan(text: ' to '),
+                TextSpan(
+                  text: provider.targetLevel.capitalize(),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: LinearProgressIndicator(
+                  value: provider.migrationTotalCount > 0
+                      ? provider.migrationProcessedCount / provider.migrationTotalCount
+                      : 0.0,
+                  backgroundColor: Colors.grey.shade700,
+                  color: Colors.deepPurple,
+                  minHeight: 6,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                provider.migrationTotalCount > 0
+                    ? '${(provider.migrationProcessedCount / provider.migrationTotalCount * 100).toInt()}%'
+                    : '0%',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                provider.migrationETA,
+                style: const TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+              Text(
+                '${provider.migrationProcessedCount} / ${provider.migrationTotalCount} objects',
+                style: const TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -246,167 +276,113 @@ class DataProtectionSection extends StatelessWidget {
     required DataProtectionLevel level,
     required String title,
     required String subtitle,
+    Widget? additionalInfo,
     required DataProtectionLevel currentLevel,
     bool enabled = true,
+    required Function(DataProtectionLevel) onChanged,
   }) {
     final bool isSelected = currentLevel == level;
     return Opacity(
       opacity: enabled ? 1.0 : 0.5,
-      child: Container(
-        color: isSelected ? Colors.deepPurple.withOpacity(0.2) : Colors.transparent,
-        child: RadioListTile<DataProtectionLevel>(
-          value: level,
-          groupValue: currentLevel,
-          onChanged: enabled ? (value) => _onLevelChanged(context, value) : null,
-          title: Row(
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-              if (!enabled && level != DataProtectionLevel.e2ee)
-                const Padding(
-                  padding: EdgeInsets.only(left: 8.0),
-                  child: Text(
-                    '(Migrating...)',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey,
-                    ),
-                  ),
-                ),
-              if (!enabled && level == DataProtectionLevel.e2ee)
-                const Padding(
-                  padding: EdgeInsets.only(left: 8.0),
-                  child: Text(
-                    '(Coming Soon)',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 4.0),
-            child: Text(
-              subtitle,
-              style: const TextStyle(color: Colors.grey),
+      child: GestureDetector(
+        onTap: enabled ? () => onChanged(level) : null,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.deepPurple.withOpacity(0.15) : const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected ? Theme.of(context).colorScheme.secondary : Colors.grey.shade800,
+              width: isSelected ? 1.5 : 1,
             ),
           ),
-          activeColor: Colors.white,
-          controlAffinity: ListTileControlAffinity.trailing,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              title,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                fontSize: 16,
+                              ),
+                            ),
+                            if (!enabled && level == DataProtectionLevel.e2ee)
+                              const Padding(
+                                padding: EdgeInsets.only(left: 8.0),
+                                child: Text(
+                                  '(Coming Soon)',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          subtitle,
+                          style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.4),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: Radio<DataProtectionLevel>(
+                      value: level,
+                      groupValue: currentLevel,
+                      onChanged: enabled ? (l) => onChanged(l!) : null,
+                      activeColor: Theme.of(context).colorScheme.secondary,
+                      fillColor: MaterialStateProperty.resolveWith<Color>((states) {
+                        if (states.contains(MaterialState.selected)) {
+                          return Theme.of(context).colorScheme.secondary;
+                        }
+                        return Colors.grey;
+                      }),
+                    ),
+                  ),
+                ],
+              ),
+              if (additionalInfo != null) ...[
+                const Divider(height: 24, color: Colors.grey),
+                additionalInfo,
+              ]
+            ],
+          ),
         ),
       ),
     );
   }
-}
 
-class _EnhancedProtectionOption extends StatefulWidget {
-  final bool enabled;
-  final DataProtectionLevel currentLevel;
-  final Function(DataProtectionLevel?) onChanged;
-  final String title;
-  final String subtitle;
-
-  const _EnhancedProtectionOption(
-      {required this.enabled,
-      required this.currentLevel,
-      required this.onChanged,
-      required this.title,
-      required this.subtitle});
-
-  @override
-  State<_EnhancedProtectionOption> createState() => _EnhancedProtectionOptionState();
-}
-
-class _EnhancedProtectionOptionState extends State<_EnhancedProtectionOption> {
-  int? _migrationCount;
-  bool _isLoadingCount = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _fetchMigrationCount();
-  }
-
-  void _fetchMigrationCount() {
-    if (mounted) {
-      setState(() => _isLoadingCount = true);
-      context.read<UserProvider>().getMigrationCountFor('enhanced').then((count) {
-        if (mounted) {
-          setState(() {
-            _migrationCount = count;
-            _isLoadingCount = false;
-          });
-        }
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isSelected = widget.currentLevel == DataProtectionLevel.enhanced;
-
-    Widget? additionalInfoWidget;
-    if (widget.currentLevel == DataProtectionLevel.standard) {
-      if (_isLoadingCount) {
-        additionalInfoWidget = const Text(
-          'Checking for data to protect...',
-          style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
-        );
-      } else if (_migrationCount != null && _migrationCount! > 0) {
-        additionalInfoWidget = Text(
-          'This will encrypt all $_migrationCount of your conversations, memories and chat messages.',
-          style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold),
-        );
-      }
-    }
-
-    return Opacity(
-      opacity: widget.enabled ? 1.0 : 0.5,
-      child: Container(
-        color: isSelected ? Colors.deepPurple.withOpacity(0.2) : Colors.transparent,
-        child: RadioListTile<DataProtectionLevel>(
-          value: DataProtectionLevel.enhanced,
-          groupValue: widget.currentLevel,
-          onChanged: widget.enabled ? (value) => widget.onChanged(value) : null,
-          title: Row(
-            children: [
-              Text(
-                widget.title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-            ],
-          ),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 4.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.subtitle,
-                  style: const TextStyle(color: Colors.grey),
-                ),
-                if (additionalInfoWidget != null) ...[
-                  const SizedBox(height: 8),
-                  additionalInfoWidget,
-                ],
-              ],
+  Widget _buildInfoRow(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 4.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: Colors.grey, size: 16),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(color: Colors.grey, fontSize: 14, height: 1.4),
             ),
           ),
-          activeColor: Colors.white,
-          controlAffinity: ListTileControlAffinity.trailing,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        ),
+        ],
       ),
     );
   }

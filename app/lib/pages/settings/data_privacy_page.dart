@@ -23,51 +23,57 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
   }
 
   Widget _buildIntroSection(BuildContext context) {
-    return Column(
-      children: [
-        const Text(
-          '🛡️',
-          style: TextStyle(fontSize: 64),
-        ),
-        const SizedBox(height: 16),
-        const Text(
-          'Your Privacy, Your Control',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 8),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: RichText(
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          const Text(
+            '🛡️',
+            style: TextStyle(fontSize: 64),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Your Privacy, Your Control',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
             textAlign: TextAlign.center,
-            text: TextSpan(
-              style: const TextStyle(fontSize: 16, color: Colors.grey, height: 1.5),
-              children: [
-                const TextSpan(
-                  text:
-                      'At Omi, we are committed to protecting your privacy. This page allows you to control how your data is stored and used. ',
-                ),
-                TextSpan(
-                  text: 'Learn more...',
-                  style: const TextStyle(
-                    color: Colors.deepPurpleAccent,
-                    decoration: TextDecoration.underline,
-                    decorationColor: Colors.deepPurpleAccent,
+          ),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: RichText(
+              textAlign: TextAlign.center,
+              text: TextSpan(
+                style: TextStyle(fontSize: 16, color: Colors.grey.shade400, height: 1.5),
+                children: [
+                  const TextSpan(
+                    text:
+                        'At Omi, we are committed to protecting your privacy. This page allows you to control how your data is stored and used. ',
                   ),
-                  recognizer: TapGestureRecognizer()
-                    ..onTap = () async {
-                      final url = Uri.parse('https://www.omi.me/pages/privacy');
-                      if (await canLaunchUrl(url)) {
-                        await launchUrl(url, mode: LaunchMode.externalApplication);
-                      }
-                    },
-                ),
-              ],
+                  TextSpan(
+                    text: 'Learn more...',
+                    style: TextStyle(
+                      color: Colors.deepPurple.shade300,
+                      decoration: TextDecoration.underline,
+                      decorationColor: Colors.deepPurple.shade300,
+                    ),
+                    recognizer: TapGestureRecognizer()
+                      ..onTap = () async {
+                        final url = Uri.parse('https://www.omi.me/pages/privacy');
+                        if (await canLaunchUrl(url)) {
+                          await launchUrl(url, mode: LaunchMode.externalApplication);
+                        }
+                      },
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 32),
-      ],
+        ],
+      ),
     );
   }
 
@@ -134,20 +140,21 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                 padding: const EdgeInsets.all(16.0),
                 children: [
                   _buildIntroSection(context),
+                  const SizedBox(height: 32),
                   const Text(
                     'Data Protection Level',
                     style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     'Choose how your data is stored and protected on our servers.',
-                    style: TextStyle(color: Colors.grey, fontSize: 14),
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                   ),
                   const SizedBox(height: 16),
                   const DataProtectionSection(),
                   const SizedBox(height: 24),
                   const Divider(color: Colors.grey),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 24),
                   Consumer<AppProvider>(
                     builder: (context, appProvider, child) {
                       final appsWithDataAccess =
@@ -161,58 +168,62 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                             style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 8),
-                          const Text(
-                            'The following apps can access to your data. Tap on an app to manage its permissions.',
-                            style: TextStyle(color: Colors.grey, fontSize: 14),
+                          Text(
+                            'The following apps can access your data. Tap on an app to manage its permissions.',
+                            style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                           ),
                           const SizedBox(height: 16),
                           if (appsWithDataAccess.isEmpty)
                             Container(
                               width: double.infinity,
-                              padding: const EdgeInsets.symmetric(vertical: 24.0),
+                              padding: const EdgeInsets.symmetric(vertical: 32.0, horizontal: 16.0),
                               decoration: BoxDecoration(
                                 color: const Color(0xFF1A1A1A),
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const Center(
-                                child: Text(
-                                  'No installed apps have external access to your data.',
-                                  style: TextStyle(color: Colors.grey),
+                              child: Center(
+                                child: Column(
+                                  children: [
+                                    Icon(Icons.apps_outlined, color: Colors.grey.shade600, size: 32),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      'No installed apps have external access to your data.',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(color: Colors.grey.shade400),
+                                    ),
+                                  ],
                                 ),
                               ),
                             )
                           else
-                            Container(
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF1A1A1A),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: ListView.separated(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                itemCount: appsWithDataAccess.length,
-                                itemBuilder: (context, index) {
-                                  final app = appsWithDataAccess[index];
-                                  return ListTile(
+                            Column(
+                              children: appsWithDataAccess.map((app) {
+                                return Card(
+                                  color: const Color(0xFF1A1A1A),
+                                  margin: const EdgeInsets.only(bottom: 10),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    side: BorderSide(color: Colors.grey.shade800, width: 1),
+                                  ),
+                                  elevation: 0,
+                                  clipBehavior: Clip.antiAlias,
+                                  child: ListTile(
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                                     leading: CircleAvatar(
                                       backgroundImage: NetworkImage(app.getImageUrl()),
                                     ),
                                     title: Text(app.getName()),
                                     subtitle: Text(
                                       _getAccessDescription(app),
-                                      style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                      style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
                                     ),
                                     trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                                     onTap: () {
                                       routeToPage(context, AppDetailPage(app: app, preventAutoOpenHomePage: true));
                                     },
-                                  );
-                                },
-                                separatorBuilder: (context, index) => const Divider(
-                                  height: 1,
-                                  color: Colors.grey,
-                                ),
-                              ),
+                                  ),
+                                );
+                              }).toList(),
                             ),
                         ],
                       );
