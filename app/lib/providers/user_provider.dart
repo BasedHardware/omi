@@ -72,7 +72,6 @@ class UserProvider with ChangeNotifier {
     try {
       final userProfile = await PrivacyApi.getUserProfile();
       _dataProtectionLevel = userProfile['data_protection_level'] ?? 'standard';
-      SharedPreferencesUtil().dataProtectionLevel = _dataProtectionLevel;
 
       final migrationStatus = userProfile['migration_status'];
       if (migrationStatus != null && migrationStatus['status'] == 'in_progress') {
@@ -83,8 +82,6 @@ class UserProvider with ChangeNotifier {
       }
     } catch (e, stackTrace) {
       Logger.error('Failed to initialize UserProvider: $e\n$stackTrace');
-      // Fallback to local cache if server fails
-      _dataProtectionLevel = SharedPreferencesUtil().dataProtectionLevel;
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -132,7 +129,7 @@ class UserProvider with ChangeNotifier {
         return;
       }
 
-      const batchSize = 5;
+      const batchSize = 100;
       for (var i = 0; i < _migrationQueue.length; i += batchSize) {
         final end = (i + batchSize > _migrationQueue.length) ? _migrationQueue.length : i + batchSize;
         final batch = _migrationQueue.sublist(i, end);
@@ -179,7 +176,6 @@ class UserProvider with ChangeNotifier {
   Future<void> _finalize(String targetLevel) async {
     await PrivacyApi.finalizeMigration(targetLevel);
     _dataProtectionLevel = targetLevel;
-    SharedPreferencesUtil().dataProtectionLevel = targetLevel;
     _isMigrating = false;
     _migrationMessage = 'Migration complete!';
     _startTime = null;

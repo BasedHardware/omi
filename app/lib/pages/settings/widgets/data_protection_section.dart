@@ -160,7 +160,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
               if (migrationCount == 0) {
                 estimatedTimeMessage = 'This should be quick.';
               } else {
-                final minutesDouble = migrationCount / 100.0; // 10 minutes per 1000 objects
+                final minutesDouble = migrationCount / 1000.0; // 1 minutes per 1000 objects
                 if (minutesDouble < 1) {
                   estimatedTimeMessage = 'This process should take less than a minute.';
                 } else {

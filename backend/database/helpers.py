@@ -2,9 +2,6 @@ import inspect
 from functools import wraps
 from typing import List, Dict, Any, Callable
 
-from database import users as users_db
-
-
 def set_data_protection_level(data_arg_name: str):
     """
     Decorator to automatically set 'data_protection_level' on a dictionary or a list of dictionaries.
@@ -38,14 +35,16 @@ def set_data_protection_level(data_arg_name: str):
             if not isinstance(data, (dict, list)):
                 return func(*args, **kwargs)
 
-            current_level = users_db.get_data_protection_level(uid)
+            default_level = 'standard'
 
             if isinstance(data, dict):
-                data['data_protection_level'] = current_level
+                if 'data_protection_level' not in data:
+                    data['data_protection_level'] = default_level
             elif isinstance(data, list):
                 for item in data:
                     if isinstance(item, dict):
-                        item['data_protection_level'] = current_level
+                        if 'data_protection_level' not in item:
+                            item['data_protection_level'] = default_level
 
             # The arguments were modified in place, so we can just call the original function
             return func(*args, **kwargs)
