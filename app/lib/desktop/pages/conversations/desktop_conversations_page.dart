@@ -39,8 +39,7 @@ class DesktopConversationsPage extends StatefulWidget {
   State<DesktopConversationsPage> createState() => _DesktopConversationsPageState();
 }
 
-class _DesktopConversationsPageState extends State<DesktopConversationsPage>
-    with AutomaticKeepAliveClientMixin, TickerProviderStateMixin {
+class _DesktopConversationsPageState extends State<DesktopConversationsPage> with AutomaticKeepAliveClientMixin, TickerProviderStateMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -254,9 +253,7 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                                 onVisibilityChanged: (visibilityInfo) {
                                   var provider = Provider.of<ConversationProvider>(context, listen: false);
                                   if (provider.previousQuery.isNotEmpty) {
-                                    if (visibilityInfo.visibleFraction > 0 &&
-                                        !provider.isLoadingConversations &&
-                                        (provider.totalSearchPages > provider.currentSearchPage)) {
+                                    if (visibilityInfo.visibleFraction > 0 && !provider.isLoadingConversations && (provider.totalSearchPages > provider.currentSearchPage)) {
                                       provider.searchMoreConversations();
                                     }
                                   } else {
@@ -333,9 +330,9 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
 
     return Container(
       padding: EdgeInsets.fromLTRB(
-        responsive.spacing(baseSpacing: 32),
-        responsive.spacing(baseSpacing: 32),
-        responsive.spacing(baseSpacing: 32),
+        responsive.spacing(baseSpacing: 40),
+        responsive.spacing(baseSpacing: 0),
+        responsive.spacing(baseSpacing: 40),
         responsive.spacing(baseSpacing: 24),
       ),
       child: Row(
@@ -405,9 +402,7 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
         color: ResponsiveHelper.backgroundTertiary,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: _isSearchFocused
-              ? ResponsiveHelper.purplePrimary.withOpacity(0.6)
-              : ResponsiveHelper.backgroundQuaternary,
+          color: _isSearchFocused ? ResponsiveHelper.purplePrimary.withOpacity(0.6) : ResponsiveHelper.backgroundQuaternary,
           width: 1,
         ),
         boxShadow: _isSearchFocused
@@ -520,8 +515,7 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
             color: isFiltered ? ResponsiveHelper.purplePrimary.withOpacity(0.15) : ResponsiveHelper.backgroundTertiary,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color:
-                  isFiltered ? ResponsiveHelper.purplePrimary.withOpacity(0.4) : ResponsiveHelper.backgroundQuaternary,
+              color: isFiltered ? ResponsiveHelper.purplePrimary.withOpacity(0.4) : ResponsiveHelper.backgroundQuaternary,
               width: 1,
             ),
             boxShadow: [
