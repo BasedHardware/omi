@@ -347,7 +347,7 @@ def update_conversation_finished_at(uid: str, conversation_id: str, finished_at:
 
 def update_conversation_segments(uid: str, conversation_id: str, segments: List[dict]):
     doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
-    doc_snapshot = doc_ref.get()
+    doc_snapshot = doc_ref.get(field_paths=['data_protection_level'])
     if not doc_snapshot.exists:
         return
 
