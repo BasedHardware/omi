@@ -23,6 +23,11 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
   Timer? _processingConversationWatchTimer;
 
+  // Add debounce mechanism for refresh
+  Timer? _refreshDebounceTimer;
+  DateTime? _lastRefreshTime;
+  static const Duration _refreshCooldown = Duration(seconds: 30); // Minimum time between refreshes
+
   List<ServerConversation> processingConversations = [];
 
   IWalService get _wal => ServiceManager.instance().wal;
@@ -163,7 +168,29 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   }
 
   Future refreshConversations() async {
-    _fetchNewConversations();
+    // Debounce mechanism: only refresh if enough time has passed since last refresh
+    final now = DateTime.now();
+    if (_lastRefreshTime != null && now.difference(_lastRefreshTime!) < _refreshCooldown) {
+      debugPrint(
+          'Skipping conversations refresh - too soon since last refresh (${now.difference(_lastRefreshTime!).inSeconds}s ago)');
+      return;
+    }
+
+    // Cancel any pending refresh
+    _refreshDebounceTimer?.cancel();
+
+    // Set debounce timer
+    _refreshDebounceTimer = Timer(const Duration(milliseconds: 500), () {
+      _lastRefreshTime = DateTime.now();
+      _fetchNewConversations();
+    });
+  }
+
+  // Force refresh bypassing debounce (for manual refresh, connection restored, etc.)
+  Future forceRefreshConversations() async {
+    _refreshDebounceTimer?.cancel();
+    _lastRefreshTime = DateTime.now();
+    await _fetchNewConversations();
   }
 
   Future _fetchNewConversations() async {
@@ -450,6 +477,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   @override
   void dispose() {
     _processingConversationWatchTimer?.cancel();
+    _refreshDebounceTimer?.cancel();
     _wal.unsubscribe(this);
     super.dispose();
   }
