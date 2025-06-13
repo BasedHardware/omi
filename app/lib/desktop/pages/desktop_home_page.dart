@@ -76,11 +76,11 @@ class _MacWindowButtonState extends State<_MacWindowButton> {
   IconData _getButtonIcon() {
     switch (widget.type) {
       case MacWindowButtonType.close:
-        return Icons.close;
+        return FontAwesomeIcons.xmark;
       case MacWindowButtonType.minimize:
-        return Icons.remove;
+        return FontAwesomeIcons.minus;
       case MacWindowButtonType.maximize:
-        return Icons.maximize;
+        return FontAwesomeIcons.expand;
     }
   }
 
@@ -505,7 +505,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                   // Main navigation section
                   Expanded(
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -559,7 +559,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                           Consumer<ConversationProvider>(builder: (context, convoProvider, child) {
                             if (homeProvider.selectedIndex == 0 && convoProvider.missingWalsInSeconds >= 120) {
                               return Container(
-                                margin: const EdgeInsets.fromLTRB(8, 8, 8, 16),
+                                margin: const EdgeInsets.fromLTRB(0, 8, 0, 16),
                                 child: Material(
                                   color: Colors.transparent,
                                   child: InkWell(
@@ -878,7 +878,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
 
     return Container(
       key: _profileCardKey,
-      margin: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+      margin: const EdgeInsets.fromLTRB(0, 0, 0, 16),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
