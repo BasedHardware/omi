@@ -451,6 +451,7 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
         case normal = 128, good = 192, high = 256, extreme = 320
     }
 
+    // MARK: - Audio and Capture Properties
     var availableContent: SCShareableContent?
     var filter: SCContentFilter?
     var audioSettings: [String: Any]!
@@ -485,6 +486,9 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
 
     // Floating overlay window
     private var floatingOverlay: FloatingRecordingOverlay?
+
+    // MARK: - Menu Bar Properties
+    private var statusBarItem: NSStatusItem?
 
     // Manual resampling function to avoid AVAudioConverter OSStatus errors
     private func resampleAudio(input: [Float], fromRate: Double, toRate: Double) -> [Float] {
@@ -877,6 +881,123 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
         locationPermissionCompletion?(false)
     }
 
+    // MARK: - Menu Bar Setup
+    
+    private func setupMenuBarItem() {
+        // Create status bar item
+        statusBarItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        
+        guard let statusBarItem = statusBarItem else {
+            print("ERROR: Failed to create status bar item")
+            return
+        }
+        
+        // Set up the button with custom icon
+        if let button = statusBarItem.button {
+            // Load custom icon from assets
+            if let customIcon = NSImage(named: "app_launcher_icon") {
+                customIcon.isTemplate = true  // Make it adapt to dark/light mode
+                customIcon.size = NSSize(width: 18, height: 18)  // Appropriate menu bar size
+                button.image = customIcon
+            } else {
+                // Fallback to system icon if custom icon fails to load
+                button.image = NSImage(systemSymbolName: "mic.circle", accessibilityDescription: "Omi")
+                print("WARNING: Could not load custom app_launcher_icon, using fallback")
+            }
+            button.toolTip = "Omi - Always On AI"
+        }
+        
+        // Create menu
+        let menu = NSMenu()
+        
+        // Show/Hide Window item
+        let showHideItem = NSMenuItem(title: self.isVisible ? "Hide Window" : "Show Window", action: #selector(toggleWindowVisibility), keyEquivalent: "")
+        showHideItem.target = self
+        menu.addItem(showHideItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
+        // Status item
+        let statusItem = NSMenuItem(title: "Status: Ready", action: nil, keyEquivalent: "")
+        statusItem.tag = 100
+        menu.addItem(statusItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
+        // Quit item
+        let quitItem = NSMenuItem(title: "Quit Omi", action: #selector(quitApplication), keyEquivalent: "q")
+        quitItem.target = self
+        menu.addItem(quitItem)
+        
+        statusBarItem.menu = menu
+        
+        print("INFO: Menu bar item created successfully")
+    }
+    
+    @objc private func toggleWindowVisibility() {
+        DispatchQueue.main.async {
+            if self.isVisible {
+                self.orderOut(nil)
+                self.updateMenuItemTitle(itemIndex: 0, to: "Show Window")
+                print("INFO: Window hidden")
+            } else {
+                self.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+                self.updateMenuItemTitle(itemIndex: 0, to: "Hide Window")
+                print("INFO: Window shown")
+            }
+        }
+    }
+    
+    @objc private func quitApplication() {
+        // Cleanup: stop audio engine and streams
+        stopAudioEngineAndCapture()
+        
+        // Hide overlay
+        hideOverlay()
+        
+        // Remove status bar item
+        if let statusBarItem = statusBarItem {
+            NSStatusBar.system.removeStatusItem(statusBarItem)
+        }
+        
+        NSApp.terminate(nil)
+    }
+    
+    private func updateMenuItemTitle(itemIndex: Int, to newTitle: String) {
+        guard let menu = statusBarItem?.menu,
+              itemIndex < menu.numberOfItems else { 
+            print("WARNING: Cannot update menu item at index \(itemIndex)")
+            return 
+        }
+        
+        if let menuItem = menu.item(at: itemIndex) {
+            menuItem.title = newTitle
+        }
+    }
+    
+    private func updateMenuBarStatus(status: String, isActive: Bool = false) {
+        guard let menu = statusBarItem?.menu,
+              let statusItem = menu.item(withTag: 100) else { return }
+        
+        statusItem.title = "Status: \(status)"
+        
+        // Update icon based on state
+        if let button = statusBarItem?.button {
+            if let customIcon = NSImage(named: "app_launcher_icon") {
+                customIcon.isTemplate = true
+                customIcon.size = NSSize(width: 18, height: 18)
+                // You could modify the icon appearance based on isActive state if needed
+                // For now, we'll keep the same icon but could add visual indicators
+                button.image = customIcon
+            } else {
+                // Fallback to system icons with state
+                let iconName = isActive ? "mic.circle.fill" : "mic.circle"
+                button.image = NSImage(systemSymbolName: iconName, accessibilityDescription: "Omi")
+            }
+        }
+    }
+
     override func awakeFromNib() {
         let flutterViewController = FlutterViewController()
         let windowFrame = self.frame
@@ -893,6 +1014,12 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
         overlayChannel = FlutterMethodChannel(
             name: "overlayPlatform",
             binaryMessenger: flutterViewController.engine.binaryMessenger)
+
+        // MARK: - Setup Menu Bar (after channels are initialized)
+        // Add a small delay to ensure Flutter engine is fully ready
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            self.setupMenuBarItem()
+        }
 
         self.micNode = audioEngine.inputNode
         self.micNodeFormat = self.micNode.outputFormat(forBus: 0)
@@ -1122,7 +1249,12 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
                             "isBigEndian": isBigEndian,
                             "isInterleaved": strongOutputAudioFormat.isInterleaved
                         ]
-                        self.screenCaptureChannel.invokeMethod("audioFormat", arguments: formatDetails)
+                        guard let screenCaptureChannel = self.screenCaptureChannel else {
+                            print("WARNING: Screen capture channel not available for audioFormat")
+                            result(FlutterError(code: "CHANNEL_ERROR", message: "Screen capture channel not initialized", details: nil))
+                            return
+                        }
+                        screenCaptureChannel.invokeMethod("audioFormat", arguments: formatDetails)
                         self.audioFormatSentToFlutter = true
                         
                         self.prepSCStreamFilter()
@@ -1210,7 +1342,11 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
                     if dataSize > 0, let int16Data = outputPCMBuffer.int16ChannelData?[0] {
                         let audioData = Data(bytes: int16Data, count: dataSize)
                         if self.audioFormatSentToFlutter {
-                           self.screenCaptureChannel.invokeMethod("audioFrame", arguments: audioData)
+                           guard let screenCaptureChannel = self.screenCaptureChannel else {
+                               // Silently skip if channel not available during audio processing
+                               return
+                           }
+                           screenCaptureChannel.invokeMethod("audioFrame", arguments: audioData)
                         }
                     } else if dataSize == 0 && outputPCMBuffer.frameLength > 0 {
                          print("DEBUG: Final converter output dataSize is 0 but frameLength > 0. Format: \(finalOutputFormat)")
@@ -1248,6 +1384,11 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
         if !audioEngine.isRunning {
             try audioEngine.start()
             print("DEBUG: AVAudioEngine started.")
+            
+            // Update menu bar status
+            DispatchQueue.main.async {
+                self.updateMenuBarStatus(status: "Starting...", isActive: true)
+            }
         }
         
         // Ensure systemAudioPlayerNode is playing AFTER the engine has started.
@@ -1282,7 +1423,12 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
             print("DEBUG: SCStream capture started.")
     } catch {
             print("Error starting SCStream capture: \(error.localizedDescription)")
-            self.screenCaptureChannel.invokeMethod("captureError", arguments: "SCStream: \(error.localizedDescription)")
+            guard let screenCaptureChannel = self.screenCaptureChannel else {
+                print("WARNING: Screen capture channel not available for captureError")
+                DispatchQueue.main.async { self.stopAudioEngineAndCapture() }
+                return
+            }
+            screenCaptureChannel.invokeMethod("captureError", arguments: "SCStream: \(error.localizedDescription)")
             DispatchQueue.main.async { self.stopAudioEngineAndCapture() }
     }
 }
@@ -1309,9 +1455,18 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
         self.audioConverter = nil
         self.scStreamSourceFormat = nil
 
+        // Update menu bar status
+        DispatchQueue.main.async {
+            self.updateMenuBarStatus(status: "Stopped", isActive: false)
+        }
+
         // Notify Flutter
         if audioFormatSentToFlutter { // Only send if start was successful enough to send format
-            self.screenCaptureChannel.invokeMethod("audioStreamEnded", arguments: nil)
+            guard let screenCaptureChannel = self.screenCaptureChannel else {
+                print("WARNING: Screen capture channel not available for audioStreamEnded notification")
+                return
+            }
+            screenCaptureChannel.invokeMethod("audioStreamEnded", arguments: nil)
             print("Recording stopped (engine & SCStream), Flutter notified.")
         } else {
             print("Recording stopped (engine & SCStream), but Flutter was not fully initialized for audio.")
@@ -1441,7 +1596,11 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
     func stream(_ stream: SCStream, didStopWithError error: Error) {
         print("SCStream stopped with error: \(error.localizedDescription)")
         if audioEngine.isRunning {
-             self.screenCaptureChannel.invokeMethod("captureError", arguments: "SCStream stopped: \(error.localizedDescription)")
+            guard let screenCaptureChannel = self.screenCaptureChannel else {
+                print("WARNING: Screen capture channel not available for captureError in delegate")
+                return
+            }
+            screenCaptureChannel.invokeMethod("captureError", arguments: "SCStream stopped: \(error.localizedDescription)")
         }
     self.stream = nil
         // If SCStream stops unexpectedly, it might be good to tear down the whole engine.
@@ -1472,19 +1631,32 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
                 
                 // Setup callbacks
                 self.floatingOverlay?.onPlayPause = { [weak self] in
-                    self?.overlayChannel.invokeMethod("onPlayPause", arguments: nil)
+                    guard let self = self, let overlayChannel = self.overlayChannel else {
+                        print("WARNING: Overlay channel not available for onPlayPause")
+                        return
+                    }
+                    overlayChannel.invokeMethod("onPlayPause", arguments: nil)
                 }
                 
                 self.floatingOverlay?.onStop = { [weak self] in
-                    self?.overlayChannel.invokeMethod("onStop", arguments: nil)
+                    guard let self = self, let overlayChannel = self.overlayChannel else {
+                        print("WARNING: Overlay channel not available for onStop")
+                        return
+                    }
+                    overlayChannel.invokeMethod("onStop", arguments: nil)
                 }
                 
                 self.floatingOverlay?.onExpand = { [weak self] in
-                    self?.overlayChannel.invokeMethod("onExpand", arguments: nil)
+                    guard let self = self, let overlayChannel = self.overlayChannel else {
+                        print("WARNING: Overlay channel not available for onExpand")
+                        return
+                    }
+                    overlayChannel.invokeMethod("onExpand", arguments: nil)
                 }
             }
             
             self.floatingOverlay?.makeKeyAndOrderFront(nil)
+            
             print("Floating overlay shown")
         }
     }
@@ -1493,6 +1665,7 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
         DispatchQueue.main.async {
             self.floatingOverlay?.orderOut(nil)
             self.floatingOverlay = nil
+            
             print("Floating overlay hidden")
         }
     }
@@ -1500,12 +1673,26 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
     private func updateOverlayState(isRecording: Bool, isPaused: Bool) {
         DispatchQueue.main.async {
             self.floatingOverlay?.updateRecordingState(isRecording: isRecording, isPaused: isPaused)
+            
+            // Update menu bar status
+            if isRecording {
+                self.updateMenuBarStatus(status: "Recording", isActive: true)
+            } else if isPaused {
+                self.updateMenuBarStatus(status: "Paused", isActive: false)
+            } else {
+                self.updateMenuBarStatus(status: "Ready", isActive: false)
+            }
         }
     }
     
     private func updateOverlayTranscript(transcript: String, segmentCount: Int) {
         DispatchQueue.main.async {
             self.floatingOverlay?.updateTranscript(transcript, segmentCount: segmentCount)
+            
+            // Update menu bar status with segment count if recording
+            if segmentCount > 0 {
+                self.updateMenuBarStatus(status: "Recording (\(segmentCount) segments)", isActive: true)
+            }
         }
     }
     

@@ -77,6 +77,14 @@
 	<string>NSApplication</string>
 	<key>PermissionGroupNotification</key>
 	<string>You need to enable notifications to receive your pro-active feedback.</string>
+	<key>LSUIElement</key>
+	<false/>
+	<key>LSBackgroundOnly</key>
+	<false/>
+	<key>NSSupportsAutomaticTermination</key>
+	<false/>
+	<key>NSSupportsSuddenTermination</key>
+	<false/>
 	<key>com.apple.security.app-sandbox</key>
 	<true/>
 	<key>keychain-access-groups</key>
