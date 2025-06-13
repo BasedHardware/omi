@@ -186,11 +186,24 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                 currentLevel: selectedLevel,
                 enabled: !isMigrating,
                 onChanged: (l) {
-                  if (!isMigrating) setState(() => _isExpanded = true);
+                  setState(() => _isExpanded = true);
                 },
                 isCollapsedView: true,
               )
             else ...[
+              if (isMigrating)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.only(bottom: 16, left: 8, right: 8),
+                  child: Text(
+                    'Migration in progress. You cannot change the protection level until it is complete.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.secondary.withOpacity(0.9),
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
               ...DataProtectionLevel.values.map((level) {
                 bool isEnabled = (level == DataProtectionLevel.e2ee ? false : !isMigrating);
                 return _buildOption(
@@ -316,7 +329,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
     return Opacity(
       opacity: enabled ? 1.0 : 0.5,
       child: GestureDetector(
-        onTap: enabled ? () => onChanged(level) : null,
+        onTap: enabled || isCollapsedView ? () => onChanged(level) : null,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           margin: const EdgeInsets.only(bottom: 12),
