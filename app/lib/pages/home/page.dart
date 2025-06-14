@@ -202,7 +202,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       // ForegroundUtil.requestPermissions();
       if (!PlatformService.isDesktop) {
         await ForegroundUtil.initializeForegroundService();
-        ForegroundUtil.startForegroundTask();
+        await ForegroundUtil.startForegroundTask();
       }
       if (mounted) {
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
