@@ -29,7 +29,7 @@ dependencies:
   visibility_detector: ^0.4.0+2
   flutter_rating_bar: ^4.0.1
   dotted_border: ^2.1.0
-  skeletonizer: 1.4.3
+  skeletonizer: 2.0.1
   shimmer: ^3.0.0
 
   # Firebase
@@ -39,31 +39,30 @@ dependencies:
 
   # Auth
   google_sign_in: 6.2.2
-  google_sign_in_all_platforms: 1.1.0
+  google_sign_in_all_platforms: 1.2.0
 
   # Analytics and Support
-  intercom_flutter: 9.2.10
-  mixpanel_flutter: ^2.2.0
-  posthog_flutter: ^4.10.2
+  intercom_flutter: 9.3.3
+  mixpanel_flutter: ^2.4.4
+  posthog_flutter: ^5.0.0
 
   # Utils
-  collection: ^1.18.0
-  equatable: 2.0.5
+  collection: ^1.19.1
   flutter_blue_plus: 1.33.6
   flutter_blue_plus_windows: 1.24.21
-  http: ^1.2.1
+  http: ^1.4.0
   pdf: ^3.11.0
-  intl: 0.19.0
+  intl: 0.20.2
   permission_handler: ^12.0.0+1
-  share_plus: 10.0.1
-  shared_preferences: ^2.2.3
+  share_plus: 10.1.4
+  shared_preferences: 2.5.3
   url_launcher: ^6.3.0
-  wav: ^1.3.0
+  wav: ^1.4.0
   path: ^1.9.0
   uuid: ^4.4.0
   tuple: ^2.0.2
-  googleapis_auth: ^1.6.0
-  envied: ^0.5.4+1
+  googleapis_auth: 1.4.1
+  envied: 1.1.1
   awesome_notifications_core: ^0.9.3
   awesome_notifications: any
   instabug_flutter: ^14.3.1
@@ -73,31 +72,29 @@ dependencies:
   json_annotation: ^4.9.0
   json_serializable: 6.8.0
   package_info_plus: ^8.0.1
-  path_provider: any
-  flutter_foreground_task: 8.13.0
+  path_provider: 2.1.5
+  flutter_foreground_task: 9.1.0
   upgrader: ^10.3.0
   crypto: ^3.0.3
-  flutter_markdown: ^0.7.2+1
-  flutter_background_service: ^5.0.7
-  flutter_background_service_android: 6.2.4
-  flutter_background_service_platform_interface: 5.1.1
+  flutter_markdown: ^0.7.7
+  flutter_background_service: 5.1.0
+  flutter_background_service_android: 6.3.0
+  flutter_background_service_platform_interface: 5.1.2
   opus_flutter: ^3.0.3
   opus_dart: ^3.0.1
   growthbook_sdk_flutter: 3.9.2
-  manage_calendar_events: ^2.0.3
   flutter_timezone: 3.0.1
   sign_in_with_apple: ^6.1.1
-  location: ^7.0.0
   cached_network_image: 3.4.1
-  map_launcher: ^3.3.1
-  internet_connection_checker_plus: ^2.5.0
-  geolocator:
+  map_launcher: ^3.5.0
+  internet_connection_checker_plus: ^2.7.2
+  geolocator: 14.0.1
   version: ^3.0.2
-  webview_flutter: ^4.8.0
+  webview_flutter: 4.13.0
   flutter_sound: ^9.10.0
   just_audio: ^0.9.39
   frame_sdk: ^0.0.7
-  web_socket_channel: ^3.0.1
+  web_socket_channel: ^3.0.3
   talker_flutter: 4.5.0
   flutter_silero_vad:
     git:
@@ -111,9 +108,7 @@ dependencies:
   font_awesome_flutter: ^10.8.0
 
 dependency_overrides:
-  http: ^1.2.1
   uuid: ^4.4.0
-  js: ^0.7.1
   google_sign_in_ios: 5.7.5
   opus_flutter_ios:
     git:
@@ -124,17 +119,6 @@ dependency_overrides:
     git:
       url: https://github.com/mdmohsin7/opus_flutter.git
       path: opus_flutter_android
-  geolocator_android: 4.6.1
-  # flutter_blue_plus:
-  # git:
-  #   url: https://github.com/chipweinberger/flutter_blue_plus
-  #   ref: 1.32.13
-  #   version: ^1.32.13
-  manage_calendar_events:
-    git:
-      url: https://github.com/beastoin/manage_calendar_events
-      ref: master
-      version: ^2.0.4
 
 dev_dependencies:
   flutter_launcher_icons: 0.13.1
@@ -145,10 +129,10 @@ dev_dependencies:
   lints: ^4.0.0
   flutter_test:
     sdk: flutter
-  envied_generator: ^0.5.4+1
-  build_runner: ^2.4.11
+  envied_generator: 1.1.1
+  build_runner: ^2.4.15
   flutter_flavorizr: ^2.2.3
-  flutter_gen_runner: 5.8.0
+  flutter_gen_runner: 5.10.0
 
 flutter_launcher_icons:
   android: true
