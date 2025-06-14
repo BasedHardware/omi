@@ -2,6 +2,7 @@ import asyncio
 import copy
 import json
 import uuid
+import zlib
 from datetime import datetime, timedelta
 from typing import List, Tuple, Optional, Dict, Any
 
@@ -24,32 +25,38 @@ conversations_collection = 'conversations'
 # ******* ENCRYPTION HELPERS ******
 # *********************************
 
-def _encrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
-    data = copy.deepcopy(conversation_data)
-
-    if 'transcript_segments' in data and isinstance(data['transcript_segments'], list):
-        segments_json = json.dumps(data['transcript_segments'])
-        data['transcript_segments'] = encryption.encrypt(segments_json, uid)
-
-    return data
-
-
 def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
     data = copy.deepcopy(conversation_data)
 
     if 'transcript_segments' in data and isinstance(data['transcript_segments'], str):
         try:
-            decrypted_segments_json = encryption.decrypt(data['transcript_segments'], uid)
-            data['transcript_segments'] = json.loads(decrypted_segments_json)
-        except (json.JSONDecodeError, TypeError):
+            decrypted_payload = encryption.decrypt(data['transcript_segments'], uid)
+            if data.get('transcript_segments_compressed'):
+                # New format: encrypted(compressed(json))
+                compressed_bytes = bytes.fromhex(decrypted_payload)
+                decompressed_json = zlib.decompress(compressed_bytes).decode('utf-8')
+                data['transcript_segments'] = json.loads(decompressed_json)
+            else:
+                # Old format: encrypted(json)
+                data['transcript_segments'] = json.loads(decrypted_payload)
+        except (json.JSONDecodeError, TypeError, zlib.error, ValueError):
             pass
 
     return data
 
 
-def _prepare_data_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
-    if level == 'enhanced':
-        return _encrypt_conversation_data(data, uid)
+def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
+    data = copy.deepcopy(data)
+    if 'transcript_segments' in data and isinstance(data['transcript_segments'], list):
+        segments_json = json.dumps(data['transcript_segments'])
+        compressed_segments_bytes = zlib.compress(segments_json.encode('utf-8'))
+        data['transcript_segments_compressed'] = True
+
+        if level == 'enhanced':
+            encrypted_segments = encryption.encrypt(compressed_segments_bytes.hex(), uid)
+            data['transcript_segments'] = encrypted_segments
+        else:
+            data['transcript_segments'] = compressed_segments_bytes
     return data
 
 
@@ -57,11 +64,22 @@ def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], 
     if not conversation_data:
         return None
 
-    level = conversation_data.get('data_protection_level')
-    if level == 'enhanced':
-        return _decrypt_conversation_data(conversation_data, uid)
+    data = copy.deepcopy(conversation_data)
+    level = data.get('data_protection_level')
 
-    return conversation_data
+    if level == 'enhanced':
+        return _decrypt_conversation_data(data, uid)
+
+    # Handle standard level with potential compression
+    if data.get('transcript_segments_compressed'):
+        if 'transcript_segments' in data and isinstance(data['transcript_segments'], bytes):
+            try:
+                decompressed_json = zlib.decompress(data['transcript_segments']).decode('utf-8')
+                data['transcript_segments'] = json.loads(decompressed_json)
+            except (json.JSONDecodeError, TypeError, zlib.error):
+                pass
+
+    return data
 
 
 # *****************************
@@ -69,7 +87,7 @@ def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], 
 # *****************************
 
 @set_data_protection_level(data_arg_name='conversation_data')
-@prepare_for_write(data_arg_name='conversation_data', encrypt_func=_encrypt_conversation_data)
+@prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
 def upsert_conversation(uid: str, conversation_data: dict):
     if 'audio_base64_url' in conversation_data:
         del conversation_data['audio_base64_url']
@@ -81,7 +99,7 @@ def upsert_conversation(uid: str, conversation_data: dict):
     conversation_ref.set(conversation_data)
 
 
-@prepare_for_read(decrypt_func=_decrypt_conversation_data)
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 def get_conversation(uid, conversation_id):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
@@ -89,7 +107,7 @@ def get_conversation(uid, conversation_id):
     return conversation_data
 
 
-@prepare_for_read(decrypt_func=_decrypt_conversation_data)
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 def get_conversations(uid: str, limit: int = 100, offset: int = 0, include_discarded: bool = False,
                       statuses: List[str] = [], start_date: Optional[datetime] = None,
                       end_date: Optional[datetime] = None, categories: Optional[List[str]] = None):
@@ -127,7 +145,7 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict):
         return
 
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
-    prepared_data = _prepare_data_for_write(update_data, uid, doc_level)
+    prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
     doc_ref.update(prepared_data)
 
 
@@ -148,7 +166,7 @@ def delete_conversation(uid, conversation_id):
     conversation_ref.delete()
 
 
-@prepare_for_read(decrypt_func=_decrypt_conversation_data)
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 def filter_conversations_by_date(uid, start_date, end_date):
     user_ref = db.collection('users').document(uid)
     query = (
@@ -162,7 +180,7 @@ def filter_conversations_by_date(uid, start_date, end_date):
     return conversations
 
 
-@prepare_for_read(decrypt_func=_decrypt_conversation_data)
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 def get_conversations_by_id(uid, conversation_ids):
     user_ref = db.collection('users').document(uid)
     conversations_ref = user_ref.collection(conversations_collection)
@@ -222,22 +240,24 @@ def migrate_conversation_level(uid: str, conversation_id: str, target_level: str
     if current_level == target_level:
         return  # Nothing to do
 
-    # Decrypt the data first (if needed) to get a clean slate.
+    # Decrypt/decompress the data to get a clean slate.
     plain_data = _prepare_conversation_for_read(conversation_data, uid)
 
-    # Now, encrypt if the target is 'enhanced'.
-    plain_segments = plain_data.get('transcript_segments')
-    migrated_segments = plain_segments
-    if target_level == 'enhanced':
-        if isinstance(plain_segments, list):
-            segments_json = json.dumps(plain_segments)
-            migrated_segments = encryption.encrypt(segments_json, uid)
+    # Re-prepare the segments for writing with the new level.
+    update_payload = {'transcript_segments': plain_data.get('transcript_segments')}
+    prepared_payload = _prepare_conversation_for_write(update_payload, uid, target_level)
 
     # Update the document with the migrated data and the new protection level.
     update_data = {
         'data_protection_level': target_level,
-        'transcript_segments': migrated_segments
     }
+    if 'transcript_segments' in prepared_payload:
+        update_data['transcript_segments'] = prepared_payload['transcript_segments']
+        update_data['transcript_segments_compressed'] = prepared_payload.get('transcript_segments_compressed', False)
+
+    if not update_data.get('transcript_segments_compressed'):
+        update_data['transcript_segments_compressed'] = firestore.DELETE_FIELD
+
     doc_ref.update(update_data)
 
 
@@ -261,22 +281,24 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
         if current_level == target_level:
             continue
 
-        # Decrypt the data first (if needed) to get a clean slate.
+        # Decrypt/decompress the data to get a clean slate.
         plain_data = _prepare_conversation_for_read(conversation_data, uid)
 
-        # Now, encrypt if the target is 'enhanced'.
-        plain_segments = plain_data.get('transcript_segments')
-        migrated_segments = plain_segments
-        if target_level == 'enhanced':
-            if isinstance(plain_segments, list):
-                segments_json = json.dumps(plain_segments)
-                migrated_segments = encryption.encrypt(segments_json, uid)
+        # Re-prepare the segments for writing with the new level.
+        update_payload = {'transcript_segments': plain_data.get('transcript_segments')}
+        prepared_payload = _prepare_conversation_for_write(update_payload, uid, target_level)
 
         # Update the document with the migrated data and the new protection level.
         update_data = {
             'data_protection_level': target_level,
-            'transcript_segments': migrated_segments
         }
+        if 'transcript_segments' in prepared_payload:
+            update_data['transcript_segments'] = prepared_payload['transcript_segments']
+            update_data['transcript_segments_compressed'] = prepared_payload.get('transcript_segments_compressed', False)
+
+        if not update_data.get('transcript_segments_compressed'):
+            update_data['transcript_segments_compressed'] = firestore.DELETE_FIELD
+
         batch.update(doc_snapshot.reference, update_data)
 
     batch.commit()
@@ -286,7 +308,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 # ********** STATUS *************
 # **************************************
 
-@prepare_for_read(decrypt_func=_decrypt_conversation_data)
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 def get_in_progress_conversation(uid: str):
     user_ref = db.collection('users').document(uid)
     conversations_ref = (
@@ -298,7 +320,7 @@ def get_in_progress_conversation(uid: str):
     return conversation
 
 
-@prepare_for_read(decrypt_func=_decrypt_conversation_data)
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 def get_processing_conversations(uid: str):
     user_ref = db.collection('users').document(uid)
     conversations_ref = (
@@ -355,7 +377,7 @@ def update_conversation_segments(uid: str, conversation_id: str, segments: List[
 
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
     update_payload = {'transcript_segments': segments}
-    prepared_payload = _prepare_data_for_write(update_payload, uid, doc_level)
+    prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
     doc_ref.update(prepared_payload)
 
 
@@ -369,7 +391,7 @@ def set_conversation_visibility(uid: str, conversation_id: str, visibility: str)
     conversation_ref.update({'visibility': visibility})
 
 
-@prepare_for_read(decrypt_func=_decrypt_conversation_data)
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 async def _get_public_conversation(db_client: AsyncClient, uid: str, conversation_id: str):
     conversation_ref = db_client.collection('users').document(uid).collection('conversations').document(conversation_id)
     conversation_doc = await conversation_ref.get()
@@ -495,7 +517,7 @@ def get_conversation_photos(uid: str, conversation_id: str):
 # ********** SYNCING *************
 # ********************************
 
-@prepare_for_read(decrypt_func=_decrypt_conversation_data)
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 def get_closest_conversation_to_timestamps(
         uid: str, start_timestamp: int, end_timestamp: int
 ) -> Optional[dict]:
@@ -536,7 +558,7 @@ def get_closest_conversation_to_timestamps(
     return closest_conversation
 
 
-@prepare_for_read(decrypt_func=_decrypt_conversation_data)
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 def get_last_completed_conversation(uid: str) -> Optional[dict]:
     query = (
         db.collection('users').document(uid).collection(conversations_collection)
