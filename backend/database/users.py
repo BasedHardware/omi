@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
-from google.cloud.firestore_v1 import FieldFilter
+from google.cloud import firestore
+from google.cloud.firestore_v1 import FieldFilter, transactional
 
 from ._client import db, document_id_from_seed
 
@@ -10,6 +11,15 @@ def is_exists_user(uid: str):
     if not user_ref.get().exists:
         return False
     return True
+
+
+def get_user_profile(uid: str) -> dict:
+    """Gets the full user profile document."""
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get()
+    if user_doc.exists:
+        return user_doc.to_dict()
+    return {}
 
 
 def get_user_store_recording_permission(uid: str):
@@ -166,6 +176,64 @@ def get_default_payment_method(uid: str):
     user_ref = db.collection('users').document(uid)
     user_data = user_ref.get().to_dict()
     return user_data.get('default_payment_method', None)
+
+# **************************************
+# ********* Data Protection ************
+# **************************************
+
+def get_data_protection_level(uid: str) -> str:
+    """
+    Get the user's data protection level.
+
+    Args:
+        uid: User ID
+
+    Returns:
+        'standard', 'enhanced', or 'e2ee'. Defaults to 'standard'.
+    """
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get()
+
+    if user_doc.exists:
+        user_data = user_doc.to_dict()
+        return user_data.get('data_protection_level', 'standard')
+
+    return 'standard'
+
+
+def set_data_protection_level(uid: str, level: str) -> None:
+    """
+    Set the user's data protection level.
+
+    Args:
+        uid: User ID
+        level: 'standard', 'enhanced', or 'e2ee'
+    """
+    if level not in ['standard', 'enhanced', 'e2ee']:
+        raise ValueError("Invalid data protection level")
+    user_ref = db.collection('users').document(uid)
+    user_ref.set({'data_protection_level': level}, merge=True)
+
+
+def set_migration_status(uid: str, target_level: str):
+    """Sets the migration status on the user's profile."""
+    user_ref = db.collection('users').document(uid)
+    migration_status = {
+        'target_level': target_level,
+        'status': 'in_progress',
+        'started_at': datetime.now(timezone.utc)
+    }
+    user_ref.set({'migration_status': migration_status}, merge=True)
+
+
+def finalize_migration(uid: str, target_level: str):
+    """Atomically sets the new protection level and removes the migration status field."""
+    user_ref = db.collection('users').document(uid)
+    user_ref.update({
+        'data_protection_level': target_level,
+        'migration_status': firestore.DELETE_FIELD
+    })
+
 
 # **************************************
 # ************* Language ***************

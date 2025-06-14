@@ -249,6 +249,11 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: STT_SERVICE_MODELS
+  - name: ENCRYPTION_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: ENCRYPTION_SECRET
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
