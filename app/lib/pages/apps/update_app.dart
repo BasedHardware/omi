@@ -14,7 +14,6 @@ import 'widgets/capabilities_chips_widget.dart';
 import 'widgets/external_trigger_fields_widget.dart';
 import 'widgets/payment_details_widget.dart';
 import 'widgets/prompt_text_field.dart';
-import 'widgets/action_fields_widget.dart';
 
 class UpdateAppPage extends StatefulWidget {
   final App app;
@@ -48,9 +47,9 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
             backgroundColor: Theme.of(context).colorScheme.primary,
           ),
           body: PopScope(
-            onPopInvoked: (didPop) {
+            onPopInvokedWithResult: (didPop, result) {
               context.read<AddAppProvider>().clear();
-            },
+              },
             child: Builder(builder: (context) {
               if (provider.isUpdating) {
                 return const Center(
