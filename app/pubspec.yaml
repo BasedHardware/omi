@@ -3,7 +3,7 @@ description: A new Flutter project.
 
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.64+316
+version: 1.0.64+317
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -109,6 +109,7 @@ dependencies:
   file_picker: 8.3.2
   photo_view: ^0.15.0
   font_awesome_flutter: ^10.8.0
+  device_info_plus:
 
 dependency_overrides:
   http: ^1.2.1

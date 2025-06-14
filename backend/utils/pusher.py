@@ -6,6 +6,14 @@ import websockets
 PusherAPI = os.getenv('HOSTED_PUSHER_API_URL')
 
 async def connect_to_trigger_pusher(uid: str, sample_rate: int = 8000, retries: int = 3):
+    # Debug the environment variable value
+    print(f"HOSTED_PUSHER_API_URL value: '{PusherAPI}' (type: {type(PusherAPI)})")
+    
+    # If Pusher API URL is not configured properly, return None to disable Pusher functionality
+    if not PusherAPI or PusherAPI.strip() == '' or not PusherAPI.startswith(('http://', 'https://')):
+        print(f"HOSTED_PUSHER_API_URL not properly configured, skipping Pusher connection for {uid}")
+        return None
+        
     print("connect_to_trigger_pusher", uid)
     for attempt in range(retries):
         try:

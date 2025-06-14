@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from modal import Image, App, asgi_app, Secret
 from routers import workflow, chat, firmware, plugins, transcribe, notifications, \
     speech_profile, agents, users, trends, sync, apps, custom_auth, \
-    payment, integration, conversations, memories, mcp, oauth # Added oauth
+    payment, integration, conversations, memories, mcp, oauth, pusher, openglass # Added oauth, pusher, and omiglass
 
 from utils.other.timeout import TimeoutMiddleware
 
@@ -24,6 +24,7 @@ app.include_router(transcribe.router)
 app.include_router(conversations.router)
 app.include_router(memories.router)
 app.include_router(chat.router)
+app.include_router(openglass.router, prefix="/omiglass")
 app.include_router(plugins.router)
 app.include_router(speech_profile.router)
 # app.include_router(screenpipe.router)
@@ -43,6 +44,7 @@ app.include_router(oauth.router) # Added oauth router
 
 app.include_router(payment.router)
 app.include_router(mcp.router)
+app.include_router(pusher.router)
 
 
 methods_timeout = {

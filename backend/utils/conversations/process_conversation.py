@@ -27,10 +27,9 @@ from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps, update_personas_async, sync_update_persona_prompt
 from utils.llm.conversation_processing import get_transcript_structure, \
     get_app_result, should_discard_conversation, select_best_app_for_conversation, \
-    get_reprocess_transcript_structure
+    get_reprocess_transcript_structure, get_combined_transcript_and_photos_structure
 from utils.llm.memories import extract_memories_from_text, new_memories_extractor
 from utils.llm.external_integrations import summarize_experience_text
-from utils.llm.openglass import summarize_open_glass
 from utils.llm.trends import trends_extractor
 from utils.llm.chat import retrieve_metadata_from_text, retrieve_metadata_from_message, retrieve_metadata_fields_from_transcript, obtain_emotional_message
 from utils.llm.external_integrations import get_message_structure
@@ -40,10 +39,24 @@ from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredict
 from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
 
+# Import new utility modules for photo processing and content preparation
+from utils.conversations.photo_processing import (
+    has_photos_with_descriptions,
+    photos_to_text_simple,
+    get_valid_photos
+)
+from utils.conversations.content_preparation import (
+    prepare_content_for_apps,
+    prepare_content_for_memory_extraction,
+    has_meaningful_content,
+    get_conversation_transcript
+)
+from utils.conversations.fallback_summary import apply_fallback_summary
+
 
 def _get_structured(
         uid: str, language_code: str, conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
-        force_process: bool = False
+        force_process: bool = False, retries: int = 0
 ) -> Tuple[Structured, bool]:
     try:
         tz = notification_db.get_user_time_zone(uid)
@@ -64,14 +77,42 @@ def _get_structured(
             # not supported conversation source
             raise HTTPException(status_code=400, detail=f'Invalid conversation source: {conversation.text_source}')
 
-        # from OpenGlass
-        if conversation.photos:
-            return summarize_open_glass(conversation.photos), False
+        # Handle photo conversations properly - check photos BEFORE OpenGlass source check
+        # This ensures photo conversations get proper titles from photo descriptions
+        if has_photos_with_descriptions(getattr(conversation, 'photos', None)):
+            # Check if this is a combined conversation (has both transcript and photos)
+            transcript = get_conversation_transcript(conversation)
+            
+            if transcript.strip():
+                # Combined conversation: transcript + photos (audio+photo)
+                structured = get_combined_transcript_and_photos_structure(
+                    transcript, getattr(conversation, 'photos', []), conversation.started_at, language_code, tz
+                )
+                
+                # Never discard conversations with photos - visual content is always valuable
+                return structured, False
+            else:
+                # Photos-only conversation - use smart processing for better titles and structure
+                photos_as_transcript = photos_to_text_simple(getattr(conversation, 'photos', []))
+                
+                # Use full transcript structure processing to get smart tags, action items, events, etc.
+                structured = get_transcript_structure(photos_as_transcript, conversation.started_at, language_code, tz)
+                
+                # Never discard photo conversations - they have valuable visual content
+                return structured, False
+
+        # Only use generic OpenGlass fallback when NO photos exist
+        if conversation.source == ConversationSource.openglass:
+            # This ensures empty OpenGlass conversations are never marked as discarded
+            # But only used when no photos are available for proper processing
+            
+            # Create basic structured data for OpenGlass conversations without photos
+            basic_structure = get_transcript_structure("Visual experience captured via OpenGlass", conversation.started_at, language_code, tz)
+            return basic_structure, False  # Never discard OpenGlass conversations
 
         # from Omi
         if force_process:
             # reprocess endpoint
-
             return get_reprocess_transcript_structure(conversation.get_transcript(False), conversation.started_at, language_code, tz, conversation.structured.title), False
 
         discarded = should_discard_conversation(conversation.get_transcript(False))
@@ -80,13 +121,21 @@ def _get_structured(
 
         return get_transcript_structure(conversation.get_transcript(False), conversation.started_at, language_code, tz), False
     except Exception as e:
-        print(e)
-        raise HTTPException(status_code=500, detail="Error processing conversation, please try again later")
+        # Keep error logging for debugging
+        import traceback
+        traceback.print_exc()
+        if retries == 2:
+            raise HTTPException(status_code=500, detail="Error processing conversation, please try again later")
+        return _get_structured(uid, language_code, conversation, force_process, retries + 1)
 
 
 def _get_conversation_obj(uid: str, structured: Structured,
                           conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation]):
-    discarded = structured.title == ''
+    # Never discard photo conversations - they have valuable visual content
+    # Only discard based on empty title for non-photo conversations
+    has_photos = has_photos_with_descriptions(getattr(conversation, 'photos', None))
+    
+    discarded = structured.title == '' and not has_photos  # Don't discard if has photos
     if isinstance(conversation, CreateConversation):
         conversation = Conversation(
             id=str(uuid.uuid4()),
@@ -96,8 +145,8 @@ def _get_conversation_obj(uid: str, structured: Structured,
             created_at=datetime.now(timezone.utc),
             discarded=discarded,
         )
-        if conversation.photos:
-            conversations_db.store_conversation_photos(uid, conversation.id, conversation.photos)
+        if getattr(conversation, 'photos', None):
+            conversations_db.store_conversation_photos(uid, conversation.id, getattr(conversation, 'photos', []))
     elif isinstance(conversation, ExternalIntegrationCreateConversation):
         create_conversation = conversation
         conversation = Conversation(
@@ -134,17 +183,16 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
     conversation_apps = [app for app in apps if app.works_with_memories() and app.enabled]
     filtered_apps = []
 
-    # If app_id is provided, only use that specific app
     if app_id:
+        # single app reprocess
         filtered_apps = [app for app in conversation_apps if app.id == app_id]
     else:
         filtered_apps = conversation_apps
 
-        # Extend with default apps
+        # Extend with default apps (only if they exist)
         default_apps = get_default_conversation_summarized_apps()
         filtered_apps.extend(default_apps)
 
-        # Select the best app for this conversation
         if filtered_apps and len(filtered_apps) > 0:
             # Check if the user has a preferred app
             preferred_app_id = get_user_preferred_app(uid)
@@ -156,15 +204,30 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
             if best_app:
                 print(f"Selected best app for conversation: {best_app.name}")
 
-                # enabled
                 user_enabled = set(redis_db.get_enabled_apps(uid))
                 if best_app.id not in user_enabled:
                     redis_db.enable_app(uid, best_app.id)
 
-                filtered_apps = [best_app]
+                filtered_apps = [best_app]  # Use only the best app
+        # auto plugins. For segments > 90 and language is not Spanish or Japanese, find the best one.
+        # if len(conversation.transcript_segments) >= 90 and conversation.language not in ["ja", "es"]:
+        #     best_app = select_best_app_for_conversation(conversation, conversation_apps)
+        #     if best_app is None:
+        #         pass
+        #     else:
+        #         filtered_apps.insert(0, best_app)
+        #
+        #         # enabled
+        #         user_enabled = set(redis_db.get_enabled_apps(uid))
+        #         if best_app.id not in user_enabled:
+        #             redis_db.enable_app(uid, best_app.id)
+        #
+        # filtered_apps = list(set(filtered_apps))
 
     if len(filtered_apps) == 0:
-        print("All apps had got filtered out", uid)
+        # No apps available - apply fallback summary
+        apply_fallback_summary(conversation)
+        return
 
     # Clear existing app results
     conversation.apps_results = []
@@ -172,7 +235,10 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
     threads = []
 
     def execute_app(app):
-        result = get_app_result(conversation.get_transcript(False), app, language_code=language_code).strip()
+        # Prepare unified content using the content preparation utility
+        content_for_app = prepare_content_for_apps(conversation)
+        
+        result = get_app_result(content_for_app, app).strip()
         conversation.apps_results.append(AppResult(app_id=app.id, content=result))
         if not is_reprocess:
             record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, conversation_id=conversation.id)
@@ -190,26 +256,40 @@ def _extract_memories(uid: str, conversation: Conversation):
 
     new_memories: List[Memory] = []
 
-    # Extract memories based on conversation source
+    # Extract memories based on conversation source and content
     if conversation.source == ConversationSource.external_integration:
         text_content = conversation.external_data.get('text')
         if text_content and len(text_content) > 0:
             text_source = conversation.external_data.get('text_source', 'other')
             new_memories = extract_memories_from_text(uid, text_content, text_source)
     else:
-        # For regular conversations with transcript segments
-        new_memories = new_memories_extractor(uid, conversation.transcript_segments)
+        # For regular conversations - handle transcript, photos, or both using utilities
+        transcript_content, photo_content = prepare_content_for_memory_extraction(conversation)
+        
+        if transcript_content and photo_content:
+            # Combined conversation: extract from both sources
+            transcript_memories = new_memories_extractor(uid, conversation.transcript_segments)
+            photo_memories = extract_memories_from_text(uid, photo_content, "visual_experience")
+            new_memories = transcript_memories + photo_memories
+        elif transcript_content:
+            # Transcript-only conversation (traditional)
+            new_memories = new_memories_extractor(uid, conversation.transcript_segments)
+        elif photo_content:
+            # Photos-only conversation
+            new_memories = extract_memories_from_text(uid, photo_content, "visual_experience")
+        else:
+            # No content for memory extraction
+            new_memories = []
 
     parsed_memories = []
     for memory in new_memories:
         parsed_memories.append(MemoryDB.from_memory(memory, uid, conversation.id, False))
-        print('_extract_memories:', memory.category.value.upper(), '|', memory.content)
 
     if len(parsed_memories) == 0:
-        print(f"No memories extracted for conversation {conversation.id}")
+        # Remove debug message - not critical for production
         return
 
-    print(f"Saving {len(parsed_memories)} memories for conversation {conversation.id}")
+    # Remove debug message - not critical for production
     memories_db.save_memories(uid, [fact.dict() for fact in parsed_memories])
 
 
@@ -257,15 +337,15 @@ def save_structured_vector(uid: str, conversation: Conversation, update_only: bo
     metadata['created_at'] = int(conversation.created_at.timestamp())
 
     if not update_only:
-        print('save_structured_vector creating vector')
+        # Remove debug message - not critical for production
         upsert_vector2(uid, conversation, vector, metadata)
     else:
-        print('save_structured_vector updating metadata')
+        # Remove debug message - not critical for production
         update_vector_metadata(uid, conversation.id, metadata)
 
 
 def _update_personas_async(uid: str):
-    print(f"[PERSONAS] Starting persona updates in background thread for uid={uid}")
+    # Remove debug messages - not critical for production
     personas = get_omi_personas_by_uid_db(uid)
     if personas:
         threads = []
@@ -274,7 +354,6 @@ def _update_personas_async(uid: str):
 
         [t.start() for t in threads]
         [t.join() for t in threads]
-        print(f"[PERSONAS] Finished persona updates in background thread for uid={uid}")
 
 
 def process_conversation(
@@ -292,6 +371,30 @@ def process_conversation(
     conversation.status = ConversationStatus.completed
     conversations_db.upsert_conversation(uid, conversation.dict())
 
+    # Notify WebSocket clients to clear live images for this completed conversation
+    try:
+        # Store clear_live_images message in Redis for active WebSocket sessions to pick up
+        photo_count = len(conversation.photos) if conversation.photos else 0
+        clear_message = {
+            "type": "clear_live_images", 
+            "data": {
+                "conversation_id": conversation.id,
+                "reason": "conversation_created",
+                "processed_image_count": photo_count
+            }
+        }
+        
+        # Log conversation completion details for debugging
+        transcript_length = len(conversation.transcript_segments) if conversation.transcript_segments else 0
+        print(f"✅ Conversation {conversation.id} completed - Photos: {photo_count}, Transcript segments: {transcript_length}, Status: {conversation.status}")
+        
+        # Store message with TTL of 60 seconds using proper helper function
+        redis_db.set_clear_live_images_message(uid, clear_message, ttl=60)
+        
+    except Exception as e:
+        # Keep error logging - this is important for debugging WebSocket issues
+        print(f'Error storing clear_live_images message: {e}')
+
     if not is_reprocess:
         threading.Thread(target=conversation_created_webhook, args=(uid, conversation,)).start()
         # Update persona prompts with new conversation
@@ -299,7 +402,6 @@ def process_conversation(
 
     # TODO: trigger external integrations here too
 
-    print('process_conversation completed conversation.id=', conversation.id)
     return conversation
 
 
@@ -396,6 +498,24 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
         print(f"Conversation is not found. Uid: {uid}. Conversation: {task.memory_id}")
         return
 
+    # Ensure all required fields are present before creating Conversation object
+    from datetime import datetime, timezone
+    
+    # Add finished_at if missing
+    if 'finished_at' not in conversation_data or conversation_data['finished_at'] is None:
+        conversation_data['finished_at'] = datetime.now(timezone.utc)
+    
+    # Add other required fields if missing
+    if 'created_at' not in conversation_data or conversation_data['created_at'] is None:
+        conversation_data['created_at'] = datetime.now(timezone.utc)
+    
+    if 'started_at' not in conversation_data or conversation_data['started_at'] is None:
+        conversation_data['started_at'] = datetime.now(timezone.utc)
+    
+    # Ensure status is set
+    if 'status' not in conversation_data:
+        conversation_data['status'] = ConversationStatus.completed
+
     conversation = Conversation(**conversation_data)
 
     # Get prediction
@@ -464,14 +584,77 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
 
 
 def retrieve_in_progress_conversation(uid):
+    """Retrieve in-progress conversation with basic session management"""
     conversation_id = redis_db.get_in_progress_conversation_id(uid)
     existing = None
 
     if conversation_id:
         existing = conversations_db.get_conversation(uid, conversation_id)
         if existing and existing['status'] != 'in_progress':
+            # Clean up stale Redis reference
+            redis_db.delete_in_progress_conversation_id(uid)
             existing = None
 
     if not existing:
         existing = conversations_db.get_in_progress_conversation(uid)
+    
+    # Check for active WebSocket recording sessions
+    if not existing:
+        try:
+            # Check if user has an active transcription WebSocket session using proper helper function
+            session_info = redis_db.get_active_transcription_session(uid)
+            
+            if session_info:
+                if not isinstance(session_info, dict):
+                    print(f"Invalid session data format for user {uid}")
+                    redis_db.delete_active_transcription_session(uid)
+                    return None
+                
+                from datetime import datetime, timezone
+                from models.conversation import Structured, ConversationStatus
+                import uuid
+                
+                now = datetime.now(timezone.utc)
+                started_at = session_info.get('started_at', now.isoformat())
+                
+                # Safe datetime parsing
+                try:
+                    if isinstance(started_at, str):
+                        started_at_dt = datetime.fromisoformat(started_at.replace('Z', '+00:00'))
+                    else:
+                        started_at_dt = started_at
+                except (ValueError, TypeError) as e:
+                    print(f"Invalid started_at format: {e}")
+                    started_at_dt = now
+                
+                # Simple session age check
+                session_age_hours = (now - started_at_dt).total_seconds() / 3600
+                if session_age_hours > 24:
+                    print(f"Cleaning up stale session for user {uid}")
+                    redis_db.delete_active_transcription_session(uid)
+                    return None
+                
+                existing = {
+                    'id': f'active_session_{uid}',
+                    'uid': uid,
+                    'status': ConversationStatus.in_progress.value,
+                    'is_active_session': True,
+                    'started_at': started_at_dt.isoformat(),
+                    'created_at': started_at_dt.isoformat(),
+                    'finished_at': now.isoformat(),
+                    'structured': Structured().dict(),
+                    'language': session_info.get('language', 'en'),
+                    'transcript_segments': [],
+                    'geolocation': None,
+                    'photos': [],
+                    'plugins_results': [],
+                    'discarded': False,
+                    'processing_memory_id': None,
+                    'visibility': 'private'
+                }
+                return existing
+                    
+        except Exception as e:
+            print(f"Error checking active session: {e}")
+    
     return existing

@@ -1,12 +1,16 @@
 import base64
 import json
 import os
+import time
 from typing import List, Union, Optional
 
 import redis
+from dotenv import load_dotenv
+
+load_dotenv()
 
 r = redis.Redis(
-    host=os.getenv('REDIS_DB_HOST'),
+    host=os.getenv('REDIS_DB_HOST') or 'localhost',
     port=int(os.getenv('REDIS_DB_PORT')) if os.getenv('REDIS_DB_PORT') is not None else 6379,
     username='default',
     password=os.getenv('REDIS_DB_PASSWORD'),
@@ -482,6 +486,114 @@ def get_user_preferred_app(uid: str) -> Optional[str]:
     key = f'user:{uid}:preferred_app'
     app_id = r.get(key)
     return app_id.decode() if app_id else None
+
+
+# Simple Redis cleanup functions
+
+def delete_in_progress_conversation_id(uid: str):
+    """Clean up stale in-progress conversation references"""
+    try:
+        r.delete(f'in_progress_conversation_id:{uid}')
+    except Exception as e:
+        print(f"Error deleting in-progress conversation ID for {uid}: {e}")
+
+
+# Active Transcription Session Management
+
+@try_catch_decorator
+def get_active_transcription_session(uid: str) -> Optional[dict]:
+    """Get active transcription session data for a user"""
+    session_data = r.get(f'active_transcription_session:{uid}')
+    if not session_data:
+        return None
+    
+    try:
+        return json.loads(session_data)
+    except json.JSONDecodeError as e:
+        print(f"Error parsing session data for {uid}: {e}")
+        delete_active_transcription_session(uid)  # Clean up corrupted data
+        return None
+
+
+@try_catch_decorator  
+def set_active_transcription_session(uid: str, session_data: dict, ttl: int = 3600):
+    """Set active transcription session data for a user"""
+    r.set(f'active_transcription_session:{uid}', json.dumps(session_data, default=str), ex=ttl)
+
+
+@try_catch_decorator
+def delete_active_transcription_session(uid: str):
+    """Delete active transcription session for a user"""
+    r.delete(f'active_transcription_session:{uid}')
+
+
+@try_catch_decorator
+def active_transcription_session_exists(uid: str) -> bool:
+    """Check if user has an active transcription session"""
+    return r.exists(f'active_transcription_session:{uid}') > 0
+
+
+@try_catch_decorator
+def set_clear_live_images_message(uid: str, message_data: dict, ttl: int = 60):
+    """Store clear live images message for WebSocket clients"""
+    r.setex(f'clear_live_images:{uid}', ttl, json.dumps(message_data, default=str))
+
+
+@try_catch_decorator
+def get_clear_live_images_message(uid: str) -> Optional[dict]:
+    """Get clear live images message for WebSocket clients"""
+    message_data = r.get(f'clear_live_images:{uid}')
+    if not message_data:
+        return None
+    
+    try:
+        return json.loads(message_data)
+    except json.JSONDecodeError as e:
+        print(f"Error parsing clear live images message for {uid}: {e}")
+        return None
+
+
+@try_catch_decorator
+def delete_clear_live_images_message(uid: str):
+    """Delete clear live images message after it's been processed"""
+    r.delete(f'clear_live_images:{uid}')
+
+
+def cleanup_stale_sessions(max_age_hours: int = 24):
+    """Simple cleanup of stale Redis sessions"""
+    try:
+        import time
+        current_time = time.time()
+        cutoff_time = current_time - (max_age_hours * 3600)
+        
+        # Clean up active transcription sessions
+        pattern = "active_transcription_session:*"
+        for key in r.scan_iter(match=pattern):
+            try:
+                session_data = r.get(key)
+                if session_data:
+                    import json
+                    session_info = json.loads(session_data)
+                    started_at = session_info.get('started_at')
+                    
+                    if started_at:
+                        if isinstance(started_at, str):
+                            from datetime import datetime, timezone
+                            session_dt = datetime.fromisoformat(started_at.replace('Z', '+00:00'))
+                            session_timestamp = session_dt.timestamp()
+                        else:
+                            session_timestamp = started_at
+                        
+                        if session_timestamp < cutoff_time:
+                            r.delete(key)
+                            print(f"Cleaned up stale session: {key}")
+            except Exception as e:
+                print(f"Error cleaning up session {key}: {e}")
+                # Delete corrupted session data
+                r.delete(key)
+                
+    except Exception as e:
+        print(f"Error in cleanup_stale_sessions: {e}")
 
 
 @try_catch_decorator

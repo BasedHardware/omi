@@ -51,8 +51,13 @@ class UpdateConversation(BaseModel):
 
 
 class ConversationPhoto(BaseModel):
-    base64: str
+    id: Optional[str] = None  # Photo ID for cloud storage photos
+    base64: Optional[str] = None  # Legacy base64 data - optional for cloud photos
     description: str
+    thumbnail_url: Optional[str] = None  # Cloud storage thumbnail URL
+    url: Optional[str] = None  # Cloud storage full-size URL
+    created_at: Optional[str] = None  # When photo was taken/added
+    added_at: Optional[str] = None  # When photo was added to conversation
 
 # TODO: remove this class when the app is updated to use apps_results
 class PluginResult(BaseModel):
