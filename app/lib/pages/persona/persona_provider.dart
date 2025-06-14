@@ -355,7 +355,7 @@ class PersonaProvider extends ChangeNotifier {
             .personaUpdateFailed(personaId: _userPersona!.id, errorMessage: 'Failed to update persona API call');
       }
     } catch (e) {
-      print('Error updating persona: $e');
+      debugPrint('Error updating persona: $e');
       AppSnackbar.showSnackbarError('Failed to update persona');
       MixpanelManager().personaUpdateFailed(personaId: _userPersona!.id, errorMessage: e.toString());
     } finally {
@@ -470,7 +470,7 @@ class PersonaProvider extends ChangeNotifier {
   }
 
   Future onTwitterVerifiedCompleted() async {
-    debugPrint("routing ${routing}");
+    debugPrint("routing $routing");
     if (routing == PersonaProfileRouting.no_device) {
       return;
     }
