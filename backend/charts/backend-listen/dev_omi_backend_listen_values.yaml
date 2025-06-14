@@ -217,6 +217,8 @@ env:
     value: "true"
   - name: DEEPGRAM_SELF_HOSTED_URL
     value: "https://dg.omiapi.com"
+  - name: ENCRYPTION_SECRET
+    value: "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv"
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious

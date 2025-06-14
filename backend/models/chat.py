@@ -59,6 +59,7 @@ class Message(BaseModel):
     files_id: List[str] = []
     files: List[FileChat] = []
     chat_session_id: Optional[str] = None
+    data_protection_level: Optional[str] = None
 
     @model_validator(mode='before')
     @classmethod
