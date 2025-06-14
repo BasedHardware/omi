@@ -42,7 +42,6 @@ def get_conversations(uid: str, limit: int = 100, offset: int = 0, include_disca
                       end_date: Optional[datetime] = None, categories: Optional[List[str]] = None):
     conversations_ref = (
         db.collection('users').document(uid).collection(conversations_collection)
-        .where(filter=FieldFilter('deleted', '==', False))
     )
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
@@ -81,7 +80,7 @@ def update_conversation_title(uid: str, conversation_id: str, title: str):
 def delete_conversation(uid, conversation_id):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_ref.update({'deleted': True})
+    conversation_ref.delete()
 
 
 def filter_conversations_by_date(uid, start_date, end_date):
@@ -90,7 +89,6 @@ def filter_conversations_by_date(uid, start_date, end_date):
         user_ref.collection(conversations_collection)
         .where(filter=FieldFilter('created_at', '>=', start_date))
         .where(filter=FieldFilter('created_at', '<=', end_date))
-        .where(filter=FieldFilter('deleted', '==', False))
         .where(filter=FieldFilter('discarded', '==', False))
         .order_by('created_at', direction=firestore.Query.DESCENDING)
     )
@@ -108,7 +106,7 @@ def get_conversations_by_id(uid, conversation_ids):
     for doc in docs:
         if doc.exists:
             data = doc.to_dict()
-            if data.get('deleted') or data.get('discarded'):
+            if data.get('discarded'):
                 continue
             conversations.append(data)
     return conversations
@@ -200,7 +198,7 @@ async def _get_public_conversation(db: AsyncClient, uid: str, conversation_id: s
     conversation_doc = await conversation_ref.get()
     if conversation_doc.exists:
         conversation_data = conversation_doc.to_dict()
-        if conversation_data.get('visibility') in ['public'] and not conversation_data.get('deleted'):
+        if conversation_data.get('visibility') in ['public']:
             return conversation_data
     return None
 
@@ -332,7 +330,6 @@ def get_closest_conversation_to_timestamps(
         db.collection('users').document(uid).collection(conversations_collection)
         .where(filter=FieldFilter('finished_at', '>=', start_threshold))
         .where(filter=FieldFilter('started_at', '<=', end_threshold))
-        .where(filter=FieldFilter('deleted', '==', False))
         .order_by('created_at', direction=firestore.Query.DESCENDING)
     )
 
@@ -364,7 +361,6 @@ def get_closest_conversation_to_timestamps(
 def get_last_completed_conversation(uid: str) -> Optional[dict]:
     query = (
         db.collection('users').document(uid).collection(conversations_collection)
-        .where(filter=FieldFilter('deleted', '==', False))
         .where(filter=FieldFilter('status', '==', ConversationStatus.completed))
         .order_by('created_at', direction=firestore.Query.DESCENDING)
         .limit(1)

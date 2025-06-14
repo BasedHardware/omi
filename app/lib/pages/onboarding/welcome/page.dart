@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -107,18 +108,20 @@ class _WelcomePageState extends State<WelcomePage> with SingleTickerProviderStat
         const SizedBox(
           height: 12,
         ),
-        InkWell(
-          child: Text(
-            'Need Help?',
-            style: TextStyle(
-              color: Colors.grey.shade300,
-              decoration: TextDecoration.underline,
-            ),
-          ),
-          onTap: () {
-            IntercomManager.instance.intercom.displayMessenger();
-          },
-        ),
+        PlatformService.isIntercomSupported
+            ? InkWell(
+                child: Text(
+                  'Need Help?',
+                  style: TextStyle(
+                    color: Colors.grey.shade300,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+                onTap: () {
+                  IntercomManager.instance.intercom.displayMessenger();
+                },
+              )
+            : const SizedBox.shrink(),
         const SizedBox(height: 10)
       ],
     );

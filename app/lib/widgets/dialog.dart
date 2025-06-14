@@ -1,7 +1,6 @@
-import 'dart:io';
-
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 
 //TODO: switch to required named parameters
 getDialog(
@@ -29,7 +28,7 @@ getDialog(
           TextButton(
               onPressed: () => onConfirm(), child: Text(okButtonText, style: const TextStyle(color: Colors.white))),
         ];
-  if (Platform.isIOS) {
+  if (PlatformService.isApple) {
     return CupertinoAlertDialog(title: Text(title), content: Text(content), actions: actions);
   }
   return AlertDialog(title: Text(title), content: Text(content), actions: actions);

@@ -8,6 +8,7 @@
 #include "sd.h"
 #include "button.h"
 #include "battery.h"
+#include "ble_throughput.h"
 
 static const struct device *const buttons = DEVICE_DT_GET(DT_ALIAS(buttons));
 static const struct gpio_dt_spec rfsw_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rfsw_en_pin), gpios, {0});
@@ -38,6 +39,11 @@ static int init_module(void)
 		printk("Failed to initialize battery module (%d)\n", ret);
 	}
 
+	ret = ble_throughput_init();
+	if (ret < 0)
+	{
+		printk("Failed to initialize ble throughput module (%d)\n", ret);
+	}
 	gpio_pin_configure_dt(&rfsw_en, (GPIO_OUTPUT | NRF_GPIO_DRIVE_S0H1));
 	gpio_pin_set_dt(&rfsw_en, 1);
 	return 0;

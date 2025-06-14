@@ -9,7 +9,8 @@ import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/auth.dart';
 import 'package:omi/pages/onboarding/find_device/page.dart';
 import 'package:omi/pages/onboarding/name/name_widget.dart';
-import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
+import 'package:omi/pages/onboarding/permissions/permissions_mobile_widget.dart';
+import 'package:omi/pages/onboarding/permissions/permissions_desktop_widget.dart';
 import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/onboarding/welcome/page.dart';
@@ -19,6 +20,7 @@ import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/device_widget.dart';
 import 'package:provider/provider.dart';
 
@@ -50,9 +52,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     _controller = TabController(length: 7, vsync: this);
     _controller!.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (mounted) {
-        context.read<OnboardingProvider>().updatePermissions();
-      }
+      // Let's not update permissions here because of Apple's review process
+      // if (mounted) {
+      //   context.read<OnboardingProvider>().updatePermissions();
+      // }
 
       if (isSignedIn()) {
         // && !SharedPreferencesUtil().onboardingCompleted
@@ -100,9 +103,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           SharedPreferencesUtil().verifiedPersonaId = null;
           MixpanelManager().onboardingStepCompleted('Auth');
           context.read<HomeProvider>().setupHasSpeakerProfile();
-          IntercomManager.instance.intercom.loginIdentifiedUser(
-            userId: SharedPreferencesUtil().uid,
-          );
+          IntercomManager.instance.loginIdentifiedUser(SharedPreferencesUtil().uid);
           if (SharedPreferencesUtil().onboardingCompleted) {
             routeToPage(context, const HomePageWrapper(), replace: true);
           } else {
@@ -123,12 +124,19 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         _goNext(); // Go to Permissions page
         MixpanelManager().onboardingStepCompleted('Primary Language');
       }),
-      PermissionsWidget(
-        goNext: () {
-          _goNext(); // Go to Welcome page
-          MixpanelManager().onboardingStepCompleted('Permissions');
-        },
-      ),
+      PlatformService.isDesktop
+          ? PermissionsDesktopWidget(
+              goNext: () {
+                _goNext(); // Go to Welcome page
+                MixpanelManager().onboardingStepCompleted('Permissions');
+              },
+            )
+          : PermissionsMobileWidget(
+              goNext: () {
+                _goNext(); // Go to Welcome page
+                MixpanelManager().onboardingStepCompleted('Permissions');
+              },
+            ),
       WelcomePage(
         goNext: () {
           _goNext(); // Go to Find Devices page
@@ -149,7 +157,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
             routeToPage(context, const HomePageWrapper(), replace: true);
           } else {
             var codec = await _getAudioCodec(provider.deviceId);
-            if (codec.isOpusSupported()) {
+            if (codec.isOpusSupported() && !PlatformService.isDesktop) {
               _goNext(); // Go to Speech Profile page
             } else {
               // Device selected, but not Opus, skip speech profile

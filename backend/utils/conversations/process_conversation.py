@@ -43,7 +43,7 @@ from utils.webhooks import conversation_created_webhook
 
 def _get_structured(
         uid: str, language_code: str, conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
-        force_process: bool = False, retries: int = 1
+        force_process: bool = False
 ) -> Tuple[Structured, bool]:
     try:
         tz = notification_db.get_user_time_zone(uid)
@@ -81,9 +81,7 @@ def _get_structured(
         return get_transcript_structure(conversation.get_transcript(False), conversation.started_at, language_code, tz), False
     except Exception as e:
         print(e)
-        if retries == 2:
-            raise HTTPException(status_code=500, detail="Error processing conversation, please try again later")
-        return _get_structured(uid, language_code, conversation, force_process, retries + 1)
+        raise HTTPException(status_code=500, detail="Error processing conversation, please try again later")
 
 
 def _get_conversation_obj(uid: str, structured: Structured,
@@ -97,7 +95,6 @@ def _get_conversation_obj(uid: str, structured: Structured,
             **conversation.dict(),
             created_at=datetime.now(timezone.utc),
             discarded=discarded,
-            deleted=False,
         )
         if conversation.photos:
             conversations_db.store_conversation_photos(uid, conversation.id, conversation.photos)
@@ -107,7 +104,6 @@ def _get_conversation_obj(uid: str, structured: Structured,
             id=str(uuid.uuid4()),
             **conversation.dict(),
             created_at=datetime.now(timezone.utc),
-            deleted=False,
             structured=structured,
             discarded=discarded,
         )
@@ -133,7 +129,7 @@ def get_default_conversation_summarized_apps():
 
     return default_apps
 
-def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = False, app_id: Optional[str] = None):
+def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = False, app_id: Optional[str] = None, language_code: str = 'en'):
     apps: List[App] = get_available_apps(uid)
     conversation_apps = [app for app in apps if app.works_with_memories() and app.enabled]
     filtered_apps = []
@@ -176,8 +172,7 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
     threads = []
 
     def execute_app(app):
-        # allow empty
-        result = get_app_result(conversation.get_transcript(False), app).strip()
+        result = get_app_result(conversation.get_transcript(False), app, language_code=language_code).strip()
         conversation.apps_results.append(AppResult(app_id=app.id, content=result))
         if not is_reprocess:
             record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, conversation_id=conversation.id)
@@ -290,7 +285,7 @@ def process_conversation(
     conversation = _get_conversation_obj(uid, structured, conversation)
 
     if not discarded:
-        _trigger_apps(uid, conversation, is_reprocess=is_reprocess, app_id=app_id)
+        _trigger_apps(uid, conversation, is_reprocess=is_reprocess, app_id=app_id, language_code=language_code)
         threading.Thread(target=save_structured_vector, args=(uid, conversation,)).start() if not is_reprocess else None
         threading.Thread(target=_extract_memories, args=(uid, conversation)).start()
 
