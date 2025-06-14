@@ -189,3 +189,4 @@ omiGlass/.expo
 # Logs
 /backend/logs/
 app/.fvm/
+app/android/.kotlin/
