@@ -1,7 +1,6 @@
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/privacy.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -116,10 +115,10 @@ class UserProvider with ChangeNotifier {
 
       NotificationService.instance.showNotification(
         id: _migrationNotificationId,
-        title: 'Data Migration in Progress',
-        body: 'Starting migration to $targetLevel protection...',
-        layout: NotificationLayout.ProgressBar,
-        payload: {'navigate_to': '/settings/data-privacy', 'progress': '0'},
+        title: 'omi says',
+        body: 'Migrating to $targetLevel protection...',
+        layout: NotificationLayout.Default,
+        payload: {'navigate_to': '/settings/data-privacy'},
       );
 
       _migrationQueue = await PrivacyApi.checkMigration(targetLevel);
@@ -144,14 +143,6 @@ class UserProvider with ChangeNotifier {
         final percentage = ((_processedCount / migrationTotalCount) * 100).toInt();
         _migrationMessage = 'Migrating $itemType... $percentage%';
 
-        NotificationService.instance.showNotification(
-          id: _migrationNotificationId,
-          title: 'Data Migration in Progress',
-          body: 'Migrating $itemType... $_processedCount of $migrationTotalCount migrated ($percentage%)',
-          layout: NotificationLayout.ProgressBar,
-          payload: {'navigate_to': '/settings/data-privacy', 'progress': percentage.toString()},
-        );
-
         notifyListeners();
       }
 
@@ -166,7 +157,7 @@ class UserProvider with ChangeNotifier {
 
       NotificationService.instance.showNotification(
         id: _migrationNotificationId,
-        title: 'Migration Failed',
+        title: 'omi says',
         body: 'An error occurred during data migration. Please try again.',
         layout: NotificationLayout.Default,
         payload: {'navigate_to': '/settings/data-privacy'},
@@ -189,7 +180,7 @@ class UserProvider with ChangeNotifier {
 
     NotificationService.instance.showNotification(
       id: _migrationNotificationId,
-      title: 'Migration Complete',
+      title: 'omi says',
       body: 'Your data is now protected with the new $targetLevel settings.',
       layout: NotificationLayout.Default,
       payload: {'navigate_to': '/settings/data-privacy'},
