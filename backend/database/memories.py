@@ -58,7 +58,7 @@ def _prepare_memory_for_read(memory_data: Optional[Dict[str, Any]], uid: str) ->
 # ********** CRUD *************
 # *****************************
 
-@prepare_for_read(decrypt_func=_decrypt_memory_data)
+@prepare_for_read(decrypt_func=_prepare_memory_for_read)
 def get_memories(uid: str, limit: int = 100, offset: int = 0, categories: List[str] = []):
     print('get_memories db', uid, limit, offset, categories)
     memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
@@ -80,7 +80,7 @@ def get_memories(uid: str, limit: int = 100, offset: int = 0, categories: List[s
     return result
 
 
-@prepare_for_read(decrypt_func=_decrypt_memory_data)
+@prepare_for_read(decrypt_func=_prepare_memory_for_read)
 def get_user_public_memories(uid: str, limit: int = 100, offset: int = 0):
     print('get_public_memories', limit, offset)
 
@@ -100,7 +100,7 @@ def get_user_public_memories(uid: str, limit: int = 100, offset: int = 0):
     return public_memories
 
 
-@prepare_for_read(decrypt_func=_decrypt_memory_data)
+@prepare_for_read(decrypt_func=_prepare_memory_for_read)
 def get_non_filtered_memories(uid: str, limit: int = 100, offset: int = 0):
     print('get_non_filtered_memories', uid, limit, offset)
     memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
@@ -113,7 +113,7 @@ def get_non_filtered_memories(uid: str, limit: int = 100, offset: int = 0):
 
 
 @set_data_protection_level(data_arg_name='data')
-@prepare_for_write(data_arg_name='data', encrypt_func=_encrypt_memory_data)
+@prepare_for_write(data_arg_name='data', prepare_func=_prepare_data_for_write)
 def create_memory(uid: str, data: dict):
     user_ref = db.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
@@ -122,7 +122,7 @@ def create_memory(uid: str, data: dict):
 
 
 @set_data_protection_level(data_arg_name='data')
-@prepare_for_write(data_arg_name='data', encrypt_func=_encrypt_memory_data)
+@prepare_for_write(data_arg_name='data', prepare_func=_prepare_data_for_write)
 def save_memories(uid: str, data: List[dict]):
     if not data:
         return
@@ -145,7 +145,7 @@ def delete_memories(uid: str):
     batch.commit()
 
 
-@prepare_for_read(decrypt_func=_decrypt_memory_data)
+@prepare_for_read(decrypt_func=_prepare_memory_for_read)
 def get_memory(uid: str, memory_id: str):
     user_ref = db.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
