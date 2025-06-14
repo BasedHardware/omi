@@ -1,5 +1,6 @@
 *.env
 .env*
+!.env.template
 *__pycache__/
 *venv/
 libraries/
