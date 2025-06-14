@@ -60,7 +60,7 @@ def _prepare_message_for_read(message_data: Optional[Dict[str, Any]], uid: str) 
 # *****************************
 
 @set_data_protection_level(data_arg_name='message_data')
-@prepare_for_write(data_arg_name='message_data', encrypt_func=_encrypt_chat_data)
+@prepare_for_write(data_arg_name='message_data', prepare_func=_prepare_data_for_write)
 def add_message(uid: str, message_data: dict):
     del message_data['memories']
     user_ref = db.collection('users').document(uid)
@@ -98,7 +98,7 @@ def add_summary_message(text: str, uid: str) -> Message:
     return ai_message
 
 
-@prepare_for_read(decrypt_func=_decrypt_chat_data)
+@prepare_for_read(decrypt_func=_prepare_message_for_read)
 def get_app_messages(uid: str, app_id: str, limit: int = 20, offset: int = 0, include_conversations: bool = False):
     user_ref = db.collection('users').document(uid)
     messages_ref = (
@@ -142,7 +142,7 @@ def get_app_messages(uid: str, app_id: str, limit: int = 20, offset: int = 0, in
     return messages
 
 
-@prepare_for_read(decrypt_func=_decrypt_chat_data)
+@prepare_for_read(decrypt_func=_prepare_message_for_read)
 def get_messages(
         uid: str, limit: int = 20, offset: int = 0, include_conversations: bool = False, app_id: Optional[str] = None,
         chat_session_id: Optional[str] = None

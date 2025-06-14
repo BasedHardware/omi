@@ -197,6 +197,7 @@ class Conversation(BaseModel):
 
     structured: Structured
     transcript_segments: List[TranscriptSegment] = []
+    transcript_segments_compressed: Optional[bool] = False
     geolocation: Optional[Geolocation] = None
     photos: List[ConversationPhoto] = []
 

@@ -80,10 +80,11 @@ def set_data_protection_level(data_arg_name: str):
     return decorator
 
 
-def prepare_for_write(data_arg_name: str, encrypt_func: Callable[[Dict[str, Any], str], Dict[str, Any]]):
+def prepare_for_write(data_arg_name: str, prepare_func: Callable[[Dict[str, Any], str, str], Dict[str, Any]]):
     """
-    Decorator to encrypt data before writing to the database if protection level is 'enhanced'.
-    It uses the provided encrypt_func to handle the specifics of which fields to encrypt.
+    Decorator to prepare data before writing to the database.
+    It uses the provided prepare_func to handle the specifics of data preparation,
+    such as compression or encryption, based on the data's protection level.
     The decorated function's return value is ignored; the decorator returns the original, unencrypted data.
 
     Assumes 'uid' and the data dictionary (specified by data_arg_name) are arguments
@@ -110,14 +111,10 @@ def prepare_for_write(data_arg_name: str, encrypt_func: Callable[[Dict[str, Any]
             prepared_data = original_data
 
             if isinstance(original_data, dict):
-                level = original_data.get('data_protection_level', 'standard')
-                if level == 'enhanced':
-                    prepared_data = encrypt_func(original_data, uid)  # encrypt_func should handle copying
+                prepared_data = prepare_func(original_data, uid, original_data.get('data_protection_level', 'standard'))
             elif isinstance(original_data, list):
                 if original_data and isinstance(original_data[0], dict):
-                    level = original_data[0].get('data_protection_level', 'standard')
-                    if level == 'enhanced':
-                        prepared_data = [encrypt_func(item, uid) for item in original_data]
+                    prepared_data = [prepare_func(item, uid, item.get('data_protection_level', 'standard')) for item in original_data]
 
             # Modify the bound arguments with the prepared data and reconstruct the call
             bound_args.arguments[data_arg_name] = prepared_data
@@ -156,9 +153,8 @@ def prepare_for_read(decrypt_func: Callable[[Dict[str, Any], str], Dict[str, Any
 
             def _process(item):
                 if isinstance(item, dict):
-                    level = item.get('data_protection_level')
-                    if level == 'enhanced':
-                        return decrypt_func(item, uid)
+                    # The decrypt_func is responsible for checking the level and acting accordingly
+                    return decrypt_func(item, uid)
                 return item
 
             if isinstance(result, dict):
