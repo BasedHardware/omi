@@ -35,8 +35,9 @@ import 'package:timeago/timeago.dart' as timeago;
 
 class AppDetailPage extends StatefulWidget {
   final App app;
+  final bool preventAutoOpenHomePage;
 
-  const AppDetailPage({super.key, required this.app});
+  const AppDetailPage({super.key, required this.app, this.preventAutoOpenHomePage = false});
 
   @override
   State<AppDetailPage> createState() => _AppDetailPageState();
@@ -70,7 +71,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
     app = widget.app;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Automatically open app home page if conditions are met
-      if (app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
+      if (!widget.preventAutoOpenHomePage && app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -147,6 +148,53 @@ class _AppDetailPageState extends State<AppDetailPage> {
         }
       }
     });
+  }
+
+  Widget _buildPermissionsCard(App app) {
+    if (!app.worksExternally()) {
+      return const SizedBox.shrink();
+    }
+
+    final actions = app.externalIntegration?.actions ?? [];
+    final trigger = app.externalIntegration?.getTriggerOnString();
+
+    final permissions = <String>[];
+    if (actions.any((a) => a.action == 'read_conversations')) {
+      permissions.add('conversations');
+    }
+    if (actions.any((a) => a.action == 'read_memories')) {
+      permissions.add('memories');
+    }
+
+    final creations = <String>[];
+    if (actions.any((a) => a.action == 'create_conversation')) {
+      creations.add('new conversations');
+    }
+    if (actions.any((a) => a.action == 'create_facts')) {
+      creations.add('new memories');
+    }
+
+    final List<String> descriptions = [];
+    if (permissions.isNotEmpty) {
+      descriptions.add('• Accesses your ${permissions.join(' and ')}.');
+    }
+    if (creations.isNotEmpty) {
+      descriptions.add('• Can create ${creations.join(' and ')}.');
+    }
+    if (trigger != null && trigger != 'Unknown') {
+      descriptions.add('• Runs when: $trigger.');
+    }
+
+    if (descriptions.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return InfoCardWidget(
+      onTap: () {},
+      title: 'Permissions & Triggers',
+      description: descriptions.join('\n'),
+      showChips: false,
+    );
   }
 
   @override
@@ -741,7 +789,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                     .toList(),
                 connectionChips: app.getConnectedAccountNames(),
               ),
-
+              _buildPermissionsCard(app),
               app.conversationPrompt != null
                   ? InfoCardWidget(
                       onTap: () {

@@ -114,6 +114,7 @@ class MemoryDB(Memory):
     edited: bool = False
     scoring: Optional[str] = None
     app_id: Optional[str] = None
+    data_protection_level: Optional[str] = None
 
     def __init__(self, **data):
         super().__init__(**data)

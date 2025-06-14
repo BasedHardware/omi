@@ -139,7 +139,9 @@ class ExternalIntegration {
       case 'memory_creation':
         return 'Conversation Creation';
       case 'transcript_processed':
-        return 'Transcript Segment Processed (every 30 seconds during conversation)';
+        return 'Transcript Segment Processed';
+      case 'audio_bytes':
+        return 'Audio Bytes Streamed';
       default:
         return 'Unknown';
     }
@@ -279,6 +281,26 @@ class App {
   bool isNotPersona() => !hasCapability('persona');
 
   bool worksExternally() => hasCapability('external_integration');
+
+  bool hasConversationsAccess() {
+    if (worksExternally()) {
+      final actions = externalIntegration?.actions;
+      if (actions != null) {
+        return actions.any((a) => a.action == 'create_conversation' || a.action == 'read_conversations');
+      }
+    }
+    return false;
+  }
+
+  bool hasMemoriesAccess() {
+    if (worksExternally()) {
+      final actions = externalIntegration?.actions;
+      if (actions != null) {
+        return actions.any((a) => a.action == 'create_facts' || a.action == 'read_memories');
+      }
+    }
+    return false;
+  }
 
   factory App.fromJson(Map<String, dynamic> json) {
     return App(
