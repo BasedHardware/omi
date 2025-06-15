@@ -92,7 +92,7 @@ class _LocalSyncWidgetState extends State<LocalSyncWidget> {
 
       // ready to sync
       if (_status == LocalSyncStatus.flush) {
-        return SizedBox.shrink();
+        return const SizedBox.shrink();
         // return GestureDetector(
         //   onTap: () {
         //     routeToPage(context, const SyncPage());
