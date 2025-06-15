@@ -12,6 +12,7 @@ import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/device.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -53,7 +54,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     connectedDevice = device;
     pairedDevice = device;
     await getDeviceInfo();
-    print('setConnectedDevice: $device');
+    Logger.debug('setConnectedDevice: $device');
     notifyListeners();
   }
 
@@ -149,7 +150,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       if (_reconnectAt != null && _reconnectAt!.isAfter(DateTime.now())) {
         return;
       }
-      print("isConnected: $isConnected, isConnecting: $isConnecting, connectedDevice: $connectedDevice");
+      Logger.debug("isConnected: $isConnected, isConnecting: $isConnecting, connectedDevice: $connectedDevice");
       if ((!isConnected && connectedDevice == null)) {
         if (isConnecting) {
           return;
@@ -198,7 +199,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     // else
     var device = await _scanAndConnectDevice();
-    debugPrint('inside scanAndConnectToDevice $device in device_provider');
+    Logger.debug('inside scanAndConnectToDevice $device in device_provider');
     if (device != null) {
       var cDevice = await _getConnectedDevice();
       if (cDevice != null) {
@@ -208,7 +209,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         MixpanelManager().deviceConnected();
         setIsConnected(true);
       }
-      debugPrint('device is not null $cDevice');
+      Logger.debug('device is not null $cDevice');
     }
     updateConnectingStatus(false);
 
@@ -237,7 +238,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   void onDeviceDisconnected() async {
-    debugPrint('onDisconnected inside: $connectedDevice');
+    Logger.debug('onDisconnected inside: $connectedDevice');
     _havingNewFirmware = false;
     setConnectedDevice(null);
     setIsDeviceV2Connected();
@@ -283,7 +284,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   void _onDeviceConnected(BtDevice device) async {
-    debugPrint('_onConnected inside: $connectedDevice');
+    Logger.debug('_onConnected inside: $connectedDevice');
     _disconnectNotificationTimer?.cancel();
     NotificationService.instance.clearNotification(1);
     setConnectedDevice(device);
@@ -343,10 +344,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         return hasUpdate; // Return whether there's an update
       } catch (e) {
         retryCount++;
-        debugPrint('Error checking firmware update (attempt $retryCount): $e');
+        Logger.debug('Error checking firmware update (attempt $retryCount): $e');
 
         if (retryCount == maxRetries) {
-          debugPrint('Max retries reached, giving up');
+          Logger.debug('Max retries reached, giving up');
           _havingNewFirmware = false;
           notifyListeners();
           break;
@@ -398,7 +399,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   @override
   void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state) async {
-    debugPrint("provider > device connection state changed...${deviceId}...${state}...${connectedDevice?.id}");
+    Logger.debug("provider > device connection state changed...$deviceId...$state...${connectedDevice?.id}");
     switch (state) {
       case DeviceConnectionState.connected:
         var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
@@ -412,7 +413,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
           onDeviceDisconnected();
         }
       default:
-        debugPrint("Device connection state is not supported $state");
+        Logger.debug("Device connection state is not supported $state");
     }
   }
 

@@ -456,10 +456,6 @@ def save_migrated_retrieval_conversation_id(conversation_id: str):
     r.expire('migrated_retrieval_memory_ids', 60 * 60 * 24 * 7)
 
 
-def has_migrated_retrieval_conversation_id(conversation_id: str) -> bool:
-    return r.sismember('migrated_retrieval_memory_ids', conversation_id)
-
-
 def set_proactive_noti_sent_at(uid: str, app_id: str, ts: int, ttl: int = 30):
     r.set(f'{uid}:{app_id}:proactive_noti_sent_at', ts, ex=ttl)
 
@@ -486,3 +482,52 @@ def get_user_preferred_app(uid: str) -> Optional[str]:
     key = f'user:{uid}:preferred_app'
     app_id = r.get(key)
     return app_id.decode() if app_id else None
+
+
+@try_catch_decorator
+def set_user_data_protection_level(uid: str, level: str):
+    """Caches the user's data protection level."""
+    key = f'user:{uid}:data_protection_level'
+    r.set(key, level)
+
+
+@try_catch_decorator
+def get_user_data_protection_level(uid: str) -> Optional[str]:
+    """Retrieves the user's cached data protection level."""
+    key = f'user:{uid}:data_protection_level'
+    level = r.get(key)
+    return level.decode() if level else None
+
+
+# ******************************************************
+# **************** DATA MIGRATION STATUS ***************
+# ******************************************************
+
+def set_migration_status(uid: str, status: str, processed: int = None, total: int = None, error: str = None):
+    key = f"migration_status:{uid}"
+    data = {"status": status}
+    if processed is not None:
+        data["processed"] = processed
+    if total is not None:
+        data["total"] = total
+    if error is not None:
+        data["error"] = error
+
+    r.set(key, json.dumps(data), ex=3600)  # Expire after 1 hour
+
+
+def get_migration_status(uid: str) -> dict:
+    key = f"migration_status:{uid}"
+    data = r.get(key)
+    if data:
+        status_data = json.loads(data)
+        # If complete or failed, keep the status for a short time so the UI can fetch it.
+        if status_data.get('status') in ['complete', 'failed']:
+            r.expire(key, 60)  # Keep it for 1 minute
+        return status_data
+    return {"status": "idle"}
+
+
+def clear_migration_status(uid: str):
+    key = f"migration_status:{uid}"
+    r.delete(key)

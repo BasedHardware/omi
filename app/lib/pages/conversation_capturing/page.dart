@@ -1,4 +1,3 @@
-import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/users.dart';
@@ -186,12 +185,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                       checkboxValue: !showSummarizeConfirmation,
                                       checkboxText: "Don't ask me again",
                                       onCheckboxChanged: (value) {
-                                        if (value != null) {
-                                          setState(() {
-                                            showSummarizeConfirmation = !value;
-                                          });
-                                        }
-                                      },
+                                        setState(() {
+                                          showSummarizeConfirmation = !value;
+                                        });
+                                                                            },
                                       onCancel: () {
                                         Navigator.of(context).pop();
                                       },

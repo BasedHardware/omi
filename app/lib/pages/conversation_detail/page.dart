@@ -191,7 +191,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                           physics: const NeverScrollableScrollPhysics(),
                           children: [
                             Selector<ConversationDetailProvider, ConversationSource?>(
-                              selector: (context, provider) => provider.conversation?.source,
+                              selector: (context, provider) => provider.conversation.source,
                               builder: (context, source, child) {
                                 return source == ConversationSource.openglass
                                     ? ListView(

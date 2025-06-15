@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:app_links/app_links.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -28,7 +27,6 @@ import 'package:omi/core/app_shell.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
-import 'package:omi/providers/calendar_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
@@ -40,11 +38,11 @@ import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
+import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
-import 'package:omi/utils/features/calendar.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -84,7 +82,6 @@ Future<bool> _init() async {
   if (PlatformService.isMobile) initOpus(await opus_flutter.load());
 
   await GrowthbookUtil.init();
-  CalendarUtil.init();
   if (!PlatformService.isWindows) {
     ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   }
@@ -227,7 +224,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             create: (context) => ConversationDetailProvider(),
             update: (BuildContext context, app, conversation, ConversationDetailProvider? previous) => (previous?..setProviders(app, conversation)) ?? ConversationDetailProvider(),
           ),
-          ChangeNotifierProvider(create: (context) => CalenderProvider()),
           ChangeNotifierProvider(create: (context) => DeveloperModeProvider()),
           ChangeNotifierProxyProvider<AppProvider, AddAppProvider>(
             create: (context) => AddAppProvider(),
@@ -236,6 +232,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => PaymentMethodProvider()),
           ChangeNotifierProvider(create: (context) => PersonaProvider()),
           ChangeNotifierProvider(create: (context) => MemoriesProvider()),
+          ChangeNotifierProvider(create: (context) => UserProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(
@@ -361,6 +358,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
       if (context.read<AuthenticationProvider>().isSignedIn()) {
         context.read<HomeProvider>().setupHasSpeakerProfile();
         context.read<HomeProvider>().setupUserPrimaryLanguage();
+        context.read<UserProvider>().initialize();
         try {
           await PlatformManager.instance.intercom.loginIdentifiedUser(SharedPreferencesUtil().uid);
         } catch (e) {

@@ -166,7 +166,7 @@ class BackgroundService {
         onStart: onStart,
         isForegroundMode: true,
         autoStartOnBoot: false,
-        foregroundServiceType: AndroidForegroundType.microphone,
+        foregroundServiceTypes: [AndroidForegroundType.microphone],
       ),
     );
 

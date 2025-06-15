@@ -3,17 +3,17 @@
 # Prerequisites (stable versions, use these or higher):
 #
 # Common for all developers:
-# - Flutter SDK (v3.24.1)
+# - Flutter SDK (v3.32.4)
 # - Opus Codec: https://opus-codec.org
 #
 # For iOS Developers:
-# - Xcode (v15.2)
-# - CocoaPods (v1.14.3)
+# - Xcode (v16.4)
+# - CocoaPods (v1.16.2)
 #
 # For Android Developers:
-# - Android Studio (Iguana | 2023.2.1 Patch 2)
-# - Android SDK Platform (API 34)
-# - JDK (v17)
+# - Android Studio (Iguana | 2024.3)
+# - Android SDK Platform (API 35)
+# - JDK (v21)
 # - Gradle (v8.10)
 # - NDK (27.0.12077973)
 
@@ -25,17 +25,17 @@ Write-Host "👋 Yo folks! Welcome to the OMI Mobile Project - We're hiring! Joi
 Write-Host "Prerequisites (stable versions, use these or higher):"
 Write-Host ""
 Write-Host "Common for all developers:"
-Write-Host "- Flutter SDK (v3.24.1)"
+Write-Host "- Flutter SDK (v3.32.4)"
 Write-Host "- Opus Codec: https://opus-codec.org"
 Write-Host ""
 Write-Host "For iOS Developers:"
-Write-Host "- Xcode (v15.2)"
-Write-Host "- CocoaPods (v1.14.3)"
+Write-Host "- Xcode (v16.4)"
+Write-Host "- CocoaPods (v1.16.2)"
 Write-Host ""
 Write-Host "For Android Developers:"
-Write-Host "- Android Studio (Iguana | 2023.2.1 Patch 2)"
-Write-Host "- Android SDK Platform (API 34)"
-Write-Host "- JDK (v17)"
+Write-Host "- Android Studio (Iguana | 2024.3)"
+Write-Host "- Android SDK Platform (API 35)"
+Write-Host "- JDK (v21)"
 Write-Host "- Gradle (v8.10)"
 Write-Host "- NDK (27.0.12077973)"
 Write-Host ""

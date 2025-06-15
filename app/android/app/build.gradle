@@ -31,6 +31,19 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
 
+def env = new Properties()
+def envFile = rootProject.file(".env")
+if (envFile.exists()) {
+    envFile.withInputStream { stream ->
+        env.load(stream)
+    }
+}
+
+
+kotlin {
+    jvmToolchain(21)
+}
+
 android {
 
     buildFeatures {
@@ -61,8 +74,8 @@ android {
     compileSdkVersion 35
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
     }
 
     sourceSets {

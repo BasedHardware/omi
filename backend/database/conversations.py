@@ -1,25 +1,93 @@
 import asyncio
+import copy
 import json
 import uuid
+import zlib
 from datetime import datetime, timedelta
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict, Any
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 from google.cloud.firestore_v1.async_client import AsyncClient
 
 import utils.other.hume as hume
+from database import users as users_db
 from models.conversation import ConversationPhoto, PostProcessingStatus, PostProcessingModel, ConversationStatus
 from models.transcript_segment import TranscriptSegment
+from utils import encryption
 from ._client import db
+from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 
 conversations_collection = 'conversations'
+
+
+# *********************************
+# ******* ENCRYPTION HELPERS ******
+# *********************************
+
+def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
+    data = copy.deepcopy(conversation_data)
+
+    if 'transcript_segments' in data and isinstance(data['transcript_segments'], str):
+        try:
+            decrypted_payload = encryption.decrypt(data['transcript_segments'], uid)
+            if data.get('transcript_segments_compressed'):
+                # New format: encrypted(compressed(json))
+                compressed_bytes = bytes.fromhex(decrypted_payload)
+                decompressed_json = zlib.decompress(compressed_bytes).decode('utf-8')
+                data['transcript_segments'] = json.loads(decompressed_json)
+            else:
+                # Old format: encrypted(json)
+                data['transcript_segments'] = json.loads(decrypted_payload)
+        except (json.JSONDecodeError, TypeError, zlib.error, ValueError):
+            pass
+
+    return data
+
+
+def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
+    data = copy.deepcopy(data)
+    if 'transcript_segments' in data and isinstance(data['transcript_segments'], list):
+        segments_json = json.dumps(data['transcript_segments'])
+        compressed_segments_bytes = zlib.compress(segments_json.encode('utf-8'))
+        data['transcript_segments_compressed'] = True
+
+        if level == 'enhanced':
+            encrypted_segments = encryption.encrypt(compressed_segments_bytes.hex(), uid)
+            data['transcript_segments'] = encrypted_segments
+        else:
+            data['transcript_segments'] = compressed_segments_bytes
+    return data
+
+
+def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
+    if not conversation_data:
+        return None
+
+    data = copy.deepcopy(conversation_data)
+    level = data.get('data_protection_level')
+
+    if level == 'enhanced':
+        return _decrypt_conversation_data(data, uid)
+
+    # Handle standard level with potential compression
+    if data.get('transcript_segments_compressed'):
+        if 'transcript_segments' in data and isinstance(data['transcript_segments'], bytes):
+            try:
+                decompressed_json = zlib.decompress(data['transcript_segments']).decode('utf-8')
+                data['transcript_segments'] = json.loads(decompressed_json)
+            except (json.JSONDecodeError, TypeError, zlib.error):
+                pass
+
+    return data
 
 
 # *****************************
 # ********** CRUD *************
 # *****************************
 
+@set_data_protection_level(data_arg_name='conversation_data')
+@prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
 def upsert_conversation(uid: str, conversation_data: dict):
     if 'audio_base64_url' in conversation_data:
         del conversation_data['audio_base64_url']
@@ -31,12 +99,15 @@ def upsert_conversation(uid: str, conversation_data: dict):
     conversation_ref.set(conversation_data)
 
 
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 def get_conversation(uid, conversation_id):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    return conversation_ref.get().to_dict()
+    conversation_data = conversation_ref.get().to_dict()
+    return conversation_data
 
 
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 def get_conversations(uid: str, limit: int = 100, offset: int = 0, include_discarded: bool = False,
                       statuses: List[str] = [], start_date: Optional[datetime] = None,
                       end_date: Optional[datetime] = None, categories: Optional[List[str]] = None):
@@ -62,18 +133,30 @@ def get_conversations(uid: str, limit: int = 100, offset: int = 0, include_disca
 
     # Limits
     conversations_ref = conversations_ref.limit(limit).offset(offset)
-    return [doc.to_dict() for doc in conversations_ref.stream()]
+
+    conversations = [doc.to_dict() for doc in conversations_ref.stream()]
+    return conversations
 
 
-def update_conversation(uid: str, conversation_id: str, memory_data: dict):
-    user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_ref.update(memory_data)
+def update_conversation(uid: str, conversation_id: str, update_data: dict):
+    doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    doc_snapshot = doc_ref.get()
+    if not doc_snapshot.exists:
+        return
+
+    doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
+    prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
+    doc_ref.update(prepared_data)
 
 
 def update_conversation_title(uid: str, conversation_id: str, title: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+
+    doc_snapshot = conversation_ref.get()
+    if not doc_snapshot.exists:
+        return
+
     conversation_ref.update({'structured.title': title})
 
 
@@ -83,6 +166,7 @@ def delete_conversation(uid, conversation_id):
     conversation_ref.delete()
 
 
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 def filter_conversations_by_date(uid, start_date, end_date):
     user_ref = db.collection('users').document(uid)
     query = (
@@ -92,9 +176,11 @@ def filter_conversations_by_date(uid, start_date, end_date):
         .where(filter=FieldFilter('discarded', '==', False))
         .order_by('created_at', direction=firestore.Query.DESCENDING)
     )
-    return [doc.to_dict() for doc in query.stream()]
+    conversations = [doc.to_dict() for doc in query.stream()]
+    return conversations
 
 
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 def get_conversations_by_id(uid, conversation_ids):
     user_ref = db.collection('users').document(uid)
     conversations_ref = user_ref.collection(conversations_collection)
@@ -109,13 +195,120 @@ def get_conversations_by_id(uid, conversation_ids):
             if data.get('discarded'):
                 continue
             conversations.append(data)
+
     return conversations
+
+
+# **************************************
+# ********* MIGRATION HELPERS **********
+# **************************************
+
+def get_conversations_to_migrate(uid: str, target_level: str) -> List[dict]:
+    """
+    Finds all conversations that are not at the target protection level by fetching all documents
+    and filtering them in memory. This simplifies the code but may be less performant for
+    users with a very large number of documents.
+    """
+    conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
+    all_conversations = conversations_ref.select(['data_protection_level', 'visibility']).stream()
+
+    to_migrate = []
+    for doc in all_conversations:
+        doc_data = doc.to_dict()
+        if doc_data.get('visibility') in ['public', 'shared']:
+            continue
+
+        current_level = doc_data.get('data_protection_level', 'standard')
+        if target_level != current_level:
+            to_migrate.append({'id': doc.id, 'type': 'conversation'})
+
+    return to_migrate
+
+
+def migrate_conversation_level(uid: str, conversation_id: str, target_level: str):
+    """
+    Migrates a single conversation to the target protection level.
+    """
+    doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    doc_snapshot = doc_ref.get()
+    if not doc_snapshot.exists:
+        raise ValueError("Conversation not found")
+
+    conversation_data = doc_snapshot.to_dict()
+    current_level = conversation_data.get('data_protection_level', 'standard')
+
+    if current_level == target_level:
+        return  # Nothing to do
+
+    # Decrypt/decompress the data to get a clean slate.
+    plain_data = _prepare_conversation_for_read(conversation_data, uid)
+
+    # Re-prepare the segments for writing with the new level.
+    update_payload = {'transcript_segments': plain_data.get('transcript_segments')}
+    prepared_payload = _prepare_conversation_for_write(update_payload, uid, target_level)
+
+    # Update the document with the migrated data and the new protection level.
+    update_data = {
+        'data_protection_level': target_level,
+    }
+    if 'transcript_segments' in prepared_payload:
+        update_data['transcript_segments'] = prepared_payload['transcript_segments']
+        update_data['transcript_segments_compressed'] = prepared_payload.get('transcript_segments_compressed', False)
+
+    if not update_data.get('transcript_segments_compressed'):
+        update_data['transcript_segments_compressed'] = firestore.DELETE_FIELD
+
+    doc_ref.update(update_data)
+
+
+def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], target_level: str):
+    """
+    Migrates a batch of conversations to the target protection level.
+    """
+    batch = db.batch()
+    conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
+    doc_refs = [conversations_ref.document(conv_id) for conv_id in conversation_ids]
+    doc_snapshots = db.get_all(doc_refs)
+
+    for doc_snapshot in doc_snapshots:
+        if not doc_snapshot.exists:
+            print(f"Conversation {doc_snapshot.id} not found, skipping.")
+            continue
+
+        conversation_data = doc_snapshot.to_dict()
+        current_level = conversation_data.get('data_protection_level', 'standard')
+
+        if current_level == target_level:
+            continue
+
+        # Decrypt/decompress the data to get a clean slate.
+        plain_data = _prepare_conversation_for_read(conversation_data, uid)
+
+        # Re-prepare the segments for writing with the new level.
+        update_payload = {'transcript_segments': plain_data.get('transcript_segments')}
+        prepared_payload = _prepare_conversation_for_write(update_payload, uid, target_level)
+
+        # Update the document with the migrated data and the new protection level.
+        update_data = {
+            'data_protection_level': target_level,
+        }
+        if 'transcript_segments' in prepared_payload:
+            update_data['transcript_segments'] = prepared_payload['transcript_segments']
+            update_data['transcript_segments_compressed'] = prepared_payload.get('transcript_segments_compressed', False)
+
+        if not update_data.get('transcript_segments_compressed'):
+            update_data['transcript_segments_compressed'] = firestore.DELETE_FIELD
+
+        batch.update(doc_snapshot.reference, update_data)
+
+    batch.commit()
 
 
 # **************************************
 # ********** STATUS *************
 # **************************************
 
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 def get_in_progress_conversation(uid: str):
     user_ref = db.collection('users').document(uid)
     conversations_ref = (
@@ -123,16 +316,19 @@ def get_in_progress_conversation(uid: str):
         .where(filter=FieldFilter('status', '==', 'in_progress'))
     )
     docs = [doc.to_dict() for doc in conversations_ref.stream()]
-    return docs[0] if docs else None
+    conversation = docs[0] if docs else None
+    return conversation
 
 
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 def get_processing_conversations(uid: str):
     user_ref = db.collection('users').document(uid)
     conversations_ref = (
         user_ref.collection(conversations_collection)
         .where(filter=FieldFilter('status', '==', 'processing'))
     )
-    return [doc.to_dict() for doc in conversations_ref.stream()]
+    conversations = [doc.to_dict() for doc in conversations_ref.stream()]
+    return conversations
 
 
 def update_conversation_status(uid: str, conversation_id: str, status: str):
@@ -152,9 +348,7 @@ def set_conversation_as_discarded(uid: str, conversation_id: str):
 # *********************************
 
 def update_conversation_events(uid: str, conversation_id: str, events: List[dict]):
-    user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_ref.update({'structured.events': events})
+    update_conversation(uid, conversation_id, {'structured.events': events})
 
 
 # *********************************
@@ -162,9 +356,7 @@ def update_conversation_events(uid: str, conversation_id: str, events: List[dict
 # *********************************
 
 def update_conversation_action_items(uid: str, conversation_id: str, action_items: List[dict]):
-    user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_ref.update({'structured.action_items': action_items})
+    update_conversation(uid, conversation_id, {'structured.action_items': action_items})
 
 
 # ******************************
@@ -178,9 +370,15 @@ def update_conversation_finished_at(uid: str, conversation_id: str, finished_at:
 
 
 def update_conversation_segments(uid: str, conversation_id: str, segments: List[dict]):
-    user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_ref.update({'transcript_segments': segments})
+    doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    doc_snapshot = doc_ref.get(field_paths=['data_protection_level'])
+    if not doc_snapshot.exists:
+        return
+
+    doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
+    update_payload = {'transcript_segments': segments}
+    prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
+    doc_ref.update(prepared_payload)
 
 
 # ***********************************
@@ -193,8 +391,9 @@ def set_conversation_visibility(uid: str, conversation_id: str, visibility: str)
     conversation_ref.update({'visibility': visibility})
 
 
-async def _get_public_conversation(db: AsyncClient, uid: str, conversation_id: str):
-    conversation_ref = db.collection('users').document(uid).collection('conversations').document(conversation_id)
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+async def _get_public_conversation(db_client: AsyncClient, uid: str, conversation_id: str):
+    conversation_ref = db_client.collection('users').document(uid).collection('conversations').document(conversation_id)
     conversation_doc = await conversation_ref.get()
     if conversation_doc.exists:
         conversation_data = conversation_doc.to_dict()
@@ -204,8 +403,8 @@ async def _get_public_conversation(db: AsyncClient, uid: str, conversation_id: s
 
 
 async def _get_public_conversations(data: List[Tuple[str, str]]):
-    db = AsyncClient()
-    tasks = [_get_public_conversation(db, uid, conversation_id) for uid, conversation_id in data]
+    db_client = AsyncClient()
+    tasks = [_get_public_conversation(db_client, uid, conversation_id) for uid, conversation_id in data]
     conversations = await asyncio.gather(*tasks)
     return [conversation for conversation in conversations if conversation is not None]
 
@@ -318,6 +517,7 @@ def get_conversation_photos(uid: str, conversation_id: str):
 # ********** SYNCING *************
 # ********************************
 
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 def get_closest_conversation_to_timestamps(
         uid: str, start_timestamp: int, end_timestamp: int
 ) -> Optional[dict]:
@@ -358,6 +558,7 @@ def get_closest_conversation_to_timestamps(
     return closest_conversation
 
 
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 def get_last_completed_conversation(uid: str) -> Optional[dict]:
     query = (
         db.collection('users').document(uid).collection(conversations_collection)
@@ -366,4 +567,5 @@ def get_last_completed_conversation(uid: str) -> Optional[dict]:
         .limit(1)
     )
     conversations = [doc.to_dict() for doc in query.stream()]
-    return conversations[0] if conversations else None
+    conversation = conversations[0] if conversations else None
+    return conversation
