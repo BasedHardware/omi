@@ -17,7 +17,6 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/device_widget.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
-import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'percentage_bar_progress.dart';
@@ -98,14 +97,14 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
 
     return PopScope(
       canPop: true,
-      onPopInvoked: (didPop) {
-        if (context.read<SpeechProfileProvider>().isInitialised) {
-          WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
-            await context.read<SpeechProfileProvider>().close();
-
-            // Restart device recording
-            restartDeviceRecording();
-          });
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) {
+          if (context.read<SpeechProfileProvider>().isInitialised) {
+            WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
+              await context.read<SpeechProfileProvider>().close();
+              restartDeviceRecording();
+            });
+          }
         }
       },
       child: Consumer2<SpeechProfileProvider, CaptureProvider>(builder: (context, provider, _, child) {

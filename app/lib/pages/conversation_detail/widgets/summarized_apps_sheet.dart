@@ -301,10 +301,8 @@ class _EnableAppsListItem extends StatelessWidget {
       trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
       onTap: () {
         Navigator.pop(context);
-        final conversationId = context.read<ConversationDetailProvider>().conversation?.id;
-        if (conversationId != null) {
-          MixpanelManager().summarizedAppEnableAppsClicked(conversationId: conversationId);
-        }
+        final conversationId = context.read<ConversationDetailProvider>().conversation.id;
+        MixpanelManager().summarizedAppEnableAppsClicked(conversationId: conversationId);
         routeToPage(context, const AppsPage(showAppBar: true));
         MixpanelManager().pageOpened('Detail Apps');
       },

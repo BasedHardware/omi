@@ -179,10 +179,10 @@ PODS:
     - Instabug (= 14.3.0)
   - integration_test (0.0.1):
     - Flutter
-  - Intercom (18.7.2)
+  - Intercom (18.8.1)
   - intercom_flutter (9.0.0):
     - Flutter
-    - Intercom (= 18.7.2)
+    - Intercom (= 18.8.1)
   - IosAwnCore (0.10.0)
   - iOSDFULibrary (4.15.3):
     - ZIPFoundation (= 0.9.19)
@@ -191,10 +191,6 @@ PODS:
   - just_audio (0.0.1):
     - Flutter
     - FlutterMacOS
-  - location (0.0.1):
-    - Flutter
-  - manage_calendar_events (0.0.1):
-    - Flutter
   - map_launcher (0.0.1):
     - Flutter
   - mcumgr_flutter (0.0.2):
@@ -229,16 +225,16 @@ PODS:
     - FlutterMacOS
   - permission_handler_apple (9.3.0):
     - Flutter
-  - PostHog (3.26.0)
+  - PostHog (3.26.2)
   - posthog_flutter (0.0.1):
     - Flutter
     - FlutterMacOS
     - PostHog (~> 3.22)
   - PromisesObjC (2.4.0)
   - RecaptchaInterop (101.0.0)
-  - SDWebImage (5.21.0):
-    - SDWebImage/Core (= 5.21.0)
-  - SDWebImage/Core (5.21.0)
+  - SDWebImage (5.21.1):
+    - SDWebImage/Core (= 5.21.1)
+  - SDWebImage/Core (5.21.1)
   - share_plus (0.0.1):
     - Flutter
   - shared_preferences_foundation (0.0.1):
@@ -250,7 +246,7 @@ PODS:
     - Flutter
     - FlutterMacOS
   - SwiftCBOR (0.4.4)
-  - SwiftProtobuf (1.29.0)
+  - SwiftProtobuf (1.30.0)
   - SwiftyGif (5.4.5)
   - url_launcher_ios (0.0.1):
     - Flutter
@@ -288,8 +284,6 @@ DEPENDENCIES:
   - integration_test (from `.symlinks/plugins/integration_test/ios`)
   - intercom_flutter (from `.symlinks/plugins/intercom_flutter/ios`)
   - just_audio (from `.symlinks/plugins/just_audio/darwin`)
-  - location (from `.symlinks/plugins/location/ios`)
-  - manage_calendar_events (from `.symlinks/plugins/manage_calendar_events/ios`)
   - map_launcher (from `.symlinks/plugins/map_launcher/ios`)
   - mcumgr_flutter (from `.symlinks/plugins/mcumgr_flutter/ios`)
   - mixpanel_flutter (from `.symlinks/plugins/mixpanel_flutter/ios`)
@@ -401,10 +395,6 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/intercom_flutter/ios"
   just_audio:
     :path: ".symlinks/plugins/just_audio/darwin"
-  location:
-    :path: ".symlinks/plugins/location/ios"
-  manage_calendar_events:
-    :path: ".symlinks/plugins/manage_calendar_events/ios"
   map_launcher:
     :path: ".symlinks/plugins/map_launcher/ios"
   mcumgr_flutter:
@@ -468,11 +458,11 @@ SPEC CHECKSUMS:
   flutter_silero_vad: bcad5bcce50bd7f63b772ad3f46f9ce1995dd833
   flutter_sound: 82aba29055d6feba684d08906e0623217b87bcd3
   flutter_sound_core: 427465f72d07ab8c3edbe8ffdde709ddacd3763c
-  flutter_timezone: ffb07bdad3c6276af8dada0f11978d8a1f8a20bb
-  frame_sdk: 5d4d7ba36cf53cfdb6aebf563dc0a69e7920a727
-  geolocator_apple: 66b711889fd333205763b83c9dcf0a57a28c7afd
-  google_sign_in_all_platforms_mobile: 14062cc28e3432a927ebf2fa5dbdba85c157951b
-  google_sign_in_ios: 7c205d44fdc266640375c6ac33d96ba3983dbe02
+  flutter_timezone: ee50ce7786b5fde27e2fe5375bbc8c9661ffc13f
+  frame_sdk: 4d4df786d828557bf57e05f6f1856613896cc9db
+  geolocator_apple: ab36aa0e8b7d7a2d7639b3b4e48308394e8cef5e
+  google_sign_in_all_platforms_mobile: e0378d33ac45af48bea7420dfb886832a5cf0731
+  google_sign_in_ios: 39f46834c156be9a4dfef914258e0145b7117725
   GoogleDataTransport: aae35b7ea0c09004c3797d53c8c41f66f219d6a7
   GoogleSignIn: b232380cf495a429b8095d3178a8d5855b42e842
   GoogleUtilities: 00c88b9a86066ef77f0da2fab05f65d7768ed8e1
@@ -480,39 +470,37 @@ SPEC CHECKSUMS:
   GTMSessionFetcher: 5aea5ba6bd522a239e236100971f10cb71b96ab6
   image_picker_ios: c560581cceedb403a6ff17f2f816d7fea1421fc1
   Instabug: 97a4e694731f46bbc02dbe49ab29cc552c5e2f41
-  instabug_flutter: 1d2781ee0b451dc2102fbe94802e310866d03e01
-  integration_test: 252f60fa39af5e17c3aa9899d35d908a0721b573
-  Intercom: bb29786287d8b4e23d171ccbe9ceeb5b74c38b36
-  intercom_flutter: 80e3f8f15cbee60ff772faa16f502368d10274f6
+  instabug_flutter: 0a2d35be020c80b2b63bd8337a94a3f2ffe65bc0
+  integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
+  Intercom: b636b0e27ab832827abdf6573c57a80cf090ff5a
+  intercom_flutter: b9237a96bc29945d2f1e57d2b702d4a5a1952c70
   IosAwnCore: 653786a911089012092ce831f2945cd339855a89
   iOSDFULibrary: 198c36ebe5a31bf2ca04ee8fb40837176a423e85
   iOSMcuManagerLibrary: 4102a4595be1c69e5286d7f1520a733c82c30b0a
-  just_audio: a42c63806f16995daf5b219ae1d679deb76e6a79
-  location: d5cf8598915965547c3f36761ae9cc4f4e87d22e
-  manage_calendar_events: 9b2889799340398027b3e3f5c4891d41599ec257
-  map_launcher: 5fde49ac9a52672bf99da746599f507b4490d7b5
-  mcumgr_flutter: 097e59bec5917b527ba6d095da57bdaed2de1fa2
+  just_audio: 4e391f57b79cad2b0674030a00453ca5ce817eed
+  map_launcher: fe43bda6720bb73c12fcc1bdd86123ff49a4d4d6
+  mcumgr_flutter: 8c4a598cb1b4d10a9adbc0f13288334297185506
   Mixpanel-swift: 7b26468fc0e2e521104e51d65c4bbf7cab8162f8
   mixpanel_flutter: c2bb8345c90bef15512a1b812ec800b52f8614b6
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
   nordic_dfu: 963e2e4e6afb04e515ff43c546e6f8abf3e04ed5
   onnxruntime-c: e87399683ec19e3b812e13c6692882609a802b86
   onnxruntime-objc: 57ae8f83779a4c32731065d50d02d042af581114
-  opus_flutter_ios: 0c103338d4f4316034e082857749a3514b9540d3
-  package_info_plus: c0502532a26c7662a62a356cebe2692ec5fe4ec4
-  path_provider_foundation: 2b6b4c569c0fb62ec74538f866245ac84301af46
-  permission_handler_apple: 9878588469a2b0d0fc1e048d9f43605f92e6cec2
-  PostHog: 77fa0e762ced56862eb9a520c46bda206ccf5f23
-  posthog_flutter: 6d1041c7da77eb2032c27b72df103439af64cb8c
+  opus_flutter_ios: f16ed3599997ced564ad44509e87003159a86def
+  package_info_plus: af8e2ca6888548050f16fa2f1938db7b5a5df499
+  path_provider_foundation: 080d55be775b7414fd5a5ef3ac137b97b097e564
+  permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
+  PostHog: 1537fafb97b44964c170f135e120b1b953338c64
+  posthog_flutter: 631ab870f7daf1ed190deeb2414eb3e347445f37
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
   RecaptchaInterop: 11e0b637842dfb48308d242afc3f448062325aba
-  SDWebImage: f84b0feeb08d2d11e6a9b843cb06d75ebf5b8868
-  share_plus: 8875f4f2500512ea181eef553c3e27dba5135aad
-  shared_preferences_foundation: fcdcbc04712aee1108ac7fda236f363274528f78
-  sign_in_with_apple: f3bf75217ea4c2c8b91823f225d70230119b8440
-  sqflite_darwin: 5a7236e3b501866c1c9befc6771dfd73ffb8702d
+  SDWebImage: f29024626962457f3470184232766516dee8dfea
+  share_plus: 50da8cb520a8f0f65671c6c6a99b3617ed10a58a
+  shared_preferences_foundation: 9e1978ff2562383bd5676f64ec4e9aa8fa06a6f7
+  sign_in_with_apple: c5dcc141574c8c54d5ac99dd2163c0c72ad22418
+  sqflite_darwin: 20b2a3a3b70e43edae938624ce550a3cbf66a3d0
   SwiftCBOR: ce5354ec8b660da2d6fc754462881119dbe1f963
-  SwiftProtobuf: b7aa08087e2ab6d162862d143020091254095f69
+  SwiftProtobuf: 3697407f0d5b23bedeba9c2eaaf3ec6fdff69349
   SwiftyGif: 706c60cf65fa2bc5ee0313beece843c8eb8194d4
   url_launcher_ios: 5334b05cef931de560670eeae103fd3e431ac3fe
   webview_flutter_wkwebview: a4af96a051138e28e29f60101d094683b9f82188

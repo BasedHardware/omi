@@ -24,7 +24,7 @@ class UserPeoplePage extends StatelessWidget {
 }
 
 class _UserPeoplePage extends StatefulWidget {
-  const _UserPeoplePage({super.key});
+  const _UserPeoplePage();
 
   @override
   State<_UserPeoplePage> createState() => _UserPeoplePageState();

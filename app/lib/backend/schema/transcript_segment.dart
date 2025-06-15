@@ -87,7 +87,7 @@ class TranscriptSegment {
       'is_user': isUser,
       'start': start,
       'end': end,
-      'translations': translations?.map((t) => t.toJson()).toList(),
+      'translations': translations.map((t) => t.toJson()).toList(),
     };
   }
 

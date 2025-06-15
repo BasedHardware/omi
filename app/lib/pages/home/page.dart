@@ -18,6 +18,7 @@ import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/home/widgets/chat_apps_dropdown_widget.dart';
 import 'package:omi/pages/memories/page.dart';
+import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -202,7 +203,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       // ForegroundUtil.requestPermissions();
       if (!PlatformService.isDesktop) {
         await ForegroundUtil.initializeForegroundService();
-        ForegroundUtil.startForegroundTask();
+        await ForegroundUtil.startForegroundTask();
       }
       if (mounted) {
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
@@ -243,6 +244,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               builder: (context) => const SettingsPage(),
             ),
           );
+          if (detailPageId == 'data-privacy') {
+            MyApp.navigatorKey.currentState?.push(
+              MaterialPageRoute(
+                builder: (context) => const DataPrivacyPage(),
+              ),
+            );
+          }
           break;
         case "facts":
           MyApp.navigatorKey.currentState?.push(
