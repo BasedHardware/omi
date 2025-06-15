@@ -1,12 +1,11 @@
 import 'dart:async';
-import 'dart:math' as Math;
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/file.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shimmer/shimmer.dart';
@@ -112,14 +111,14 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
               // 32768 is max absolute value for 16-bit audio
               int sampleCount = bytes.length ~/ 2;
               if (sampleCount > 0) {
-                rms = Math.sqrt(rms / sampleCount) / 32768.0;
+                rms = math.sqrt(rms / sampleCount) / 32768.0;
               } else {
                 rms = 0;
               }
 
               // Apply non-linear scaling to make quiet sounds more visible
               // and loud sounds more dramatic
-              final level = Math.pow(rms, 0.4).toDouble().clamp(0.1, 1.0);
+              final level = math.pow(rms, 0.4).toDouble().clamp(0.1, 1.0);
 
               // Shift all values left
               for (int i = 0; i < _audioLevels.length - 1; i++) {

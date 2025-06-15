@@ -27,9 +27,9 @@ import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:uuid/uuid.dart';
 
 class CaptureProvider extends ChangeNotifier
     with MessageNotifierMixin
@@ -150,14 +150,14 @@ class CaptureProvider extends ChangeNotifier
     bool? isPcm,
     bool force = false,
   }) async {
-    print('initiateWebsocket in capture_provider');
+    Logger.debug('initiateWebsocket in capture_provider');
 
     BleAudioCodec codec = audioCodec;
     sampleRate ??= mapCodecToSampleRate(codec);
     channels ??= (codec == BleAudioCodec.pcm16 || codec == BleAudioCodec.pcm8) ? 1 : 2;
 
-    debugPrint('is ws null: ${_socket == null}');
-    print('Initiating WebSocket with: codec=$codec, sampleRate=$sampleRate, channels=$channels, isPcm=$isPcm');
+    Logger.debug('is ws null: ${_socket == null}');
+    Logger.debug('Initiating WebSocket with: codec=$codec, sampleRate=$sampleRate, channels=$channels, isPcm=$isPcm');
 
     // Connect to the transcript socket
     String language =
@@ -491,7 +491,6 @@ class CaptureProvider extends ChangeNotifier
         _handleSystemAudioPermissionError(error);
       });
 
-      // Give it a moment to start or fail
       await Future.delayed(const Duration(milliseconds: 500));
 
       if (recordingStarted) {
