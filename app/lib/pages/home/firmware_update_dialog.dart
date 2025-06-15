@@ -19,10 +19,10 @@ class FirmwareUpdateDialog extends StatefulWidget {
   final List<String> steps;
 
   const FirmwareUpdateDialog({
-    Key? key,
+    super.key,
     required this.onUpdateStart,
     required this.steps,
-  }) : super(key: key);
+  });
 
   @override
   State<FirmwareUpdateDialog> createState() => _FirmwareUpdateDialogState();

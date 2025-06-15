@@ -5,17 +5,17 @@
 # Prerequisites (stable versions, use these or higher):
 #
 # Common for all developers:
-# - Flutter SDK (v3.24.1)
+# - Flutter SDK (v3.32.4)
 # - Opus Codec: https://opus-codec.org
 #
 # For iOS Developers:
-# - Xcode (v15.2)
-# - CocoaPods (v1.14.3)
+# - Xcode (v16.4)
+# - CocoaPods (v1.16.2)
 #
 # For Android Developers:
-# - Android Studio (Iguana | 2023.2.1 Patch 2)
-# - Android SDK Platform (API 34)
-# - JDK (v17)
+# - Android Studio (Iguana | 2024.3)
+# - Android SDK Platform (API 35)
+# - JDK (v21)
 # - Gradle (v8.10)
 # - NDK (27.0.12077973)
 # Usages: 
@@ -28,17 +28,17 @@ echo "👋 Yo folks! Welcome to the OMI Mobile Project - We're hiring! Join us o
 echo "Prerequisites (stable versions, use these or higher):"
 echo ""
 echo "Common for all developers:"
-echo "- Flutter SDK (v3.24.1)"
+echo "- Flutter SDK (v3.32.4)"
 echo "- Opus Codec: https://opus-codec.org"
 echo ""
 echo "For iOS Developers:"
-echo "- Xcode (v15.2)"
-echo "- CocoaPods (v1.14.3)"
+echo "- Xcode (v16.4)"
+echo "- CocoaPods (v1.16.2)"
 echo ""
 echo "For Android Developers:"
-echo "- Android Studio (Iguana | 2023.2.1 Patch 2)"
-echo "- Android SDK Platform (API 34)"
-echo "- JDK (v17)"
+echo "- Android Studio (Iguana | 2024.3)"
+echo "- Android SDK Platform (API 35)"
+echo "- JDK (v21)"
 echo "- Gradle (v8.10)"
 echo "- NDK (27.0.12077973)"
 echo "Usages:"
