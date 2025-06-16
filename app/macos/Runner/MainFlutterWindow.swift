@@ -6,1031 +6,44 @@ import CoreBluetooth
 import CoreLocation
 import UserNotifications
 
-// MARK: - Floating Overlay Window
-class FloatingRecordingOverlay: NSWindow {
-    private var dragOffset: NSPoint = NSPoint.zero
-    private var logoImageView: NSImageView!
-    private var controlsContainer: NSView!
-    private var playPauseButton: NSButton!
-    private var stopButton: NSButton!
-    private var expandButton: NSButton!
-    
-    // Callback for button actions
-    var onPlayPause: (() -> Void)?
-    var onStop: (() -> Void)?
-    var onExpand: (() -> Void)?
-    
-    override init(contentRect: NSRect, styleMask style: NSWindow.StyleMask, backing backingStoreType: NSWindow.BackingStoreType, defer flag: Bool) {
-        super.init(contentRect: contentRect, styleMask: [.borderless], backing: backingStoreType, defer: flag)
-        
-        setupWindow()
-        setupUI()
-    }
-    
-    private func setupWindow() {
-        // Make window float above all other applications
-        self.level = NSWindow.Level.floating
-        self.isOpaque = false
-        self.backgroundColor = NSColor.clear
-        self.hasShadow = true
-        self.ignoresMouseEvents = false
-        
-        // Enable mouse tracking for hover effects
-        self.acceptsMouseMovedEvents = true
-        
-        // Make window appear above all other windows including fullscreen apps
-        self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        
-        // Hide from screen sharing (similar to what we discussed earlier)
-        self.sharingType = .none
-    }
-    
-    // Override these properties instead of trying to assign to them
-    override var canBecomeKey: Bool {
-        return true
-    }
-    
-    override var canBecomeMain: Bool {
-        return false
-    }
-    
-    private func setupUI() {
-        let containerView = NSView(frame: self.contentView!.bounds)
-        containerView.autoresizingMask = [.width, .height]
-        
-        // Main pill container - optimized width with better proportions
-        let pillContainer = NSView(frame: NSRect(x: 0, y: 0, width: 220, height: 52))
-        pillContainer.wantsLayer = true
-        pillContainer.layer?.cornerRadius = 26
-        pillContainer.layer?.masksToBounds = false  // Allow shadows to show
-        
-        // Add blur effect background
-        setupBlurBackground(pillContainer)
-        
-        // Set initial background overlay (we'll update this based on state)
-        setupPillBackground(pillContainer, isRecording: false, isPaused: false)
-        
-        // Logo container (left side)
-        let logoContainer = NSView(frame: NSRect(x: 16, y: 0, width: 52, height: 52))
-        pillContainer.addSubview(logoContainer)
-        
-        // App logo (centered and slightly larger)
-        logoImageView = NSImageView(frame: NSRect(x: 14, y: 14, width: 24, height: 24))
-        if let appIcon = NSImage(named: "app_launcher_icon") {
-            appIcon.size = NSSize(width: 24, height: 24)
-            logoImageView.image = appIcon
-        } else {
-            // Fallback to system mic icon if app icon not found
-            let fallbackIcon = NSImage(systemSymbolName: "mic.circle.fill", accessibilityDescription: "Recording")
-            fallbackIcon?.size = NSSize(width: 24, height: 24)
-            logoImageView.image = fallbackIcon
-        }
-        logoImageView.wantsLayer = true
-        logoImageView.layer?.cornerRadius = 12
-        logoImageView.imageScaling = .scaleProportionallyUpOrDown
-        setupLogoShadow(logoImageView)
-        logoContainer.addSubview(logoImageView)
-        
-        // Controls container (right side) - better spacing and positioning
-        controlsContainer = NSView(frame: NSRect(x: 76, y: 12, width: 132, height: 28))
-        setupControls()
-        pillContainer.addSubview(controlsContainer)
-        
-        containerView.addSubview(pillContainer)
-        self.contentView = containerView
-        
-        // Add drag gesture
-        let dragGesture = NSPanGestureRecognizer(target: self, action: #selector(handleDrag(_:)))
-        containerView.addGestureRecognizer(dragGesture)
-        
-        // Add subtle entrance animation
-        pillContainer.layer?.opacity = 0.0
-        pillContainer.layer?.transform = CATransform3DMakeScale(0.9, 0.9, 1.0)
-        
-        CATransaction.begin()
-        CATransaction.setAnimationDuration(0.4)
-        CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeIn))
-        pillContainer.layer?.opacity = 1.0
-        pillContainer.layer?.transform = CATransform3DIdentity
-        CATransaction.commit()
-    }
-    
-    private func setupBlurBackground(_ container: NSView) {
-        // Create blur effect view
-        let blurView = NSVisualEffectView(frame: container.bounds)
-        blurView.autoresizingMask = [.width, .height]
-        blurView.material = .hudWindow
-        blurView.blendingMode = .behindWindow
-        blurView.state = .active
-        blurView.wantsLayer = true
-        blurView.layer?.cornerRadius = 30
-        blurView.layer?.masksToBounds = true
-        
-        container.addSubview(blurView, positioned: .below, relativeTo: nil)
-    }
-    
-    private func setupLogoShadow(_ logoView: NSImageView) {
-        logoView.layer?.shadowColor = NSColor.black.cgColor
-        logoView.layer?.shadowOpacity = 0.08
-        logoView.layer?.shadowRadius = 3
-        logoView.layer?.shadowOffset = CGSize(width: 0, height: 1)
-        logoView.layer?.masksToBounds = false
-    }
-    
-    private func setupPillBackground(_ container: NSView, isRecording: Bool, isPaused: Bool) {
-        // Remove existing overlays
-        container.layer?.sublayers?.removeAll { layer in
-            layer.name == "colorOverlay" || layer.name == "borderLayer"
-        }
-        
-        // Create subtle color overlay on top of blur - more minimal approach
-        let overlay = CALayer()
-        overlay.name = "colorOverlay"
-        overlay.frame = container.bounds
-        overlay.cornerRadius = 26
-        overlay.masksToBounds = true
-        
-        if isRecording {
-            // Very subtle purple tint for recording
-            overlay.backgroundColor = NSColor.systemPurple.withAlphaComponent(0.08).cgColor
-        } else if isPaused {
-            // Very subtle orange tint for paused
-            overlay.backgroundColor = NSColor.systemOrange.withAlphaComponent(0.06).cgColor
-        } else {
-            // Nearly transparent for idle state
-            overlay.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.03).cgColor
-        }
-        
-        container.layer?.addSublayer(overlay)
-        
-        // Minimal border following native macOS principles
-        let borderLayer = CALayer()
-        borderLayer.name = "borderLayer"
-        borderLayer.frame = container.bounds
-        borderLayer.cornerRadius = 26
-        borderLayer.borderWidth = 0.5
-        borderLayer.masksToBounds = true
-        
-        if isRecording {
-            borderLayer.borderColor = NSColor.systemPurple.withAlphaComponent(0.15).cgColor
-        } else if isPaused {
-            borderLayer.borderColor = NSColor.systemOrange.withAlphaComponent(0.12).cgColor
-        } else {
-            borderLayer.borderColor = NSColor.separatorColor.withAlphaComponent(0.3).cgColor
-        }
-        
-        container.layer?.addSublayer(borderLayer)
-        
-        // Subtle shadow system
-        setupContainerShadow(container, isRecording: isRecording, isPaused: isPaused)
-    }
-    
-    private func setupContainerShadow(_ container: NSView, isRecording: Bool, isPaused: Bool) {
-        // Subtle shadow following native macOS design
-        container.layer?.shadowColor = NSColor.black.cgColor
-        container.layer?.shadowOpacity = 0.08
-        container.layer?.shadowRadius = 12
-        container.layer?.shadowOffset = CGSize(width: 0, height: 2)
-        
-        // Very minimal glow for active states - more native feeling
-        if isRecording || isPaused {
-            let glowColor = isRecording ? NSColor.systemPurple : NSColor.systemOrange
-            container.layer?.shadowColor = glowColor.withAlphaComponent(0.08).cgColor
-            container.layer?.shadowOpacity = 0.12
-            container.layer?.shadowRadius = 16
-        }
-    }
-    
-    private func setupControls() {
-        // Play/Pause button (primary action) - better spacing
-        playPauseButton = NSButton(frame: NSRect(x: 0, y: 0, width: 28, height: 28))
-        playPauseButton.isBordered = false
-        playPauseButton.bezelStyle = .circular
-        playPauseButton.imageScaling = .scaleProportionallyDown
-        let playConfig = NSImage.SymbolConfiguration(pointSize: 11, weight: .medium)
-        playPauseButton.image = NSImage(systemSymbolName: "play.fill", accessibilityDescription: "Play")?.withSymbolConfiguration(playConfig)
-        styleModernButton(playPauseButton, isPrimary: true)
-        controlsContainer.addSubview(playPauseButton)
-        
-        // Stop button (initially hidden, appears when recording with content) - increased spacing
-        stopButton = NSButton(frame: NSRect(x: 36, y: 0, width: 28, height: 28))
-        stopButton.isBordered = false
-        stopButton.bezelStyle = .circular
-        stopButton.imageScaling = .scaleProportionallyDown
-        let stopConfig = NSImage.SymbolConfiguration(pointSize: 9, weight: .medium)
-        stopButton.image = NSImage(systemSymbolName: "stop.fill", accessibilityDescription: "Stop")?.withSymbolConfiguration(stopConfig)
-        stopButton.isHidden = true
-        styleStopButton(stopButton)
-        controlsContainer.addSubview(stopButton)
-        
-        // Expand/Maximize button (always visible) - proper spacing from other buttons
-        expandButton = NSButton(frame: NSRect(x: 72, y: 0, width: 28, height: 28))
-        expandButton.isBordered = false
-        expandButton.bezelStyle = .circular
-        expandButton.imageScaling = .scaleProportionallyDown
-        let expandConfig = NSImage.SymbolConfiguration(pointSize: 9, weight: .medium)
-        expandButton.image = NSImage(systemSymbolName: "arrow.up.backward.and.arrow.down.forward", accessibilityDescription: "Restore App")?.withSymbolConfiguration(expandConfig)
-        styleModernButton(expandButton, isPrimary: false)
-        controlsContainer.addSubview(expandButton)
-    }
-    
-    private func styleModernButton(_ button: NSButton, isPrimary: Bool) {
-        button.wantsLayer = true
-        button.layer?.cornerRadius = 14
-        button.layer?.masksToBounds = true
-        
-        if isPrimary {
-            // Primary button - very subtle, native macOS style
-            button.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.08).cgColor
-            button.layer?.borderWidth = 0.5
-            button.layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.15).cgColor
-        } else {
-            // Secondary button - extremely subtle
-            button.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.3).cgColor
-            button.layer?.borderWidth = 0.5
-            button.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.2).cgColor
-        }
-        
-        // Very minimal shadow - native macOS approach
-        button.layer?.shadowColor = NSColor.black.cgColor
-        button.layer?.shadowOpacity = 0.04
-        button.layer?.shadowRadius = 2
-        button.layer?.shadowOffset = CGSize(width: 0, height: 0.5)
-        
-        // Add hover effect
-        setupButtonHoverEffect(button)
-    }
-    
-    private func styleStopButton(_ button: NSButton) {
-        button.wantsLayer = true
-        button.layer?.cornerRadius = 14
-        button.layer?.masksToBounds = true
-        button.layer?.backgroundColor = NSColor.systemRed.withAlphaComponent(0.08).cgColor
-        button.layer?.borderWidth = 0.5
-        button.layer?.borderColor = NSColor.systemRed.withAlphaComponent(0.2).cgColor
-        
-        // Minimal red shadow - native approach
-        button.layer?.shadowColor = NSColor.systemRed.cgColor
-        button.layer?.shadowOpacity = 0.06
-        button.layer?.shadowRadius = 3
-        button.layer?.shadowOffset = CGSize(width: 0, height: 0.5)
-        
-        setupButtonHoverEffect(button)
-    }
-    
-    private func setupButtonHoverEffect(_ button: NSButton) {
-        let trackingArea = NSTrackingArea(
-            rect: button.bounds,
-            options: [.activeAlways, .mouseEnteredAndExited],
-            owner: self,
-            userInfo: ["button": button]
-        )
-        button.addTrackingArea(trackingArea)
-        
-        // Add target-action for pressed state feedback
-        button.target = self
-        if button == playPauseButton {
-            button.action = #selector(playPausePressed)
-        } else if button == stopButton {
-            button.action = #selector(stopPressed)
-        } else if button == expandButton {
-            button.action = #selector(expandPressed)
-        }
-    }
-    
-    @objc private func playPausePressed() {
-        animateButtonPress(playPauseButton)
-        // Small delay to show the press animation before calling the actual action
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            self.playPauseClicked()
-        }
-    }
-    
-    @objc private func stopPressed() {
-        animateButtonPress(stopButton)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            self.stopClicked()
-        }
-    }
-    
-    @objc private func expandPressed() {
-        animateButtonPress(expandButton)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            self.expandClicked()
-        }
-    }
-    
-    private func animateButtonPress(_ button: NSButton) {
-        // Scale down briefly to show press feedback
-        CATransaction.begin()
-        CATransaction.setAnimationDuration(0.1)
-        button.layer?.transform = CATransform3DMakeScale(0.95, 0.95, 1.0)
-        CATransaction.setCompletionBlock {
-            CATransaction.begin()
-            CATransaction.setAnimationDuration(0.1)
-            button.layer?.transform = CATransform3DIdentity
-            CATransaction.commit()
-        }
-        CATransaction.commit()
-    }
-    
-    override func mouseEntered(with event: NSEvent) {
-        if let button = event.trackingArea?.userInfo?["button"] as? NSButton {
-            // Enhanced hover feedback - more noticeable but still native feeling
-            CATransaction.begin()
-            CATransaction.setAnimationDuration(0.15)
-            
-            // Slight scale and brightness change for better button feel
-            button.layer?.transform = CATransform3DMakeScale(1.05, 1.05, 1.0)
-            
-            // Increase background opacity for more prominent hover effect
-            if button == playPauseButton {
-                button.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.15).cgColor
-            } else if button == stopButton {
-                button.layer?.backgroundColor = NSColor.systemRed.withAlphaComponent(0.15).cgColor
-            } else {
-                button.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.5).cgColor
-            }
-            
-            CATransaction.commit()
-        }
-    }
-    
-    override func mouseExited(with event: NSEvent) {
-        if let button = event.trackingArea?.userInfo?["button"] as? NSButton {
-            // Return to normal state
-            CATransaction.begin()
-            CATransaction.setAnimationDuration(0.15)
-            
-            button.layer?.transform = CATransform3DIdentity
-            
-            // Reset to original background colors
-            if button == playPauseButton {
-                button.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.08).cgColor
-            } else if button == stopButton {
-                button.layer?.backgroundColor = NSColor.systemRed.withAlphaComponent(0.08).cgColor
-            } else {
-                button.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.3).cgColor
-            }
-            
-            CATransaction.commit()
-        }
-    }
-    
-    @objc private func handleDrag(_ gesture: NSPanGestureRecognizer) {
-        let location = gesture.location(in: self.contentView)
-        
-        switch gesture.state {
-        case .began:
-            dragOffset = NSPoint(x: location.x, y: location.y)
-        case .changed:
-            let newOrigin = NSPoint(
-                x: self.frame.origin.x + location.x - dragOffset.x,
-                y: self.frame.origin.y + location.y - dragOffset.y
-            )
-            self.setFrameOrigin(newOrigin)
-        default:
-            break
-        }
-    }
-    
-    @objc private func playPauseClicked() {
-        onPlayPause?()
-    }
-    
-    @objc private func stopClicked() {
-        onStop?()
-    }
-    
-    @objc private func expandClicked() {
-        print("DEBUG: Expand button clicked in overlay")
-        
-        // Just call the callback - let the main window handle restoration and hiding
-        onExpand?()
-    }
-    
-
-    
-    // Public methods to update the UI
-    func updateRecordingState(isRecording: Bool, isPaused: Bool) {
-        // Update background
-        if let pillContainer = self.contentView?.subviews.first?.subviews.first {
-            setupPillBackground(pillContainer, isRecording: isRecording, isPaused: isPaused)
-        }
-        
-        // Update button image
-        let imageName = isRecording ? "pause.fill" : "play.fill"
-        playPauseButton.image = NSImage(systemSymbolName: imageName, accessibilityDescription: isRecording ? "Pause" : "Play")
-        
-        // Add pulsing animation for logo when recording
-        if isRecording {
-            startPulsingAnimation()
-        } else {
-            stopPulsingAnimation()
-        }
-    }
-    
-    func updateTranscript(_ text: String, segmentCount: Int) {
-        // Show stop button when there are segments (recording has content)
-        if segmentCount > 0 {
-            stopButton.isHidden = false
-            
-            // Animate stop button entrance smoothly
-            if stopButton.layer?.opacity == 0 {
-                stopButton.layer?.opacity = 0
-                stopButton.layer?.transform = CATransform3DMakeScale(0.8, 0.8, 1.0)
-                
-                CATransaction.begin()
-                CATransaction.setAnimationDuration(0.25)
-                CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeOut))
-                stopButton.layer?.opacity = 1.0
-                stopButton.layer?.transform = CATransform3DIdentity
-                CATransaction.commit()
-            }
-        } else {
-            // No segments - hide stop button
-            stopButton.isHidden = true
-        }
-    }
-    
-    func updateStatusText(_ status: String) {
-        // No status text display needed since we removed the transcript label
-    }
-    
-    private func startPulsingAnimation() {
-        let animation = CABasicAnimation(keyPath: "opacity")
-        animation.fromValue = 0.6
-        animation.toValue = 1.0
-        animation.duration = 1.2
-        animation.autoreverses = true
-        animation.repeatCount = .infinity
-        logoImageView.layer?.add(animation, forKey: "pulsing")
-    }
-    
-    private func stopPulsingAnimation() {
-        logoImageView.layer?.removeAnimation(forKey: "pulsing")
-    }
-}
-
-class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralManagerDelegate, CLLocationManagerDelegate, NSWindowDelegate {
-
-    enum AudioQuality: Int {
-        case normal = 128, good = 192, high = 256, extreme = 320
-    }
-
-    // MARK: - Audio and Capture Properties
-    var availableContent: SCShareableContent?
-    var filter: SCContentFilter?
-    var audioSettings: [String: Any]!
-    var stream: SCStream!
-
-    private let audioEngine = AVAudioEngine()
-    private let systemAudioPlayerNode = AVAudioPlayerNode()
-    private let mixerNode = AVAudioMixerNode()
-
-    private var engineProcessingFormat: AVAudioFormat!
-    private var micNode: AVAudioInputNode!
-    private var micNodeFormat: AVAudioFormat!
-    var outputAudioFormat: AVAudioFormat?
-    var audioConverter: AVAudioConverter?
+class MainFlutterWindow: NSWindow, NSWindowDelegate {
 
     private var screenCaptureChannel: FlutterMethodChannel!
-    private var overlayChannel: FlutterMethodChannel!
-    private var audioFormatSentToFlutter: Bool = false
-
-    private var scStreamSourceFormat: AVAudioFormat?
     
-    // Two-step conversion: intermediate format and second converter
-    private var scStreamIntermediateFormat: AVAudioFormat?
-    private var scStreamSecondConverter: AVAudioConverter?
+    // Audio manager
+    private let audioManager = AudioManager()
 
-    // Bluetooth and Location managers
-    private var bluetoothManager: CBCentralManager?
-    private var locationManager: CLLocationManager?
-    private var bluetoothPermissionCompletion: ((Bool) -> Void)?
-    private var locationPermissionCompletion: ((Bool) -> Void)?
-    private var notificationPermissionCompletion: ((Bool) -> Void)?
+    // Permission manager
+    private let permissionManager = PermissionManager.shared
 
     // Floating overlay window
     private var floatingOverlay: FloatingRecordingOverlay?
 
-    // MARK: - Menu Bar Properties
-    private var statusBarItem: NSStatusItem?
+    // Menu bar manager
+    private var menuBarManager: MenuBarManager?
 
-    // Manual resampling function to avoid AVAudioConverter OSStatus errors
-    private func resampleAudio(input: [Float], fromRate: Double, toRate: Double) -> [Float] {
-        if fromRate == toRate {
-            return input
-        }
-        
-        let ratio = fromRate / toRate
-        let outputCount = Int(Double(input.count) / ratio)
-        var output = [Float](repeating: 0, count: outputCount)
-        
-        for i in 0..<outputCount {
-            let sourceIndex = Double(i) * ratio
-            let index0 = Int(sourceIndex)
-            let index1 = min(index0 + 1, input.count - 1)
-            let fraction = sourceIndex - Double(index0)
-            
-            if index0 < input.count {
-                output[i] = Float((1.0 - fraction) * Double(input[index0]) + fraction * Double(input[index1]))
-            }
-        }
-        return output
-    }
-    
-    // Convert stereo to mono by averaging channels
-    private func stereoToMono(leftChannel: [Float], rightChannel: [Float]) -> [Float] {
-        let count = min(leftChannel.count, rightChannel.count)
-        var mono = [Float](repeating: 0, count: count)
-        for i in 0..<count {
-            mono[i] = (leftChannel[i] + rightChannel[i]) * 0.5
-        }
-        return mono
-    }
+    // Overlay channel
+    private var overlayChannel: FlutterMethodChannel!
 
-    @available(macOS 14.0, *)
-    func checkMicrophonePermission() -> String {
-        switch AVAudioApplication.shared.recordPermission {
-        case .granted:
-            return "granted"
-        case .denied:
-            return "denied"
-        case .undetermined:
-            return "undetermined"
-        @unknown default:
-            return "unknown"
-        }
-    }
-    
-    @available(macOS 14.0, *)
-    func requestMicrophonePermission() async -> Bool {
-        guard AVAudioApplication.shared.recordPermission != .granted else {
-            return true // Already granted
-        }
-        
-        let granted = await AVAudioApplication.requestRecordPermission()
-        print("Microphone permission request result: \(granted)")
-        return granted
-    }
-    
-    func checkScreenCapturePermission() async -> String {
-        // First try the most reliable method - actually attempt to get content
-        do {
-            let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
-            if !content.displays.isEmpty {
-                return "granted"
-            } else {
-                return "denied"
-            }
-        } catch {
-            print("Error checking shareable content: \(error)")
-            if case SCStreamError.userDeclined = error {
-                return "denied"
-            }
-            // For any other error, it's likely undetermined
-            return "undetermined"
-        }
-    }
-    
-    func requestScreenCapturePermission() async -> Bool {
-        // First check if we can actually use the permission without triggering dialogs
-        do {
-            let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
-            if !content.displays.isEmpty {
-                print("Screen capture permission is actually working despite status")
-                return true
-            }
-        } catch {
-            print("Initial screen capture test failed: \(error)")
-        }
-        
-        // Only if the above fails, try the official request method
-        if #available(macOS 11.0, *) {
-            // Check TCC database first to avoid unnecessary prompts
-            let hasAccess = CGPreflightScreenCaptureAccess()
-            if hasAccess {
-                print("TCC database shows screen capture access is granted")
-                return true
-            }
-            
-            print("Requesting screen capture permission via CGRequestScreenCaptureAccess")
-            let granted = CGRequestScreenCaptureAccess()
-            if granted {
-                return true
-            }
-        }
-        
-        // As a last resort, open system preferences
-        print("Opening System Preferences as last resort for screen capture permission")
-        await MainActor.run {
-            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
-        }
-        return false
-    }
 
-    // MARK: - Bluetooth Permission Management
-    
-    func checkBluetoothPermission() -> String {
-        if #available(macOS 10.15, *) {
-            switch CBCentralManager.authorization {
-            case .allowedAlways:
-                return "granted"
-            case .denied:
-                return "denied"
-            case .restricted:
-                return "restricted"
-            case .notDetermined:
-                return "undetermined"
-            @unknown default:
-                return "unknown"
-            }
-        } else {
-            // For older macOS versions, assume granted if Bluetooth is available
-            return "granted"
-        }
-    }
-    
-    func requestBluetoothPermission() async -> Bool {
-        if #available(macOS 10.15, *) {
-            guard CBCentralManager.authorization != .allowedAlways else {
-                return true
-            }
-            
-            // If explicitly denied or restricted, can't request again
-            if CBCentralManager.authorization == .denied || CBCentralManager.authorization == .restricted {
-                print("Bluetooth permission is \(CBCentralManager.authorization.rawValue), cannot request again")
-                return false
-            }
-            
-            // Check if Bluetooth service is available first
-            let tempManager = CBCentralManager()
-            if tempManager.state == .poweredOff {
-                print("Bluetooth is powered off. User needs to enable Bluetooth in System Settings.")
-                await MainActor.run {
-                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.bluetooth")!)
-                }
-                return false
-            } else if tempManager.state == .unsupported {
-                print("Bluetooth is not supported on this device.")
-                return false
-            }
-            
-            return await withCheckedContinuation { continuation in
-                // Set up timeout to prevent continuation leak
-                Task {
-                    try? await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds timeout for Bluetooth
-                    if bluetoothPermissionCompletion != nil {
-                        print("Bluetooth permission request timed out")
-                        bluetoothPermissionCompletion?(false)
-                    }
-                }
-                
-                bluetoothPermissionCompletion = { granted in
-                    continuation.resume(returning: granted)
-                    self.bluetoothPermissionCompletion = nil // Clear to prevent multiple calls
-                }
-                
-                // Initialize CBCentralManager to trigger permission request
-                if bluetoothManager == nil {
-                    print("Initializing Bluetooth central manager...")
-                    bluetoothManager = CBCentralManager(delegate: self, queue: nil)
-                } else {
-                    // If manager already exists, check current state
-                    print("Bluetooth manager exists, checking current state...")
-                    centralManagerDidUpdateState(bluetoothManager!)
-                }
-            }
-        } else {
-            print("Bluetooth permission handling not available on macOS < 10.15, assuming granted")
-            return true
-        }
-    }
-    
-    // MARK: - Location Permission Management
-    
-    func checkLocationPermission() -> String {
-        switch CLLocationManager.authorizationStatus() {
-        case .authorizedAlways, .authorized:
-            return "granted"
-        case .denied:
-            return "denied"
-        case .restricted:
-            return "restricted"
-        case .notDetermined:
-            return "undetermined"
-        @unknown default:
-            return "unknown"
-        }
-    }
-    
-    func requestLocationPermission() async -> Bool {
-        let currentStatus = CLLocationManager.authorizationStatus()
-        guard currentStatus != .authorizedAlways && currentStatus != .authorized else {
-            return true // Already granted
-        }
-        
-        guard currentStatus == .notDetermined else {
-            // If denied or restricted, open system preferences
-            print("Location permission is \(currentStatus.rawValue), opening System Preferences")
-            await MainActor.run {
-                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices")!)
-            }
-            return false
-        }
-        
-        // Check if location services are enabled before requesting
-        guard CLLocationManager.locationServicesEnabled() else {
-            print("Location services are disabled system-wide, opening System Preferences")
-            await MainActor.run {
-                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices")!)
-            }
-            return false
-        }
-        
-        return await withCheckedContinuation { continuation in
-            // Set up timeout to prevent continuation leak
-            Task {
-                try? await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds timeout
-                if locationPermissionCompletion != nil {
-                    print("Location permission request timed out")
-                    locationPermissionCompletion?(false)
-                }
-            }
-            
-            locationPermissionCompletion = { granted in
-                continuation.resume(returning: granted)
-                self.locationPermissionCompletion = nil // Clear to prevent multiple calls
-            }
-            
-            if locationManager == nil {
-                locationManager = CLLocationManager()
-                locationManager?.delegate = self
-            }
-            
-            locationManager?.requestWhenInUseAuthorization()
-        }
-    }
-    
-    // MARK: - Notification Permission Management
-    
-    func checkNotificationPermission() async -> String {
-        let center = UNUserNotificationCenter.current()
-        let settings = await center.notificationSettings()
-        
-        switch settings.authorizationStatus {
-        case .authorized:
-            return "granted"
-        case .denied:
-            return "denied"
-        case .notDetermined:
-            return "undetermined"
-        case .provisional:
-            return "provisional"
-        case .ephemeral:
-            return "ephemeral"
-        @unknown default:
-            return "unknown"
-        }
-    }
-    
-    func requestNotificationPermission() async -> Bool {
-        let center = UNUserNotificationCenter.current()
-        let currentSettings = await center.notificationSettings()
-        
-        guard currentSettings.authorizationStatus != .authorized else {
-            print("Notification permission already granted")
-            return true
-        }
-        
-        if currentSettings.authorizationStatus == .notDetermined {
-            // Only try to request if undetermined
-            do {
-                let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
-                print("Notification permission request result: \(granted)")
-                if !granted {
-                    print("User denied notification permission request, opening System Preferences")
-                    await MainActor.run {
-                        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.notifications")!)
-                    }
-                }
-                return granted
-            } catch {
-                print("Error requesting notification permission: \(error.localizedDescription)")
-                await MainActor.run {
-                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.notifications")!)
-                }
-                return false
-            }
-        } else {
-            // If denied, restricted, or any other status, redirect to system preferences
-            print("Notification permission is \(currentSettings.authorizationStatus.rawValue), opening System Preferences")
-            await MainActor.run {
-                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.notifications")!)
-            }
-            return false
-        }
-    }
-    
-    // MARK: - CBCentralManagerDelegate
-    
-    func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        print("Bluetooth central manager state updated to: \(central.state.rawValue)")
-        
-        // Handle different Bluetooth states
-        switch central.state {
-        case .poweredOff:
-            print("Bluetooth is powered off. Permission cannot be granted until Bluetooth is enabled.")
-            bluetoothPermissionCompletion?(false)
-            bluetoothPermissionCompletion = nil
-            return
-        case .unsupported:
-            print("Bluetooth is not supported on this device.")
-            bluetoothPermissionCompletion?(false)
-            bluetoothPermissionCompletion = nil
-            return
-        case .unauthorized:
-            print("Bluetooth access is not authorized for this app.")
-            bluetoothPermissionCompletion?(false)
-            bluetoothPermissionCompletion = nil
-            return
-        case .poweredOn:
-            break
-        case .unknown, .resetting:
-            print("Bluetooth state is \(central.state). Waiting for definitive state...")
-            return
-        @unknown default:
-            print("Unknown Bluetooth state: \(central.state)")
-            return
-        }
-        
-        if #available(macOS 10.15, *) {
-            let granted: Bool
-            switch CBCentralManager.authorization {
-            case .allowedAlways:
-                granted = true
-            case .denied, .restricted:
-                granted = false
-            case .notDetermined:
-                granted = (central.state == .poweredOn)
-            @unknown default:
-                granted = false
-            }
-            
-            print("Bluetooth permission resolved: granted=\(granted)")
-            bluetoothPermissionCompletion?(granted)
-            bluetoothPermissionCompletion = nil
-        } else {
-            let granted = (central.state == .poweredOn)
-            bluetoothPermissionCompletion?(granted)
-            bluetoothPermissionCompletion = nil
-        }
-    }
-    
-    // MARK: - CLLocationManagerDelegate
-    
-    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
-        print("Location authorization changed to: \(status.rawValue)")
-        
-        guard let completion = locationPermissionCompletion else {
-            print("Location permission completion is nil, ignoring delegate call")
-            return
-        }
-        
-        let granted = (status == .authorizedAlways || status == .authorized)
-        print("Location permission resolved: granted=\(granted)")
-        completion(granted)
-    }
-    
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        print("Location manager failed with error: \(error.localizedDescription)")
-        locationPermissionCompletion?(false)
-    }
-
-    // MARK: - Menu Bar Setup
-    
-    private func setupMenuBarItem() {
-        // Create status bar item
-        statusBarItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        
-        guard let statusBarItem = statusBarItem else {
-            print("ERROR: Failed to create status bar item")
-            return
-        }
-        
-        // Set up the button with custom icon
-        if let button = statusBarItem.button {
-            // Load custom icon from assets
-            if let customIcon = NSImage(named: "app_launcher_icon") {
-                customIcon.isTemplate = true  // Make it adapt to dark/light mode
-                customIcon.size = NSSize(width: 18, height: 18)  // Appropriate menu bar size
-                button.image = customIcon
-            } else {
-                // Fallback to system icon if custom icon fails to load
-                button.image = NSImage(systemSymbolName: "mic.circle", accessibilityDescription: "Omi")
-                print("WARNING: Could not load custom app_launcher_icon, using fallback")
-            }
-            button.toolTip = "Omi - Always On AI"
-        }
-        
-        // Create menu
-        let menu = NSMenu()
-        
-        // Show/Hide Window item
-        let showHideItem = NSMenuItem(title: self.isVisible ? "Hide Window" : "Show Window", action: #selector(toggleWindowVisibility), keyEquivalent: "")
-        showHideItem.target = self
-        menu.addItem(showHideItem)
-        
-        menu.addItem(NSMenuItem.separator())
-        
-        // Status item
-        let statusItem = NSMenuItem(title: "Status: Ready", action: nil, keyEquivalent: "")
-        statusItem.tag = 100
-        menu.addItem(statusItem)
-        
-        menu.addItem(NSMenuItem.separator())
-        
-        // Quit item
-        let quitItem = NSMenuItem(title: "Quit Omi", action: #selector(quitApplication), keyEquivalent: "q")
-        quitItem.target = self
-        menu.addItem(quitItem)
-        
-        statusBarItem.menu = menu
-        
-        print("INFO: Menu bar item created successfully")
-    }
-    
-    @objc private func toggleWindowVisibility() {
-        DispatchQueue.main.async {
-            if self.isVisible {
-                self.orderOut(nil)
-                self.updateMenuItemTitle(itemIndex: 0, to: "Show Window")
-                print("INFO: Window hidden")
-            } else {
-                self.makeKeyAndOrderFront(nil)
-                NSApp.activate(ignoringOtherApps: true)
-                self.updateMenuItemTitle(itemIndex: 0, to: "Hide Window")
-                print("INFO: Window shown")
-            }
-        }
-    }
-    
-    @objc private func quitApplication() {
-        // Cleanup: stop audio engine and streams
-        stopAudioEngineAndCapture()
-        
-        // Hide overlay
-        hideOverlay()
-        
-        // Remove status bar item
-        if let statusBarItem = statusBarItem {
-            NSStatusBar.system.removeStatusItem(statusBarItem)
-        }
-        
-        NSApp.terminate(nil)
-    }
-    
-    private func updateMenuItemTitle(itemIndex: Int, to newTitle: String) {
-        guard let menu = statusBarItem?.menu,
-              itemIndex < menu.numberOfItems else { 
-            print("WARNING: Cannot update menu item at index \(itemIndex)")
-            return 
-        }
-        
-        if let menuItem = menu.item(at: itemIndex) {
-            menuItem.title = newTitle
-        }
-    }
-    
-    private func updateMenuBarStatus(status: String, isActive: Bool = false) {
-        guard let menu = statusBarItem?.menu,
-              let statusItem = menu.item(withTag: 100) else { return }
-        
-        statusItem.title = "Status: \(status)"
-        
-        // Update icon based on state
-        if let button = statusBarItem?.button {
-            if let customIcon = NSImage(named: "app_launcher_icon") {
-                customIcon.isTemplate = true
-                customIcon.size = NSSize(width: 18, height: 18)
-                // You could modify the icon appearance based on isActive state if needed
-                // For now, we'll keep the same icon but could add visual indicators
-                button.image = customIcon
-            } else {
-                // Fallback to system icons with state
-                let iconName = isActive ? "mic.circle.fill" : "mic.circle"
-                button.image = NSImage(systemSymbolName: iconName, accessibilityDescription: "Omi")
-            }
-        }
-    }
 
     override func awakeFromNib() {
         let flutterViewController = FlutterViewController()
         let windowFrame = self.frame
         self.contentViewController = flutterViewController
         self.setFrame(windowFrame, display: true)
-        
+
+        RegisterGeneratedPlugins(registry: flutterViewController)
+
+        screenCaptureChannel = FlutterMethodChannel(
+            name: "screenCapturePlatform",
+            binaryMessenger: flutterViewController.engine.binaryMessenger)
+
+        // Setup overlay channel
+        overlayChannel = FlutterMethodChannel(
+            name: "overlayPlatform",
+            binaryMessenger: flutterViewController.engine.binaryMessenger)
+
         // Set self as delegate to detect window events
         self.delegate = self
 
@@ -1054,57 +67,14 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
             contentView.layer?.shadowOffset = CGSize(width: 0, height: 4)
         }
 
-        RegisterGeneratedPlugins(registry: flutterViewController)
-
-        screenCaptureChannel = FlutterMethodChannel(
-            name: "screenCapturePlatform",
-            binaryMessenger: flutterViewController.engine.binaryMessenger)
-
-        // Setup overlay channel
-        overlayChannel = FlutterMethodChannel(
-            name: "overlayPlatform",
-            binaryMessenger: flutterViewController.engine.binaryMessenger)
-
         // MARK: - Setup Menu Bar (after channels are initialized)
         // Add a small delay to ensure Flutter engine is fully ready
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            self.setupMenuBarItem()
+            self.setupMenuBar()
         }
 
-        self.micNode = audioEngine.inputNode
-        self.micNodeFormat = self.micNode.outputFormat(forBus: 0)
-
-        // Attempt to enable voice processing for AEC
-        // This should be done before the engine is started or the graph is fully configured.
-        if #available(macOS 10.15, *) {
-            do {
-                try self.micNode.setVoiceProcessingEnabled(true)
-                 // Configure ducking to minimum level to keep system audio audible
-                if #available(macOS 14.0, *) {
-                    var duckingConfig = AVAudioVoiceProcessingOtherAudioDuckingConfiguration()
-                    duckingConfig.enableAdvancedDucking = false
-                    duckingConfig.duckingLevel = .min
-                    self.micNode.voiceProcessingOtherAudioDuckingConfiguration = duckingConfig
-                    print("DEBUG: Configured voice processing ducking to minimum level to preserve system audio volume.")
-                } else {
-                    print("INFO: Voice processing ducking configuration requires macOS 14.0+. System audio may be ducked on older OS versions.")
-                }
-                print("DEBUG: Successfully enabled voice processing on microphone input node. This may help reduce echo.")
-            } catch {
-                print("ERROR: Could not enable voice processing on microphone input node: \(error.localizedDescription). Echo might persist.")
-            }
-        } else {
-            print("INFO: Voice processing on AVAudioInputNode requires macOS 10.15+. Echo might persist on older OS versions.")
-        }
-
-        engineProcessingFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32,
-                                               sampleRate: self.micNodeFormat.sampleRate, // Use mic's native rate
-                                               channels: 1, // MONO for mixing
-                                               interleaved: false)
-        
-        print("DEBUG: Engine processing format (mic native SR: \(self.micNodeFormat.sampleRate)) SR: \(engineProcessingFormat.sampleRate), CH: \(engineProcessingFormat.channelCount)")
-
-        setupAudioEngine() // Uses engineProcessingFormat for mixer tap and systemAudioPlayerNode connection
+        // Setup audio manager with Flutter channel
+        audioManager.setFlutterChannel(screenCaptureChannel)
 
         // Setup overlay channel handlers
         overlayChannel.setMethodCallHandler { [weak self] (call, result) in
@@ -1168,7 +138,7 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
             switch call.method {
             case "checkMicrophonePermission":
                 if #available(macOS 14.0, *) {
-                    let status = self.checkMicrophonePermission()
+                    let status = self.permissionManager.checkMicrophonePermission()
                     result(status)
                 } else {
                     result("unavailable")
@@ -1177,7 +147,7 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
             case "requestMicrophonePermission":
                 if #available(macOS 14.0, *) {
                     Task {
-                        let granted = await self.requestMicrophonePermission()
+                        let granted = await self.permissionManager.requestMicrophonePermission()
                         result(granted)
                     }
                 } else {
@@ -1186,45 +156,45 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
                 
             case "checkScreenCapturePermission":
                 Task {
-                    let status = await self.checkScreenCapturePermission()
+                    let status = await self.permissionManager.checkScreenCapturePermission()
                     result(status)
                 }
                 
             case "requestScreenCapturePermission":
                 Task {
-                    let granted = await self.requestScreenCapturePermission()
+                    let granted = await self.permissionManager.requestScreenCapturePermission()
                     result(granted)
                 }
                 
             case "checkBluetoothPermission":
-                let status = self.checkBluetoothPermission()
+                let status = self.permissionManager.checkBluetoothPermission()
                 result(status)
                 
             case "requestBluetoothPermission":
                 Task {
-                    let granted = await self.requestBluetoothPermission()
+                    let granted = await self.permissionManager.requestBluetoothPermission()
                     result(granted)
                 }
                 
             case "checkLocationPermission":
-                let status = self.checkLocationPermission()
+                let status = self.permissionManager.checkLocationPermission()
                 result(status)
                 
             case "requestLocationPermission":
                 Task {
-                    let granted = await self.requestLocationPermission()
+                    let granted = await self.permissionManager.requestLocationPermission()
                     result(granted)
                 }
                 
             case "checkNotificationPermission":
                 Task {
-                    let status = await self.checkNotificationPermission()
+                    let status = await self.permissionManager.checkNotificationPermission()
                     result(status)
                 }
                 
             case "requestNotificationPermission":
                 Task {
-                    let granted = await self.requestNotificationPermission()
+                    let granted = await self.permissionManager.requestNotificationPermission()
                     result(granted)
                 }
                 
@@ -1232,7 +202,7 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
                 Task {
                     // Check permissions before starting
                     if #available(macOS 14.0, *) {
-                        let micStatus = self.checkMicrophonePermission()
+                        let micStatus = self.permissionManager.checkMicrophonePermission()
                         if micStatus != "granted" {
                             result(FlutterError(code: "MIC_PERMISSION_REQUIRED", 
                                               message: "Microphone permission is required. Current status: \(micStatus)", 
@@ -1241,7 +211,7 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
                         }
                     }
                     
-                    let screenStatus = await self.checkScreenCapturePermission()
+                    let screenStatus = await self.permissionManager.checkScreenCapturePermission()
                     if screenStatus != "granted" {
                         result(FlutterError(code: "SCREEN_PERMISSION_REQUIRED", 
                                           message: "Screen capture permission is required. Current status: \(screenStatus)", 
@@ -1249,78 +219,16 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
                         return
                     }
 
-                    self.audioFormatSentToFlutter = false
-                    self.scStreamSourceFormat = nil   // Reset for new stream
-
-                SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: true) { content, error in
-                    if let error = error {
-                            self.handleError(error, result: result)
-                            return
-                        }
-                        self.availableContent = content
-                        
-                        // outputAudioFormat for Flutter (e.g., 16kHz or 44.1kHz Mono Int16)
-                        // Let's target 16kHz for Flutter as a common speech rate.
-                        let flutterOutputSampleRate = 16000.0 
-                        let flutterOutputChannels: AVAudioChannelCount = 1
-                        self.updateAudioSettings(sampleRate: flutterOutputSampleRate, channels: flutterOutputChannels)
-
-                        print("DEBUG: Flutter output format will be SR: \(flutterOutputSampleRate), CH: \(flutterOutputChannels)")
-                        self.outputAudioFormat = AVAudioFormat(commonFormat: .pcmFormatInt16,
-                                                               sampleRate: flutterOutputSampleRate,
-                                                               channels: flutterOutputChannels,
-                                                               interleaved: true)
-
-                        guard let strongOutputAudioFormat = self.outputAudioFormat else {
-                            result(FlutterError(code: "AUDIO_FORMAT_ERROR", message: "Could not create final output audio format for Flutter", details: nil))
-                            return
-                        }
-
-                        // Final converter: engineProcessingFormat -> outputAudioFormat (for Flutter)
-                        self.audioConverter = AVAudioConverter(from: self.engineProcessingFormat, to: strongOutputAudioFormat)
-                        guard self.audioConverter != nil else {
-                            result(FlutterError(code: "CONVERTER_SETUP_ERROR", message: "Could not create main audio converter to Flutter format", details: nil))
-                        return
-                        }
-                        self.audioConverter?.sampleRateConverterAlgorithm = AVSampleRateConverterAlgorithm_Mastering
-                        self.audioConverter?.sampleRateConverterQuality = .max
-                        
-                        // Enable dithering for better quality when converting to Int16
-                        self.audioConverter?.dither = true
-                        print("DEBUG: Final audioConverter configured with mastering algorithm and dithering")
-                        
-                        // Send format details to Flutter
-                        let isBigEndian = (strongOutputAudioFormat.streamDescription.pointee.mFormatFlags & kAudioFormatFlagIsBigEndian) != 0
-                        let formatDetails: [String: Any] = [
-                            "sampleRate": strongOutputAudioFormat.sampleRate,
-                            "channels": strongOutputAudioFormat.channelCount,
-                            "bitsPerChannel": strongOutputAudioFormat.streamDescription.pointee.mBitsPerChannel,
-                            "isFloat": (strongOutputAudioFormat.commonFormat == .pcmFormatFloat32 || strongOutputAudioFormat.commonFormat == .pcmFormatFloat64),
-                            "isBigEndian": isBigEndian,
-                            "isInterleaved": strongOutputAudioFormat.isInterleaved
-                        ]
-                        guard let screenCaptureChannel = self.screenCaptureChannel else {
-                            print("WARNING: Screen capture channel not available for audioFormat")
-                            result(FlutterError(code: "CHANNEL_ERROR", message: "Screen capture channel not initialized", details: nil))
-                            return
-                        }
-                        screenCaptureChannel.invokeMethod("audioFormat", arguments: formatDetails)
-                        self.audioFormatSentToFlutter = true
-                        
-                        self.prepSCStreamFilter()
-                        
-                        do {
-                            try self.startAudioEngineAndCapture()
-                            Task { await self.recordSCStream(filter: self.filter!) }
-                            result(nil)
-                        } catch {
-                            print("Error starting audio engine or capture: \(error.localizedDescription)")
-                            result(FlutterError(code: "ENGINE_START_ERROR", message: error.localizedDescription, details: nil))
-                        }
+                    do {
+                        try await self.audioManager.startCapture()
+                        result(nil)
+                    } catch {
+                        print("Error starting audio capture: \(error.localizedDescription)")
+                        result(FlutterError(code: "AUDIO_START_ERROR", message: error.localizedDescription, details: nil))
                     }
                 }
             case "stop":
-                self.stopAudioEngineAndCapture()
+                self.audioManager.stopCapture()
                 result(nil)
             default:
                 result(FlutterMethodNotImplemented)
@@ -1329,332 +237,55 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
         super.awakeFromNib()
     }
 
-    func handleError(_ error: Error, result: FlutterResult) {
-        switch error {
-        case SCStreamError.userDeclined:
-            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
-            result(FlutterError(code: "PERMISSION_ERROR", message: "User declined screen capture permission.", details: nil))
-        default:
-            print("[err] failed to fetch available content: \(error.localizedDescription)")
-            result(FlutterError(code: "SHAREABLE_CONTENT_ERROR", message: error.localizedDescription, details: nil))
-        }
-    }
 
-    func setupAudioEngine() {
-        audioEngine.attach(systemAudioPlayerNode)
-        audioEngine.attach(mixerNode)
-
-        // Set systemAudioPlayerNode to full volume to ensure system audio is captured properly
-        systemAudioPlayerNode.volume = 4.0
-
-        print("DEBUG: Mic native format: \(self.micNodeFormat!))")
-        print("DEBUG: Engine processing format: \(self.engineProcessingFormat!))")
+    
+    // MARK: - Menu Bar Setup
+    
+    private func setupMenuBar() {
+        menuBarManager = MenuBarManager(mainWindow: self)
         
-        audioEngine.connect(self.micNode, to: mixerNode, format: self.micNodeFormat) // Mic uses its native format
-        
-        // systemAudioPlayerNode connected to mixer using engineProcessingFormat
-        audioEngine.connect(systemAudioPlayerNode, to: mixerNode, format: self.engineProcessingFormat)
-
-        // Set mixer output volume to ensure proper levels
-        mixerNode.outputVolume = 4.0
-
-        // Mixer tap is at engineProcessingFormat
-        mixerNode.installTap(onBus: 0, bufferSize: 1024, format: self.engineProcessingFormat) { [weak self] (buffer, time) in
-            guard let self = self, let finalConverter = self.audioConverter, let finalOutputFormat = self.outputAudioFormat else {
-                // print("Mixer tap: finalConverter or finalOutputFormat is nil")
-                return
-            }
-
-            let outputBufferFrameCapacity = AVAudioFrameCount(Double(buffer.frameLength) * (finalOutputFormat.sampleRate / buffer.format.sampleRate))
-            guard let outputPCMBuffer = AVAudioPCMBuffer(pcmFormat: finalOutputFormat, frameCapacity: outputBufferFrameCapacity) else {
-                print("Failed to create output PCM buffer for final converter.")
-                return
-            }
-            // outputPCMBuffer.frameLength = outputPCMBuffer.frameCapacity // Set frameLength after conversion
-
-            var error: NSError?
-            let status = finalConverter.convert(to: outputPCMBuffer, error: &error) { inNumPackets, outStatus in
-                outStatus.pointee = .haveData
-                return buffer
-            }
-
-            if status == .error || error != nil {
-                print("Final audio conversion error from mixer tap: \(error?.localizedDescription ?? "Unknown error")")
-                return
-            }
-            
-            if status == .haveData && outputPCMBuffer.frameLength > 0 {
-                 outputPCMBuffer.frameLength = outputPCMBuffer.frameCapacity // THIS WAS IN THE WRONG PLACE - set it before checking data size if using frameCapacity
-                                                                            // Actually, the converter sets the frameLength of outputPCMBuffer.
-
-                if finalOutputFormat.commonFormat == .pcmFormatInt16 && finalOutputFormat.isInterleaved {
-                    let dataSize = Int(outputPCMBuffer.frameLength) * Int(finalOutputFormat.streamDescription.pointee.mBytesPerFrame)
-                    if dataSize > 0, let int16Data = outputPCMBuffer.int16ChannelData?[0] {
-                        let audioData = Data(bytes: int16Data, count: dataSize)
-                        if self.audioFormatSentToFlutter {
-                           guard let screenCaptureChannel = self.screenCaptureChannel else {
-                               // Silently skip if channel not available during audio processing
-                               return
-                           }
-                           screenCaptureChannel.invokeMethod("audioFrame", arguments: audioData)
-                        }
-                    } else if dataSize == 0 && outputPCMBuffer.frameLength > 0 {
-                         print("DEBUG: Final converter output dataSize is 0 but frameLength > 0. Format: \(finalOutputFormat)")
-                    }
-                }
-            }
-        }
-
-        // REMOVED: The connection from mixerNode to outputNode was causing echo feedback.
-        // Keeping it in comment so that everyone can see it and understand why it was removed.
-        // The mixerNode was routing the combined audio (including microphone) back to system output,
-        // which SCStream would then capture, creating a circular feedback loop.
-        // We only need the mixer for combining sources and tapping for recording, not for playback.
-        // audioEngine.disconnectNodeOutput(mixerNode) // make sure we have a clean slot
-        // audioEngine.connect(mixerNode, to: audioEngine.outputNode, format: self.engineProcessingFormat)
-        // mixerNode.volume = 0 // mute – we only need the connection for clocking, not playback
-        print("DEBUG: Mixer NOT connected to outputNode to prevent echo feedback loop.")
-        
-        audioEngine.prepare()
-    }
-
-    func prepSCStreamFilter() {
-    let excluded = availableContent?.applications.filter { app in
-            Bundle.main.bundleIdentifier == app.bundleIdentifier
-    }
-    filter = SCContentFilter(display: availableContent!.displays.first!, excludingApplications: excluded ?? [], exceptingWindows: [])
-
-        // Reset SCStream source format for a new session
-        scStreamSourceFormat = nil
-    }
-
-    func startAudioEngineAndCapture() throws {
-        // REMOVED AVAudioSession configuration lines that are unavailable/problematic on macOS
-        
-        if !audioEngine.isRunning {
-            try audioEngine.start()
-            print("DEBUG: AVAudioEngine started.")
-            
-            // Update menu bar status
-            DispatchQueue.main.async {
-                self.updateMenuBarStatus(status: "Starting...", isActive: true)
-            }
+        // Setup callbacks
+        menuBarManager?.onToggleWindow = { [weak self] in
+            self?.handleWindowToggle()
         }
         
-        // Ensure systemAudioPlayerNode is playing AFTER the engine has started.
-        if systemAudioPlayerNode.engine != nil && !systemAudioPlayerNode.isPlaying { 
-             systemAudioPlayerNode.play() 
-             print("DEBUG: systemAudioPlayerNode explicitly started in startAudioEngineAndCapture.")
-        } else if systemAudioPlayerNode.engine == nil {
-            print("ERROR: systemAudioPlayerNode.engine is nil in startAudioEngineAndCapture. Cannot play.")
-        } else if systemAudioPlayerNode.isPlaying {
-            print("DEBUG: systemAudioPlayerNode was already playing in startAudioEngineAndCapture.")
-        }
-    }
-
-    func recordSCStream(filter: SCContentFilter) async {
-    let conf = SCStreamConfiguration()
-    conf.width = 2
-    conf.height = 2
-        conf.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(600))
-        conf.showsCursor = false
-    conf.capturesAudio = true
-        
-        // DO NOT explicitly set conf.sampleRate or conf.channelCount here.
-        // Let SCStream use its default/preferred audio format.
-        // We will convert it if necessary.
-        // conf.sampleRate = Int(self.engineProcessingFormat.sampleRate)
-        // conf.channelCount = Int(self.engineProcessingFormat.channelCount)
-
-    stream = SCStream(filter: filter, configuration: conf, delegate: self)
-    do {
-            try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: .global(qos: .userInitiated))
-        try await stream.startCapture()
-            print("DEBUG: SCStream capture started.")
-    } catch {
-            print("Error starting SCStream capture: \(error.localizedDescription)")
-            guard let screenCaptureChannel = self.screenCaptureChannel else {
-                print("WARNING: Screen capture channel not available for captureError")
-                DispatchQueue.main.async { self.stopAudioEngineAndCapture() }
-                return
-            }
-            screenCaptureChannel.invokeMethod("captureError", arguments: "SCStream: \(error.localizedDescription)")
-            DispatchQueue.main.async { self.stopAudioEngineAndCapture() }
-    }
-}
-
-    func stopAudioEngineAndCapture() {
-        // Stop SCStream first
-    if stream != nil {
-            Task {
-                try? await stream.stopCapture() // Errors handled in delegate or ignored for stop
-                self.stream = nil
-            }
+        menuBarManager?.onQuit = { [weak self] in
+            self?.handleQuitApplication()
         }
         
-        // Stop AVAudioEngine
-        if audioEngine.isRunning {
-            audioEngine.stop()
-            // audioEngine.inputNode.removeTap(onBus: 0) // If mic tap was used directly
-            // mixerNode.removeTap(onBus: 0) // Tap is auto-removed when engine stops or node is reset
-        }
-        systemAudioPlayerNode.stop()
-
-
-        // Reset converters and formats
-        self.audioConverter = nil
-        self.scStreamSourceFormat = nil
-
-        // Update menu bar status
+        menuBarManager?.setupMenuBarItem()
+    }
+    
+    private func handleWindowToggle() {
         DispatchQueue.main.async {
-            self.updateMenuBarStatus(status: "Stopped", isActive: false)
-        }
-
-        // Notify Flutter
-        if audioFormatSentToFlutter { // Only send if start was successful enough to send format
-            guard let screenCaptureChannel = self.screenCaptureChannel else {
-                print("WARNING: Screen capture channel not available for audioStreamEnded notification")
-                return
-            }
-            screenCaptureChannel.invokeMethod("audioStreamEnded", arguments: nil)
-            print("Recording stopped (engine & SCStream), Flutter notified.")
-        } else {
-            print("Recording stopped (engine & SCStream), but Flutter was not fully initialized for audio.")
-        }
-        audioFormatSentToFlutter = false // Reset for next session
-    }
-
-    // Modified to accept parameters
-    func updateAudioSettings(sampleRate: Double, channels: AVAudioChannelCount) {
-        audioSettings = [AVSampleRateKey: sampleRate, AVNumberOfChannelsKey: channels]
-    }
-
-    // SCStream Delegate methods
-    func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
-        guard sampleBuffer.isValid, type == .audio else { return }
-
-        guard let pcmBufferFromSCStream = sampleBuffer.asPCMBuffer else {
-            print("SCStream: Failed to get PCM buffer from CMSampleBuffer")
-            return
-        }
-
-        if scStreamSourceFormat == nil {
-            scStreamSourceFormat = pcmBufferFromSCStream.format
-            print("DEBUG: SCStream actual source format: \(scStreamSourceFormat!)")
-            
-            // Detailed format logging
-            let sourceDesc = scStreamSourceFormat!.streamDescription.pointee
-            print("DEBUG: SCStream format details - SR: \(sourceDesc.mSampleRate), CH: \(sourceDesc.mChannelsPerFrame), BitsPerCh: \(sourceDesc.mBitsPerChannel), BytesPerFrame: \(sourceDesc.mBytesPerFrame), BytesPerPacket: \(sourceDesc.mBytesPerPacket)")
-            
-            let engineDesc = self.engineProcessingFormat.streamDescription.pointee  
-            print("DEBUG: Engine format details - SR: \(engineDesc.mSampleRate), CH: \(engineDesc.mChannelsPerFrame), BitsPerCh: \(engineDesc.mBitsPerChannel), BytesPerFrame: \(engineDesc.mBytesPerFrame), BytesPerPacket: \(engineDesc.mBytesPerPacket)")
-            
-            // Check if formats differ and note for manual processing
-            if scStreamSourceFormat != self.engineProcessingFormat {
-                print("DEBUG: SCStream format (\(scStreamSourceFormat!)) differs from Engine format (\(self.engineProcessingFormat!)). Will use manual conversion.")
-    } else {
-                print("DEBUG: SCStream format matches Engine format. No conversion needed.")
-            }
-        }
-
-        var bufferToSchedule: AVAudioPCMBuffer = pcmBufferFromSCStream
-
-        // Manual conversion if formats differ (avoiding AVAudioConverter OSStatus errors)
-        guard let currentSCStreamFormat = self.scStreamSourceFormat else {
-            print("ERROR: scStreamSourceFormat is nil. Cannot process SCStream audio buffer. Buffer skipped.")
-            return
-        }
-
-        if currentSCStreamFormat != self.engineProcessingFormat {
-            // This block is for when SCStream's format differs from our desired engineProcessingFormat (mono, float, specific SR).
-            // We need to ensure the input is deinterleaved float to use floatChannelData directly.
-            
-            guard currentSCStreamFormat.commonFormat == .pcmFormatFloat32,
-                  !currentSCStreamFormat.isInterleaved, // Must be deinterleaved for this specific access pattern
-                  let floatDataPointers = pcmBufferFromSCStream.floatChannelData else {
-                print("ERROR: SCStream buffer (format: \(currentSCStreamFormat.description)) is not in deinterleaved float format or floatChannelData is nil. Cannot perform current manual conversion. Buffer skipped.")
-                // TODO: Consider a fallback to AVAudioConverter if other formats from SCStream need robust handling here.
-                return
-            }
-
-            let inputFrameCount = Int(pcmBufferFromSCStream.frameLength)
-            let inputSampleRate = currentSCStreamFormat.sampleRate
-            let outputSampleRate = self.engineProcessingFormat.sampleRate
-            var monoResampled: [Float] // This will hold the audio data after resampling and mono conversion
-
-            if currentSCStreamFormat.channelCount == 1 {
-                // Input is already mono (but deinterleaved float as per guard)
-                let sourceChannelPtr = floatDataPointers[0]
-                let sourceArray = Array(UnsafeBufferPointer(start: sourceChannelPtr, count: inputFrameCount))
-                if inputSampleRate != outputSampleRate {
-                    monoResampled = resampleAudio(input: sourceArray, fromRate: inputSampleRate, toRate: outputSampleRate)
-                } else {
-                    monoResampled = sourceArray
-                }
-            } else if currentSCStreamFormat.channelCount >= 2 {
-                // Input is stereo (or more channels, take first two) deinterleaved float
-                let leftChannelPtr = floatDataPointers[0]
-                let rightChannelPtr = floatDataPointers[1] // Safe due to channelCount >= 2
-
-                let leftArray = Array(UnsafeBufferPointer(start: leftChannelPtr, count: inputFrameCount))
-                let rightArray = Array(UnsafeBufferPointer(start: rightChannelPtr, count: inputFrameCount))
-
-                let leftResampled: [Float]
-                let rightResampled: [Float]
-
-                if inputSampleRate != outputSampleRate {
-                    leftResampled = resampleAudio(input: leftArray, fromRate: inputSampleRate, toRate: outputSampleRate)
-                    rightResampled = resampleAudio(input: rightArray, fromRate: inputSampleRate, toRate: outputSampleRate)
-                } else {
-                    leftResampled = leftArray
-                    rightResampled = rightArray
-                }
-                monoResampled = stereoToMono(leftChannel: leftResampled, rightChannel: rightResampled)
+            if self.isVisible {
+                // Mark Flutter engine as inactive before hiding window
+                self.audioManager.setFlutterEngineActive(false)
+                self.orderOut(nil)
+                print("INFO: Window hidden")
             } else {
-                print("ERROR: SCStream buffer has \(currentSCStreamFormat.channelCount) channels (e.g., 0), which is not supported for manual conversion. Buffer skipped.")
-                return
+                self.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+                // Mark Flutter engine as active after showing window
+                self.audioManager.setFlutterEngineActive(true)
+                print("INFO: Window shown")
             }
-            
-            // Create output buffer for the processed monoResampled data
-            let outputFrameCount = monoResampled.count
-            guard let manuallyConvertedBuffer = AVAudioPCMBuffer(pcmFormat: self.engineProcessingFormat, frameCapacity: AVAudioFrameCount(outputFrameCount)) else {
-                print("ERROR: Failed to create output buffer for manually converted audio.")
-                return
-            }
-            manuallyConvertedBuffer.frameLength = AVAudioFrameCount(outputFrameCount)
-            
-            // engineProcessingFormat is known to be non-interleaved Float32, so floatChannelData![0] is correct for it.
-            let monoOutputDataPtr = manuallyConvertedBuffer.floatChannelData![0]
-            for i in 0..<outputFrameCount {
-                monoOutputDataPtr[i] = monoResampled[i]
-            }
-            
-            bufferToSchedule = manuallyConvertedBuffer
-        }
-
-        if systemAudioPlayerNode.engine != nil && audioEngine.isRunning {
-            if systemAudioPlayerNode.isPlaying {
-                systemAudioPlayerNode.scheduleBuffer(bufferToSchedule, completionHandler: nil)
-            } else {
-                print("Warning: systemAudioPlayerNode was not playing when an audio buffer was received. Attempting to play and schedule.")
-                systemAudioPlayerNode.play()
-                systemAudioPlayerNode.scheduleBuffer(bufferToSchedule, completionHandler: nil)
-            }
+            // Update menu title after window state change
+            self.menuBarManager?.updateWindowToggleTitle()
         }
     }
-
-    func stream(_ stream: SCStream, didStopWithError error: Error) {
-        print("SCStream stopped with error: \(error.localizedDescription)")
-        if audioEngine.isRunning {
-            guard let screenCaptureChannel = self.screenCaptureChannel else {
-                print("WARNING: Screen capture channel not available for captureError in delegate")
-                return
-            }
-            screenCaptureChannel.invokeMethod("captureError", arguments: "SCStream stopped: \(error.localizedDescription)")
-        }
-    self.stream = nil
-        // If SCStream stops unexpectedly, it might be good to tear down the whole engine.
-        // However, the Flutter 'stop' call is the primary trigger for full shutdown.
+    
+    private func handleQuitApplication() {
+        // Cleanup: stop audio engine and streams
+        audioManager.stopCapture()
+        
+        // Hide overlay
+        hideOverlay()
+        
+        // Cleanup menu bar
+        menuBarManager?.cleanup()
+        
+        NSApp.terminate(nil)
     }
     
     // MARK: - Floating Overlay Methods
@@ -1789,11 +420,11 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
             
             // Update menu bar status
             if isRecording {
-                self.updateMenuBarStatus(status: "Recording", isActive: true)
+                self.menuBarManager?.updateStatus(status: "Recording", isActive: true)
             } else if isPaused {
-                self.updateMenuBarStatus(status: "Paused", isActive: false)
+                self.menuBarManager?.updateStatus(status: "Paused", isActive: false)
             } else {
-                self.updateMenuBarStatus(status: "Ready", isActive: false)
+                self.menuBarManager?.updateStatus(status: "Ready", isActive: false)
             }
         }
     }
@@ -1804,7 +435,7 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
             
             // Update menu bar status with segment count if recording
             if segmentCount > 0 {
-                self.updateMenuBarStatus(status: "Recording (\(segmentCount) segments)", isActive: true)
+                self.menuBarManager?.updateStatus(status: "Recording (\(segmentCount) segments)", isActive: true)
             }
         }
     }
@@ -1872,6 +503,9 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
         
         print("DEBUG: Main window became main")
         
+        // Ensure Flutter engine is marked as active when window becomes main
+        audioManager.setFlutterEngineActive(true)
+        
         // Only hide overlay if it exists and is visible
         guard let overlay = floatingOverlay, overlay.isVisible else {
             return
@@ -1890,6 +524,9 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
         }
         
         print("DEBUG: Window became key")
+        
+        // Ensure Flutter engine is marked as active when window becomes key
+        audioManager.setFlutterEngineActive(true)
         
         // Only hide overlay if it exists and is visible
         guard let overlay = floatingOverlay, overlay.isVisible else {
@@ -1910,6 +547,9 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
         
         print("DEBUG: Window deminiaturized")
         
+        // Ensure Flutter engine is marked as active when window is deminiaturized
+        audioManager.setFlutterEngineActive(true)
+        
         // Only hide overlay if it exists and is visible
         guard let overlay = floatingOverlay, overlay.isVisible else {
             return
@@ -1920,15 +560,28 @@ class MainFlutterWindow: NSWindow, SCStreamDelegate, SCStreamOutput, CBCentralMa
             self.hideOverlay()
         }
     }
-}
-
-extension CMSampleBuffer {
-    var asPCMBuffer: AVAudioPCMBuffer? {
-        try? self.withAudioBufferList { audioBufferList, blockBuffer -> AVAudioPCMBuffer? in
-            guard var absd = self.formatDescription?.audioStreamBasicDescription else { return nil }
-            guard let format = AVAudioFormat(streamDescription: &absd) else { return nil}
-            return AVAudioPCMBuffer(pcmFormat: format, bufferListNoCopy: audioBufferList.unsafePointer)
+    
+    func windowDidMiniaturize(_ notification: Notification) {
+        guard let notificationWindow = notification.object as? NSWindow,
+              notificationWindow == self else {
+            return
         }
+        
+        print("DEBUG: Window miniaturized")
+        
+        // Mark Flutter engine as inactive when window is minimized
+        audioManager.setFlutterEngineActive(false)
+    }
+    
+    func windowWillClose(_ notification: Notification) {
+        guard let notificationWindow = notification.object as? NSWindow,
+              notificationWindow == self else {
+            return
+        }
+        
+        print("DEBUG: Window will close")
+        
+        // Mark Flutter engine as inactive when window is closing
+        audioManager.setFlutterEngineActive(false)
     }
 }
-
