@@ -14,8 +14,8 @@
         "group": "Get Started",
         "pages": [
           "docs/get_started/introduction",
-          "docs/get_started/Flash_device",
-           "getstartedwithomi"
+          "docs/get_started/flash-device",
+          "get-started-with-omi"
         ]
       },
       {
@@ -24,32 +24,32 @@
           {
             "group": "Apps",
             "pages": [
-              "docs/developer/apps/Introduction",
-              "docs/developer/apps/PromptBased",
-              "docs/developer/apps/Integrations",
-              "docs/developer/apps/AudioStreaming",
-              "docs/developer/apps/Import",
-              "docs/developer/apps/Submitting",
-              "docs/developer/apps/Oauth",
-              "docs/developer/apps/Notifications"
+              "docs/developer/apps/introduction",
+              "docs/developer/apps/prompt-based",
+              "docs/developer/apps/integrations",
+              "docs/developer/apps/audio-streaming",
+              "docs/developer/apps/import",
+              "docs/developer/apps/submitting",
+              "docs/developer/apps/oauth",
+              "docs/developer/apps/notifications"
             ]
           },
-          "docs/developer/AppSetup",
+          "docs/developer/app-setup",
           {
             "group": "Backend",
             "pages": [
-              "docs/developer/backend/Backend_Setup",
-              "docs/developer/backend/backend_deepdive",
-              "docs/developer/backend/StoringMemory",
+              "docs/developer/backend/backend-setup",
+              "docs/developer/backend/backend-deepdive",
+              "docs/developer/backend/storing-memory",
               "docs/developer/backend/transcription",
-              "docs/developer/backend/memory_embeddings",
+              "docs/developer/backend/memory-embeddings",
               "docs/developer/backend/postprocessing"
             ]
           },
           {
             "group": "Firmware",
             "pages": [
-              "docs/developer/firmware/Compile_firmware"
+              "docs/developer/firmware/compile-firmware"
             ]
           },
           {
@@ -57,19 +57,19 @@
             "pages": [
               "docs/developer/sdk/sdk",
               "docs/developer/sdk/python",
-              "docs/developer/sdk/ReactNative",
+              "docs/developer/sdk/react-native",
               "docs/developer/sdk/swift"
             ]
           },
-          "docs/developer/Protocol",
-          "docs/developer/Contribution",
-          "docs/developer/MCP",
+          "docs/developer/protocol",
+          "docs/developer/contribution",
+          "docs/developer/mcp",
           {
             "group": "Audio & Testing",
             "pages": [
-              "docs/developer/savingaudio",
-              "docs/developer/AudioStreaming",
-              "docs/developer/DevKit2Testing"
+              "docs/developer/saving-audio",
+              "docs/developer/audio-streaming",
+              "docs/developer/devkit2-testing"
             ]
           }
         ]
