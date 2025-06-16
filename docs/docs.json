@@ -13,8 +13,8 @@
       {
         "group": "Get Started",
         "pages": [
-          "docs/get_started/introduction",
-          "docs/get_started/flash-device",
+          "docs/get-started/introduction",
+          "docs/get-started/flash-device",
           "get-started-with-omi"
         ]
       },
