@@ -107,7 +107,7 @@ export default function AppList({ initialPlugins, initialStats }: AppListProps) 
   return (
     <div className="relative">
       {/* Fixed Header and Navigation */}
-      <div
+            <div
         ref={headerRef}
         className={`fixed inset-x-0 top-12 z-40 transform-gpu bg-[#0B0F17] transition-all duration-300 ease-in-out ${
           headerMinimized ? 'bg-[#0B0F17]/95 shadow-lg backdrop-blur-lg' : ''
@@ -119,35 +119,34 @@ export default function AppList({ initialPlugins, initialStats }: AppListProps) 
           }`}
         >
           <div className="container mx-auto px-3 py-3 sm:px-6 sm:py-4 md:px-8 md:py-5">
-            <div className="flex items-center justify-between">
-              <div
-                className={`transition-all duration-300 ${
-                  headerMinimized ? 'w-auto' : 'w-full'
-                }`}
-              >
+            <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-6 transition-all duration-300">
+              {/* Title Section */}
+              <div className={`flex-shrink-0 transition-all duration-300 ease-in-out transform-gpu ${
+                headerMinimized ? 'sm:w-48 md:w-56' : 'w-full sm:w-56 md:w-64'
+              }`}>
                 <h1
-                  className={`text-2xl font-bold text-[#6C8EEF] transition-all duration-300 ${
+                  className={`text-2xl font-bold text-[#6C8EEF] transition-all duration-300 transform-gpu ${
                     headerMinimized ? 'text-xl sm:text-2xl' : 'sm:text-3xl md:text-4xl'
                   }`}
                 >
                   Omi App Store
                 </h1>
-                {!headerMinimized && (
+                <div className={`overflow-hidden transition-all duration-300 transform-gpu ${
+                  headerMinimized ? 'h-0 opacity-0' : 'h-auto opacity-100'
+                }`}>
                   <p className="mt-1 text-sm text-gray-400 sm:mt-2 sm:text-base">
                     Discover our most popular AI-powered applications
                   </p>
-                )}
+                </div>
               </div>
 
-              <div
-                className={`transition-all duration-300 ${
-                  headerMinimized ? 'w-2/3' : 'mt-4 w-full sm:mt-5'
-                }`}
-              >
+              {/* Search Section */}
+              <div className={`flex-grow transition-all duration-300 transform-gpu ${
+                headerMinimized ? 'mt-0' : 'mt-4 sm:mt-0'
+              }`}>
                 <SearchBar
                   allApps={initialPlugins}
                   onSearching={(searching) => setIsSearching(searching)}
-                  className={headerMinimized ? 'ml-4' : ''}
                 />
               </div>
             </div>
