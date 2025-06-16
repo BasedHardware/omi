@@ -35,9 +35,11 @@ export interface AppInitializationData {
   paymentPlans: PaymentPlan[];
 }
 
-export default async function getAppInitializationData(token?: string): Promise<AppInitializationData> {
+export default async function getAppInitializationData(
+  token?: string,
+): Promise<AppInitializationData> {
   const apiUrl = envConfig.API_URL || 'http://localhost:8000';
-  
+
   try {
     // Fetch categories and capabilities in parallel (no auth required)
     const [categoriesResponse, capabilitiesResponse] = await Promise.all([
@@ -52,12 +54,16 @@ export default async function getAppInitializationData(token?: string): Promise<
           'Content-Type': 'application/json',
         },
         cache: 'no-cache',
-      })
+      }),
     ]);
 
     // Parse categories and capabilities
-    const categories: Category[] = categoriesResponse.ok ? await categoriesResponse.json() : [];
-    const capabilities: AppCapability[] = capabilitiesResponse.ok ? await capabilitiesResponse.json() : [];
+    const categories: Category[] = categoriesResponse.ok
+      ? await categoriesResponse.json()
+      : [];
+    const capabilities: AppCapability[] = capabilitiesResponse.ok
+      ? await capabilitiesResponse.json()
+      : [];
 
     // Fetch payment plans if token is provided
     let paymentPlans: PaymentPlan[] = [];
@@ -66,11 +72,11 @@ export default async function getAppInitializationData(token?: string): Promise<
         const paymentPlansResponse = await fetch(`${apiUrl}/v1/app/plans`, {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            Authorization: `Bearer ${token}`,
           },
           cache: 'no-cache',
         });
-        
+
         if (paymentPlansResponse.ok) {
           paymentPlans = await paymentPlansResponse.json();
         }
@@ -82,14 +88,14 @@ export default async function getAppInitializationData(token?: string): Promise<
     return {
       categories,
       capabilities,
-      paymentPlans
+      paymentPlans,
     };
   } catch (error) {
     console.error('Error fetching app initialization data:', error);
     return {
       categories: [],
       capabilities: [],
-      paymentPlans: []
+      paymentPlans: [],
     };
   }
-} 
+}

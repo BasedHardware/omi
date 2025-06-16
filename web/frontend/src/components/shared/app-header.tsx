@@ -27,7 +27,7 @@ interface AppHeaderProps {
   className?: string;
 }
 
-const DiscordIcon = () => (
+export const DiscordIcon = () => (
   <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
     <path
       fill="currentColor"
@@ -36,7 +36,7 @@ const DiscordIcon = () => (
   </svg>
 );
 
-const GithubIcon = () => (
+export const GithubIcon = () => (
   <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
     <path
       fill="currentColor"
@@ -45,7 +45,7 @@ const GithubIcon = () => (
   </svg>
 );
 
-const ZapIcon = () => (
+export const ZapIcon = () => (
   <svg
     className="h-4 w-4"
     viewBox="0 0 24 24"
@@ -62,7 +62,7 @@ const ZapIcon = () => (
   </svg>
 );
 
-const LoadingSpinner = () => (
+export const LoadingSpinner = () => (
   <svg className="h-5 w-5 animate-spin text-white" viewBox="0 0 24 24">
     <circle
       className="opacity-25"
@@ -81,7 +81,7 @@ const LoadingSpinner = () => (
   </svg>
 );
 
-const CartIcon = () => (
+export const CartIcon = () => (
   <div className="relative">
     <svg
       className="h-4 w-4"
@@ -142,7 +142,7 @@ export default function AppHeader({
       console.log('✅ User is authenticated, redirecting to create app page');
       setIsProcessingAuth(true);
       router.push('/create-app');
-      setTimeout(() => setIsProcessingAuth(false), 2000); 
+      setTimeout(() => setIsProcessingAuth(false), 2000);
     } else {
       console.log('🔑 User not authenticated, initiating Google sign-in...');
       setIsProcessingAuth(true);
@@ -172,12 +172,12 @@ export default function AppHeader({
   const defaultNavItems: NavItem[] = [
     {
       id: 'create-app-button',
-      href: '#', 
+      href: '#',
       label: isAuthenticated ? 'Create App' : 'Sign in to Create App',
       onClick: handleCreateAppAuth,
       className: `px-4 py-2 rounded-[0.5rem] font-semibold text-sm transition-all duration-200 flex items-center justify-center ${
-        isProcessingAuth 
-          ? 'bg-gray-700 text-gray-400 cursor-not-allowed' 
+        isProcessingAuth
+          ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
           : 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 shadow-md hover:shadow-lg transform hover:-translate-y-px'
       }`,
     },
@@ -194,7 +194,12 @@ export default function AppHeader({
     },
   ];
 
-  const navItems = [...defaultNavItems, ...initialNavItems.filter(item => !defaultNavItems.find(di => di.label === item.label))];
+  const navItems = [
+    ...defaultNavItems,
+    ...initialNavItems.filter(
+      (item) => !defaultNavItems.find((di) => di.label === item.label),
+    ),
+  ];
 
   return !dreamforcePage ? (
     <>
@@ -234,10 +239,10 @@ export default function AppHeader({
               className={item.className || 'text-white hover:text-gray-300'}
             >
               {item.id === 'create-app-button' && isProcessingAuth ? (
-                <LoadingSpinner /> 
+                <LoadingSpinner />
               ) : (
                 <>
-                  {item.icon && <span className="mr-1">{item.icon}</span>} 
+                  {item.icon && <span className="mr-1">{item.icon}</span>}
                   {item.label}
                 </>
               )}
@@ -308,15 +313,15 @@ export default function AppHeader({
                 setIsMobileMenuOpen(false);
               }}
               disabled={item.id === 'create-app-button' && isProcessingAuth}
-              className={`flex w-full items-center justify-center space-x-2 rounded-md px-3 py-2.5 text-base font-medium ${item.className} ${
-                item.id === 'create-app-button' ? '' : 'hover:bg-gray-700'
-              }`}
+              className={`flex w-full items-center justify-center space-x-2 rounded-md px-3 py-2.5 text-base font-medium ${
+                item.className
+              } ${item.id === 'create-app-button' ? '' : 'hover:bg-gray-700'}`}
             >
-               {item.id === 'create-app-button' && isProcessingAuth ? (
+              {item.id === 'create-app-button' && isProcessingAuth ? (
                 <LoadingSpinner />
               ) : (
                 <>
-                  {item.icon && <span className="mr-1">{item.icon}</span>} 
+                  {item.icon && <span className="mr-1">{item.icon}</span>}
                   {item.label}
                 </>
               )}
