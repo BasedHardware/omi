@@ -438,24 +438,8 @@ export default function CreateAppPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0B0F17] text-white">
-        <div className="text-center">
-          <div className="mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-white"></div>
-          <p>Loading user...</p>
-        </div>
-      </div>
-    );
-  }
-
   if (!user) {
-    // This case should be handled by the useEffect redirect, but as a fallback:
-    return (
-        <div className="flex min-h-screen items-center justify-center bg-[#0B0F17] text-white">
-            <p>Redirecting to login...</p>
-        </div>
-    );
+    return null;
   }
 
   if (isLoading || (isSubmitting && submissionRef.current) || isRedirecting) { 
