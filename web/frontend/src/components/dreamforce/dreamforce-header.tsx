@@ -1,10 +1,6 @@
-'use client';
 import Image from 'next/image';
-import { useParams } from 'next/navigation';
 
 export default function DreamforceHeader() {
-  const params = useParams();
-
   return (
     <header
       className={`fixed top-0 z-30 flex w-full items-center justify-between bg-black/40 bg-white p-4 px-4 text-white transition-all duration-500 md:bg-transparent md:px-12`}
