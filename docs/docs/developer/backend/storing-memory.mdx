@@ -3,7 +3,7 @@ title: Storing Memories
 description: 'This document outlines the process of storing memory objects in the Omi AI system.'
 ---
 
-## 🔄 Overview of the Process
+## Overview of the Process
 
 1. Memory object is processed
 2. Object is converted to a dictionary
@@ -14,19 +14,19 @@ description: 'This document outlines the process of storing memory objects in th
 
 
 
-## 🧠 Detailed Steps
+## Detailed Steps
 
-### 1. 📥 Memory Object Received
+### 1. Memory Object Received
 
 - The `process_memory` function in `utils/memories/process_memory.py` processes a new or updated memory
 - The complete Memory object is then sent to the `upsert_memory` function in `database/memories.py`
 
-### 2. 🔄 Convert to Dictionary
+### 2. Convert to Dictionary
 
 - The `upsert_memory` function converts the Memory object into a Python dictionary
 - This conversion is necessary because Firestore stores data in a JSON-like format
 
-### 3. 📊 Data Fields
+### 3. Data Fields
 
 The dictionary contains the following key fields:
 
@@ -48,7 +48,7 @@ The dictionary contains the following key fields:
 | `deleted` | Boolean indicating if the memory has been deleted |
 | `visibility` | Visibility setting of the memory |
 
-#### 📋 Structured Information
+#### Structured Information
 
 The `structured` field contains:
 
@@ -59,7 +59,7 @@ The `structured` field contains:
 - `action_items`: List of derived action items
 - `events`: List of extracted calendar events
 
-#### 🗣️ Transcript Segments
+#### Transcript Segments
 
 Each segment in `transcript_segments` includes:
 
@@ -70,7 +70,7 @@ Each segment in `transcript_segments` includes:
 - `is_user`: Boolean indicating if spoken by the user
 - `person_id`: ID of a person from user's profiles (if applicable)
 
-#### 🔄 Postprocessing Information
+#### Postprocessing Information
 
 The `postprocessing` field contains:
 
@@ -78,12 +78,12 @@ The `postprocessing` field contains:
 - `model`: Post-processing model used (e.g., "fal_whisperx")
 - `fail_reason`: (Optional) Reason for failure
 
-### 4. 💾 Save to Firestore
+### 4. Save to Firestore
 
 - `database/memories.py` uses the Firebase Firestore API to store the memory data dictionary
 - Data is saved in the `memories` collection within the user's document
 
-#### 📁 Firestore Structure
+#### Firestore Structure
 Users Collection
 ```└── User Document
 └── memories Collection

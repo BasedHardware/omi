@@ -11,81 +11,73 @@ Navigate to [Flash Device](https://docs.omi.me/docs/get_started/Flash_device) to
 
 ## Build Your Own Firmware
 
-### Step 1: Set Up nRF Connect
+<Steps>
+  <Step title="Set Up nRF Connect">
+    Follow the tutorial in this video:
+    [How to Set Up nRF Connect](https://youtu.be/EAJdOqsL9m8)
+  </Step>
 
-Follow the tutorial in this video:
-[How to Set Up nRF Connect](https://youtu.be/EAJdOqsL9m8)
+  <Step title="Choose Your Firmware Version">
+    You have two options for building firmware:
 
-### Step 2: Choose Your Firmware Version
+    1. **OMI Consumer Version**
+       - Open the `firmware/omi` folder
+       - Use **nRF Connect** SDK and toolchain version `2.9.0`
 
-You have two options for building firmware:
+    2. **OMI DevKit Version**
+       - Open the `firmware/devkit` folder
+       - Use **nRF Connect** SDK and toolchain version `2.7.0`
 
-1. **OMI Consumer Version**
-   - Open the `firmware/omi` folder
-   - Use **nRF Connect** SDK and toolchain version `2.9.0`
+    Make sure to use the correct SDK version for the firmware you're building.
+  </Step>
 
-2. **OMI DevKit Version**
-   - Open the `firmware/devkit` folder
-   - Use **nRF Connect** SDK and toolchain version `2.7.0`
+  <Step title="Open the Firmware Application">
+    1. Open **nRF Connect Extension** inside VS Code.
+    2. Click "Open an existing application" and navigate to either the `firmware/omi` or `firmware/devkit` folder in the root of this repository, depending on which version you want to build.
 
-Make sure to use the correct SDK version for the firmware you're building.
+       <img
+         src="/images/docs/developer/images/install_firmware_screenshot_1.png"
+         alt="install_firmware_screenshot_1"
+         width="75%"
+       />
 
----
+       <img
+         src="/images/docs/developer/images/install_firmware_screenshot_2.png"
+         alt="install_firmware_screenshot_2"
+         width="75%"
+       />
+  </Step>
 
-### Step 3: Open the Firmware Application
+  <Step title="Add a Build Configuration">
+    1. In the application panel of the extension, click the **Add Build Configuration** icon. Choose a `CMake Preset` that matches your hardware.
 
-1. Open **nRF Connect Extension** inside VS Code.
-2. Click "Open an existing application" and navigate to either the `firmware/omi` or `firmware/devkit` folder in the root of this repository, depending on which version you want to build.
+       <img
+         src="/images/docs/developer/images/build_configuration.png"
+         alt="Build Configuration"
+         width="75%"
+       />
 
-   <img
-     src="/images/docs/developer/images/install_firmware_screenshot_1.png"
-     alt="install_firmware_screenshot_1"
-     width="75%"
-   />
+       Board target should be:
+       xiao_ble/nrf52840/sense
 
-   <img
-     src="/images/docs/developer/images/install_firmware_screenshot_2.png"
-     alt="install_firmware_screenshot_2"
-     width="75%"
-   />
+    2. Scroll to the bottom and click "Build Configuration." This will start the nRFConnect SDK building your firmware file.
+       A VSCode notification popup will notify you of the progress of your build.
 
----
+       <img
+         src="/images/docs/developer/images/build_configuration_button.png"
+         alt="Build Configuration"
+         width="75%"
+       />
+  </Step>
 
-### Step 3: Add a Build Configuration
+  <Step title="Locate the Compiled Firmware">
+    Once the build succeeds, you will find the `zephyr.uf2` file in the directory corresponding to the CMake preset you chose, for example `firmware/build/build_xiao_ble_sense_devkitv2-adafruit/zephyr/`.
+  </Step>
 
-1.  In the application panel of the extension, click the **Add Build Configuration** icon. Choose a `CMake Preset` that matches your hardware.
-
-    <img
-      src="/images/docs/developer/images/build_configuration.png"
-      alt="Build Configuration"
-      width="75%"
-    />
-
-Board target shoud be:
-xiao_ble/nrf52840/sense
-
-2.  Scroll to the bottom and click "Build Configuration." This will start the nRFConnect SDK building your firmware file.
-    A VSCode notification popup will notify you of the progress of your build.
-
-   <img
-     src="/images/docs/developer/images/build_configuration_button.png"
-     alt="Build Configuration"
-     width="75%"
-   />
-
----
-
-### Step 4: Locate the Compiled Firmware
-
-Once the build succeeds, you will find the `zephyr.uf2` file in the directory corresponding to the CMake preset you chose, for example `firmware/build/build_xiao_ble_sense_devkitv2-adafruit/zephyr/`.
-
----
-
-### Step 5: Flash the Firmware
-
-Follow the steps as described [here](../get_started/Flash_device) using the generated file
-
----
+  <Step title="Flash the Firmware">
+    Follow the steps as described [here](../get_started/Flash_device) using the generated file.
+  </Step>
+</Steps>
 
 ## Congratulations!
 

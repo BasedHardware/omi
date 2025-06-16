@@ -3,7 +3,7 @@ title: "Memory Embeddings"
 description: "This document outlines how Omi creates and stores embeddings for memories."
 ---
 
-## 🔄 Process Overview
+## Process Overview
 
 1. Memory processing triggers embedding creation
 2. Structured data is extracted from the memory
@@ -14,7 +14,7 @@ description: "This document outlines how Omi creates and stores embeddings for m
 ![Embeddings](/images/docs/developer/images/embeddings.png)
 
 
-## 📊 Detailed Steps
+## Detailed Steps
 
 ### 1. Memory Processing Triggers Embedding Creation
 
@@ -63,18 +63,18 @@ description: "This document outlines how Omi creates and stores embeddings for m
   - Sends data point to Pinecone API using upsert operation
   - Pinecone stores embedding and metadata in specified index
 
-## 🎯 Why This Matters
+## Why This Matters
 
 1. **Semantic Search**: Enables Omi to find semantically similar memories when answering user questions
 2. **Metadata for Filtering**: Allows efficient filtering of memories by user or time range during retrieval
 
-## 🔍 Additional Considerations
+## Additional Considerations
 
 - **Embedding Model**: Uses OpenAI's `text-embedding-3-large` model
 - **Index Configuration**: Ensure Pinecone index is configured for the chosen embedding model
 - **Retrieval**: `query_vectors` function in `database/vector_db.py` retrieves memory IDs based on query embedding and filter criteria
 
-## 💻 Key Code Components
+## Key Code Components
 
 ```python
 # In utils/memories/process_memory.py

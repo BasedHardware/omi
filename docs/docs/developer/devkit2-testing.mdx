@@ -5,7 +5,7 @@ description: How to test the Omi Dev Kit 2
 
 **SEE THE BOTTOM OF THE DOCUMENT LABELED BUGS IF YOU RUN INTO ISSUES**
 
-## 🎯Two Key Tests
+## Two Key Tests
 
 There are two important characteristics to test: 
 
@@ -52,9 +52,9 @@ You may get the following return command bytes if you send a packet
 | 4 | File size is 0 |
 | 6 |  Invalid command. The command sent is not one of the commands listed above |
 
-⚠️  Note: If you don't receive 100 or 200, the file request wasn't carried out.
+Note: If you don't receive 100 or 200, the file request wasn't carried out.
 
-## **🧪 Testing Process**
+## **Testing Process**
 
 There are 5 python files for testing. Please run them in the order shown here. This process is meant to test individual devices, since multiple could be on at any time. Before testing, please ensure you have all the python packages needed for running(in requirements.txt) . Also ensure that you have ffmpeg and opus for decoding. 
 
@@ -63,7 +63,7 @@ There are 5 python files for testing. Please run them in the order shown here. T
 * ✅ Python packages (see requirements.txt)  
 * ✅ ffmpeg and opus for decoding
 
-**⚠️ WARNING: NEVER remove the SD card while the device is on\! It's not hot-swappable.**
+**WARNING: NEVER remove the SD card while the device is on\! It's not hot-swappable.**
 
 #### Safe SD Card Removal
 
@@ -139,7 +139,7 @@ Config file should include:
 Names-names customizable to be set by the user  
 User id-user id after bonding
 
-## 🐞 Known Bugs
+## Known Bugs
 
 Bug 1 (Version 2.0.1)  
 Some users are experiencing issues with the sd card streaming. One cause is the fact that sometimes the audio file is empty, and since the a01.txt file, which audio data is streamed into, does not exist, nothing is actually written.

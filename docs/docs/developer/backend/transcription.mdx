@@ -5,13 +5,13 @@ description: 'This document outlines the real-time audio transcription process i
 
 ![Post Processing](/images/docs/developer/images/transcription-process.png)
 
-## 📡 Audio Streaming
+## Audio Streaming
 
 1. The Omi App initiates a real-time audio stream to the backend.
 2. Audio data is sent via WebSocket to the `/listen` endpoint.
 3. Audio can be in Opus or Linear16 encoding, depending on device settings.
 
-## 🔌 WebSocket Handling
+## WebSocket Handling
 
 ### `/listen` Endpoint
 
@@ -29,7 +29,7 @@ description: 'This document outlines the real-time audio transcription process i
   - `receive_audio`: Receives audio chunks and sends to Deepgram
   - `send_heartbeat`: Sends periodic messages to keep connection alive
 
-## 🔊 Deepgram Integration
+## Deepgram Integration
 
 ### `process_audio_dg` Function
 
@@ -57,7 +57,7 @@ description: 'This document outlines the real-time audio transcription process i
 | `multichannel` | channels > 1 | Enable if multiple channels |
 | `model` | 'nova-2-general' | Deepgram model selection |
 
-## 🔄 Transcript Processing
+## Transcript Processing
 
 1. Deepgram processes audio and triggers `on_message` callback
 2. `on_message` receives raw transcript data
@@ -77,7 +77,7 @@ description: 'This document outlines the real-time audio transcription process i
 | `is_user` | Boolean indicating if segment is from the user |
 | `person_id` | ID of matched person from user profiles (if applicable) |
 
-## 🔑 Key Considerations
+## Key Considerations
 
 - Real-time, low-latency transcription
 - Speaker diarization accuracy may vary

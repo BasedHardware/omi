@@ -3,8 +3,6 @@ title: "Model Context Protocol"
 description: "A Model Context Protocol server for Omi interaction and automation. This server provides tools to read, search, and manipulate Memories and Conversations."
 ---
 
-import { AccordionGroup, Accordion } from 'mintlify-components';
-
 ## Configuration
 
 ### Usage with Claude Desktop
@@ -12,60 +10,55 @@ import { AccordionGroup, Accordion } from 'mintlify-components';
 Add this to your `claude_desktop_config.json`:
 
 <AccordionGroup>
-<Accordion title="Using uvx">
+  <Accordion title="Using uvx">
+    When using [uv](https://docs.astral.sh/uv/) no specific installation is needed.
 
-When using [uv](https://docs.astral.sh/uv/) no specific installation is needed.
+    We will use [uvx](https://docs.astral.sh/uv/guides/tools/) to directly run *mcp-server-omi*.
 
-We will use [uvx](https://docs.astral.sh/uv/guides/tools/) to directly run *mcp-server-omi*.
+    | If having issues instead of `"command": "uvx"`, put your whole package path (`which uvx`), then `"command": "$path"`.
 
-| If having issues instead of `"command": "uvx"`, put your whole package path (`which uvx`), then `"command": "$path"`.
+    ```json
+    "mcpServers": {
+      "omi": {
+        "command": "uvx",
+        "args": ["mcp-server-omi"]
+      }
+    }
+    ```
+  </Accordion>
 
-```json
-"mcpServers": {
-  "omi": {
-    "command": "uvx",
-    "args": ["mcp-server-omi"]
-  }
-}
-```
+  <Accordion title="Using docker">
+    Install docker, https://orbstack.dev/ is great.
 
-</Accordion>
+    ```json
+    "mcpServers": {
+      "omi": {
+        "command": "docker",
+        "args": ["run", "--rm", "-i", "josancamon19/mcp-server-omi"]
+      }
+    }
+    ```
+  </Accordion>
 
-<Accordion title="Using docker">
+  <Accordion title="Using pip installation">
+    Requires python >= 3.11.6. 
+    - Check `python --version`, and `brew list --versions | grep python` (you might have other versions of python installed)
+    - Get the path of the python version (`which python`) or with brew
 
-Install docker, https://orbstack.dev/ is great.
-
-```json
-"mcpServers": {
-  "omi": {
-    "command": "docker",
-    "args": ["run", "--rm", "-i", "josancamon19/mcp-server-omi"]
-  }
-}
-```
-</Accordion>
-
-<Accordion title="Using pip installation">
-
-Requires python >= 3.11.6. 
-- Check `python --version`, and `brew list --versions | grep python` (you might have other versions of python installed)
-- Get the path of the python version (`which python`) or with brew
-
-```json
-"mcpServers": {
-  "omi": {
-    "command": "/opt/homebrew/bin/python3.12",
-    "args": ["-m", "mcp_server_omi"]
-  }
-}
-```
-</Accordion>
+    ```json
+    "mcpServers": {
+      "omi": {
+        "command": "/opt/homebrew/bin/python3.12",
+        "args": ["-m", "mcp_server_omi"]
+      }
+    }
+    ```
+  </Accordion>
 </AccordionGroup>
 
 ### Examples (langchain, openai Agents, dspy)
 
 https://github.com/BasedHardware/omi/tree/main/mcp/examples
-
 
 ### Tools
 1. `get_memories`
@@ -111,13 +104,13 @@ https://github.com/BasedHardware/omi/tree/main/mcp/examples
 
 You can use the MCP inspector to debug the server. For uvx installations:
 
-```
+```bash
 npx @modelcontextprotocol/inspector uvx mcp-server-omi
 ```
 
 Or if you've installed the package in a specific directory or are developing on it:
 
-```
+```bash
 cd path/to/servers/src/omi
 npx @modelcontextprotocol/inspector uv run mcp-server-omi
 ```

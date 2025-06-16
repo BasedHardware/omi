@@ -3,12 +3,12 @@ title: "Backend Setup"
 description: "Welcome to the Omi backend setup guide! Omi is an innovative, multimodal AI assistant that combines cutting-edge technologies to provide a seamless user experience. This guide will help you set up the backend infrastructure that powers Omi's intelligent capabilities."
 ---
 
-## Prerequisites 📋
+## Prerequisites
 
 Before you start, make sure you have the following:
 
 - **Google Cloud Project:** You need a Google Cloud project with Firebase enabled. If you've already set up Firebase for the Omi app, you're good to go.
-- **API Keys: 🔑**  Obtain API keys for:
+- **API Keys:**  Obtain API keys for:
     - **OpenAI:** For AI language models ([OpenAI API Keys](https://platform.openai.com/settings/organization/api-keys))
     - **Deepgram:** For speech-to-text ([Deepgram API Keys](https://console.deepgram.com/api-keys))
     - **Redis:** Upstash is recommended ([Upstash Redis Console](https://console.upstash.com/))
@@ -27,7 +27,7 @@ Before you start, make sure you have the following:
 <iframe width="560" height="315" src="https://www.youtube.com/embed/JyXQM0B0Gnc?si=_2W2GU5Qr7dn7gC7" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 
 
-## I. Setting Up Google Cloud & Firebase ☁️
+## I. Setting Up Google Cloud & Firebase
 
 1. **Install Google Cloud SDK:**
     - **Mac (using brew):** `brew install google-cloud-sdk`
@@ -42,7 +42,7 @@ Before you start, make sure you have the following:
         - [Cloud Resource Manager API](https://console.cloud.google.com/apis/library/cloudresourcemanager.googleapis.com)
         - [Firebase Management API](https://console.cloud.google.com/apis/library/firebase.googleapis.com)
 
-3. **Authenticate with Google Cloud: 🔐**
+3. **Authenticate with Google Cloud:**
     - Open your terminal
     - Run the following commands one by one, replacing `<project-id>` with your Google Cloud project ID:
        ```bash
@@ -63,7 +63,7 @@ Before you start, make sure you have the following:
 
 ## II. Backend Setup 🛠️
 
-1. **Install Python & Dependencies: 🐍**
+1. **Install Python & Dependencies:**
     - **Mac (using brew):** `brew install python`
     - **Nix Envdir:** Python is pre-installed
     - **Windows (using choco):** `choco install python`
@@ -81,7 +81,7 @@ Before you start, make sure you have the following:
     - **Install All Required Dependencies:**
         - **All Platforms:** `brew install -r requirements.txt`
 
-2. **Clone the Backend Repository: 📂**
+2. **Clone the Backend Repository:**
     - Open your terminal and navigate to your desired directory
     - Clone the Omi backend repository:
        ```bash
@@ -90,7 +90,7 @@ Before you start, make sure you have the following:
        cd backend
        ```
 
-3. **Set up Pusher Service: 📡 [Optional]**
+3. **Set up Pusher Service: [Optional]**
     - You don't need to have the Pusher Service running if you do not intend to use the webhooks feature
     - Navigate to the pusher directory:
        ```bash
@@ -119,7 +119,7 @@ Before you start, make sure you have the following:
     - Set the `TYPESENSE_HOST`, `TYPESENSE_HOST_PORT` and `TYPESENSE_API_KEY` environment variables in the `.env` file to the host URL and API key provided by Typesense
 
 
-5. **Set up the Environment File: 📝**
+5. **Set up the Environment File:**
     - Create a copy of the `.env.template` file and rename it to `.env`:
       ```bash
       cp .env.template .env
@@ -135,10 +135,10 @@ Before you start, make sure you have the following:
         - **NO_SOCKET_TIMEOUT: (Optional)** Set to `True` to disable the socket timeout for the backend server (socket will stay connected for as long as the app is open)
         - **Other API Keys:** Fill in any other API keys required by your integrations (e.g., [Google Maps API key](https://console.cloud.google.com/google/maps-apis/credentials))
 
-6. **Install Python Dependencies: 📚**
+6. **Install Python Dependencies:**
     You have two options for installing the required Python packages:
 
-    **Option A: Using a Virtual Environment (Recommended) 🐍**
+    **Option A: Using a Virtual Environment (Recommended)**
     - It's recommended to use a virtual environment to isolate your project dependencies and avoid conflicts
     - Create a new virtual environment in the backend directory:
       ```bash
@@ -165,9 +165,9 @@ Before you start, make sure you have the following:
       ```
     - Note that this approach may lead to conflicts with other Python projects on your system
 
-## III. Running the Backend Locally 🏃‍♂️
+## III. Running the Backend Locally
 
-1. **Set up Ngrok for Tunneling: 🚇**
+1. **Set up Ngrok for Tunneling:**
     - Sign up for a free account on [https://ngrok.com/](https://ngrok.com/) and install Ngrok
     - Follow their instructions to authenticate Ngrok with your account
     - During the onboarding, Ngrok will provide you with a command to create a tunnel to your localhost. Modify the port in the command to `8000` (the default port for the backend). For example:
@@ -176,7 +176,7 @@ Before you start, make sure you have the following:
       ```
     - Run this command in your terminal. Ngrok will provide you with a public URL (like `https://example.ngrok-free.app`) that points to your local backend
 
-2. **Start the Backend Server: 🖥️**
+2. **Start the Backend Server:**
     - In your terminal, run:
       ```bash
       uvicorn main:app --reload --env-file .env
@@ -186,7 +186,7 @@ Before you start, make sure you have the following:
         - `--host 0.0.0.0` listens to every interface on your computer so you don't have to set up `ngrok` when developing in your network
         -  `--port 8000` port for backend to listen
 
-3. **Troubleshooting SSL Errors: 🔒**
+3. **Troubleshooting SSL Errors:**
     - **SSL Errors:** If you encounter SSL certificate errors during model downloads, add this to `utils/stt/vad.py`:
       ```python
       import ssl
@@ -204,7 +204,7 @@ Before you start, make sure you have the following:
 
 Now, your Omi app should be successfully connected to the locally running backend.
 
-5. **When You're Done: 🛑**
+5. **When You're Done:**
     - If you used a virtual environment, when you're finished working with the backend, deactivate it by running:
       ```bash
       deactivate
@@ -212,7 +212,7 @@ Now, your Omi app should be successfully connected to the locally running backen
     - This command returns you to your system's global Python environment
     - To reactivate the virtual environment later, just run the activation command again (`source venv/bin/activate` on macOS/Linux or `venv\Scripts\activate` on Windows)
 
-## Environment Variables 🔐
+## Environment Variables:
 
 Here's a detailed explanation of each environment variable you need to define in your `.env` file:
 
@@ -240,17 +240,17 @@ Here's a detailed explanation of each environment variable you need to define in
 
 Make sure to replace the placeholders (`<api-key>`, `<bucket-name>`, etc.) with your actual values.
 
-## Contributing 🤝
+## Contributing
 
 We welcome contributions from the open source community! Whether it's improving documentation, adding new features, or reporting bugs, your input is valuable. Check out
 our [Contribution Guide](https://docs.omi.me/developer/Contribution/) for more information.
 
-## Support 🆘
+## Support
 
 If you're stuck, have questions, or just want to chat about Omi:
 
-- **GitHub Issues: 🐛** For bug reports and feature requests
-- **Community Forum: 💬** Join our [community forum](https://discord.gg/omi) for discussions and questions
-- **Documentation: 📚** Check out our [full documentation](https://docs.omi.me/) for in-depth guides
+- **GitHub Issues:** For bug reports and feature requests
+- **Community Forum:** Join our [community forum](https://discord.gg/omi) for discussions and questions
+- **Documentation:** Check out our [full documentation](https://docs.omi.me/) for in-depth guides
 
-Happy coding! 💻 If you have any questions or need further assistance, don't hesitate to reach out to our community.
+Happy coding! If you have any questions or need further assistance, don't hesitate to reach out to our community.

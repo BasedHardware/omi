@@ -15,75 +15,69 @@ Before you begin, ensure your application is registered with OMI and has an `App
 
 ## OAuth Flow
 
-The OMI OAuth flow consists of the following steps:
+<Steps>
+  <Step title="Redirect User to OMI for Authorization">
+    Your application initiates the OAuth flow by redirecting the user's browser to OMI's authorization endpoint:
 
-1.  **User Authorization Request**: Your application redirects the user to the OMI OAuth authorization endpoint.
-2.  **User Authentication & Consent**: The user logs into their OMI account (if not already logged in) and reviews the permissions requested by your application. If they approve, they grant consent.
-3.  **Token Exchange & User Redirection**: After successful authentication and consent, OMI's authorization page will internally facilitate the exchange of the Firebase ID token (obtained client-side) for an OMI user ID (`uid`). The user is then redirected back to your application's **App Home URL** with the `uid` and an optional `state` parameter.
+    `https://api.omi.me/v1/oauth/authorize?app_id=YOUR_APP_ID&state=YOUR_OPAQUE_STATE_STRING`
 
-### Step 1: Redirect User to OMI for Authorization
+    **Parameters:**
+    * `app_id` (required): Your application's unique ID.
+    * `state` (optional): An opaque value used to maintain state between the request and callback. This is useful for preventing CSRF attacks and can also store application-specific state. OMI will return this value to your application after the user authorizes your app.
+  </Step>
 
-Your application initiates the OAuth flow by redirecting the user's browser to OMI's authorization endpoint:
+  <Step title="User Authentication and Consent">
+    Upon visiting the `/v1/oauth/authorize` URL, the user will be presented with an OMI page where they can:
+    1. Log in using their Firebase credentials (Google or Apple).
+    2. Review the permissions your application is requesting. These permissions are derived from the capabilities configured for your app (e.g., access chat, read/create memories, etc.).
+    3. Grant or deny access.
 
-`https://api.omi.me/v1/oauth/authorize?app_id=YOUR_APP_ID&state=YOUR_OPAQUE_STATE_STRING`
+    The permissions displayed are user-friendly descriptions based on your app's declared capabilities, such as:
+    - "Engage in chat conversations with Omi."
+    - "Access and manage your conversations."
+    - "Process audio data in real-time."
+    - "Trigger actions when new conversations are created."
+    - "Create new conversations on your behalf."
+    - "Access and read your stored memories."
+    - "Access your basic Omi profile information." (This may be shown as a default if no other specific permissions are applicable or as a general permission).
+  </Step>
 
-**Parameters:**
+  <Step title="Token Exchange and Redirection to Your App">
+    This step is primarily handled by the client-side JavaScript on the OMI authorization page after the user successfully logs in via Firebase.
 
-*   `app_id` (required): Your application's unique ID.
-*   `state` (optional): An opaque value used to maintain state between the request and callback. This is useful for preventing CSRF attacks and can also store application-specific state. OMI will return this value to your application after the user authorizes your app.
+    1. **Firebase Authentication**: The user authenticates with Firebase on the OMI authorization page.
 
+    2. **Token POST**: The client-side script on the OMI authorization page makes a `POST` request to:
+       `POST https://api.omi.me/v1/oauth/token`
 
-### Step 2: User Authentication and Consent
+       **Request Body (form-data):**
+       * `firebase_id_token` (required): The ID token obtained from Firebase after successful user login on the OMI page.
+       * `app_id` (required): Your application's unique ID.
+       * `state` (optional): The `state` parameter that was initially passed to the `/v1/oauth/authorize` endpoint.
 
-Upon visiting the `/v1/oauth/authorize` URL, the user will be presented with an OMI page where they can:
-1.  Log in using their Firebase credentials (Google or Apple).
-2.  Review the permissions your application is requesting. These permissions are derived from the capabilities configured for your app (e.g., access chat, read/create memories, etc.).
-3.  Grant or deny access.
+       **Response (JSON):**
+       If successful, the `/v1/oauth/token` endpoint responds with a JSON object containing:
+       ```json
+       {
+         "uid": "USER_UNIQUE_ID",
+         "redirect_url": "YOUR_APP_HOME_URL",
+         "state": "YOUR_OPAQUE_STATE_STRING_IF_PROVIDED"
+       }
+       ```
+       - `uid`: The unique identifier for the OMI user.
+       - `redirect_url`: Your application's configured **App Home URL**.
+       - `state`: The `state` parameter, if it was included in the initial authorization request.
 
-The permissions displayed are user-friendly descriptions based on your app's declared capabilities, such as:
-- "Engage in chat conversations with Omi."
-- "Access and manage your conversations."
-- "Process audio data in real-time."
-- "Trigger actions when new conversations are created."
-- "Create new conversations on your behalf."
-- "Access and read your stored memories."
-- "Access your basic Omi profile information." (This may be shown as a default if no other specific permissions are applicable or as a general permission).
+    3. **Redirection to App Home URL**: The client-side script on the OMI authorization page then uses the `redirect_url`, `uid`, and `state` from the response to redirect the user's browser to your application.
 
-### Step 3: Token Exchange and Redirection to Your App
+       **Example Redirect URL constructed by the client-side script:**
+       ```
+       YOUR_APP_HOME_URL?uid=USER_UNIQUE_ID&state=YOUR_OPAQUE_STATE_STRING
+       ```
 
-This step is primarily handled by the client-side JavaScript on the OMI authorization page after the user successfully logs in via Firebase.
-
-1.  **Firebase Authentication**: The user authenticates with Firebase on the OMI authorization page.
-2.  **Token POST**: The client-side script on the OMI authorization page makes a `POST` request to:
-
-    `POST https://api.omi.me/v1/oauth/token`
-
-    **Request Body (form-data):**
-    *   `firebase_id_token` (required): The ID token obtained from Firebase after successful user login on the OMI page.
-    *   `app_id` (required): Your application's unique ID.
-    *   `state` (optional): The `state` parameter that was initially passed to the `/v1/oauth/authorize` endpoint.
-
-    **Response (JSON):**
-    If successful, the `/v1/oauth/token` endpoint responds with a JSON object containing:
-    ```json
-    {
-      "uid": "USER_UNIQUE_ID",
-      "redirect_url": "YOUR_APP_HOME_URL",
-      "state": "YOUR_OPAQUE_STATE_STRING_IF_PROVIDED"
-    }
-    ```
-    - `uid`: The unique identifier for the OMI user.
-    - `redirect_url`: Your application's configured **App Home URL**.
-    - `state`: The `state` parameter, if it was included in the initial authorization request.
-
-3.  **Redirection to App Home URL**: The client-side script on the OMI authorization page then uses the `redirect_url`, `uid`, and `state` from the response to redirect the user's browser to your application.
-
-    **Example Redirect URL constructed by the client-side script:**
-    ```
-    YOUR_APP_HOME_URL?uid=USER_UNIQUE_ID&state=YOUR_OPAQUE_STATE_STRING
-    ```
-
-Your application, at its **App Home URL**, can then retrieve the `uid` from the query parameters to identify the user. If you used a `state` parameter, your application should validate it against the value it initially sent to protect against CSRF attacks.
+    Your application, at its **App Home URL**, can then retrieve the `uid` from the query parameters to identify the user. If you used a `state` parameter, your application should validate it against the value it initially sent to protect against CSRF attacks.
+  </Step>
+</Steps>
 
 ## Automatic App Enablement
 
