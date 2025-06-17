@@ -63,7 +63,7 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                 child: Column(
                   children: [
                     const Spacer(flex: 2),
-                    SvgPicture.asset(Assets.images.checkbox.path),
+                    SvgPicture.asset(Assets.images.checkbox),
                     const SizedBox(height: 24),
                     Text(
                       FirebaseAuth.instance.currentUser?.isAnonymous == false
