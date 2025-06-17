@@ -4,7 +4,6 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
-/// Desktop popular apps section with premium minimal design
 class DesktopPopularAppsSection extends StatelessWidget {
   final List<App> popularApps;
 
@@ -35,7 +34,7 @@ class DesktopPopularAppsSection extends StatelessWidget {
                   color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.star_rounded,
                   color: ResponsiveHelper.purplePrimary,
                   size: 20,
@@ -262,7 +261,7 @@ class _DesktopPopularAppCardState extends State<_DesktopPopularAppCard> {
           SizedBox(height: widget.responsive.spacing(baseSpacing: 4)),
           Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.star_rounded,
                 color: ResponsiveHelper.purplePrimary,
                 size: 14,

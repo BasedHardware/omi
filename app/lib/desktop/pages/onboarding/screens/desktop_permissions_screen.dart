@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:omi/utils/platform/platform_service.dart';
-import 'package:intercom_flutter/intercom_flutter.dart';
 
 class DesktopPermissionsScreen extends StatefulWidget {
   final VoidCallback onNext;
@@ -41,7 +39,6 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
       curve: Curves.easeOut,
     ));
 
-    // Initial permission check - same as permissions_desktop_widget.dart
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = Provider.of<OnboardingProvider>(context, listen: false);
       provider.updatePermissions();
@@ -59,7 +56,6 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // Refresh permissions when user returns to the app
       final provider = Provider.of<OnboardingProvider>(context, listen: false);
       provider.updatePermissions();
     }
@@ -133,7 +129,7 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
   Widget build(BuildContext context) {
     return Consumer<OnboardingProvider>(
       builder: (context, provider, child) {
-        return Container(
+        return SizedBox(
           width: double.infinity,
           height: double.infinity,
           child: SingleChildScrollView(
@@ -144,7 +140,6 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
               child: IntrinsicHeight(
                 child: Column(
                   children: [
-                    // Header Section
                     FadeTransition(
                       opacity: _fadeAnimation,
                       child: Container(
@@ -154,7 +149,6 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
                         ),
                         child: Column(
                           children: [
-                            // Simple minimal icon matching name and language pages
                             Container(
                               width: 56,
                               height: 56,
@@ -171,7 +165,6 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
 
                             const SizedBox(height: 24),
 
-                            // Clean title
                             const Text(
                               'Grant permissions',
                               style: TextStyle(
@@ -185,7 +178,6 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
 
                             const SizedBox(height: 8),
 
-                            // Clean subtitle
                             Container(
                               constraints: const BoxConstraints(maxWidth: 480),
                               padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -205,7 +197,6 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
                       ),
                     ),
 
-                    // Permissions list - use flexible instead of expanded
                     Flexible(
                       child: FadeTransition(
                         opacity: _fadeAnimation,
@@ -287,7 +278,6 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
                       ),
                     ),
 
-                    // Clean minimal navigation - reduced padding and responsive
                     Container(
                       padding: const EdgeInsets.fromLTRB(40, 24, 40, 40),
                       child: Column(
@@ -295,7 +285,6 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              // Premium continue button
                               Container(
                                 height: 44,
                                 decoration: BoxDecoration(
@@ -349,7 +338,6 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
 
                           const SizedBox(height: 8),
 
-                          // Small back button
                           TextButton(
                             onPressed: widget.onBack,
                             child: const Text(
@@ -403,7 +391,7 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
           child: Row(
             children: [
               // Icon
-              Container(
+              SizedBox(
                 width: 24,
                 height: 24,
                 child: Icon(

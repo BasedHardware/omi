@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
-/// Premium minimal search widget for desktop conversations
 class DesktopConversationSearch extends StatefulWidget {
   final TextEditingController controller;
   final Function(String) onSearchChanged;

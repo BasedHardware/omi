@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
-/// Premium minimal header for desktop conversations page
 class DesktopConversationHeader extends StatefulWidget {
   const DesktopConversationHeader({super.key});
 

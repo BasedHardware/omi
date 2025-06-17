@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
-/// Desktop search header with premium minimal design - fully responsive
 class DesktopSearchHeader extends StatefulWidget {
   final TextEditingController controller;
   final FocusNode focusNode;

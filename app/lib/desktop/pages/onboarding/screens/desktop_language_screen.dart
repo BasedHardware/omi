@@ -93,7 +93,6 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
           selectedLanguage = savedLanguage;
         });
       }
-      // Don't default to 'en' - require explicit selection like mobile
       _buildLanguageList();
       _fadeController.forward();
     });
@@ -165,7 +164,6 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
       return;
     }
 
-    // Save the language like mobile version
     final homeProvider = Provider.of<HomeProvider>(context, listen: false);
     await homeProvider.updateUserPrimaryLanguage(selectedLanguage!);
 
@@ -176,7 +174,7 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
   Widget build(BuildContext context) {
     final responsive = ResponsiveHelper(context);
 
-    return Container(
+    return SizedBox(
       width: double.infinity,
       height: double.infinity,
       child: Column(
@@ -191,7 +189,6 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
               ),
               child: Column(
                 children: [
-                  // Simple minimal icon
                   Container(
                     width: 56,
                     height: 56,
@@ -208,8 +205,7 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
 
                   SizedBox(height: responsive.spacing(baseSpacing: 24)),
 
-                  // Clean typography
-                  Text(
+                  const Text(
                     'Choose your language',
                     style: TextStyle(
                       fontSize: 28,
@@ -222,12 +218,12 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
 
                   SizedBox(height: responsive.spacing(baseSpacing: 8)),
 
-                  Text(
+                  const Text(
                     'Select your preferred language for the best Omi experience',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w400,
-                      color: const Color(0xFF9CA3AF),
+                      color: Color(0xFF9CA3AF),
                       height: 1.5,
                     ),
                     textAlign: TextAlign.center,
@@ -237,14 +233,13 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
             ),
           ),
 
-          // Clean minimal search
           FadeTransition(
             opacity: _fadeAnimation,
             child: Container(
-              constraints: BoxConstraints(
+              constraints: const BoxConstraints(
                 maxWidth: 480,
               ),
-              margin: EdgeInsets.symmetric(
+              margin: const EdgeInsets.symmetric(
                 horizontal: 40,
                 vertical: 16,
               ),
@@ -267,19 +262,19 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
                     fontSize: 15,
                     fontWeight: FontWeight.w400,
                   ),
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     hintText: 'Search languages...',
-                    hintStyle: const TextStyle(
+                    hintStyle: TextStyle(
                       color: Color(0xFF6B7280),
                       fontSize: 15,
                     ),
                     prefixIcon: Icon(
                       Icons.search_rounded,
-                      color: const Color(0xFF6B7280),
+                      color: Color(0xFF6B7280),
                       size: 20,
                     ),
                     border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(
+                    contentPadding: EdgeInsets.symmetric(
                       horizontal: 20,
                       vertical: 16,
                     ),
@@ -289,7 +284,6 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
             ),
           ),
 
-          // Clean language list
           Expanded(
             child: FadeTransition(
               opacity: _fadeAnimation,
@@ -319,7 +313,6 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
             ),
           ),
 
-          // Clean minimal navigation - centered continue button
           Container(
             padding: const EdgeInsets.all(40),
             child: Column(
@@ -327,7 +320,6 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Premium continue button
                     Container(
                       height: 44,
                       decoration: BoxDecoration(
@@ -365,7 +357,6 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
 
                 const SizedBox(height: 8),
 
-                // Small back button
                 TextButton(
                   onPressed: widget.onBack,
                   child: const Text(
@@ -448,7 +439,7 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
             child: Row(
               children: [
                 // Flag
-                Container(
+                SizedBox(
                   width: 24,
                   height: 24,
                   child: Center(
@@ -473,9 +464,8 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
                   ),
                 ),
 
-                // Minimal selection indicator
                 if (isSelected)
-                  Icon(
+                  const Icon(
                     Icons.check_rounded,
                     color: ResponsiveHelper.purplePrimary,
                     size: 18,

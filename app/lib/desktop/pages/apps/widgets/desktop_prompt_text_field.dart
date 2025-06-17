@@ -20,7 +20,7 @@ class DesktopPromptTextField extends StatelessWidget {
       children: [
         Text(
           label,
-          style: TextStyle(
+          style: const TextStyle(
             color: ResponsiveHelper.textSecondary,
             fontSize: 14,
             fontWeight: FontWeight.w500,
@@ -54,7 +54,7 @@ class DesktopPromptTextField extends StatelessWidget {
                     }
                     return null;
                   },
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: ResponsiveHelper.textPrimary,
                     fontSize: 14,
                     height: 1.5,
@@ -63,7 +63,7 @@ class DesktopPromptTextField extends StatelessWidget {
                     contentPadding: const EdgeInsets.all(16),
                     isDense: false,
                     hintText: hint,
-                    hintStyle: TextStyle(
+                    hintStyle: const TextStyle(
                       color: ResponsiveHelper.textTertiary,
                       fontSize: 14,
                     ),

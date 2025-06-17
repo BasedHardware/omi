@@ -26,13 +26,13 @@ class DesktopActionItemsSection extends StatelessWidget {
         // Section header
         Row(
           children: [
-            Icon(
+            const Icon(
               FontAwesomeIcons.listCheck,
               color: ResponsiveHelper.textSecondary,
               size: 16,
             ),
             const SizedBox(width: 8),
-            Text(
+            const Text(
               'Action Items',
               style: TextStyle(
                 color: ResponsiveHelper.textPrimary,
@@ -49,7 +49,7 @@ class DesktopActionItemsSection extends StatelessWidget {
               ),
               child: Text(
                 '${actionItems.length}',
-                style: TextStyle(
+                style: const TextStyle(
                   color: ResponsiveHelper.textTertiary,
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
@@ -97,7 +97,7 @@ class DesktopActionItemsSection extends StatelessWidget {
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: item.completed
-                        ? Icon(
+                        ? const Icon(
                             FontAwesomeIcons.check,
                             size: 10,
                             color: Colors.white,

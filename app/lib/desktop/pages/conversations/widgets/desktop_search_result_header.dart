@@ -3,7 +3,6 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
 
-/// Premium minimal search result header for desktop
 class DesktopSearchResultHeader extends StatelessWidget {
   const DesktopSearchResultHeader({super.key});
 

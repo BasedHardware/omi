@@ -4,7 +4,6 @@ import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:provider/provider.dart';
 
-/// Modern filter chips inspired by App Store and other marketplaces
 class DesktopFilterChips extends StatelessWidget {
   final VoidCallback onFilterChanged;
 
@@ -179,7 +178,7 @@ class DesktopFilterChips extends StatelessWidget {
             value: 'clear',
             child: Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.clear,
                   size: 16,
                   color: ResponsiveHelper.textTertiary,
@@ -272,7 +271,7 @@ class DesktopFilterChips extends StatelessWidget {
             value: 'clear',
             child: Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.clear,
                   size: 16,
                   color: ResponsiveHelper.textTertiary,
@@ -293,7 +292,7 @@ class DesktopFilterChips extends StatelessWidget {
             value: rating,
             child: Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.star_rounded,
                   size: 16,
                   color: ResponsiveHelper.purplePrimary,
@@ -378,7 +377,7 @@ class DesktopFilterChips extends StatelessWidget {
             value: 'clear',
             child: Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.clear,
                   size: 16,
                   color: ResponsiveHelper.textTertiary,

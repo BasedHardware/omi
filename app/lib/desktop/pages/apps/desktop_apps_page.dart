@@ -9,13 +9,11 @@ import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
-import 'desktop_add_app_page.dart';
 import 'widgets/desktop_app_grid.dart';
 import 'widgets/desktop_search_header.dart';
 import 'widgets/desktop_filter_chips.dart';
 import 'widgets/desktop_app_detail.dart';
 
-/// Desktop Apps Page - Optimized for large datasets (4000+ apps)
 class DesktopAppsPage extends StatefulWidget {
   final VoidCallback? onNavigateToCreateApp;
 
@@ -31,14 +29,12 @@ class DesktopAppsPage extends StatefulWidget {
 class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAliveClientMixin {
   late TextEditingController _searchController;
   late FocusNode _searchFocusNode;
-  final Debouncer _debouncer = Debouncer(delay: const Duration(milliseconds: 500)); // Increased debounce
+  final Debouncer _debouncer = Debouncer(delay: const Duration(milliseconds: 500));
   late ScrollController _scrollController;
 
-  // Performance optimization: Track initialization state
   bool _isInitialized = false;
   bool _isLoadingData = false;
 
-  // App detail panel state - using ValueNotifier to avoid full rebuilds
   final ValueNotifier<App?> _selectedAppNotifier = ValueNotifier<App?>(null);
 
   @override
@@ -48,10 +44,8 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
     _searchFocusNode = FocusNode();
     _scrollController = ScrollController();
 
-    // Optimize initialization to avoid concurrent database operations
     _initializeDataSequentially();
 
-    // Add listener for app provider changes to refresh category content
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AppProvider>().addListener(_handleAppProviderChange);
     });
@@ -64,7 +58,6 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
       Future.delayed(const Duration(milliseconds: 100), () {
         if (mounted) {
           setState(() {
-            // This will cause the category-based content to rebuild with fresh data
           });
         }
       });
@@ -87,7 +80,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
       }
 
       // Sequential loading to avoid database conflicts
-      await Future.delayed(const Duration(milliseconds: 100)); // Small delay to allow UI to render
+      await Future.delayed(const Duration(milliseconds: 100));
 
       if (mounted) {
         // Load categories first (smaller dataset)
@@ -122,11 +115,9 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
 
   @override
   void dispose() {
-    // Remove app provider listener
     try {
       context.read<AppProvider>().removeListener(_handleAppProviderChange);
     } catch (e) {
-      // Context might not be available during dispose
       debugPrint('Could not remove AppProvider listener: $e');
     }
 
@@ -144,14 +135,12 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
 
     return Consumer<AppProvider>(
       builder: (context, appProvider, _) {
-        // Show loading state during initialization
         if (_isLoadingData && appProvider.apps.isEmpty) {
           return _buildLoadingState(responsive);
         }
 
         return Stack(
           children: [
-            // Main content - this won't rebuild when panel state changes
             Container(
               decoration: BoxDecoration(
                 color: ResponsiveHelper.backgroundPrimary.withOpacity(0.8),
@@ -159,13 +148,8 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
               ),
               child: Column(
                 children: [
-                  // Clean header section
                   _buildHeader(responsive, appProvider),
-
-                  // Filter chips section (only show when active)
                   if (appProvider.isFilterActive()) _buildActiveFilters(responsive, appProvider),
-
-                  // Main content
                   Expanded(
                     child: _buildContent(responsive, appProvider),
                   ),
@@ -173,7 +157,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
               ),
             ),
 
-            // Panel overlay - only this part rebuilds when panel state changes
+            // Panel overlay
             ValueListenableBuilder<App?>(
               valueListenable: _selectedAppNotifier,
               builder: (context, selectedApp, child) {
@@ -198,7 +182,6 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                         ),
                       ),
                     ),
-
                     // App detail panel
                     Positioned(
                       top: 0,
@@ -337,7 +320,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                         width: 1,
                       ),
                     ),
-                    child: Row(
+                    child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
@@ -345,7 +328,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                           color: ResponsiveHelper.purplePrimary,
                           size: 18,
                         ),
-                        const SizedBox(width: 6),
+                        SizedBox(width: 6),
                         Text(
                           'Create App',
                           style: TextStyle(
@@ -753,7 +736,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
     final Map<String, List<App>> appsByCategory = {};
     for (final app in appProvider.apps) {
       final categoryId = app.category;
-      if (categoryId != null && categoryId.isNotEmpty) {
+      if (categoryId.isNotEmpty) {
         appsByCategory[categoryId] ??= [];
         appsByCategory[categoryId]!.add(app);
       }
@@ -768,7 +751,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
     }
 
     // Add uncategorized apps if any
-    final uncategorizedApps = appProvider.apps.where((app) => app.category == null || app.category!.isEmpty).toList();
+    final uncategorizedApps = appProvider.apps.where((app) => app.category.isEmpty).toList();
     if (uncategorizedApps.isNotEmpty) {
       slivers.add(_buildUncategorizedSection(responsive, appProvider, uncategorizedApps));
     }
@@ -932,8 +915,8 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
 
   Widget _buildCategoryAppCard(ResponsiveHelper responsive, App app) {
     return SizedBox(
-      width: 320, // Fixed width to match popular apps proportionally
-      height: 120, // Increased height for better content spacing
+      width: 320, 
+      height: 120,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -1026,11 +1009,11 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                       // App description - reduced opacity and better spacing
                       Text(
                         app.description.decodeString,
-                        maxLines: 2, // Back to 2 lines with increased card height
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 12,
-                          color: ResponsiveHelper.textTertiary.withOpacity(0.7), // Reduced opacity
+                          color: ResponsiveHelper.textTertiary.withOpacity(0.7),
                           height: 1.3,
                         ),
                       ),

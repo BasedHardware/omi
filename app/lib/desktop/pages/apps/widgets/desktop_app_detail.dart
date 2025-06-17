@@ -31,7 +31,6 @@ import '../../../../pages/apps/widgets/show_app_options_sheet.dart';
 
 import 'package:timeago/timeago.dart' as timeago;
 
-/// Desktop App Detail Panel - slides in from right with premium minimal design
 class DesktopAppDetail extends StatefulWidget {
   final App app;
   final VoidCallback onClose;
@@ -61,7 +60,6 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
     super.initState();
     app = widget.app;
 
-    // Setup slide animation
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
@@ -74,16 +72,13 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
       curve: Curves.easeOutCubic,
     ));
 
-    // Start slide animation
     _animationController.forward();
 
     _initializeAppData();
   }
 
   Future<void> _initializeAppData() async {
-    // Same initialization logic as mobile version
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // Load details
       setIsLoading(true);
       var res = await context.read<AppProvider>().getAppDetails(app.id);
       if (mounted) {
@@ -102,17 +97,6 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
     });
 
     if (app.worksExternally()) {
-      if (app.externalIntegration!.setupInstructionsFilePath?.isNotEmpty == true) {
-        if (app.externalIntegration!.setupInstructionsFilePath?.contains('raw.githubusercontent.com') == true) {
-          getAppMarkdown(app.externalIntegration!.setupInstructionsFilePath ?? '').then((value) {
-            value = value.replaceAll(
-              '](assets/',
-              '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${app.id}/assets/',
-            );
-            setState(() => instructionsMarkdown = value);
-          });
-        }
-      }
       checkSetupCompleted();
     }
   }
@@ -304,7 +288,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                 if (app.ratingAvg != null)
                   Row(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.star_rounded,
                         color: ResponsiveHelper.purplePrimary,
                         size: 16,
@@ -382,7 +366,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                   borderRadius: BorderRadius.circular(8),
                   child: Container(
                     padding: EdgeInsets.all(responsive.spacing(baseSpacing: 8)),
-                    child: Icon(
+                    child: const Icon(
                       Icons.close_rounded,
                       color: ResponsiveHelper.textTertiary,
                       size: 20,
@@ -749,7 +733,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                           ),
                         ),
                       ),
-                      Icon(
+                      const Icon(
                         Icons.arrow_forward_ios,
                         size: 16,
                         color: ResponsiveHelper.textTertiary,
@@ -813,7 +797,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                       ),
                     ),
                   ),
-                  Icon(
+                  const Icon(
                     Icons.arrow_forward_ios,
                     size: 16,
                     color: ResponsiveHelper.textTertiary,
@@ -947,7 +931,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                       ),
                       const Spacer(),
                       if (app.description.decodeString.characters.length > 200)
-                        Icon(
+                        const Icon(
                           Icons.arrow_forward_ios,
                           size: 16,
                           color: ResponsiveHelper.textTertiary,
@@ -1044,7 +1028,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                       ),
                       const Spacer(),
                       if (prompt.decodeString.characters.length > 200)
-                        Icon(
+                        const Icon(
                           Icons.arrow_forward_ios,
                           size: 16,
                           color: ResponsiveHelper.textTertiary,
@@ -1109,7 +1093,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                       ),
                       const Spacer(),
                       if (app.reviews.isNotEmpty)
-                        Icon(
+                        const Icon(
                           Icons.arrow_forward_ios,
                           size: 16,
                           color: ResponsiveHelper.textTertiary,
@@ -1140,7 +1124,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                             itemSize: 16,
                             tapOnlyMode: false,
                             itemPadding: EdgeInsets.zero,
-                            itemBuilder: (context, _) => Icon(
+                            itemBuilder: (context, _) => const Icon(
                               Icons.star,
                               color: ResponsiveHelper.purplePrimary,
                             ),
@@ -1189,7 +1173,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                                         itemSize: 12,
                                         tapOnlyMode: false,
                                         itemPadding: EdgeInsets.zero,
-                                        itemBuilder: (context, _) => Icon(
+                                        itemBuilder: (context, _) => const Icon(
                                           Icons.star,
                                           color: ResponsiveHelper.purplePrimary,
                                         ),

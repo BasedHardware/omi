@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
 
-/// Premium minimal search widget for desktop conversations
 class DesktopSearchWidget extends StatefulWidget {
   const DesktopSearchWidget({super.key});
 

@@ -1,7 +1,6 @@
-import 'dart:math' as math;
+
 
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -26,7 +25,6 @@ class DesktopActionsPageState extends State<DesktopActionsPage> with AutomaticKe
 
   bool _showGroupedView = false;
 
-  // Animation controllers for modern feel
   late AnimationController _fadeController;
   late AnimationController _slideController;
   late AnimationController _pulseController;
@@ -49,7 +47,6 @@ class DesktopActionsPageState extends State<DesktopActionsPage> with AutomaticKe
   void initState() {
     super.initState();
 
-    // Initialize animations for modern feel
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
@@ -78,13 +75,11 @@ class DesktopActionsPageState extends State<DesktopActionsPage> with AutomaticKe
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
-    // Mark animations as initialized
     _animationsInitialized = true;
 
     (() async {
       MixpanelManager().actionItemsPageOpened();
 
-      // Start animations
       _fadeController.forward();
       _slideController.forward();
     }).withPostFrameCallback();
@@ -145,10 +140,8 @@ class DesktopActionsPageState extends State<DesktopActionsPage> with AutomaticKe
             borderRadius: BorderRadius.circular(20),
             child: Stack(
               children: [
-                // Animated background pattern
                 _buildAnimatedBackground(),
 
-                // Main content with glassmorphism
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.02),
@@ -156,10 +149,8 @@ class DesktopActionsPageState extends State<DesktopActionsPage> with AutomaticKe
                   ),
                   child: Column(
                     children: [
-                      // Modern header
                       _buildModernHeader(flattenedItems),
 
-                      // Main actions area
                       Expanded(
                         child: _animationsInitialized
                             ? FadeTransition(
@@ -229,14 +220,14 @@ class DesktopActionsPageState extends State<DesktopActionsPage> with AutomaticKe
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
+                const Row(
                   children: [
                     Icon(
                       FontAwesomeIcons.listCheck,
                       color: ResponsiveHelper.textSecondary,
                       size: 18,
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: 12),
                     Text(
                       'Action Items',
                       style: TextStyle(
@@ -250,7 +241,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage> with AutomaticKe
                 const SizedBox(height: 4),
                 Text(
                   '$incompleteCount pending tasks',
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: ResponsiveHelper.textSecondary,
                     fontSize: 14,
                   ),
@@ -321,7 +312,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage> with AutomaticKe
               padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
               child: Row(
                 children: [
-                  Text(
+                  const Text(
                     'Completed',
                     style: TextStyle(
                       color: ResponsiveHelper.textPrimary,
@@ -338,7 +329,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage> with AutomaticKe
                     ),
                     child: Text(
                       '${flattenedItems.where((item) => item.actionItem.completed).length}',
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: ResponsiveHelper.textTertiary,
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
@@ -359,14 +350,14 @@ class DesktopActionsPageState extends State<DesktopActionsPage> with AutomaticKe
                 color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Row(
+              child: const Row(
                 children: [
                   Icon(
                     FontAwesomeIcons.circleCheck,
                     color: ResponsiveHelper.textTertiary,
                     size: 16,
                   ),
-                  const SizedBox(width: 12),
+                  SizedBox(width: 12),
                   Text(
                     'No completed items yet',
                     style: TextStyle(
@@ -441,7 +432,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage> with AutomaticKe
                     ),
                   ),
             const SizedBox(height: 16),
-            Text(
+            const Text(
               'Loading your action items...',
               textAlign: TextAlign.center,
               style: TextStyle(
@@ -490,7 +481,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage> with AutomaticKe
                           color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: Icon(
+                        child: const Icon(
                           FontAwesomeIcons.circleCheck,
                           size: 48,
                           color: ResponsiveHelper.purplePrimary,
@@ -505,14 +496,14 @@ class DesktopActionsPageState extends State<DesktopActionsPage> with AutomaticKe
                     color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: Icon(
+                  child: const Icon(
                     FontAwesomeIcons.circleCheck,
                     size: 48,
                     color: ResponsiveHelper.purplePrimary,
                   ),
                 ),
           const SizedBox(height: 24),
-          Text(
+          const Text(
             '✅ No Action Items',
             style: TextStyle(
               color: ResponsiveHelper.textPrimary,
@@ -521,7 +512,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage> with AutomaticKe
             ),
           ),
           const SizedBox(height: 8),
-          Text(
+          const Text(
             'Tasks and to-dos from your conversations will appear here once they are created.',
             textAlign: TextAlign.center,
             style: TextStyle(
