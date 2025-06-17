@@ -652,7 +652,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 child: IconButton(
                   padding: const EdgeInsets.fromLTRB(2.0, 2.0, 0, 2.0),
                   icon: SvgPicture.asset(
-                    Assets.images.icSettingPersona.path,
+                    Assets.images.icSettingPersona,
                     width: 36,
                     height: 36,
                   ),
