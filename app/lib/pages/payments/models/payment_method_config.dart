@@ -32,7 +32,7 @@ class PaymentMethodConfig {
     return PaymentMethodConfig(
       title: 'Stripe',
       icon: SvgPicture.asset(
-        Assets.images.stripeLogo.path,
+        Assets.images.stripeLogo,
         width: 80,
         color: Colors.white,
       ),

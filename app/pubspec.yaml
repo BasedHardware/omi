@@ -181,15 +181,6 @@ flutter:
 
 flutter_gen:
   output: lib/gen/
-  class_name: Assets
-  integrations:
-    flutter_svg: true
-    rive: true
-    lottie: true
-  gen_package_path: true
-  ignore_resolution: true
-  omit_path_levels: 3
-  format_dart_code: false
 
 flutter_native_splash:
   background_image: "assets/images/splash.png"
