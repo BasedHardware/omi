@@ -9,7 +9,7 @@ mixpanel.init(process.env.NEXT_PUBLIC_MIXPANEL_TOKEN!, {
   ignore_dnt: true,
   loaded: (mixpanel) => {
     console.log('Mixpanel loaded successfully');
-  }
+  },
 });
 
 // Generate a unique anonymous ID if one doesn't exist
@@ -29,18 +29,18 @@ export const Mixpanel = {
     mixpanel.identify(anonymousId);
     console.log('Identified user:', anonymousId);
   },
-  
+
   track: (name: string, props?: any) => {
     try {
       const anonymousId = getOrCreateAnonymousId();
       const eventProps = {
         distinct_id: anonymousId,
-        ...props
+        ...props,
       };
       console.log('Tracking event:', name, eventProps);
       mixpanel.track(name, eventProps);
     } catch (e) {
       console.error('Mixpanel error:', e);
     }
-  }
+  },
 };

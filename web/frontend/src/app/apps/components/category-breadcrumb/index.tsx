@@ -28,4 +28,4 @@ export function CategoryBreadcrumb({ category }: CategoryBreadcrumbProps) {
       </div>
     </nav>
   );
-} 
+}

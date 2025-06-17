@@ -1,6 +1,6 @@
 import { cache } from 'react';
 import envConfig from '@/src/constants/envConfig';
-import { Plugin, PluginStat } from '@/src/app/apps/components/types';
+import { Plugin } from '@/src/app/apps/components/types';
 
 // Store last successful response in memory
 let lastSuccessfulResponse: Plugin[] | null = null;

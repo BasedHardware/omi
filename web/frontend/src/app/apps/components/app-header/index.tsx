@@ -100,4 +100,4 @@ export function AppHeader({ plugin }: AppHeaderProps) {
       </div>
     </div>
   );
-} 
+}

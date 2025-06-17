@@ -23,4 +23,4 @@ export function AppActionButton({ link, className = '' }: AppActionButtonProps) 
       </Link>
     </Button>
   );
-} 
+}

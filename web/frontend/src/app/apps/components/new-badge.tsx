@@ -12,7 +12,7 @@ export function isNewApp(plugin: Plugin): boolean {
     // Validate the date
     if (isNaN(creationDate.getTime())) return false;
     const diffInDays = Math.floor(
-      (now.getTime() - creationDate.getTime()) / (1000 * 60 * 60 * 24)
+      (now.getTime() - creationDate.getTime()) / (1000 * 60 * 60 * 24),
     );
     // Add debug logging in development
     if (process.env.NODE_ENV === 'development') {

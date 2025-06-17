@@ -5,11 +5,11 @@ import OpenAI from 'openai';
 
 const getOpenAIClient = () => {
   return new OpenAI({
-    baseURL: "https://openrouter.ai/api/v1",
+    baseURL: 'https://openrouter.ai/api/v1',
     apiKey: process.env.OPENROUTER_API_KEY || '',
     defaultHeaders: {
-      "X-Title": "Omi Chat",
-    }
+      'X-Title': 'Omi Chat',
+    },
   });
 };
 
@@ -17,10 +17,10 @@ export async function POST(req: Request) {
   try {
     const { message, botId, conversationHistory } = await req.json();
 
-    var chatPrompt;
-    var isInfluencer = false;
+    let chatPrompt;
+    let isInfluencer = false;
 
-    if (!botId) return NextResponse.json({ message: "Bad param" }, { status: 400 });
+    if (!botId) return NextResponse.json({ message: 'Bad param' }, { status: 400 });
 
     try {
       const botDoc = await getDoc(doc(db, 'plugins_data', botId));
@@ -32,13 +32,14 @@ export async function POST(req: Request) {
     } catch (error) {
       console.error('Error fetching bot data:', error);
     }
-    if (!chatPrompt) return NextResponse.json({ message: "Persona not found" }, { status: 404 });
+    if (!chatPrompt)
+      return NextResponse.json({ message: 'Persona not found' }, { status: 404 });
 
     console.log('Received request:', {
       botId,
       message,
       chatPrompt,
-      conversationHistoryLength: conversationHistory?.length
+      conversationHistoryLength: conversationHistory?.length,
     });
 
     // Initialize the OpenAI client
@@ -46,21 +47,20 @@ export async function POST(req: Request) {
 
     // Format messages for OpenRouter - including system message in the array
     const formattedMessages = [
-      { role: "system", content: chatPrompt },
-      ...(conversationHistory || []).map((msg: { sender: string; text: string; }) => ({
+      { role: 'system', content: chatPrompt },
+      ...(conversationHistory || []).map((msg: { sender: string; text: string }) => ({
         role: msg.sender === 'user' ? 'user' : 'assistant',
-        content: msg.text
+        content: msg.text,
       })),
-      { role: "user", content: message }
+      { role: 'user', content: message },
     ];
 
     console.log('Formatted messages:', formattedMessages);
 
-
     // LLM model, use a better model for specific people
-    var llmModel = "google/gemini-flash-1.5-8b";
+    let llmModel = 'google/gemini-flash-1.5-8b';
     if (isInfluencer) {
-      llmModel = "anthropic/claude-3.5-sonnet";
+      llmModel = 'anthropic/claude-3.5-sonnet';
     }
 
     const stream = await openai.chat.completions.create({
@@ -88,29 +88,31 @@ export async function POST(req: Request) {
         } catch (error) {
           controller.error(error);
         }
-      }
+      },
     });
 
     return new Response(customStream, {
       headers: {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
+        Connection: 'keep-alive',
       },
     });
-
   } catch (error: any) {
     console.error('Error in chat route:', error);
     console.error('Error details:', {
       message: error.message,
       stack: error.stack,
-      response: error.response?.data
+      response: error.response?.data,
     });
 
-    return NextResponse.json({
-      error: 'Failed to get response',
-      details: error.message || 'Unknown error',
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: 'Failed to get response',
+        details: error.message || 'Unknown error',
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+      },
+      { status: 500 },
+    );
   }
 }

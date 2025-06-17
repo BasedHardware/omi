@@ -20,7 +20,7 @@ export default function Plugins({ apps }: PluginsProps) {
                 <IdentifyPlugin pluginId={app.app_id} />
               </ErrorBoundary>
               <div className="bg-bg-color px-4 md:px-12">
-                <Markdown className="prose md:prose-p:text-lg text-white prose-headings:text-gray-200 prose-strong:text-white prose-ul:text-gray-300 prose-li:text-gray-300 prose-p:m-0 prose-p:mt-3 last:prose-p:mt-8 last:prose-p:rounded-lg last:prose-p:bg-zinc-900 last:prose-p:p-2 last:prose-p:px-4 last:prose-p:text-zinc-200 md:last:prose-p:text-sm">
+                <Markdown className="prose text-white prose-headings:text-gray-200 prose-p:m-0 prose-p:mt-3 last:prose-p:mt-8 last:prose-p:rounded-lg last:prose-p:bg-zinc-900 last:prose-p:p-2 last:prose-p:px-4 last:prose-p:text-zinc-200 prose-strong:text-white prose-ul:text-gray-300 prose-li:text-gray-300 md:prose-p:text-lg md:last:prose-p:text-sm">
                   {app.content}
                 </Markdown>
               </div>

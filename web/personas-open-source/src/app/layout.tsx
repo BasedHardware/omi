@@ -1,6 +1,6 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import "./globals.css";
+import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
+import './globals.css';
 import { Toaster } from 'sonner';
 import Script from 'next/script';
 
@@ -10,27 +10,27 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Omi by Based Hardware",
-  description: "AI Twitter",
+  title: 'Omi by Based Hardware',
+  description: 'AI Twitter',
   icons: {
-    icon: "/basedfavicon.png",
+    icon: '/basedfavicon.png',
   },
   openGraph: {
-    title: "Omi by Based Hardware",
-    description: "AI Twitter",
+    title: 'Omi by Based Hardware',
+    description: 'AI Twitter',
     images: [
       {
-        url: "/omidevice.webp",
+        url: '/omidevice.webp',
         width: 1200,
         height: 630,
       },
     ],
   },
   twitter: {
-    card: "summary_large_image",
-    title: "Omi by Based Hardware",
-    description: "AI Twitter",
-    images: ["/omidevice.webp"],
+    card: 'summary_large_image',
+    title: 'Omi by Based Hardware',
+    description: 'AI Twitter',
+    images: ['/omidevice.webp'],
   },
 };
 
@@ -58,7 +58,7 @@ export default function RootLayout({
         </Script>
 
         {/* Google Analytics (gtag.js) Snippet */}
-        <Script 
+        <Script
           strategy="afterInteractive"
           src="https://www.googletagmanager.com/gtag/js?id=G-3JHGJR61HK"
         />
@@ -70,7 +70,6 @@ export default function RootLayout({
             gtag('config', 'G-3JHGJR61HK');
           `}
         </Script>
-
       </body>
     </html>
   );

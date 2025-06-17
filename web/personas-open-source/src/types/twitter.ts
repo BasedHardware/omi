@@ -7,4 +7,4 @@ export type TwitterProfile = {
   friends: number;
   sub_count: number;
   id: string;
-}; 
+};

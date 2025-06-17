@@ -6,7 +6,6 @@ import { CategoryHeader } from '../../components/category-header';
 import type { Plugin, PluginStat } from '../../components/types';
 import { Metadata } from 'next';
 import {
-  categoryMetadata,
   getBaseMetadata,
   generateProductSchema,
   generateCollectionPageSchema,

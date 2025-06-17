@@ -16,7 +16,7 @@ export default function Memory({ memory, searchParams }: MemoryProps) {
       <div className="relative py-6 md:pt-12">
         {/* Gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-zinc-900/20 to-zinc-900/40" />
-        
+
         {/* Content */}
         <div className="relative z-10">
           <div className="px-6 md:px-12">

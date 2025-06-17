@@ -22,56 +22,77 @@ interface ChatbotListProps {
 
 /**
  * ChatbotList Component
- * 
+ *
  * @component
  * @param {ChatbotListProps} props - Component props
  * @returns {JSX.Element} Rendered ChatbotList component
  */
-export const ChatbotList = ({ chatbots, searchQuery, setSearchQuery, handleChatbotClick, hasMore, ref }: ChatbotListProps) => (
+export const ChatbotList = ({
+  chatbots,
+  searchQuery,
+  setSearchQuery,
+  handleChatbotClick,
+  hasMore,
+  ref,
+}: ChatbotListProps) => (
   <div className="w-full max-w-3xl">
     <div className="relative mb-6">
-      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 w-5 h-5" />
+      <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 transform text-zinc-400" />
       <input
         type="text"
         placeholder="Search existing personas..."
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
-        className="w-full bg-zinc-900 text-white rounded-full py-2 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-zinc-700 border-0"
+        className="w-full rounded-full border-0 bg-zinc-900 py-2 pl-10 pr-4 text-white focus:outline-none focus:ring-2 focus:ring-zinc-700"
       />
     </div>
 
     {chatbots.length > 0 ? (
       <div className="space-y-4">
-        {chatbots.map(bot => (
+        {chatbots.map((bot) => (
           <Card
             key={bot.id}
             onClick={() => handleChatbotClick(bot)}
-            className="hover:bg-zinc-800 transition-colors cursor-pointer bg-zinc-900 border-zinc-700"
+            className="cursor-pointer border-zinc-700 bg-zinc-900 transition-colors hover:bg-zinc-800"
           >
             <CardContent className="flex items-start space-x-4 p-4">
-              <Avatar className="w-16 h-16 flex-shrink-0">
+              <Avatar className="h-16 w-16 flex-shrink-0">
                 <AvatarImage src={bot.avatar || '/omi-avatar.svg'} alt={bot.name} />
                 <AvatarFallback>{bot.name[0]}</AvatarFallback>
               </Avatar>
-              <div className="flex-1 min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-lg font-semibold text-white truncate flex items-center">
+                  <h2 className="flex items-center truncate text-lg font-semibold text-white">
                     {bot.name}
                     {bot.category === 'linkedin' ? (
-                      <FaLinkedin className="ml-1 h-5 w-5 stroke-zinc-900" style={{ fill: '#0077b5' }} />
+                      <FaLinkedin
+                        className="ml-1 h-5 w-5 stroke-zinc-900"
+                        style={{ fill: '#0077b5' }}
+                      />
                     ) : bot.category === 'twitter' ? (
-                      <BadgeCheck className="ml-1 h-5 w-5 stroke-zinc-900" style={{ fill: '#00acee' }} />
+                      <BadgeCheck
+                        className="ml-1 h-5 w-5 stroke-zinc-900"
+                        style={{ fill: '#00acee' }}
+                      />
                     ) : null}
                   </h2>
-                  <span className="text-sm text-zinc-400 truncate">@{bot.username || bot.profile}</span>
+                  <span className="truncate text-sm text-zinc-400">
+                    @{bot.username || bot.profile}
+                  </span>
                   {bot.category === 'linkedin' && bot.connection_count !== undefined && (
-                    <span className="text-sm text-zinc-400">{bot.connection_count.toLocaleString()} connections</span>
+                    <span className="text-sm text-zinc-400">
+                      {bot.connection_count.toLocaleString()} connections
+                    </span>
                   )}
                   {bot.sub_count !== undefined && (
-                    <span className="text-sm text-zinc-400">{bot.sub_count.toLocaleString()} followers</span>
+                    <span className="text-sm text-zinc-400">
+                      {bot.sub_count.toLocaleString()} followers
+                    </span>
                   )}
                 </div>
-                <p className="text-zinc-400 text-sm mt-1 line-clamp-2">{bot.profile || 'No profile available'}</p>
+                <p className="mt-1 line-clamp-2 text-sm text-zinc-400">
+                  {bot.profile || 'No profile available'}
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -79,12 +100,12 @@ export const ChatbotList = ({ chatbots, searchQuery, setSearchQuery, handleChatb
 
         {hasMore && (
           <div ref={ref} className="flex justify-center py-4">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+            <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-white"></div>
           </div>
         )}
       </div>
     ) : (
-      <div className="text-center py-8">
+      <div className="py-8 text-center">
         <p className="text-zinc-400">No matching personas found</p>
       </div>
     )}

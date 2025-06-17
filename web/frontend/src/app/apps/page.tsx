@@ -1,7 +1,6 @@
 import AppList from './components/app-list';
 import { Metadata } from 'next';
 import {
-  getBaseMetadata,
   generateProductSchema,
   generateCollectionPageSchema,
   generateOrganizationSchema,

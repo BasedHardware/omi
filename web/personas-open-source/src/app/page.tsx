@@ -10,7 +10,19 @@
 import { SetStateAction, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, query, where, getDocs, orderBy, startAfter, limit, doc, setDoc, or } from 'firebase/firestore';
+import {
+  collection,
+  addDoc,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  startAfter,
+  limit,
+  doc,
+  setDoc,
+  or,
+} from 'firebase/firestore';
 import { toast } from 'sonner';
 import { Mixpanel } from '@/lib/mixpanel';
 import { useInView } from 'react-intersection-observer';
@@ -52,17 +64,22 @@ const formatDate = (dateString: string): string => {
     second: '2-digit',
     timeZoneName: 'short',
     hour12: false,
-  }).format(date).replace(',', ' at');
+  })
+    .format(date)
+    .replace(',', ' at');
 };
 
 const fetchTwitterTimeline = async (screenname: string) => {
   try {
-    const response = await fetch(`https://${process.env.NEXT_PUBLIC_RAPIDAPI_HOST}/timeline.php?screenname=${screenname}`, {
-      headers: {
-        'x-rapidapi-key': process.env.NEXT_PUBLIC_RAPIDAPI_KEY!,
-        'x-rapidapi-host': process.env.NEXT_PUBLIC_RAPIDAPI_HOST!,
+    const response = await fetch(
+      `https://${process.env.NEXT_PUBLIC_RAPIDAPI_HOST}/timeline.php?screenname=${screenname}`,
+      {
+        headers: {
+          'x-rapidapi-key': process.env.NEXT_PUBLIC_RAPIDAPI_KEY!,
+          'x-rapidapi-host': process.env.NEXT_PUBLIC_RAPIDAPI_HOST!,
+        },
       },
-    });
+    );
 
     const data = await response.json();
 
@@ -97,12 +114,16 @@ const PlatformSelectionModal = ({
   onSelect: (platform: 'twitter' | 'linkedin') => void;
   mode: 'create' | 'add';
 }) => (
-  <div className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center ${isOpen ? '' : 'hidden'}`}>
-    <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full">
-      <h2 className="text-xl font-bold mb-4">
+  <div
+    className={`fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 ${
+      isOpen ? '' : 'hidden'
+    }`}
+  >
+    <div className="w-full max-w-md rounded-lg bg-zinc-900 p-6">
+      <h2 className="mb-4 text-xl font-bold">
         {mode === 'create' ? 'Select Platform' : 'Add Additional Profile'}
       </h2>
-      <p className="text-zinc-400 mb-6">
+      <p className="mb-6 text-zinc-400">
         {mode === 'create'
           ? 'This handle is available on multiple platforms. Which one would you like to use?'
           : 'We found an additional profile for this handle. Would you like to add it?'}
@@ -111,7 +132,7 @@ const PlatformSelectionModal = ({
         {platforms.twitter && (
           <button
             onClick={() => onSelect('twitter')}
-            className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 py-2 text-white hover:bg-blue-700"
           >
             Twitter Profile
           </button>
@@ -119,7 +140,7 @@ const PlatformSelectionModal = ({
         {platforms.linkedin && (
           <button
             onClick={() => onSelect('linkedin')}
-            className="w-full flex items-center justify-center gap-2 bg-[#0077b5] hover:bg-[#006399] text-white py-2 rounded-lg"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#0077b5] py-2 text-white hover:bg-[#006399]"
           >
             LinkedIn Profile
           </button>
@@ -157,13 +178,15 @@ export default function HomePage() {
   // Comment or delete after tests together with TEST_UID declarations.
   const openChatGPTWithUid = (uid: string) => {
     const isMobile = isMobileDevice();
-    const baseChatGPTUrl = 'https://chatgpt.com/g/g-67e2772d0af081919a5baddf4a12aacf-omigpt';
+    const baseChatGPTUrl =
+      'https://chatgpt.com/g/g-67e2772d0af081919a5baddf4a12aacf-omigpt';
 
     console.log(`[openChatGPTWithUid] Detected mobile: ${isMobile}`);
 
     if (isMobile) {
       // Mobile flow: Copy UID, show toast, redirect after delay
-      navigator.clipboard.writeText(uid)
+      navigator.clipboard
+        .writeText(uid)
         .then(() => {
           console.log('[openChatGPTWithUid] UID copied to clipboard for mobile.');
           toast.success('UID copied! Paste it into ChatGPT.', {
@@ -171,19 +194,23 @@ export default function HomePage() {
           });
           // Redirect after toast duration
           setTimeout(() => {
-            console.log(`[openChatGPTWithUid] Redirecting mobile to base URL: ${baseChatGPTUrl}`);
+            console.log(
+              `[openChatGPTWithUid] Redirecting mobile to base URL: ${baseChatGPTUrl}`,
+            );
             window.location.href = baseChatGPTUrl;
           }, 3000);
         })
-        .catch(err => {
+        .catch((err) => {
           console.error('[openChatGPTWithUid] Failed to copy UID to clipboard:', err);
           // Show UID in the error toast for manual copying
           toast.error(`Redirecting to integration partner`, {
-             duration: 5000, // Give a bit more time to see/copy
+            duration: 5000, // Give a bit more time to see/copy
           });
           // Still redirect after a delay, allowing time for manual copy
           setTimeout(() => {
-            console.log(`[openChatGPTWithUid] Redirecting mobile (after copy fail) to base URL: ${baseChatGPTUrl}`);
+            console.log(
+              `[openChatGPTWithUid] Redirecting mobile (after copy fail) to base URL: ${baseChatGPTUrl}`,
+            );
             window.location.href = baseChatGPTUrl;
           }, 5000); // Increased delay
         });
@@ -253,7 +280,7 @@ export default function HomePage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const profileParam = params.get('profile');
-    
+
     if (profileParam) {
       const cleanHandle = extractHandle(profileParam);
       setHandle(cleanHandle);
@@ -261,28 +288,28 @@ export default function HomePage() {
     }
   }, []);
 
-  const handleInputChange = (e: { target: { value: SetStateAction<string>; }; }) => {
+  const handleInputChange = (e: { target: { value: SetStateAction<string> } }) => {
     setHandle(e.target.value);
   };
-  
+
   //function to retrieve the document id from Firestore.
-  const getProfileDocId = async (cleanHandle: string, category: 'twitter' | 'linkedin'): Promise<string | null> => {
+  const getProfileDocId = async (
+    cleanHandle: string,
+    category: 'twitter' | 'linkedin',
+  ): Promise<string | null> => {
     const q = query(
       collection(db, 'plugins_data'),
       where('username', '==', cleanHandle.toLowerCase()),
-      where('connected_accounts', 'array-contains', category)
+      where('connected_accounts', 'array-contains', category),
     );
 
     const q2 = query(
       collection(db, 'plugins_data'),
       where('username', '==', cleanHandle.toLowerCase()),
-      where('category', '==', category)
+      where('category', '==', category),
     );
 
-    const [querySnapshot1, querySnapshot2] = await Promise.all([
-      getDocs(q),
-      getDocs(q2)
-    ]);
+    const [querySnapshot1, querySnapshot2] = await Promise.all([getDocs(q), getDocs(q2)]);
 
     if (!querySnapshot1.empty || !querySnapshot2.empty) {
       const doc = querySnapshot1.empty ? querySnapshot2.docs[0] : querySnapshot1.docs[0];
@@ -315,10 +342,10 @@ export default function HomePage() {
     // Try platform-specific extractors first
     const twitterHandle = extractTwitterHandle(input);
     if (twitterHandle) return twitterHandle;
-    
+
     const linkedinHandle = extractLinkedinHandle(input);
     if (linkedinHandle) return linkedinHandle;
-    
+
     // If not a URL, remove leading '@' if present
     const trimmedInput = input.trim();
     return trimmedInput.startsWith('@') ? trimmedInput.substring(1) : trimmedInput;
@@ -333,23 +360,23 @@ export default function HomePage() {
     return /linkedin\.com\//i.test(input.trim());
   };
 
-  const checkExistingProfile = async (cleanHandle: string, category: 'twitter' | 'linkedin'): Promise<string | null> => {
+  const checkExistingProfile = async (
+    cleanHandle: string,
+    category: 'twitter' | 'linkedin',
+  ): Promise<string | null> => {
     const q = query(
       collection(db, 'plugins_data'),
       where('username', '==', cleanHandle.toLowerCase()),
-      where('connected_accounts', 'array-contains', category)
+      where('connected_accounts', 'array-contains', category),
     );
 
     const q2 = query(
       collection(db, 'plugins_data'),
       where('username', '==', cleanHandle.toLowerCase()),
-      where('category', '==', category)
+      where('category', '==', category),
     );
 
-    const [querySnapshot1, querySnapshot2] = await Promise.all([
-      getDocs(q),
-      getDocs(q2)
-    ]);
+    const [querySnapshot1, querySnapshot2] = await Promise.all([getDocs(q), getDocs(q2)]);
 
     if (!querySnapshot1.empty || !querySnapshot2.empty) {
       const doc = querySnapshot1.empty ? querySnapshot2.docs[0] : querySnapshot1.docs[0];
@@ -361,7 +388,7 @@ export default function HomePage() {
   // Modified handleCreatePersona to accept an optional handle parameter
   const handleCreatePersona = async (inputHandle?: string) => {
     if (isCreating) return;
-    
+
     const handleToUse = (inputHandle || handle || '').toString();
     if (!handleToUse || handleToUse.trim() === '') {
       toast.error('Please enter a handle');
@@ -371,7 +398,7 @@ export default function HomePage() {
     // Track the click event in Mixpanel
     Mixpanel.track('Create Persona Clicked', {
       input: handleToUse,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     try {
@@ -421,7 +448,7 @@ export default function HomePage() {
           return;
         }
       }
-      
+
       if (!twitterResult && !linkedinResult) {
         toast.error('No profiles found for the given handle.');
       }
@@ -460,17 +487,14 @@ export default function HomePage() {
     Mixpanel.track('Page View', {
       page: 'Home',
       url: window.location.pathname,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   }, []);
 
   const fetchChatbots = async (isInitial = true) => {
     try {
       const chatbotsCollection = collection(db, 'plugins_data');
-      let q = query(
-        chatbotsCollection,
-        orderBy('sub_count', 'desc')
-      );
+      let q = query(chatbotsCollection, orderBy('sub_count', 'desc'));
 
       if (!isInitial && lastDoc) {
         q = query(q, startAfter(lastDoc), limit(BOTS_PER_PAGE));
@@ -483,7 +507,7 @@ export default function HomePage() {
       // Single Map for all bots, keyed by lowercase username and category
       const allBotsMap = new Map();
 
-      querySnapshot.docs.forEach(doc => {
+      querySnapshot.docs.forEach((doc) => {
         const bot = { id: doc.id, ...doc.data() } as Chatbot;
         const normalizedUsername = bot.username?.toLowerCase().trim();
         const category = bot.category;
@@ -494,7 +518,7 @@ export default function HomePage() {
         const existingBot = allBotsMap.get(key);
 
         // Only update if new bot has higher sub_count
-        if (!existingBot || ((bot.sub_count || 0) > (existingBot.sub_count || 0))) {
+        if (!existingBot || (bot.sub_count || 0) > (existingBot.sub_count || 0)) {
           allBotsMap.set(key, bot);
         }
       });
@@ -504,11 +528,11 @@ export default function HomePage() {
       if (isInitial) {
         setChatbots(uniqueBots);
       } else {
-        setChatbots(prev => {
+        setChatbots((prev) => {
           const masterMap = new Map();
 
           // First add existing bots to master map
-          prev.forEach(bot => {
+          prev.forEach((bot) => {
             const username = bot.username?.toLowerCase().trim();
             const category = bot.category;
             if (username) {
@@ -518,20 +542,21 @@ export default function HomePage() {
           });
 
           // Then add new bots, only updating if sub_count is higher
-          uniqueBots.forEach(bot => {
+          uniqueBots.forEach((bot) => {
             const username = bot.username?.toLowerCase().trim();
             const category = bot.category;
             if (username) {
               const key = `${username}-${category}`;
               const existingBot = masterMap.get(key);
-              if (!existingBot || ((bot.sub_count || 0) > (existingBot.sub_count || 0))) {
+              if (!existingBot || (bot.sub_count || 0) > (existingBot.sub_count || 0)) {
                 masterMap.set(key, bot);
               }
             }
           });
 
-          return Array.from(masterMap.values())
-            .sort((a, b) => (b.sub_count || 0) - (a.sub_count || 0));
+          return Array.from(masterMap.values()).sort(
+            (a, b) => (b.sub_count || 0) - (a.sub_count || 0),
+          );
         });
       }
 
@@ -548,7 +573,6 @@ export default function HomePage() {
 
   useEffect(() => {
     fetchChatbots();
-
   }, []);
 
   useEffect(() => {
@@ -561,9 +585,10 @@ export default function HomePage() {
     router.push(`/chat?id=${encodeURIComponent(bot.id)}`);
   };
 
-  const filteredChatbots = chatbots.filter(bot =>
-    bot.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (bot.username && bot.username.toLowerCase().includes(searchQuery.toLowerCase()))
+  const filteredChatbots = chatbots.filter(
+    (bot) =>
+      bot.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (bot.username && bot.username.toLowerCase().includes(searchQuery.toLowerCase())),
   );
 
   const redirectToChat = (id: string) => {
@@ -576,19 +601,24 @@ export default function HomePage() {
     setIsCreating(true);
     try {
       const profileExists = await checkExistingProfile(cleanHandle, 'twitter');
-      const profileResponse = await fetch(`https://${process.env.NEXT_PUBLIC_RAPIDAPI_HOST}/screenname.php?screenname=${cleanHandle}`, {
-        headers: {
-          'x-rapidapi-key': process.env.NEXT_PUBLIC_RAPIDAPI_KEY!,
-          'x-rapidapi-host': process.env.NEXT_PUBLIC_RAPIDAPI_HOST!,
+      const profileResponse = await fetch(
+        `https://${process.env.NEXT_PUBLIC_RAPIDAPI_HOST}/screenname.php?screenname=${cleanHandle}`,
+        {
+          headers: {
+            'x-rapidapi-key': process.env.NEXT_PUBLIC_RAPIDAPI_KEY!,
+            'x-rapidapi-host': process.env.NEXT_PUBLIC_RAPIDAPI_HOST!,
+          },
         },
-      });
+      );
       if (!profileResponse.ok) return false;
       const profileData: TwitterProfile = await profileResponse.json();
       if (!profileData || !profileData.name) return false;
       const recentTweets = await fetchTwitterTimeline(cleanHandle);
       const formattedAvatarUrl = formatTwitterAvatarUrl(profileData.avatar);
-      const enhancedDesc = `${profileData.desc || 'No description available'}\n\nHere are my recent tweets:\n${recentTweets.join('\n')}`;
-      const extraPromptRules = process.env.NEXT_PUBLIC_EXTRA_PROMPT_RULES ?? "";
+      const enhancedDesc = `${
+        profileData.desc || 'No description available'
+      }\n\nHere are my recent tweets:\n${recentTweets.join('\n')}`;
+      const extraPromptRules = process.env.NEXT_PUBLIC_EXTRA_PROMPT_RULES ?? '';
       const fullChatPrompt = `You are ${profileData.name} AI, you must personify ${profileData.name} as well as you can.
       
 Style:
@@ -613,29 +643,29 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
       }
 
       const docData = {
-        'id': persona_id,
-        'name': profileData.name,
-        'username': cleanHandle.toLowerCase(),
-        'description': profileData.desc || 'This is my personal AI clone',
-        'image': formattedAvatarUrl,
-        'uid': uid,
-        'author': profileData.name,
-        'email': auth.currentUser?.email || '',
-        'approved': true,
-        'deleted': false,
-        'status': 'approved',
-        'category': 'personality-emulation',
-        'capabilities': ['persona'],
-        'connected_accounts': ['twitter'],
-        'created_at': new Date().toISOString(),
-        'private': false,
-        'persona_prompt': fullChatPrompt,
-        'avatar': formattedAvatarUrl,
-        'twitter': {
-          'username': cleanHandle.toLowerCase(),
-          'avatar': formattedAvatarUrl,
-          'connected_at': new Date().toISOString(),
-        }
+        id: persona_id,
+        name: profileData.name,
+        username: cleanHandle.toLowerCase(),
+        description: profileData.desc || 'This is my personal AI clone',
+        image: formattedAvatarUrl,
+        uid: uid,
+        author: profileData.name,
+        email: auth.currentUser?.email || '',
+        approved: true,
+        deleted: false,
+        status: 'approved',
+        category: 'personality-emulation',
+        capabilities: ['persona'],
+        connected_accounts: ['twitter'],
+        created_at: new Date().toISOString(),
+        private: false,
+        persona_prompt: fullChatPrompt,
+        avatar: formattedAvatarUrl,
+        twitter: {
+          username: cleanHandle.toLowerCase(),
+          avatar: formattedAvatarUrl,
+          connected_at: new Date().toISOString(),
+        },
       };
 
       if (!profileExists) {
@@ -647,7 +677,7 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
         const enableRes = await fetch('/api/enable-plugins', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ uid: uid }) // Use real UID
+          body: JSON.stringify({ uid: uid }), // Use real UID
         });
         if (!enableRes.ok) {
           console.error('Failed to enable plugins via API:', await enableRes.text());
@@ -655,7 +685,7 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
         }
       } catch (apiErr) {
         console.error('Error calling /api/enable-plugins:', apiErr);
-         // Non-fatal
+        // Non-fatal
       }
 
       // Store facts into OMI then redirect
@@ -665,7 +695,6 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
       toast.success('Profile saved successfully!');
 
       return true;
-
     } catch (error) {
       console.error('Error fetching Twitter profile:', error);
       return false;
@@ -681,36 +710,51 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
     try {
       const profileExists = await checkExistingProfile(cleanHandle, 'linkedin');
       const encodedHandle = encodeURIComponent(cleanHandle);
-      const profileResponse = await fetch(`https://${process.env.NEXT_PUBLIC_LINKEDIN_API_HOST}/profile-data-connection-count-posts?username=${encodedHandle}`, {
-        headers: {
-          'x-rapidapi-key': process.env.NEXT_PUBLIC_LINKEDIN_API_KEY!,
-          'x-rapidapi-host': process.env.NEXT_PUBLIC_LINKEDIN_API_HOST!,
+      const profileResponse = await fetch(
+        `https://${process.env.NEXT_PUBLIC_LINKEDIN_API_HOST}/profile-data-connection-count-posts?username=${encodedHandle}`,
+        {
+          headers: {
+            'x-rapidapi-key': process.env.NEXT_PUBLIC_LINKEDIN_API_KEY!,
+            'x-rapidapi-host': process.env.NEXT_PUBLIC_LINKEDIN_API_HOST!,
+          },
         },
-      });
+      );
       if (!profileResponse.ok) return false;
       const profileData: LinkedinProfile = await profileResponse.json();
       if (!profileData || !profileData?.data?.firstName) return false;
-      const formattedAvatarUrl = profileData?.data?.profilePicture || 'https://storage.googleapis.com/omi_plugins/dummy_linkedin_image.png';
-      const fullName = `${profileData?.data?.firstName || ''} ${profileData?.data?.lastName || ''}`.trim();
+      const formattedAvatarUrl =
+        profileData?.data?.profilePicture ||
+        'https://storage.googleapis.com/omi_plugins/dummy_linkedin_image.png';
+      const fullName = `${profileData?.data?.firstName || ''} ${
+        profileData?.data?.lastName || ''
+      }`.trim();
       const headline = profileData?.data?.headline || 'No headline available';
       const summary = profileData?.data?.summary || 'No summary available';
       const positions = Array.isArray(profileData?.data?.position)
-        ? profileData.data.position.map(pos => {
-            const title = pos?.title || 'Unknown Title';
-            const company = pos?.companyName || 'Unknown Company';
-            const startYear = pos?.start?.year || 'N/A';
-            const endYear = pos?.end?.year || 'Present';
-            return `${title} at ${company} (${startYear} - ${endYear})`;
-          }).join(', ')
+        ? profileData.data.position
+            .map((pos) => {
+              const title = pos?.title || 'Unknown Title';
+              const company = pos?.companyName || 'Unknown Company';
+              const startYear = pos?.start?.year || 'N/A';
+              const endYear = pos?.end?.year || 'Present';
+              return `${title} at ${company} (${startYear} - ${endYear})`;
+            })
+            .join(', ')
         : 'No positions available';
       const skills = Array.isArray(profileData?.data?.skills)
-        ? profileData.data.skills.map(skill => skill?.name || '').filter(Boolean).join(', ')
+        ? profileData.data.skills
+            .map((skill) => skill?.name || '')
+            .filter(Boolean)
+            .join(', ')
         : 'No skills available';
       const recentPosts = Array.isArray(profileData?.posts)
-        ? profileData.posts.map(post => post?.text || '').filter(Boolean).join('\n')
+        ? profileData.posts
+            .map((post) => post?.text || '')
+            .filter(Boolean)
+            .join('\n')
         : 'No recent posts available';
       const enhancedDesc = `${summary}\n\nPositions: ${positions}\n\nSkills: ${skills}\n\nRecent Posts:\n${recentPosts}`;
-      const extraPromptRules = process.env.NEXT_PUBLIC_EXTRA_PROMPT_RULES ?? "";
+      const extraPromptRules = process.env.NEXT_PUBLIC_EXTRA_PROMPT_RULES ?? '';
       const fullChatPrompt = `You are ${fullName}, an AI persona. Here is some information about you:
       
 Name: ${fullName}
@@ -741,29 +785,29 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
 
         const persona_id = ulid();
         const docData = {
-          'id': persona_id,
-          'name': fullName,
-          'username': cleanHandle.toLowerCase().replace('@', ''),
-          'description': enhancedDesc || 'This is my personal AI clone',
-          'image': formattedAvatarUrl,
-          'uid': uid,
-          'author': fullName,
-          'email': auth.currentUser?.email || '',
-          'approved': true,
-          'deleted': false,
-          'status': 'approved',
-          'category': 'personality-emulation',
-          'capabilities': ['persona'],
-          'connected_accounts': ['linkedin'],
-          'connected_at': new Date().toISOString(),
-          'private': false,
-          'persona_prompt': fullChatPrompt,
-          'avatar': formattedAvatarUrl,
-          'linkedin': {
-            'username': cleanHandle.toLowerCase(),
-            'avatar': formattedAvatarUrl,
-            'connected_at': new Date().toISOString(),
-          }
+          id: persona_id,
+          name: fullName,
+          username: cleanHandle.toLowerCase().replace('@', ''),
+          description: enhancedDesc || 'This is my personal AI clone',
+          image: formattedAvatarUrl,
+          uid: uid,
+          author: fullName,
+          email: auth.currentUser?.email || '',
+          approved: true,
+          deleted: false,
+          status: 'approved',
+          category: 'personality-emulation',
+          capabilities: ['persona'],
+          connected_accounts: ['linkedin'],
+          connected_at: new Date().toISOString(),
+          private: false,
+          persona_prompt: fullChatPrompt,
+          avatar: formattedAvatarUrl,
+          linkedin: {
+            username: cleanHandle.toLowerCase(),
+            avatar: formattedAvatarUrl,
+            connected_at: new Date().toISOString(),
+          },
         };
 
         if (!profileExists) {
@@ -775,7 +819,7 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
           const enableRes = await fetch('/api/enable-plugins', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ uid: uid }) // Use real UID
+            body: JSON.stringify({ uid: uid }), // Use real UID
           });
           if (!enableRes.ok) {
             console.error('Failed to enable plugins via API:', await enableRes.text());
@@ -783,7 +827,7 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
           }
         } catch (apiErr) {
           console.error('Error calling /api/enable-plugins:', apiErr);
-           // Non-fatal
+          // Non-fatal
         }
 
         // Store facts then redirect
@@ -808,49 +852,64 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
   // Helper to store scraped memories in OMI and redirect to ChatGPT
   const storeFactsAndRedirect = async (uid: string, memories: string[]) => {
     if (!uid || memories.length === 0) {
-      console.warn('[storeFactsAndRedirect] No UID or no memories provided, redirecting anyway.');
+      console.warn(
+        '[storeFactsAndRedirect] No UID or no memories provided, redirecting anyway.',
+      );
       openChatGPTWithUid(uid || 'NO_UID_PROVIDED'); // Redirect even if memories are empty, handle missing UID case.
       return;
     }
-    
+
     // Initiate the background fact storage - DO NOT await this
     try {
-      fetch('/api/store-facts', { // No await here!
+      fetch('/api/store-facts', {
+        // No await here!
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ uid, memories }),
-      }).then(response => {
-        if (!response.ok) {
-          console.error(`[storeFactsAndRedirect] Background /api/store-facts call failed with status: ${response.status}`);
-          // Optionally log response.text() here if needed, but don't block
-        }
-      }).catch(err => {
-         console.error('[storeFactsAndRedirect] Background fetch to /api/store-facts failed:', err);
-      });
+      })
+        .then((response) => {
+          if (!response.ok) {
+            console.error(
+              `[storeFactsAndRedirect] Background /api/store-facts call failed with status: ${response.status}`,
+            );
+            // Optionally log response.text() here if needed, but don't block
+          }
+        })
+        .catch((err) => {
+          console.error(
+            '[storeFactsAndRedirect] Background fetch to /api/store-facts failed:',
+            err,
+          );
+        });
     } catch (err) {
       // Catch synchronous errors initiating the fetch, though unlikely
-      console.error('[storeFactsAndRedirect] Error initiating background fact storage:', err);
+      console.error(
+        '[storeFactsAndRedirect] Error initiating background fact storage:',
+        err,
+      );
     }
-    
+
     // Redirect immediately after initiating the background fetch
-    console.log('[storeFactsAndRedirect] Initiated background fact storage. Redirecting NOW...');
+    console.log(
+      '[storeFactsAndRedirect] Initiated background fact storage. Redirecting NOW...',
+    );
     openChatGPTWithUid(uid);
   };
 
   const handleIntegrationClick = async (provider: string) => {
-    if (isIntegrating) return; 
+    if (isIntegrating) return;
     setIsIntegrating(true);
 
     console.log(`[handleIntegrationClick] Clicked provider: ${provider}`);
-    
+
     // Track the click event in Mixpanel
     Mixpanel.track('Integration Clicked', {
       provider: provider,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
-    
+
     const isMobile = isMobileDevice();
     let loadingToastId: string | number | undefined = undefined;
 
@@ -862,8 +921,8 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
     let uid: string | null = null;
 
     try {
-      // 1. Await UID 
-      uid = await getUid(); 
+      // 1. Await UID
+      uid = await getUid();
       if (!uid) {
         if (loadingToastId) toast.dismiss(loadingToastId);
         toast.error('Could not get user ID. Please try again.');
@@ -873,77 +932,109 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
       console.log(`[handleIntegrationClick] Obtained UID: ${uid}`);
 
       // 2. Trigger API Call (Fire-and-Forget - before clipboard/redirect logic)
-      console.log(`[handleIntegrationClick] Triggering background /api/enable-plugins for UID: ${uid}`);
+      console.log(
+        `[handleIntegrationClick] Triggering background /api/enable-plugins for UID: ${uid}`,
+      );
       fetch('/api/enable-plugins', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uid: uid })
-      }).then(async response => {
+        body: JSON.stringify({ uid: uid }),
+      })
+        .then(async (response) => {
           if (!response.ok) {
-            console.error(`[handleIntegrationClick] Background /api/enable-plugins call failed for provider ${provider}:`, await response.text());
+            console.error(
+              `[handleIntegrationClick] Background /api/enable-plugins call failed for provider ${provider}:`,
+              await response.text(),
+            );
           } else {
-            console.log(`[handleIntegrationClick] Background /api/enable-plugins call successful for UID: ${uid}`);
+            console.log(
+              `[handleIntegrationClick] Background /api/enable-plugins call successful for UID: ${uid}`,
+            );
           }
-        }).catch(apiErr => {
-          console.error(`[handleIntegrationClick] Background /api/enable-plugins fetch failed for provider ${provider}:`, apiErr);
+        })
+        .catch((apiErr) => {
+          console.error(
+            `[handleIntegrationClick] Background /api/enable-plugins fetch failed for provider ${provider}:`,
+            apiErr,
+          );
         });
 
       // 3. Construct Veyrax Redirect URL
-      const redirectUrl = `https://veyrax.com/user/omi?omi_user_id=${encodeURIComponent(uid)}&provider_tag=${encodeURIComponent(provider)}`;
+      const redirectUrl = `https://veyrax.com/user/omi?omi_user_id=${encodeURIComponent(
+        uid,
+      )}&provider_tag=${encodeURIComponent(provider)}`;
 
       // 4. Handle Mobile vs Desktop Redirect/Feedback
       if (isMobile) {
         // Mobile: Copy UID, show success toast, delay redirect
-        navigator.clipboard.writeText(uid)
+        navigator.clipboard
+          .writeText(uid)
           .then(() => {
             if (loadingToastId) toast.dismiss(loadingToastId);
             console.log('[handleIntegrationClick] UID copied to clipboard for mobile.');
-            toast.success('UID copied! Paste it into ChatGPT. Redirecting to integration partner...', {
-              duration: 3000,
-            });
+            toast.success(
+              'UID copied! Paste it into ChatGPT. Redirecting to integration partner...',
+              {
+                duration: 3000,
+              },
+            );
             // Redirect after toast duration
             setTimeout(() => {
-              console.log(`[handleIntegrationClick] Redirecting mobile to Veyrax URL: ${redirectUrl}`);
+              console.log(
+                `[handleIntegrationClick] Redirecting mobile to Veyrax URL: ${redirectUrl}`,
+              );
               window.location.href = redirectUrl;
             }, 3000);
           })
-          .catch(err => {
+          .catch((err) => {
             if (loadingToastId) toast.dismiss(loadingToastId);
-            console.error('[handleIntegrationClick] Failed to copy UID to clipboard:', err);
+            console.error(
+              '[handleIntegrationClick] Failed to copy UID to clipboard:',
+              err,
+            );
             // Show UID in the error toast for manual copying
             toast.error(`Redirecting to an integration partner`, {
-                duration: 5000, // Give more time to see/copy
+              duration: 5000, // Give more time to see/copy
             });
             // Redirect after a delay, allowing time for manual copy
             // Note: We are still redirecting even if copy fails, as the primary action is integration.
             setTimeout(() => {
-                console.log(`[handleIntegrationClick] Redirecting mobile (after copy fail) to Veyrax URL: ${redirectUrl}`);
-                window.location.href = redirectUrl; 
+              console.log(
+                `[handleIntegrationClick] Redirecting mobile (after copy fail) to Veyrax URL: ${redirectUrl}`,
+              );
+              window.location.href = redirectUrl;
             }, 5000); // Increased delay
           });
       } else {
         // Desktop: Redirect immediately to Veyrax
         if (loadingToastId) toast.dismiss(loadingToastId); // Dismiss if somehow shown
-        console.log(`[handleIntegrationClick] Redirecting desktop to Veyrax URL: ${redirectUrl}`);
+        console.log(
+          `[handleIntegrationClick] Redirecting desktop to Veyrax URL: ${redirectUrl}`,
+        );
         window.location.href = redirectUrl;
       }
-
-    } catch (error) { // Catch errors mainly from getUid
+    } catch (error) {
+      // Catch errors mainly from getUid
       if (loadingToastId) toast.dismiss(loadingToastId);
-      console.error(`[handleIntegrationClick] Error processing integration for provider ${provider}:`, error);
+      console.error(
+        `[handleIntegrationClick] Error processing integration for provider ${provider}:`,
+        error,
+      );
       toast.error(`Failed to initiate integration for ${provider}.`);
       setIsIntegrating(false); // Reset state on error
-    } 
+    }
   };
 
   // URL for the Veyrax page to add more tools - Updated path
-  const addToolsUrl = currentUserUid ? `https://veyrax.com/omi/auth?omi_user_id=${encodeURIComponent(currentUserUid)}` : '#';
+  const addToolsUrl = currentUserUid
+    ? `https://veyrax.com/omi/auth?omi_user_id=${encodeURIComponent(currentUserUid)}`
+    : '#';
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col">
+    <div className="flex min-h-screen flex-col bg-black text-white">
       {/* <PreorderBanner botName="your favorite personal" /> */}
       <Header uid={currentUserUid} />
-      <div className="flex flex-col items-center justify-center px-4 py-8 md:py-16 flex-grow">
+      <div className="flex flex-grow flex-col items-center justify-center px-4 py-8 md:py-16">
         <InputArea
           handle={handle}
           handleInputChange={handleInputChange}
@@ -961,7 +1052,11 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
               target="_blank"
               rel="noopener noreferrer"
               className="text-base text-white hover:text-zinc-300 hover:underline"
-              onClick={() => Mixpanel.track('Show All Integrations Clicked', { timestamp: new Date().toISOString() })}
+              onClick={() =>
+                Mixpanel.track('Show All Integrations Clicked', {
+                  timestamp: new Date().toISOString(),
+                })
+              }
             >
               Show all 100+ integrations →
             </a>
@@ -969,48 +1064,55 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
         )}
 
         {/* Before/After Comparison */}
-        <div className="w-full max-w-5xl mt-12 md:mt-16 px-4">
-          <div className="grid md:grid-cols-2 gap-8">
+        <div className="mt-12 w-full max-w-5xl px-4 md:mt-16">
+          <div className="grid gap-8 md:grid-cols-2">
             {/* Before Section */}
-            <div className="bg-zinc-900 p-6 rounded-lg order-2 md:order-1">
-              <h3 className="text-lg font-semibold mb-4 text-center text-zinc-400">ChatGPT</h3>
+            <div className="order-2 rounded-lg bg-zinc-900 p-6 md:order-1">
+              <h3 className="mb-4 text-center text-lg font-semibold text-zinc-400">
+                ChatGPT
+              </h3>
               <div className="space-y-3">
                 {/* User Bubble */}
                 <div className="flex justify-end">
-                  <div className="bg-zinc-700 p-3 rounded-lg max-w-[80%] text-white">
+                  <div className="max-w-[80%] rounded-lg bg-zinc-700 p-3 text-white">
                     What should I do today?
                   </div>
                 </div>
                 {/* AI Bubble (Generic) */}
                 <div className="flex justify-start">
-                  <div className="bg-zinc-700 p-3 rounded-lg max-w-[80%] text-zinc-200">
-                    You could organize your tasks, check the weather forecast, brainstorm new ideas, or maybe learn a new skill online.
+                  <div className="max-w-[80%] rounded-lg bg-zinc-700 p-3 text-zinc-200">
+                    You could organize your tasks, check the weather forecast, brainstorm
+                    new ideas, or maybe learn a new skill online.
                   </div>
                 </div>
               </div>
             </div>
 
             {/* After Section */}
-            <div className="bg-zinc-800 p-6 rounded-lg order-1 md:order-2 shadow-lg">
-              <h3 className="text-lg font-semibold mb-4 text-center text-white">omiGPT</h3>
+            <div className="order-1 rounded-lg bg-zinc-800 p-6 shadow-lg md:order-2">
+              <h3 className="mb-4 text-center text-lg font-semibold text-white">
+                omiGPT
+              </h3>
               <div className="space-y-3">
                 {/* User Bubble */}
                 <div className="flex justify-end">
-                  <div className="bg-zinc-700 p-3 rounded-lg max-w-[80%] text-white">
+                  <div className="max-w-[80%] rounded-lg bg-zinc-700 p-3 text-white">
                     What should I do today?
                   </div>
                 </div>
                 {/* AI Bubble (Personalized) */}
                 <div className="flex justify-start">
-                  <div className="bg-zinc-600 p-3 rounded-lg max-w-[80%] text-white">
-                    Based on your calendar, you have the 'Marketing Sync' at 2 PM. Your Notion page 'Q3 Launch Plan' needs review. How about blocking 1 hour now to finalize those presentation slides? Also, remember you starred that new cafe near the meeting spot on Maps.
+                  <div className="max-w-[80%] rounded-lg bg-zinc-600 p-3 text-white">
+                    Based on your calendar, you have the 'Marketing Sync' at 2 PM. Your
+                    Notion page 'Q3 Launch Plan' needs review. How about blocking 1 hour
+                    now to finalize those presentation slides? Also, remember you starred
+                    that new cafe near the meeting spot on Maps.
                   </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-
       </div>
       <Footer />
       {/* Render the modal */}
@@ -1027,4 +1129,3 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
     </div>
   );
 }
-
