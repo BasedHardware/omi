@@ -9,7 +9,6 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
 
-import 'desktop_action_item.dart';
 
 class DesktopActionGroup extends StatelessWidget {
   final ServerConversation conversation;
@@ -70,7 +69,7 @@ class DesktopActionGroup extends StatelessWidget {
                         color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Icon(
+                      child: const Icon(
                         FontAwesomeIcons.message,
                         color: ResponsiveHelper.purplePrimary,
                         size: 14,
@@ -86,7 +85,7 @@ class DesktopActionGroup extends StatelessWidget {
                         children: [
                           Text(
                             conversation.structured.title.isNotEmpty ? conversation.structured.title : 'Untitled Conversation',
-                            style: TextStyle(
+                            style: const TextStyle(
                               color: ResponsiveHelper.textPrimary,
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
@@ -97,7 +96,7 @@ class DesktopActionGroup extends StatelessWidget {
                           const SizedBox(height: 2),
                           Text(
                             '$incompleteCount remaining',
-                            style: TextStyle(
+                            style: const TextStyle(
                               color: ResponsiveHelper.textSecondary,
                               fontSize: 12,
                             ),
@@ -107,7 +106,7 @@ class DesktopActionGroup extends StatelessWidget {
                     ),
 
                     // Navigate icon
-                    Icon(
+                    const Icon(
                       FontAwesomeIcons.chevronRight,
                       color: ResponsiveHelper.textTertiary,
                       size: 12,
@@ -177,7 +176,7 @@ class DesktopActionGroup extends StatelessWidget {
                 borderRadius: BorderRadius.circular(4),
               ),
               child: item.completed
-                  ? Icon(
+                  ? const Icon(
                       FontAwesomeIcons.check,
                       size: 10,
                       color: Colors.white,
@@ -214,7 +213,7 @@ class DesktopActionGroup extends StatelessWidget {
                 color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
                 borderRadius: BorderRadius.circular(6),
               ),
-              child: Icon(
+              child: const Icon(
                 FontAwesomeIcons.pen,
                 color: ResponsiveHelper.textSecondary,
                 size: 10,

@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
@@ -10,10 +8,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/app_provider.dart';
-import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/utils/enums.dart';
-
-import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -25,15 +20,11 @@ import 'widgets/desktop_search_widget.dart';
 import 'widgets/desktop_search_result_header.dart';
 import 'widgets/desktop_recording_widget.dart';
 
-/// Desktop conversations page - premium minimal design
+
 class DesktopConversationsPage extends StatefulWidget {
-  final VoidCallback? onMinimizeRecording; // Keep for overlay functionality elsewhere
-  final bool isRecordingMinimized; // Keep for overlay functionality elsewhere
 
   const DesktopConversationsPage({
     super.key,
-    this.onMinimizeRecording,
-    this.isRecordingMinimized = false,
   });
 
   @override
@@ -48,13 +39,10 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
 
-  // Search functionality is handled by DesktopSearchWidget internally
 
   // State for inline conversation detail viewing
   bool _showingConversationDetail = false;
   ServerConversation? _selectedConversation;
-  int? _selectedConversationIndex;
-  DateTime? _selectedDate;
   ConversationDetailProvider? _conversationDetailProvider;
 
   // State for expanded recording view
@@ -64,9 +52,8 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
   void initState() {
     super.initState();
 
-    // Search is handled by DesktopSearchWidget internally
 
-    // Initialize animations for premium feel
+    // Initialize animations
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
@@ -117,8 +104,6 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
     setState(() {
       _showingConversationDetail = true;
       _selectedConversation = conversation;
-      _selectedConversationIndex = index;
-      _selectedDate = date;
       _conversationDetailProvider = detailProvider;
     });
   }
@@ -127,8 +112,6 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
     setState(() {
       _showingConversationDetail = false;
       _selectedConversation = null;
-      _selectedConversationIndex = null;
-      _selectedDate = null;
       _conversationDetailProvider?.dispose();
       _conversationDetailProvider = null;
     });
@@ -156,7 +139,6 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
         final isRecording = recordingState == RecordingState.systemAudioRecord;
         final isInitializing = recordingState == RecordingState.initialising;
         final isRecordingOrInitializing = isRecording || isInitializing || captureProvider.isPaused;
-        final hasConversations = convoProvider.groupedConversations.isNotEmpty;
         final isSearchActive = convoProvider.previousQuery.isNotEmpty;
         final hasAnyConversationsInSystem = convoProvider.conversations.isNotEmpty;
 
@@ -183,7 +165,7 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
               // Main content layer
               if (!hasAnyConversationsInSystem && !isSearchActive)
                 Center(
-                  child: DesktopPremiumRecordingWidget(
+                  child: DesktopRecordingWidget(
                     hasConversations: false,
                     onStartRecording: _showExpandedRecordingView,
                   ),
@@ -194,24 +176,6 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                   slivers: [
                     const SliverToBoxAdapter(child: SizedBox(height: 20)),
 
-                    // Hardware cards section (only show if there are conversations in system)
-                    if (hasAnyConversationsInSystem)
-                      SliverToBoxAdapter(
-                        child: FadeTransition(
-                          opacity: _fadeAnimation,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 32),
-                            child: const Column(
-                              children: [
-                                SpeechProfileCardWidget(),
-                                SizedBox(height: 12),
-                                UpdateFirmwareCardWidget(),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-
                     // Header section (only show if there are conversations in system)
                     if (hasAnyConversationsInSystem)
                       SliverToBoxAdapter(
@@ -221,7 +185,7 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                         ),
                       ),
 
-                    // Recording widget section (compact version)
+                    // Recording widget section
                     // Only show if there are conversations in system and not searching
                     if (hasAnyConversationsInSystem && !isSearchActive && !_showExpandedRecording)
                       SliverToBoxAdapter(
@@ -229,7 +193,7 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                           opacity: _fadeAnimation,
                           child: Container(
                             padding: const EdgeInsets.fromLTRB(32, 24, 32, 24),
-                            child: DesktopPremiumRecordingWidget(
+                            child: DesktopRecordingWidget(
                               hasConversations: true,
                               onStartRecording: _showExpandedRecordingView,
                             ),
@@ -242,7 +206,7 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
 
                     getProcessingConversationsWidget(convoProvider.processingConversations),
 
-                    // Main conversations content with premium design
+                    // Main conversations content
                     if (convoProvider.groupedConversations.isEmpty && !convoProvider.isLoadingConversations)
                       SliverToBoxAdapter(
                         child: FadeTransition(
@@ -333,7 +297,7 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                                 );
                               }
 
-                              // Conversation groups with premium spacing
+                              // Conversation groups
                               var date = convoProvider.groupedConversations.keys.elementAt(index);
                               List<ServerConversation> conversationsForDate = convoProvider.groupedConversations[date]!;
 
@@ -356,7 +320,7 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                   width: double.infinity,
                   height: double.infinity,
                   color: ResponsiveHelper.backgroundSecondary.withOpacity(0.95),
-                  child: DesktopPremiumRecordingWidget(
+                  child: DesktopRecordingWidget(
                     onBack: _hideExpandedRecordingView,
                     showTranscript: true,
                     hasConversations: true,
@@ -443,7 +407,6 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Clean date header with minimal typography - inspired by reference
           Container(
             padding: const EdgeInsets.only(
               left: 2,
@@ -460,7 +423,6 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
             ),
           ),
 
-          // Conversations list with premium spacing
           ...conversations.asMap().entries.map((entry) {
             final index = entry.key;
             final conversation = entry.value;
@@ -472,7 +434,7 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                 onTap: () => _navigateToConversationDetail(conversation, index, date),
               ),
             );
-          }).toList(),
+          }),
         ],
       ),
     );

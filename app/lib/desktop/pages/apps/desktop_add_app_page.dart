@@ -1,4 +1,3 @@
-import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
@@ -43,7 +42,6 @@ class DesktopAddAppPage extends StatefulWidget {
 class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProviderStateMixin {
   late bool showSubmitAppConfirmation;
 
-  // Animation controllers for modern feel
   late AnimationController _fadeController;
   late AnimationController _slideController;
   late AnimationController _pulseController;
@@ -59,7 +57,6 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
     super.initState();
     showSubmitAppConfirmation = SharedPreferencesUtil().showSubmitAppConfirmation;
 
-    // Initialize animations for modern feel
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
@@ -88,13 +85,11 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
-    // Mark animations as initialized
     _animationsInitialized = true;
 
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
       await Provider.of<AddAppProvider>(context, listen: false).init();
 
-      // Start animations
       _fadeController.forward();
       _slideController.forward();
     });
@@ -127,9 +122,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
             ),
             child: Stack(
               children: [
-                // Animated background pattern
                 _buildAnimatedBackground(),
-
                 // Main content
                 Container(
                   decoration: BoxDecoration(
@@ -137,10 +130,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                   ),
                   child: Column(
                     children: [
-                      // Modern header
-                      _buildModernHeader(),
-
-                      // Main content area
+                      _buildHeader(),
                       Expanded(
                         child: _animationsInitialized
                             ? FadeTransition(
@@ -198,7 +188,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
     );
   }
 
-  Widget _buildModernHeader() {
+  Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -230,7 +220,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                   color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
+                child: const Icon(
                   FontAwesomeIcons.arrowLeft,
                   color: ResponsiveHelper.textSecondary,
                   size: 16,
@@ -261,7 +251,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Create New App',
                   style: TextStyle(
                     fontSize: 20,
@@ -478,7 +468,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
             Text(
               provider.isSubmitting ? 'Submitting your app...' : 'Preparing the form for you...',
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 color: ResponsiveHelper.textSecondary,
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
@@ -532,7 +522,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                 const SizedBox(width: 8),
                 Text(
                   title,
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: ResponsiveHelper.textPrimary,
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -569,14 +559,14 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
               width: 1,
             ),
           ),
-          child: Row(
+          child: const Row(
             children: [
               Icon(
                 FontAwesomeIcons.lightbulb,
                 color: ResponsiveHelper.purplePrimary,
                 size: 20,
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -589,7 +579,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    SizedBox(height: 4),
                     Text(
                       'Click here for app building guides and documentation',
                       style: TextStyle(
@@ -654,7 +644,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                             child: const Icon(Icons.photo, size: 32),
                           ),
                         )
-                      : Icon(
+                      : const Icon(
                           Icons.add_photo_alternate_outlined,
                           size: 32,
                           color: ResponsiveHelper.textTertiary,
@@ -792,7 +782,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),
-              Expanded(
+              const Expanded(
                 child: Text(
                   'Make my app public',
                   style: TextStyle(
@@ -815,7 +805,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),
-              Expanded(
+              const Expanded(
                 child: Text(
                   'By submitting this app, I agree to the Omi AI Terms of Service and Privacy Policy',
                   style: TextStyle(
@@ -947,9 +937,9 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                     context: context,
                     builder: (ctx) => Container(
                       padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         color: ResponsiveHelper.backgroundSecondary,
-                        borderRadius: const BorderRadius.vertical(
+                        borderRadius: BorderRadius.vertical(
                           top: Radius.circular(20),
                         ),
                       ),
@@ -977,7 +967,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                               ),
                             ),
                             const SizedBox(height: 12),
-                            Text(
+                            const Text(
                               'Connect Stripe or PayPal to receive payments for your app.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
@@ -1004,7 +994,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                             const SizedBox(height: 8),
                             CupertinoButton(
                               onPressed: () => Navigator.pop(ctx),
-                              child: Text(
+                              child: const Text(
                                 'Maybe Later',
                                 style: TextStyle(
                                   color: ResponsiveHelper.textSecondary,

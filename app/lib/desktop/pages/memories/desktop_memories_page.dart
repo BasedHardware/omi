@@ -13,7 +13,6 @@ import 'widgets/desktop_memory_item.dart';
 import 'widgets/desktop_memory_dialog.dart';
 import 'widgets/desktop_memory_review_sheet.dart';
 
-// Filter options for the dropdown
 enum FilterOption { interesting, system, all }
 
 class DesktopMemoriesPage extends StatefulWidget {
@@ -31,7 +30,6 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
   MemoryCategory? _selectedCategory;
   final ScrollController _scrollController = ScrollController();
 
-  // Animation controllers for modern feel
   late AnimationController _fadeController;
   late AnimationController _slideController;
   late AnimationController _pulseController;
@@ -42,11 +40,9 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
 
   bool _animationsInitialized = false;
 
-  // Filter options for the dropdown
-  // Default will be set in initState based on current date
   late FilterOption _currentFilter;
 
-  // Memory review panel state - using ValueNotifier to avoid full rebuilds
+  // Memory review panel state
   final ValueNotifier<List<Memory>?> _reviewMemoriesNotifier = ValueNotifier<List<Memory>?>(null);
 
   // Track unreviewed memories and notification state
@@ -69,7 +65,6 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
   void initState() {
     super.initState();
 
-    // Initialize animations for modern feel
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
@@ -98,18 +93,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
-    // Mark animations as initialized
     _animationsInitialized = true;
-
-    // Set default filter based on current date
-    final now = DateTime.now();
-    final cutoffDate = DateTime(2025, 5, 31);
-
-    if (now.isAfter(cutoffDate)) {
-      _currentFilter = FilterOption.interesting;
-    } else {
-      _currentFilter = FilterOption.all;
-    }
 
     (() async {
       await _handleRefresh();
@@ -131,7 +115,6 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
     final provider = context.read<MemoriesProvider>();
     await provider.init();
 
-    // Apply the date-based default filter after refreshing data
     _applyFilter(_currentFilter);
 
     if (mounted) {
@@ -140,7 +123,6 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
   }
 
   void _applyFilter(FilterOption option) {
-    final provider = context.read<MemoriesProvider>();
     setState(() {
       _currentFilter = option;
 
@@ -154,7 +136,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
           MixpanelManager().memoriesFiltered('system');
           break;
         case FilterOption.all:
-          _filterByCategory(null); // null means no category filter
+          _filterByCategory(null);
           MixpanelManager().memoriesFiltered('all');
           break;
       }
@@ -168,14 +150,6 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
     context.read<MemoriesProvider>().setCategoryFilter(category);
   }
 
-  Map<MemoryCategory, int> _getCategoryCounts(List<Memory> memories) {
-    var counts = <MemoryCategory, int>{};
-    for (var memory in memories) {
-      counts[memory.category] = (counts[memory.category] ?? 0) + 1;
-    }
-    return counts;
-  }
-
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -183,7 +157,6 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
       builder: (context, provider, _) {
         return Stack(
           children: [
-            // Main content - this won't rebuild when panel state changes
             Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -200,10 +173,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
                 borderRadius: BorderRadius.circular(20),
                 child: Stack(
                   children: [
-                    // Animated background pattern
                     _buildAnimatedBackground(),
-
-                    // Main content with glassmorphism
                     Container(
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.02),
@@ -211,13 +181,8 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
                       ),
                       child: Column(
                         children: [
-                          // Modern header with controls
                           _buildModernHeader(provider),
-
-                          // Review indicator notification
                           _buildReviewIndicator(),
-
-                          // Main memories area
                           Expanded(
                             child: _animationsInitialized
                                 ? FadeTransition(
@@ -237,7 +202,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
               ),
             ),
 
-            // Panel overlay - only this part rebuilds when panel state changes
+            // Panel overlay
             ValueListenableBuilder<List<Memory>?>(
               valueListenable: _reviewMemoriesNotifier,
               builder: (context, reviewMemories, child) {
@@ -327,7 +292,6 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
       padding: const EdgeInsets.all(20),
       child: Row(
         children: [
-          // Search field
           Expanded(
             child: Container(
               height: 44,
@@ -362,12 +326,10 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
 
           const SizedBox(width: 12),
 
-          // Filter dropdown
           _buildFilterDropdown(provider),
 
           const SizedBox(width: 12),
 
-          // Add memory button
           Material(
             color: Colors.transparent,
             child: InkWell(
@@ -391,7 +353,6 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
 
           const SizedBox(width: 8),
 
-          // Management menu
           Material(
             color: Colors.transparent,
             child: InkWell(
@@ -430,6 +391,12 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
           borderRadius: BorderRadius.circular(12),
         ),
         offset: const Offset(0, 48),
+        itemBuilder: (context) => [
+          _buildFilterItem(FilterOption.all, 'All Memories'),
+          _buildFilterItem(FilterOption.interesting, 'Interesting'),
+          _buildFilterItem(FilterOption.system, 'System'),
+        ],
+        onSelected: _applyFilter,
         child: Container(
           height: 44,
           padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -458,12 +425,6 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
             ],
           ),
         ),
-        itemBuilder: (context) => [
-          _buildFilterItem(FilterOption.all, 'All Memories'),
-          _buildFilterItem(FilterOption.interesting, 'Interesting'),
-          _buildFilterItem(FilterOption.system, 'System'),
-        ],
-        onSelected: _applyFilter,
       ),
     );
   }
@@ -515,7 +476,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
         color: ResponsiveHelper.purplePrimary,
         child: Stack(
           children: [
-            ListView(), // Needed to make RefreshIndicator work on a non-scrollable child
+            ListView(),
             _buildModernEmptyState(provider),
           ],
         ),
@@ -842,7 +803,6 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
 
                   const SizedBox(width: 12),
 
-                  // Message text
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -870,7 +830,6 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
 
                   const SizedBox(width: 12),
 
-                  // Action buttons
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [

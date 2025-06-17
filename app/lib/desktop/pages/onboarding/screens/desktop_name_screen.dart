@@ -108,7 +108,7 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: double.infinity,
       height: double.infinity,
       child: Column(
@@ -120,7 +120,6 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Simple minimal icon
                   Container(
                     width: 56,
                     height: 56,
@@ -137,7 +136,6 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
 
                   const SizedBox(height: 32),
 
-                  // Clean title
                   const Text(
                     'What\'s your name?',
                     style: TextStyle(
@@ -151,7 +149,6 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
 
                   const SizedBox(height: 8),
 
-                  // Clean subtitle
                   Container(
                     constraints: const BoxConstraints(maxWidth: 480),
                     padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -169,7 +166,6 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
 
                   const SizedBox(height: 48),
 
-                  // Clean input field
                   Container(
                     constraints: const BoxConstraints(maxWidth: 400),
                     margin: const EdgeInsets.symmetric(horizontal: 40),
@@ -222,7 +218,6 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
                           ),
                         ),
 
-                        // Error message
                         if (_errorMessage.isNotEmpty) ...[
                           const SizedBox(height: 8),
                           Row(
@@ -244,7 +239,6 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
                           ),
                         ],
 
-                        // Character counter
                         if (_nameController.text.isNotEmpty) ...[
                           const SizedBox(height: 8),
                           Align(
@@ -266,13 +260,11 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
             ),
           ),
 
-          // Clean minimal navigation - centered continue button only
           Container(
             padding: const EdgeInsets.all(40),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Premium continue button
                 Container(
                   height: 44,
                   decoration: BoxDecoration(

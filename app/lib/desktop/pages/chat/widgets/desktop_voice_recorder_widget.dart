@@ -1,12 +1,11 @@
 import 'dart:async';
-import 'dart:math' as Math;
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/file.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -102,12 +101,12 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
 
               int sampleCount = bytes.length ~/ 2;
               if (sampleCount > 0) {
-                rms = Math.sqrt(rms / sampleCount) / 32768.0;
+                rms = math.sqrt(rms / sampleCount) / 32768.0;
               } else {
                 rms = 0;
               }
 
-              final level = Math.pow(rms, 0.4).toDouble().clamp(0.1, 1.0);
+              final level = math.pow(rms, 0.4).toDouble().clamp(0.1, 1.0);
 
               for (int i = 0; i < _audioLevels.length - 1; i++) {
                 _audioLevels[i] = _audioLevels[i + 1];
@@ -212,7 +211,7 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               IconButton(
-                icon: Icon(Icons.close, color: ResponsiveHelper.textSecondary),
+                icon: const Icon(Icons.close, color: ResponsiveHelper.textSecondary),
                 onPressed: widget.onClose,
               ),
               Expanded(
@@ -263,7 +262,7 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
               Shimmer.fromColors(
                 baseColor: ResponsiveHelper.textTertiary,
                 highlightColor: ResponsiveHelper.textPrimary,
-                child: Text(
+                child: const Text(
                   'Transcribing...',
                   style: TextStyle(
                     color: ResponsiveHelper.textPrimary,
@@ -292,7 +291,7 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
               ),
               child: Text(
                 _transcript,
-                style: TextStyle(
+                style: const TextStyle(
                   color: ResponsiveHelper.textPrimary,
                   fontSize: 14,
                 ),
@@ -303,11 +302,11 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 IconButton(
-                  icon: Icon(Icons.close, color: ResponsiveHelper.textSecondary),
+                  icon: const Icon(Icons.close, color: ResponsiveHelper.textSecondary),
                   onPressed: widget.onClose,
                 ),
                 IconButton(
-                  icon: Icon(Icons.send, color: ResponsiveHelper.purplePrimary),
+                  icon: const Icon(Icons.send, color: ResponsiveHelper.purplePrimary),
                   onPressed: () => widget.onTranscriptReady(_transcript),
                 ),
               ],
@@ -368,7 +367,7 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
                     ),
                   ),
                   IconButton(
-                    icon: Icon(Icons.close, color: ResponsiveHelper.textSecondary),
+                    icon: const Icon(Icons.close, color: ResponsiveHelper.textSecondary),
                     onPressed: widget.onClose,
                   ),
                 ],

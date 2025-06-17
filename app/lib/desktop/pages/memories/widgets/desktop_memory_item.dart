@@ -69,7 +69,7 @@ class DesktopMemoryItem extends StatelessWidget {
                     children: [
                       Text(
                         memory.content.decodeString,
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: ResponsiveHelper.textPrimary,
                           fontSize: 15,
                           height: 1.4,
@@ -83,12 +83,10 @@ class DesktopMemoryItem extends StatelessWidget {
 
                 const SizedBox(width: 12),
 
-                // Visibility indicator (centered vertically)
                 _buildVisibilityIndicator(),
 
                 const SizedBox(width: 8),
 
-                // Quick actions
                 _buildQuickActions(),
               ],
             ),
@@ -126,14 +124,14 @@ class DesktopMemoryItem extends StatelessWidget {
             color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(
+          child: const Icon(
             Icons.more_vert,
             color: ResponsiveHelper.textSecondary,
             size: 16,
           ),
         ),
         itemBuilder: (context) => [
-          PopupMenuItem<String>(
+          const PopupMenuItem<String>(
             value: 'edit',
             child: Row(
               children: [
@@ -142,7 +140,7 @@ class DesktopMemoryItem extends StatelessWidget {
                   color: ResponsiveHelper.textSecondary,
                   size: 16,
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Text(
                   'Edit',
                   style: TextStyle(
@@ -165,7 +163,7 @@ class DesktopMemoryItem extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   memory.visibility == MemoryVisibility.private ? 'Make Public' : 'Make Private',
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: ResponsiveHelper.textPrimary,
                     fontSize: 14,
                   ),
@@ -223,7 +221,7 @@ class DesktopMemoryItem extends StatelessWidget {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
-        title: Text(
+        title: const Text(
           'Delete Memory',
           style: TextStyle(
             color: ResponsiveHelper.textPrimary,
@@ -231,7 +229,7 @@ class DesktopMemoryItem extends StatelessWidget {
             fontWeight: FontWeight.w600,
           ),
         ),
-        content: Text(
+        content: const Text(
           'Are you sure you want to delete this memory? This action cannot be undone.',
           style: TextStyle(
             color: ResponsiveHelper.textSecondary,
@@ -241,7 +239,7 @@ class DesktopMemoryItem extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(
+            child: const Text(
               'Cancel',
               style: TextStyle(
                 color: ResponsiveHelper.textSecondary,
@@ -272,8 +270,6 @@ class DesktopMemoryItem extends StatelessWidget {
         return ResponsiveHelper.purplePrimary;
       case MemoryCategory.system:
         return Colors.orange;
-      default:
-        return ResponsiveHelper.textSecondary;
     }
   }
 
@@ -283,21 +279,9 @@ class DesktopMemoryItem extends StatelessWidget {
         return Icons.lightbulb_outline;
       case MemoryCategory.system:
         return Icons.settings_outlined;
-      default:
-        return Icons.note_outlined;
     }
   }
 
-  String _getCategoryName() {
-    switch (memory.category) {
-      case MemoryCategory.interesting:
-        return 'Interesting';
-      case MemoryCategory.system:
-        return 'System';
-      default:
-        return StringCapitalize(memory.category.name).capitalize();
-    }
-  }
 }
 
 extension StringCapitalize on String {

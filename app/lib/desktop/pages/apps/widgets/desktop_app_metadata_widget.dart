@@ -54,7 +54,6 @@ class DesktopAppMetadataWidget extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // App icon section with modern desktop styling
             Center(
               child: Stack(
                 children: [
@@ -98,14 +97,14 @@ class DesktopAppMetadataWidget extends StatelessWidget {
                                           ),
                                         ),
                                       ),
-                                      errorWidget: (context, url, error) => Icon(
+                                      errorWidget: (context, url, error) => const Icon(
                                         FontAwesomeIcons.image,
                                         color: ResponsiveHelper.textTertiary,
                                         size: 32,
                                       ),
                                     ),
                             )
-                          : Icon(
+                          : const Icon(
                               FontAwesomeIcons.plus,
                               color: ResponsiveHelper.textTertiary,
                               size: 32,
@@ -198,7 +197,7 @@ class DesktopAppMetadataWidget extends StatelessWidget {
   Widget _buildFieldLabel(String label) {
     return Text(
       label,
-      style: TextStyle(
+      style: const TextStyle(
         color: ResponsiveHelper.textSecondary,
         fontSize: 14,
         fontWeight: FontWeight.w500,
@@ -225,13 +224,13 @@ class DesktopAppMetadataWidget extends StatelessWidget {
         controller: controller,
         validator: validator,
         maxLines: maxLines,
-        style: TextStyle(
+        style: const TextStyle(
           color: ResponsiveHelper.textPrimary,
           fontSize: 14,
         ),
         decoration: InputDecoration(
           hintText: hintText,
-          hintStyle: TextStyle(
+          hintStyle: const TextStyle(
             color: ResponsiveHelper.textTertiary,
             fontSize: 14,
           ),
@@ -261,7 +260,7 @@ class DesktopAppMetadataWidget extends StatelessWidget {
           Expanded(
             child: Text(
               appId,
-              style: TextStyle(
+              style: const TextStyle(
                 color: ResponsiveHelper.textTertiary,
                 fontSize: 14,
               ),
@@ -291,7 +290,7 @@ class DesktopAppMetadataWidget extends StatelessWidget {
                   color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(
+                child: const Icon(
                   FontAwesomeIcons.copy,
                   color: ResponsiveHelper.textSecondary,
                   size: 14,
@@ -331,7 +330,7 @@ class DesktopAppMetadataWidget extends StatelessWidget {
                   ),
                 ),
               ),
-              Icon(
+              const Icon(
                 FontAwesomeIcons.chevronDown,
                 color: ResponsiveHelper.textTertiary,
                 size: 12,
@@ -364,10 +363,10 @@ class DesktopAppMetadataWidget extends StatelessWidget {
               child: generatingDescription
                   ? Skeletonizer.zone(
                       enabled: generatingDescription,
-                      effect: ShimmerEffect(
+                      effect: const ShimmerEffect(
                         baseColor: ResponsiveHelper.backgroundTertiary,
                         highlightColor: ResponsiveHelper.backgroundSecondary,
-                        duration: const Duration(seconds: 1),
+                        duration: Duration(seconds: 1),
                       ),
                       child: Container(
                         padding: const EdgeInsets.all(16),
@@ -397,19 +396,19 @@ class DesktopAppMetadataWidget extends StatelessWidget {
                         }
                         return null;
                       },
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: ResponsiveHelper.textPrimary,
                         fontSize: 14,
                         height: 1.5,
                       ),
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         hintText: 'My Awesome App is a great app that does amazing things. It is the best app ever!',
                         hintStyle: TextStyle(
                           color: ResponsiveHelper.textTertiary,
                           fontSize: 14,
                         ),
                         border: InputBorder.none,
-                        contentPadding: const EdgeInsets.all(16),
+                        contentPadding: EdgeInsets.all(16),
                         isDense: false,
                       ),
                     ),
@@ -478,7 +477,7 @@ class DesktopAppMetadataWidget extends StatelessWidget {
                   ),
                 ),
               ),
-              Icon(
+              const Icon(
                 FontAwesomeIcons.chevronDown,
                 color: ResponsiveHelper.textTertiary,
                 size: 12,
@@ -521,8 +520,8 @@ class DesktopAppMetadataWidget extends StatelessWidget {
             ),
 
             // Header
-            Padding(
-              padding: const EdgeInsets.all(20),
+            const Padding(
+              padding: EdgeInsets.all(20),
               child: Row(
                 children: [
                   Icon(
@@ -530,7 +529,7 @@ class DesktopAppMetadataWidget extends StatelessWidget {
                     color: ResponsiveHelper.textSecondary,
                     size: 18,
                   ),
-                  const SizedBox(width: 12),
+                  SizedBox(width: 12),
                   Text(
                     'App Category',
                     style: TextStyle(
@@ -570,14 +569,14 @@ class DesktopAppMetadataWidget extends StatelessWidget {
                             Expanded(
                               child: Text(
                                 categoryItem.title,
-                                style: TextStyle(
+                                style: const TextStyle(
                                   color: ResponsiveHelper.textPrimary,
                                   fontSize: 16,
                                 ),
                               ),
                             ),
                             if (isSelected)
-                              Icon(
+                              const Icon(
                                 FontAwesomeIcons.check,
                                 color: ResponsiveHelper.purplePrimary,
                                 size: 16,
@@ -629,8 +628,8 @@ class DesktopAppMetadataWidget extends StatelessWidget {
             ),
 
             // Header
-            Padding(
-              padding: const EdgeInsets.all(20),
+            const Padding(
+              padding: EdgeInsets.all(20),
               child: Row(
                 children: [
                   Icon(
@@ -638,7 +637,7 @@ class DesktopAppMetadataWidget extends StatelessWidget {
                     color: ResponsiveHelper.textSecondary,
                     size: 18,
                   ),
-                  const SizedBox(width: 12),
+                  SizedBox(width: 12),
                   Text(
                     'App Pricing',
                     style: TextStyle(
@@ -679,14 +678,14 @@ class DesktopAppMetadataWidget extends StatelessWidget {
                             Expanded(
                               child: Text(
                                 option,
-                                style: TextStyle(
+                                style: const TextStyle(
                                   color: ResponsiveHelper.textPrimary,
                                   fontSize: 16,
                                 ),
                               ),
                             ),
                             if (isSelected)
-                              Icon(
+                              const Icon(
                                 FontAwesomeIcons.check,
                                 color: ResponsiveHelper.purplePrimary,
                                 size: 16,

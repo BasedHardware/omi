@@ -5,7 +5,6 @@ import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
-/// Desktop Memory Review Panel - slides in from right with premium minimal design
 class DesktopMemoryReviewSheet extends StatefulWidget {
   final List<Memory> memories;
   final MemoriesProvider provider;
@@ -37,7 +36,6 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
     remainingMemories = List.from(widget.memories);
     displayedMemories = List.from(remainingMemories);
 
-    // Setup animations
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
@@ -229,7 +227,7 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
               color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(
+            child: const Icon(
               FontAwesomeIcons.magnifyingGlass,
               color: ResponsiveHelper.purplePrimary,
               size: 16,
@@ -265,7 +263,7 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
               borderRadius: BorderRadius.circular(8),
               child: Container(
                 padding: EdgeInsets.all(responsive.spacing(baseSpacing: 8)),
-                child: Icon(
+                child: const Icon(
                   Icons.close_rounded,
                   color: ResponsiveHelper.textTertiary,
                   size: 20,
@@ -386,7 +384,7 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
                 color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: Icon(
+              child: const Icon(
                 FontAwesomeIcons.circleCheck,
                 size: 32,
                 color: ResponsiveHelper.purplePrimary,
@@ -537,7 +535,7 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    SizedBox(
+                    const SizedBox(
                       width: 16,
                       height: 16,
                       child: CircularProgressIndicator(
@@ -643,8 +641,6 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
         return 'Interesting';
       case MemoryCategory.system:
         return 'System';
-      default:
-        return 'Unknown';
     }
   }
 
@@ -654,8 +650,6 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
         return ResponsiveHelper.purplePrimary;
       case MemoryCategory.system:
         return Colors.orange;
-      default:
-        return ResponsiveHelper.textSecondary;
     }
   }
 
@@ -665,8 +659,6 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
         return FontAwesomeIcons.lightbulb;
       case MemoryCategory.system:
         return FontAwesomeIcons.gear;
-      default:
-        return FontAwesomeIcons.noteSticky;
     }
   }
 }

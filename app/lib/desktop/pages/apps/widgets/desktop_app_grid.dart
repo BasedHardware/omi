@@ -4,7 +4,6 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
-/// Desktop app grid optimized for large datasets (4000+ apps)
 class DesktopAppGrid extends StatefulWidget {
   final List<App> apps;
   final Function(App) onAppTap;
@@ -21,7 +20,7 @@ class DesktopAppGrid extends StatefulWidget {
 
 class _DesktopAppGridState extends State<DesktopAppGrid> {
   late ScrollController _scrollController;
-  static const int _itemsPerPage = 50; // Pagination for performance
+  static const int _itemsPerPage = 60;
   int _currentPage = 1;
   bool _isLoadingMore = false;
 
@@ -240,7 +239,6 @@ class _DesktopAppCardState extends State<_DesktopAppCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Top row with icon and status
                     Row(
                       children: [
                         _buildAppIcon(),
@@ -248,7 +246,6 @@ class _DesktopAppCardState extends State<_DesktopAppCard> {
                       ],
                     ),
 
-                    // Flexible spacing
                     Expanded(
                       child: Padding(
                         padding: EdgeInsets.symmetric(
@@ -258,7 +255,6 @@ class _DesktopAppCardState extends State<_DesktopAppCard> {
                       ),
                     ),
 
-                    // Bottom row with rating and action
                     _buildBottomSection(),
                   ],
                 ),
@@ -332,7 +328,6 @@ class _DesktopAppCardState extends State<_DesktopAppCard> {
           size: iconSize * 0.5,
         ),
       ),
-      // Performance optimization: Reduce memory usage
       memCacheHeight: (iconSize * 2).toInt(),
       memCacheWidth: (iconSize * 2).toInt(),
     );
@@ -363,7 +358,6 @@ class _DesktopAppCardState extends State<_DesktopAppCard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // App name - responsive font size
         Text(
           widget.app.name,
           maxLines: 2,
@@ -404,7 +398,6 @@ class _DesktopAppCardState extends State<_DesktopAppCard> {
   Widget _buildBottomSection() {
     return Row(
       children: [
-        // Rating section
         if (widget.app.ratingAvg != null) ...[
           Icon(
             Icons.star_rounded,
@@ -426,7 +419,6 @@ class _DesktopAppCardState extends State<_DesktopAppCard> {
         ] else
           const Spacer(),
 
-        // Action button
         _buildActionButton(),
       ],
     );
@@ -436,11 +428,9 @@ class _DesktopAppCardState extends State<_DesktopAppCard> {
     final isInstalled = widget.app.enabled;
 
     if (isInstalled) {
-      // Show simple "Installed" text for installed apps
       return _buildInstalledBadge();
     }
 
-    // Show install button for non-installed apps
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       child: Container(

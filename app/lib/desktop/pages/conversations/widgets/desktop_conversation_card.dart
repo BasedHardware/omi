@@ -6,7 +6,6 @@ import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
-/// Premium modern conversation card with beautiful design
 class DesktopConversationCard extends StatefulWidget {
   final ServerConversation conversation;
   final VoidCallback onTap;
@@ -200,7 +199,7 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
             ),
             child: Text(
               widget.conversation.getTag(),
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 color: ResponsiveHelper.purplePrimary,
@@ -234,7 +233,7 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
+                const Icon(
                   FontAwesomeIcons.clock,
                   size: 12,
                   color: ResponsiveHelper.textTertiary,
@@ -265,7 +264,7 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
+                const Icon(
                   FontAwesomeIcons.listCheck,
                   size: 10,
                   color: ResponsiveHelper.purplePrimary,
@@ -273,7 +272,7 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
                 const SizedBox(width: 4),
                 Text(
                   '${widget.conversation.structured.actionItems.length}',
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: ResponsiveHelper.purplePrimary,
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
@@ -329,7 +328,7 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
+              const Icon(
                 FontAwesomeIcons.calendar,
                 size: 12,
                 color: ResponsiveHelper.textTertiary,
@@ -363,7 +362,7 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
+                const Icon(
                   FontAwesomeIcons.microphone,
                   size: 12,
                   color: ResponsiveHelper.textTertiary,

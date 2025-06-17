@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
@@ -8,33 +7,30 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
 
-class DesktopPremiumRecordingWidget extends StatefulWidget {
+class DesktopRecordingWidget extends StatefulWidget {
   final VoidCallback? onBack;
-  final VoidCallback? onMinimize; // Keep for overlay functionality elsewhere
-  final VoidCallback? onStartRecording; // Callback to navigate to recording page
+  final VoidCallback? onStartRecording;
   final bool hasConversations;
-  final bool showTranscript; // Whether to show the transcript section (for full recording page)
+  final bool showTranscript;
 
-  const DesktopPremiumRecordingWidget({
+  const DesktopRecordingWidget({
     super.key,
     this.onBack,
-    this.onMinimize,
     this.onStartRecording,
     this.hasConversations = false,
-    this.showTranscript = false, // Default to false for compact mode
+    this.showTranscript = false,
   });
 
   @override
-  State<DesktopPremiumRecordingWidget> createState() => _DesktopPremiumRecordingWidgetState();
+  State<DesktopRecordingWidget> createState() => _DesktopRecordingWidgetState();
 }
 
-class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingWidget> {
+class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
   bool _isHovered = false;
 
   Future<void> _toggleRecording(BuildContext context, CaptureProvider provider) async {
@@ -418,9 +414,9 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
-                      Opacity(
+                      const Opacity(
                         opacity: 0.6,
-                        child: const Text(
+                        child: Text(
                           'translated',
                           style: TextStyle(
                             fontSize: 10,
@@ -442,7 +438,7 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
             MouseRegion(
               cursor: SystemMouseCursors.click,
               child: GestureDetector(
-                onTap: widget.onStartRecording, // This will call _showExpandedRecordingView
+                onTap: widget.onStartRecording,
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
@@ -498,7 +494,6 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
 
   @override
   Widget build(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
 
     return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(
       builder: (context, captureProvider, deviceProvider, connectivityProvider, child) {
@@ -507,7 +502,6 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
         final isInitializing = recordingState == RecordingState.initialising;
         final isPaused = captureProvider.isPaused;
         final hasTranscripts = captureProvider.segments.isNotEmpty;
-        final isRecordingOrInitializing = isRecording || isInitializing || isPaused;
 
         return Container(
           width: double.infinity,
@@ -668,7 +662,6 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
   }
 
   Widget _buildLiveTranscriptContent(List<TranscriptSegment> segments) {
-    // Show recent segments with smooth streaming effect
     final displaySegments = segments.length > 15 ? segments.sublist(segments.length - 15) : segments;
 
     return Column(
@@ -767,11 +760,11 @@ class _DesktopPremiumRecordingWidgetState extends State<DesktopPremiumRecordingW
     }
   }
 
-  // Translation notice widget (same as mobile version)
+
   Widget _buildTranslationNotice() {
-    return Opacity(
+    return const Opacity(
       opacity: 0.5,
-      child: const Row(
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(

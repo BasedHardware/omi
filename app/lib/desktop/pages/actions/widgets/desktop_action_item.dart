@@ -188,7 +188,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
                 ),
               ],
             ),
-            child: Row(
+            child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
@@ -196,7 +196,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
                   color: Colors.white,
                   size: 14,
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Text(
                   'Saved',
                   style: TextStyle(
@@ -264,7 +264,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
                   borderRadius: BorderRadius.circular(5),
                 ),
                 child: widget.actionItem.completed
-                    ? Icon(
+                    ? const Icon(
                         FontAwesomeIcons.check,
                         size: 12,
                         color: Colors.white,
@@ -281,13 +281,13 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
                       ? TextField(
                           controller: _textController,
                           focusNode: _focusNode,
-                          style: TextStyle(
+                          style: const TextStyle(
                             color: ResponsiveHelper.textPrimary,
                             fontSize: 15,
                             height: 1.4,
                             fontWeight: FontWeight.w500,
                           ),
-                          decoration: InputDecoration(
+                          decoration: const InputDecoration(
                             border: InputBorder.none,
                             contentPadding: EdgeInsets.zero,
                             isDense: true,
@@ -326,7 +326,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
                       Expanded(
                         child: Text(
                           widget.conversation.structured.title.isNotEmpty ? widget.conversation.structured.title : 'Untitled Conversation',
-                          style: TextStyle(
+                          style: const TextStyle(
                             color: ResponsiveHelper.textTertiary,
                             fontSize: 12,
                           ),
@@ -378,7 +378,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
           color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Icon(
+        child: const Icon(
           FontAwesomeIcons.ellipsisVertical,
           color: ResponsiveHelper.textSecondary,
           size: 14,
@@ -397,7 +397,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
               const SizedBox(width: 8),
               Text(
                 widget.actionItem.completed ? 'Mark Incomplete' : 'Mark Complete',
-                style: TextStyle(
+                style: const TextStyle(
                   color: ResponsiveHelper.textPrimary,
                   fontSize: 14,
                 ),
@@ -468,7 +468,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
-        title: Text(
+        title: const Text(
           'Delete Action Item',
           style: TextStyle(
             color: ResponsiveHelper.textPrimary,
@@ -476,7 +476,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
             fontWeight: FontWeight.w600,
           ),
         ),
-        content: Text(
+        content: const Text(
           'Are you sure you want to delete this action item?',
           style: TextStyle(
             color: ResponsiveHelper.textSecondary,
@@ -486,7 +486,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(
+            child: const Text(
               'Cancel',
               style: TextStyle(
                 color: ResponsiveHelper.textSecondary,

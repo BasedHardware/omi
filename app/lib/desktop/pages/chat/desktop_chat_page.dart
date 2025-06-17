@@ -1,5 +1,4 @@
-import 'dart:io';
-import 'dart:math' as math;
+
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -13,8 +12,6 @@ import 'package:omi/backend/schema/message.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/chat/select_text_screen.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
-import 'package:omi/pages/chat/widgets/animated_mini_banner.dart';
-import 'package:omi/pages/chat/widgets/user_message.dart';
 import 'package:omi/pages/chat/widgets/typing_indicator.dart';
 import 'package:omi/pages/chat/widgets/markdown_message_widget.dart';
 import 'package:omi/desktop/pages/chat/widgets/desktop_voice_recorder_widget.dart';
@@ -33,7 +30,6 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/widgets/dialog.dart';
 
 import 'widgets/desktop_message_action_menu.dart';
 
@@ -74,7 +70,6 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     apps = prefs.appsList;
     scrollController = ScrollController();
 
-    // Initialize animations for modern feel
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
@@ -127,7 +122,6 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
       }
     });
 
-    // Mark animations as initialized
     _animationsInitialized = true;
 
     SchedulerBinding.instance.addPostFrameCallback((_) async {
@@ -136,7 +130,6 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
         provider.refreshMessages();
       }
 
-      // Start animations
       _fadeController.forward();
       _slideController.forward();
 
@@ -188,13 +181,10 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                   ),
                   child: Column(
                     children: [
-                      // Modern header with app selection
                       _buildModernHeader(appProvider),
 
-                      // Modern loading indicator
-                      if (provider.isLoadingMessages) _buildModernLoadingBar(),
+                      if (provider.isLoadingMessages) _buildLoadingBar(),
 
-                      // Main chat area with enhanced styling
                       Expanded(
                         child: _animationsInitialized
                             ? FadeTransition(
@@ -207,7 +197,6 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                             : _buildChatContent(provider, connectivityProvider),
                       ),
 
-                      // Floating input area with glassmorphism
                       _buildFloatingInputArea(provider, connectivityProvider),
                     ],
                   ),
@@ -351,7 +340,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                           children: [
                             Text(
                               selectedApp?.name ?? 'Omi',
-                              style: TextStyle(
+                              style: const TextStyle(
                                 color: ResponsiveHelper.textPrimary,
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
@@ -363,7 +352,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                               const SizedBox(height: 2),
                               Text(
                                 'Chat with ${selectedApp.name}',
-                                style: TextStyle(
+                                style: const TextStyle(
                                   color: ResponsiveHelper.textTertiary,
                                   fontSize: 11,
                                 ),
@@ -372,7 +361,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                               ),
                             ] else ...[
                               const SizedBox(height: 2),
-                              Text(
+                              const Text(
                                 'Default AI Assistant',
                                 style: TextStyle(
                                   color: ResponsiveHelper.textTertiary,
@@ -387,7 +376,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                       const SizedBox(width: 8),
 
                       // Dropdown arrow
-                      Icon(
+                      const Icon(
                         FontAwesomeIcons.chevronDown,
                         color: ResponsiveHelper.textSecondary,
                         size: 12,
@@ -413,7 +402,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                   color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
+                child: const Icon(
                   FontAwesomeIcons.trash,
                   color: ResponsiveHelper.textSecondary,
                   size: 16,
@@ -426,12 +415,12 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     );
   }
 
-  Widget _buildModernLoadingBar() {
+  Widget _buildLoadingBar() {
     return Container(
       height: 3,
       margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        borderRadius: const BorderRadius.only(
+      decoration: const BoxDecoration(
+        borderRadius: BorderRadius.only(
           topLeft: Radius.circular(20),
           topRight: Radius.circular(20),
         ),
@@ -464,21 +453,21 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     ConnectivityProvider connectivityProvider,
   ) {
     if (provider.isLoadingMessages && !provider.hasCachedMessages) {
-      return _buildModernLoadingState(provider.firstTimeLoadingText);
+      return _buildLoadingState(provider.firstTimeLoadingText);
     }
 
     if (provider.isClearingChat) {
-      return _buildModernLoadingState("Deleting your messages from Omi's memory...");
+      return _buildLoadingState("Deleting your messages from Omi's memory...");
     }
 
     if (provider.messages.isEmpty) {
-      return _buildModernEmptyState(connectivityProvider.isConnected);
+      return _buildEmptyState(connectivityProvider.isConnected);
     }
 
     return _buildMessagesList(provider);
   }
 
-  Widget _buildModernLoadingState(String text) {
+  Widget _buildLoadingState(String text) {
     Widget content = Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -548,7 +537,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
               Text(
                 text,
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   color: ResponsiveHelper.textSecondary,
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
@@ -570,7 +559,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     );
   }
 
-  Widget _buildModernEmptyState(bool isConnected) {
+  Widget _buildEmptyState(bool isConnected) {
     Widget content = Container(
       padding: const EdgeInsets.all(40),
       margin: const EdgeInsets.all(32),
@@ -645,7 +634,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
           const SizedBox(height: 24),
           Text(
             isConnected ? '✨ Ready to chat!' : '🌐 Connection needed',
-            style: TextStyle(
+            style: const TextStyle(
               color: ResponsiveHelper.textPrimary,
               fontSize: 20,
               fontWeight: FontWeight.w600,
@@ -655,7 +644,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
           Text(
             isConnected ? 'Start a conversation and let the magic begin' : 'Please check your internet connection',
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
               color: ResponsiveHelper.textSecondary,
               fontSize: 14,
               height: 1.5,
@@ -738,11 +727,9 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // AI message with profile picture outside
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // AI profile picture outside the bubble (restored original Omi image)
                       Container(
                         decoration: BoxDecoration(
                           image: DecorationImage(
@@ -789,7 +776,6 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                       ),
                     ],
                   ),
-                  // Timestamp outside and below the bubble (with 2pts more left margin)
                   Container(
                     margin: const EdgeInsets.only(left: 50, top: 6),
                     child: Text(
@@ -821,14 +807,13 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                     padding: const EdgeInsets.all(16),
                     child: Text(
                       message.text.decodeString,
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: ResponsiveHelper.textPrimary,
                         fontSize: 15,
                         height: 1.4,
                       ),
                     ),
                   ),
-                  // Add 5pts margin below user messages
                   const SizedBox(height: 5),
                 ],
               ),
@@ -1017,7 +1002,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          const Text(
             '📎 Attached Files',
             style: TextStyle(
               color: ResponsiveHelper.textSecondary,
@@ -1064,7 +1049,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                               color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: Icon(
+                            child: const Icon(
                               Icons.insert_drive_file_rounded,
                               color: ResponsiveHelper.purplePrimary,
                               size: 24,
@@ -1227,19 +1212,19 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
         controller: textController,
         maxLines: null,
         keyboardType: TextInputType.multiline,
-        style: TextStyle(
+        style: const TextStyle(
           fontSize: 14,
           color: ResponsiveHelper.textPrimary,
           height: 1.4,
         ),
-        decoration: InputDecoration(
+        decoration: const InputDecoration(
           hintText: '💬 Type your message...',
           hintStyle: TextStyle(
             fontSize: 14,
             color: ResponsiveHelper.textTertiary,
           ),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(
+          contentPadding: EdgeInsets.symmetric(
             horizontal: 16,
             vertical: 12,
           ),
@@ -1270,7 +1255,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                         color: ResponsiveHelper.purplePrimary.withOpacity(0.15 + _pulseAnimation.value * 0.05),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(
+                      child: const Icon(
                         Icons.mic_rounded,
                         color: ResponsiveHelper.purplePrimary,
                         size: 20,
@@ -1284,7 +1269,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                     color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(
+                  child: const Icon(
                     Icons.mic_rounded,
                     color: ResponsiveHelper.purplePrimary,
                     size: 20,
@@ -1451,7 +1436,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
               children: [
                 Text(
                   title,
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: ResponsiveHelper.textPrimary,
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -1460,7 +1445,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: ResponsiveHelper.textSecondary,
                     fontSize: 11,
                   ),
@@ -1614,13 +1599,13 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
               padding: const EdgeInsets.all(20),
               child: Row(
                 children: [
-                  Icon(
+                  const Icon(
                     FontAwesomeIcons.robot,
                     color: ResponsiveHelper.textSecondary,
                     size: 18,
                   ),
                   const SizedBox(width: 12),
-                  Text(
+                  const Text(
                     'Select Chat Assistant',
                     style: TextStyle(
                       color: ResponsiveHelper.textPrimary,
@@ -1631,7 +1616,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                   const Spacer(),
                   IconButton(
                     onPressed: () => Navigator.pop(context),
-                    icon: Icon(
+                    icon: const Icon(
                       FontAwesomeIcons.xmark,
                       color: ResponsiveHelper.textSecondary,
                       size: 16,
@@ -1686,14 +1671,14 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                               width: 1,
                             ),
                           ),
-                          child: Row(
+                          child: const Row(
                             children: [
                               Icon(
                                 FontAwesomeIcons.store,
                                 color: ResponsiveHelper.purplePrimary,
                                 size: 16,
                               ),
-                              const SizedBox(width: 12),
+                              SizedBox(width: 12),
                               Text(
                                 'Enable More Apps',
                                 style: TextStyle(
@@ -1702,7 +1687,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
-                              const Spacer(),
+                              Spacer(),
                               Icon(
                                 FontAwesomeIcons.chevronRight,
                                 color: ResponsiveHelper.textTertiary,
@@ -1819,7 +1804,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                     children: [
                       Text(
                         app?.name ?? 'Omi',
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: ResponsiveHelper.textPrimary,
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -1828,7 +1813,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                       const SizedBox(height: 4),
                       Text(
                         app?.description ?? 'Default AI Assistant',
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: ResponsiveHelper.textSecondary,
                           fontSize: 12,
                         ),
@@ -1843,7 +1828,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
 
                 // Selection indicator
                 if (isSelected)
-                  Icon(
+                  const Icon(
                     FontAwesomeIcons.check,
                     color: ResponsiveHelper.purplePrimary,
                     size: 16,

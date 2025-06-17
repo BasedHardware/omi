@@ -4,19 +4,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/transcript.dart';
 import 'package:provider/provider.dart';
 
 import 'widgets/desktop_action_items_section.dart';
 import 'widgets/desktop_conversation_summary.dart';
-import 'widgets/desktop_conversation_header.dart';
 
 class DesktopConversationDetailPage extends StatefulWidget {
   final ServerConversation conversation;
@@ -52,7 +49,6 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
   void initState() {
     super.initState();
 
-    // Initialize animations for modern feel
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
@@ -94,7 +90,6 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
       curve: Curves.easeOutCubic,
     ));
 
-    // Mark animations as initialized
     _animationsInitialized = true;
 
     SchedulerBinding.instance.addPostFrameCallback((_) async {
@@ -149,7 +144,6 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
             ),
             child: Column(
               children: [
-                // Modern header with conversation title and controls (conditionally shown)
                 if (widget.showBackButton) _buildModernAppBar(),
 
                 // Main content area
@@ -168,7 +162,7 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
             ),
           ),
 
-          // Transcript drawer overlay - positioned at root level for full height
+          // Transcript drawer overlay
           if (_showTranscript) _buildTranscriptDrawer(),
         ],
       ),
@@ -224,7 +218,6 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
       ),
       child: Row(
         children: [
-          // Back button (conditionally shown)
           if (widget.showBackButton) ...[
             Material(
               color: Colors.transparent,
@@ -237,7 +230,7 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
                     color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(
+                  child: const Icon(
                     FontAwesomeIcons.arrowLeft,
                     color: ResponsiveHelper.textSecondary,
                     size: 16,
@@ -248,7 +241,6 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
             const SizedBox(width: 16),
           ],
 
-          // Conversation emoji and title
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
@@ -280,7 +272,7 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
                 const SizedBox(height: 2),
                 Text(
                   '${dateTimeFormat('MMM d, yyyy', widget.conversation.createdAt)} ${widget.conversation.startedAt == null ? 'at' : 'from'} ${setTime(widget.conversation.startedAt, widget.conversation.createdAt, widget.conversation.finishedAt)}',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 14,
                     color: ResponsiveHelper.textSecondary,
                   ),
@@ -289,7 +281,6 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
             ),
           ),
 
-          // View toggle button
           Material(
             color: Colors.transparent,
             child: InkWell(
@@ -382,14 +373,14 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
                     ),
                   ),
                 ),
-                child: Row(
+                child: const Row(
                   children: [
                     Icon(
                       FontAwesomeIcons.fileAlt,
                       color: ResponsiveHelper.textSecondary,
                       size: 16,
                     ),
-                    const SizedBox(width: 8),
+                    SizedBox(width: 8),
                     Text(
                       'Conversation Details',
                       style: TextStyle(
@@ -493,13 +484,13 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
                     ),
                     child: Row(
                       children: [
-                        Icon(
+                        const Icon(
                           FontAwesomeIcons.fileLines,
                           color: ResponsiveHelper.textSecondary,
                           size: 18,
                         ),
                         const SizedBox(width: 12),
-                        Text(
+                        const Text(
                           'Transcript',
                           style: TextStyle(
                             color: ResponsiveHelper.textPrimary,
@@ -517,7 +508,7 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
                             ),
                             child: Text(
                               '${widget.conversation.transcriptSegments.length} segments',
-                              style: TextStyle(
+                              style: const TextStyle(
                                 color: ResponsiveHelper.textTertiary,
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
@@ -539,7 +530,7 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
                             borderRadius: BorderRadius.circular(8),
                             child: Container(
                               padding: const EdgeInsets.all(8),
-                              child: Icon(
+                              child: const Icon(
                                 FontAwesomeIcons.xmark,
                                 color: ResponsiveHelper.textSecondary,
                                 size: 16,
@@ -586,14 +577,14 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
                 color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Icon(
+              child: const Icon(
                 FontAwesomeIcons.fileLines,
                 size: 48,
                 color: ResponsiveHelper.purplePrimary,
               ),
             ),
             const SizedBox(height: 24),
-            Text(
+            const Text(
               'No Transcript Available',
               style: TextStyle(
                 color: ResponsiveHelper.textPrimary,
@@ -602,7 +593,7 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
               ),
             ),
             const SizedBox(height: 8),
-            Text(
+            const Text(
               'This conversation doesn\'t have a transcript.',
               textAlign: TextAlign.center,
               style: TextStyle(

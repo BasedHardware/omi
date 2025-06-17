@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
-/// Premium minimal empty state for conversations - inspired by reference design
 class DesktopEmptyConversations extends StatelessWidget {
   const DesktopEmptyConversations({super.key});
 
@@ -12,7 +11,6 @@ class DesktopEmptyConversations extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Clean minimal icon with better design
           Container(
             width: 64,
             height: 64,
@@ -33,7 +31,6 @@ class DesktopEmptyConversations extends StatelessWidget {
 
           const SizedBox(height: 24),
 
-          // Clean typography with better hierarchy
           const Text(
             'No conversations yet',
             style: TextStyle(
@@ -59,7 +56,6 @@ class DesktopEmptyConversations extends StatelessWidget {
 
           const SizedBox(height: 32),
 
-          // Minimal getting started tips
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(

@@ -18,7 +18,7 @@ class DesktopCapabilitiesChipsWidget extends StatelessWidget {
             color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Center(
+          child: const Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -27,7 +27,7 @@ class DesktopCapabilitiesChipsWidget extends StatelessWidget {
                   color: ResponsiveHelper.textTertiary,
                   size: 24,
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
                 Text(
                   'Loading capabilities...',
                   style: TextStyle(
@@ -77,7 +77,7 @@ class DesktopCapabilitiesChipsWidget extends StatelessWidget {
                   children: [
                     // Check icon for selected state
                     if (isSelected) ...[
-                      Icon(
+                      const Icon(
                         FontAwesomeIcons.check,
                         color: ResponsiveHelper.purplePrimary,
                         size: 14,

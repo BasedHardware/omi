@@ -37,7 +37,6 @@ class DesktopMessageActionMenu extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Message preview with desktop styling
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(

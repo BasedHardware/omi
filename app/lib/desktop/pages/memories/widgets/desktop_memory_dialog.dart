@@ -3,7 +3,6 @@ import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:omi/widgets/extensions/string.dart';
 
 class DesktopMemoryDialog extends StatefulWidget {
   final Memory? memory;
@@ -69,7 +68,7 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
               children: [
                 Text(
                   widget.memory != null ? '✏️ Edit Memory' : '✨ New Memory',
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: ResponsiveHelper.textPrimary,
                     fontSize: 20,
                     fontWeight: FontWeight.w600,
@@ -78,7 +77,7 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
                 const Spacer(),
                 IconButton(
                   onPressed: () => Navigator.pop(context),
-                  icon: Icon(
+                  icon: const Icon(
                     Icons.close,
                     color: ResponsiveHelper.textSecondary,
                     size: 20,
@@ -103,19 +102,19 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
                 controller: _textController,
                 maxLines: 6,
                 autofocus: true,
-                style: TextStyle(
+                style: const TextStyle(
                   color: ResponsiveHelper.textPrimary,
                   fontSize: 15,
                   height: 1.4,
                 ),
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   hintText: 'What would you like to remember?',
                   hintStyle: TextStyle(
                     color: ResponsiveHelper.textTertiary,
                     fontSize: 15,
                   ),
                   border: InputBorder.none,
-                  contentPadding: const EdgeInsets.all(16),
+                  contentPadding: EdgeInsets.all(16),
                 ),
               ),
             ),
@@ -123,7 +122,7 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
             const SizedBox(height: 20),
 
             // Category selection
-            Text(
+            const Text(
               'Category',
               style: TextStyle(
                 color: ResponsiveHelper.textPrimary,
@@ -143,7 +142,7 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
             const SizedBox(height: 20),
 
             // Visibility selection
-            Text(
+            const Text(
               'Visibility',
               style: TextStyle(
                 color: ResponsiveHelper.textPrimary,
@@ -185,7 +184,7 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
                 const Spacer(),
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: Text(
+                  child: const Text(
                     'Cancel',
                     style: TextStyle(
                       color: ResponsiveHelper.textSecondary,
@@ -314,7 +313,7 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
                 const SizedBox(height: 4),
                 Text(
                   subtitle,
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: ResponsiveHelper.textTertiary,
                     fontSize: 10,
                   ),
@@ -357,7 +356,7 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
-        title: Text(
+        title: const Text(
           'Delete Memory',
           style: TextStyle(
             color: ResponsiveHelper.textPrimary,
@@ -365,7 +364,7 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
             fontWeight: FontWeight.w600,
           ),
         ),
-        content: Text(
+        content: const Text(
           'Are you sure you want to delete this memory? This action cannot be undone.',
           style: TextStyle(
             color: ResponsiveHelper.textSecondary,
@@ -375,7 +374,7 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(
+            child: const Text(
               'Cancel',
               style: TextStyle(
                 color: ResponsiveHelper.textSecondary,
@@ -386,8 +385,8 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
             onPressed: () {
               widget.provider.deleteMemory(widget.memory!);
               MixpanelManager().memoriesPageDeletedMemory(widget.memory!);
-              Navigator.pop(context); // Close confirmation
-              Navigator.pop(context); // Close edit dialog
+              Navigator.pop(context);
+              Navigator.pop(context);
             },
             child: Text(
               'Delete',

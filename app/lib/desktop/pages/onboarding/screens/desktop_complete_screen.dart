@@ -93,7 +93,6 @@ class _DesktopCompleteScreenState extends State<DesktopCompleteScreen> with Tick
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // Simple minimal success icon matching other pages
                       ScaleTransition(
                         scale: _scaleAnimation,
                         child: Container(
@@ -113,7 +112,6 @@ class _DesktopCompleteScreenState extends State<DesktopCompleteScreen> with Tick
 
                       const SizedBox(height: 32),
 
-                      // Clean title
                       const Text(
                         'You\'re all set!',
                         style: TextStyle(
@@ -127,7 +125,6 @@ class _DesktopCompleteScreenState extends State<DesktopCompleteScreen> with Tick
 
                       const SizedBox(height: 8),
 
-                      // Clean subtitle
                       Container(
                         constraints: const BoxConstraints(maxWidth: 480),
                         padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -145,7 +142,6 @@ class _DesktopCompleteScreenState extends State<DesktopCompleteScreen> with Tick
 
                       const SizedBox(height: 48),
 
-                      // Clean button
                       Container(
                         constraints: const BoxConstraints(maxWidth: 400),
                         margin: const EdgeInsets.symmetric(horizontal: 40),
@@ -196,7 +192,6 @@ class _DesktopCompleteScreenState extends State<DesktopCompleteScreen> with Tick
 
                       const SizedBox(height: 16),
 
-                      // Small back button
                       if (widget.onBack != null)
                         TextButton(
                           onPressed: widget.onBack,
@@ -218,124 +213,6 @@ class _DesktopCompleteScreenState extends State<DesktopCompleteScreen> with Tick
             },
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildFeatureHighlights(ResponsiveHelper responsive) {
-    final features = [
-      {
-        'icon': Icons.chat_bubble_outline,
-        'title': 'Smart Conversations',
-        'description': 'Natural AI interactions',
-      },
-      {
-        'icon': Icons.psychology,
-        'title': 'Memory & Context',
-        'description': 'Remembers your preferences',
-      },
-      {
-        'icon': Icons.speed,
-        'title': 'Lightning Fast',
-        'description': 'Instant responses',
-      },
-    ];
-
-    if (responsive.isSmallScreen) {
-      // Stack vertically on small screens
-      return Column(
-        children: features
-            .map((feature) => Container(
-                  margin: EdgeInsets.only(bottom: responsive.spacing(baseSpacing: 16, minSpacing: 12, maxSpacing: 20)),
-                  child: _buildFeatureCard(
-                    icon: feature['icon'] as IconData,
-                    title: feature['title'] as String,
-                    description: feature['description'] as String,
-                    responsive: responsive,
-                  ),
-                ))
-            .toList(),
-      );
-    } else {
-      // Show in row for larger screens
-      return Row(
-        children: features
-            .map((feature) => Expanded(
-                  child: Container(
-                    margin: EdgeInsets.symmetric(horizontal: responsive.spacing(baseSpacing: 8, minSpacing: 6, maxSpacing: 12)),
-                    child: _buildFeatureCard(
-                      icon: feature['icon'] as IconData,
-                      title: feature['title'] as String,
-                      description: feature['description'] as String,
-                      responsive: responsive,
-                    ),
-                  ),
-                ))
-            .toList(),
-      );
-    }
-  }
-
-  Widget _buildFeatureCard({
-    required IconData icon,
-    required String title,
-    required String description,
-    required ResponsiveHelper responsive,
-  }) {
-    return Container(
-      padding: responsive.cardPadding(),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(responsive.spacing(baseSpacing: 16, minSpacing: 12, maxSpacing: 20)),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.1),
-          width: 1,
-        ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: responsive.iconSize(baseSize: 48, minSize: 36, maxSize: 56),
-            height: responsive.iconSize(baseSize: 48, minSize: 36, maxSize: 56),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  const Color(0xFF667EEA).withOpacity(0.2),
-                  const Color(0xFF764BA2).withOpacity(0.2),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(responsive.spacing(baseSpacing: 12, minSpacing: 8, maxSpacing: 16)),
-            ),
-            child: Icon(
-              icon,
-              color: const Color(0xFF667EEA),
-              size: responsive.iconSize(baseSize: 24, minSize: 18, maxSize: 28),
-            ),
-          ),
-          SizedBox(height: responsive.spacing(baseSpacing: 12, minSpacing: 8, maxSpacing: 16)),
-          Text(
-            title,
-            style: responsive.responsiveTextStyle(
-              baseFontSize: 16,
-              minFontSize: 14,
-              maxFontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
-            textAlign: TextAlign.center,
-            overflow: TextOverflow.ellipsis,
-            maxLines: 2,
-          ),
-          SizedBox(height: responsive.spacing(baseSpacing: 8, minSpacing: 6, maxSpacing: 10)),
-          Text(
-            description,
-            style: responsive.bodySmall,
-            textAlign: TextAlign.center,
-            overflow: TextOverflow.ellipsis,
-            maxLines: 2,
-          ),
-        ],
       ),
     );
   }

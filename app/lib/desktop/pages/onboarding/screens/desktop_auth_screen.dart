@@ -36,7 +36,6 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Logo/Icon with minimal design
                   Container(
                     width: 88,
                     height: 88,
@@ -52,7 +51,6 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
 
                   SizedBox(height: responsive.spacing(baseSpacing: 32)),
 
-                  // Title with clean typography
                   Text(
                     'Welcome to Omi',
                     style: responsive.headlineLarge.copyWith(
@@ -63,7 +61,6 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
 
                   SizedBox(height: responsive.spacing(baseSpacing: 12)),
 
-                  // Subtitle with minimal styling
                   Text(
                     'Your personal growth journey with AI that listens to your every word.',
                     style: responsive.bodyLarge.copyWith(
@@ -112,7 +109,7 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
 
                           SizedBox(height: responsive.spacing(baseSpacing: 24)),
 
-                          // Terms and privacy with clickable links
+                          // Terms and privacy
                           RichText(
                             textAlign: TextAlign.center,
                             text: TextSpan(
@@ -241,7 +238,7 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
                   // Header with gradient background
                   Container(
                     padding: EdgeInsets.all(responsive.spacing(baseSpacing: 32)),
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
@@ -263,7 +260,7 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
                                 color: ResponsiveHelper.purplePrimary.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(responsive.radiusSmall),
                               ),
-                              child: Icon(
+                              child: const Icon(
                                 Icons.privacy_tip_outlined,
                                 color: ResponsiveHelper.purplePrimary,
                                 size: 20,
@@ -283,7 +280,6 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
 
                         SizedBox(height: responsive.spacing(baseSpacing: 16)),
 
-                        // Auth method indicator with enhanced design
                         Container(
                           padding: EdgeInsets.all(responsive.spacing(baseSpacing: 16)),
                           decoration: BoxDecoration(
@@ -365,7 +361,7 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
                             children: [
                               Row(
                                 children: [
-                                  Icon(
+                                  const Icon(
                                     Icons.info_outline,
                                     color: ResponsiveHelper.purplePrimary,
                                     size: 20,
@@ -394,7 +390,7 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
 
                         SizedBox(height: responsive.spacing(baseSpacing: 20)),
 
-                        // Privacy links with enhanced design
+                        // Privacy links
                         Container(
                           padding: EdgeInsets.all(responsive.spacing(baseSpacing: 16)),
                           decoration: BoxDecoration(
@@ -406,7 +402,7 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
                             children: [
                               Row(
                                 children: [
-                                  Icon(
+                                  const Icon(
                                     Icons.shield_outlined,
                                     color: ResponsiveHelper.textTertiary,
                                     size: 16,
@@ -465,10 +461,9 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
 
                         SizedBox(height: responsive.spacing(baseSpacing: 32)),
 
-                        // Enhanced action buttons
                         Row(
                           children: [
-                            // Cancel button with better styling
+                            // Cancel button
                             Expanded(
                               child: Container(
                                 decoration: BoxDecoration(
@@ -501,7 +496,7 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
 
                             SizedBox(width: responsive.spacing(baseSpacing: 16)),
 
-                            // Continue button with enhanced gradient and shadow
+                            // Continue button
                             Expanded(
                               flex: 2,
                               child: Container(

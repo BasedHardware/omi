@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:omi/desktop/pages/desktop_home_page.dart';
 import 'package:omi/desktop/pages/onboarding/screens/desktop_auth_screen.dart';
@@ -8,7 +7,6 @@ import 'package:omi/desktop/pages/onboarding/screens/desktop_language_screen.dar
 import 'package:omi/desktop/pages/onboarding/screens/desktop_permissions_screen.dart';
 import 'package:omi/desktop/pages/onboarding/screens/desktop_complete_screen.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/pages/home/page.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -16,7 +14,7 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
 
-/// Clean desktop onboarding wrapper without sidebar
+
 class DesktopOnboardingWrapper extends StatefulWidget {
   const DesktopOnboardingWrapper({super.key});
 
@@ -150,7 +148,7 @@ class _DesktopOnboardingWrapperState extends State<DesktopOnboardingWrapper> wit
       FirebaseAuth.instance.currentUser!.displayName,
       FirebaseAuth.instance.currentUser!.uid,
     );
-    _nextStep(); // Go to Name page
+    _nextStep();
   }
 
   void _completeOnboarding() {
@@ -178,7 +176,7 @@ class _DesktopOnboardingWrapperState extends State<DesktopOnboardingWrapper> wit
                   position: _slideAnimation,
                   child: PageView.builder(
                     controller: _pageController,
-                    physics: const NeverScrollableScrollPhysics(), // Disable swiping
+                    physics: const NeverScrollableScrollPhysics(),
                     onPageChanged: (index) {
                       setState(() {
                         _currentStep = index;

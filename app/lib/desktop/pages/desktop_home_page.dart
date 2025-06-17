@@ -42,10 +42,9 @@ import 'package:flutter/services.dart';
 import '../../pages/conversations/sync_page.dart';
 import 'home/widgets/battery_info_widget.dart';
 
-/// Enum for macOS window button types
+
 enum MacWindowButtonType { close, minimize, maximize }
 
-/// macOS-style window button with proper hover states
 class _MacWindowButton extends StatefulWidget {
   final MacWindowButtonType type;
   final VoidCallback onTap;
@@ -124,7 +123,7 @@ class _MacWindowButtonState extends State<_MacWindowButton> {
   }
 }
 
-/// Desktop home page - premium minimal design with complete mobile functionality
+
 class DesktopHomePage extends StatefulWidget {
   final String? navigateToRoute;
   const DesktopHomePage({super.key, this.navigateToRoute});
@@ -141,10 +140,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
   late Animation<double> _sidebarSlideAnimation;
   final GlobalKey _profileCardKey = GlobalKey();
 
-  // Global floating recording widget state
+
   bool _isRecordingMinimized = false;
-  Offset _floatingPosition = const Offset(50, 50); // Default position
-  final GlobalKey _floatingKey = GlobalKey();
 
   // Native overlay platform channel
   static const _overlayChannel = MethodChannel('overlayPlatform');
@@ -237,11 +234,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       _initiateApps();
 
-      // Same mobile initialization logic
-      if (!PlatformService.isDesktop) {
-        await ForegroundUtil.initializeForegroundService();
-        ForegroundUtil.startForegroundTask();
-      }
       if (mounted) {
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
@@ -253,7 +245,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
       // Handle navigation
       switch (pageAlias) {
         case "chat":
-          print('inside chat alias $detailPageId');
           if (detailPageId != null && detailPageId.isNotEmpty) {
             var appId = detailPageId != "omi" ? detailPageId : '';
             if (mounted) {
@@ -388,25 +379,18 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
         },
         child: Consumer2<HomeProvider, CaptureProvider>(
           builder: (context, homeProvider, captureProvider, _) {
-            final recordingState = captureProvider.recordingState;
-            final isRecording = recordingState == RecordingState.systemAudioRecord;
-            final isInitializing = recordingState == RecordingState.initialising;
-            final isRecordingOrInitializing = isRecording || isInitializing || captureProvider.isPaused;
-            final showFloatingWidget = isRecordingOrInitializing && _isRecordingMinimized;
-
             return Scaffold(
               backgroundColor: ResponsiveHelper.backgroundPrimary,
               body: Stack(
                 children: [
                   // Main app content
                   Container(
-                    decoration: BoxDecoration(
-                      // gradient: responsive.backgroundGradient,
+                    decoration: const BoxDecoration(
                       color: ResponsiveHelper.backgroundPrimary,
                     ),
                     child: Row(
                       children: [
-                        // Premium sidebar with device widget
+                        // Sidebar
                         _buildSidebar(responsive, homeProvider),
 
                         // Main content area with rounded container
@@ -439,10 +423,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                                     controller: _controller,
                                     physics: const NeverScrollableScrollPhysics(),
                                     children: [
-                                      DesktopConversationsPage(
-                                        onMinimizeRecording: minimizeRecording,
-                                        isRecordingMinimized: _isRecordingMinimized,
-                                      ),
+                                      const DesktopConversationsPage(),
                                       const DesktopChatPage(),
                                       const DesktopMemoriesPage(),
                                       const DesktopActionsPage(),
@@ -462,8 +443,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                       ],
                     ),
                   ),
-
-                  // Native overlay replaces Flutter floating widget
                 ],
               ),
             );
@@ -762,15 +741,9 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     setState(() {
       _isRecordingMinimized = false;
     });
-    _hideNativeOverlay(); // Hide native overlay when expanding
+    _hideNativeOverlay();
   }
 
-  void updateFloatingPosition(Offset newPosition) {
-    // Not needed for native overlay, but keeping for compatibility
-    setState(() {
-      _floatingPosition = newPosition;
-    });
-  }
 
   Future<void> toggleRecordingFromFloat(CaptureProvider provider) async {
     var recordingState = provider.recordingState;
@@ -1060,8 +1033,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
         ),
       ),
       // Add custom animation for bottom-up slide
-      popUpAnimationStyle: AnimationStyle(
-        duration: const Duration(milliseconds: 200),
+      popUpAnimationStyle: const AnimationStyle(
+        duration: Duration(milliseconds: 200),
         curve: Curves.easeOutCubic,
       ),
       items: [
