@@ -146,7 +146,7 @@ class ConversationBottomBar extends StatelessWidget {
           icon: null,
           customIcon: app == null && reprocessingApp == null
               ? SvgPicture.asset(
-                  Assets.images.aiMagic.path,
+                  Assets.images.aiMagic,
                   color: Colors.white,
                 )
               : null,
