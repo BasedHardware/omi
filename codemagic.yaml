@@ -18,9 +18,9 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-      flutter: 3.22.3
-      xcode: 16.0
-      cocoapods: 1.15.2
+      flutter: 3.32.4
+      xcode: 16.4
+      cocoapods: 1.16.2
     cache:
       cache_paths:
         - $HOME/.pub-cache
@@ -184,10 +184,10 @@ workflows:
       vars:
         PACKAGE_NAME: "com.friend.ios"
         JAVA_TOOL_OPTIONS: "-Xmx8g"
-      flutter: 3.22.3
-      xcode: 15.4
-      cocoapods: 1.15.2
-      java: 17
+      flutter: 3.32.4
+      xcode: 16.4
+      cocoapods: 1.16.2
+      java: 21
     cache:
       cache_paths:
         - $HOME/opt
@@ -386,9 +386,9 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-      flutter: 3.22.3
-      xcode: 15.4
-      cocoapods: 1.15.2
+      flutter: 3.32.4
+      xcode: 16.4
+      cocoapods: 1.16.2
     cache:
       cache_paths:
         - $HOME/.pub-cache
@@ -518,10 +518,10 @@ workflows:
         - shorebird
       vars:
         PACKAGE_NAME: "com.friend.ios"
-      flutter: 3.22.3
-      xcode: 15.4
-      cocoapods: 1.15.2
-      java: 17
+      flutter: 3.32.4
+      xcode: 16.4
+      cocoapods: 1.16.2
+      java: 21
     cache:
       cache_paths:
         - $HOME/opt
