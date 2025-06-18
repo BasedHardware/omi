@@ -1,5 +1,3 @@
-
-
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
@@ -12,7 +10,6 @@ import 'package:omi/backend/schema/message.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/chat/select_text_screen.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
-import 'package:omi/pages/chat/widgets/typing_indicator.dart';
 import 'package:omi/pages/chat/widgets/markdown_message_widget.dart';
 import 'package:omi/desktop/pages/chat/widgets/desktop_voice_recorder_widget.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -20,6 +17,7 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/ui/atoms/omi_typing_indicator.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
@@ -30,6 +28,10 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:omi/ui/atoms/omi_avatar.dart';
+import 'package:omi/ui/molecules/omi_chat_bubble.dart';
+import 'package:omi/ui/atoms/omi_message_input.dart';
+import 'package:omi/ui/atoms/omi_send_button.dart';
 
 import 'widgets/desktop_message_action_menu.dart';
 
@@ -272,63 +274,13 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                     children: [
                       // App avatar
                       selectedApp != null
-                          ? CachedNetworkImage(
+                          ? OmiAvatar(
+                              size: 24,
                               imageUrl: selectedApp.getImageUrl(),
-                              imageBuilder: (context, imageProvider) {
-                                return Container(
-                                  width: 24,
-                                  height: 24,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(6),
-                                    image: DecorationImage(
-                                      image: imageProvider,
-                                      fit: BoxFit.cover,
-                                    ),
-                                  ),
-                                );
-                              },
-                              errorWidget: (context, url, error) {
-                                return Container(
-                                  width: 24,
-                                  height: 24,
-                                  decoration: BoxDecoration(
-                                    color: ResponsiveHelper.backgroundTertiary,
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: const Icon(Icons.error_outline, size: 16),
-                                );
-                              },
-                              progressIndicatorBuilder: (context, url, progress) => Container(
-                                width: 24,
-                                height: 24,
-                                decoration: BoxDecoration(
-                                  color: ResponsiveHelper.backgroundTertiary,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: const SizedBox(
-                                  width: 12,
-                                  height: 12,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                ),
-                              ),
                             )
-                          : Container(
-                              width: 24,
-                              height: 24,
-                              decoration: BoxDecoration(
-                                image: DecorationImage(
-                                  image: AssetImage(Assets.images.background.path),
-                                  fit: BoxFit.cover,
-                                ),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Center(
-                                child: Image.asset(
-                                  Assets.images.herologo.path,
-                                  width: 16,
-                                  height: 16,
-                                ),
-                              ),
+                          : OmiAvatar(
+                              size: 24,
+                              fallback: Image.asset(Assets.images.logoTransparent.path),
                             ),
 
                       const SizedBox(width: 12),
@@ -730,47 +682,16 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          image: DecorationImage(
-                            image: AssetImage(Assets.images.background.path),
-                            fit: BoxFit.cover,
-                          ),
-                          borderRadius: const BorderRadius.all(Radius.circular(16.0)),
-                        ),
-                        height: 32,
-                        width: 32,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            Image.asset(
-                              Assets.images.herologo.path,
-                              height: 24,
-                              width: 24,
-                            ),
-                          ],
-                        ),
+                      OmiAvatar(
+                        size: 32,
+                        imageUrl: provider.messageSenderApp(message.appId)?.getImageUrl(),
+                        fallback: Image.asset(Assets.images.herologo.path, height: 24, width: 24),
                       ),
                       const SizedBox(width: 12),
                       // AI message bubble
                       Expanded(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: const Color.fromARGB(255, 255, 255, 255).withOpacity(0.05),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
-                              width: 1,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.05),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          padding: const EdgeInsets.all(16),
+                        child: OmiChatBubble(
+                          type: OmiChatBubbleType.incoming,
                           child: _buildAIMessageContent(message, provider, chatIndex),
                         ),
                       ),
@@ -792,19 +713,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    padding: const EdgeInsets.all(16),
+                  OmiChatBubble(
+                    type: OmiChatBubbleType.outgoing,
                     child: Text(
                       message.text.decodeString,
                       style: const TextStyle(
@@ -901,7 +811,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                           )
                         : const SizedBox(
                             height: 16,
-                            child: TypingIndicator(),
+                            child: OmiTypingIndicator(),
                           ),
                   ],
                 ))
@@ -1201,36 +1111,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   }
 
   Widget _buildModernTextInput() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8),
-      constraints: const BoxConstraints(maxHeight: 120),
-      decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundTertiary.withOpacity(0.8),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: TextField(
-        controller: textController,
-        maxLines: null,
-        keyboardType: TextInputType.multiline,
-        style: const TextStyle(
-          fontSize: 14,
-          color: ResponsiveHelper.textPrimary,
-          height: 1.4,
-        ),
-        decoration: const InputDecoration(
-          hintText: '💬 Type your message...',
-          hintStyle: TextStyle(
-            fontSize: 14,
-            color: ResponsiveHelper.textTertiary,
-          ),
-          border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 12,
-          ),
-        ),
-      ),
-    );
+    return OmiMessageInput(controller: textController);
   }
 
   Widget _buildModernVoiceButton() {
@@ -1288,40 +1169,15 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
 
     return Container(
       margin: const EdgeInsets.only(left: 8),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: canSend
-              ? () {
-                  String message = textController.text.trim();
-                  if (message.isEmpty) return;
-                  _sendMessageUtil(message);
-                }
-              : null,
-          borderRadius: BorderRadius.circular(12),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: canSend ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textQuaternary.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: canSend
-                  ? [
-                      BoxShadow(
-                        color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ]
-                  : [],
-            ),
-            child: Icon(
-              Icons.send_rounded,
-              color: canSend ? Colors.white : ResponsiveHelper.textQuaternary,
-              size: 18,
-            ),
-          ),
-        ),
+      child: OmiSendButton(
+        enabled: canSend,
+        onPressed: canSend
+            ? () {
+                String message = textController.text.trim();
+                if (message.isEmpty) return;
+                _sendMessageUtil(message);
+              }
+            : null,
       ),
     );
   }
@@ -1736,63 +1592,13 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
               children: [
                 // App avatar
                 app != null
-                    ? CachedNetworkImage(
+                    ? OmiAvatar(
+                        size: 40,
                         imageUrl: app.getImageUrl(),
-                        imageBuilder: (context, imageProvider) {
-                          return Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(10),
-                              image: DecorationImage(
-                                image: imageProvider,
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                          );
-                        },
-                        errorWidget: (context, url, error) {
-                          return Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: ResponsiveHelper.backgroundTertiary,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Icon(Icons.error_outline, size: 20),
-                          );
-                        },
-                        progressIndicatorBuilder: (context, url, progress) => Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: ResponsiveHelper.backgroundTertiary,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        ),
                       )
-                    : Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          image: DecorationImage(
-                            image: AssetImage(Assets.images.background.path),
-                            fit: BoxFit.cover,
-                          ),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Center(
-                          child: Image.asset(
-                            Assets.images.herologo.path,
-                            width: 24,
-                            height: 24,
-                          ),
-                        ),
+                    : OmiAvatar(
+                        size: 40,
+                        fallback: Image.asset(Assets.images.logoTransparent.path),
                       ),
 
                 const SizedBox(width: 16),

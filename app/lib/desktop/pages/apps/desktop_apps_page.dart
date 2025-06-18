@@ -10,9 +10,10 @@ import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 import 'widgets/desktop_app_grid.dart';
-import 'widgets/desktop_search_header.dart';
 import 'widgets/desktop_filter_chips.dart';
 import 'widgets/desktop_app_detail.dart';
+import 'package:omi/ui/atoms/omi_search_input.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 
 class DesktopAppsPage extends StatefulWidget {
   final VoidCallback? onNavigateToCreateApp;
@@ -285,62 +286,27 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
               // Search bar - prominent like App Store
               SizedBox(
                 width: responsive.responsiveWidth(baseWidth: 400, maxWidth: 500),
-                child: DesktopSearchHeader(
+                child: OmiSearchInput(
                   controller: _searchController,
                   focusNode: _searchFocusNode,
-                  onSearchChanged: (query) {
-                    // Increased debounce for better performance with large datasets
-                    _debouncer.run(() {
-                      appProvider.searchApps(query);
-                    });
-                  },
-                  onClearSearch: () {
+                  onChanged: (query) => _debouncer.run(() => appProvider.searchApps(query)),
+                  onClear: () {
                     _searchController.clear();
                     appProvider.searchApps('');
                     _searchFocusNode.unfocus();
                   },
+                  hint: 'Search apps...',
                 ),
               ),
 
               const SizedBox(width: 12),
 
               // Create App button
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => _navigateToCreateApp(context),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
-                        width: 1,
-                      ),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.add_rounded,
-                          color: ResponsiveHelper.purplePrimary,
-                          size: 18,
-                        ),
-                        SizedBox(width: 6),
-                        Text(
-                          'Create App',
-                          style: TextStyle(
-                            color: ResponsiveHelper.purplePrimary,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+              OmiButton(
+                label: 'Create App',
+                icon: Icons.add_rounded,
+                onPressed: () => _navigateToCreateApp(context),
+                type: OmiButtonType.primary,
               ),
             ],
           ),

@@ -7,6 +7,8 @@ import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
+import 'package:omi/ui/molecules/omi_sign_in_button.dart';
 
 class DesktopAuthScreen extends StatefulWidget {
   final VoidCallback onSignIn;
@@ -90,21 +92,21 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
 
                           // Apple Sign In (if available)
                           if (Platform.isMacOS) ...[
-                            _DesktopSignInButton(
+                            OmiSignInButton(
                               icon: Icons.apple,
-                              title: 'Continue with Apple',
-                              onTap: provider.loading ? null : () => _handleAppleSignIn(provider),
-                              isEnabled: !provider.loading,
+                              label: 'Continue with Apple',
+                              onPressed: provider.loading ? null : () => _handleAppleSignIn(provider),
+                              enabled: !provider.loading,
                             ),
                             SizedBox(height: responsive.spacing(baseSpacing: 16)),
                           ],
 
                           // Google Sign In
-                          _DesktopSignInButton(
+                          OmiSignInButton(
                             icon: Icons.g_mobiledata,
-                            title: 'Continue with Google',
-                            onTap: provider.loading ? null : () => _handleGoogleSignIn(provider),
-                            isEnabled: !provider.loading,
+                            label: 'Continue with Google',
+                            onPressed: provider.loading ? null : () => _handleGoogleSignIn(provider),
+                            enabled: !provider.loading,
                           ),
 
                           SizedBox(height: responsive.spacing(baseSpacing: 24)),
@@ -465,32 +467,10 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
                           children: [
                             // Cancel button
                             Expanded(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color: ResponsiveHelper.backgroundTertiary,
-                                    width: 1,
-                                  ),
-                                  borderRadius: BorderRadius.circular(responsive.radiusSmall),
-                                ),
-                                child: TextButton(
-                                  onPressed: () => Navigator.of(context).pop(),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: ResponsiveHelper.textSecondary,
-                                    padding: EdgeInsets.symmetric(
-                                      vertical: responsive.spacing(baseSpacing: 16),
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(responsive.radiusSmall),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    'Cancel',
-                                    style: responsive.labelMedium.copyWith(
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
+                              child: OmiButton(
+                                label: 'Cancel',
+                                type: OmiButtonType.text,
+                                onPressed: () => Navigator.of(context).pop(),
                               ),
                             ),
 
@@ -499,46 +479,13 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
                             // Continue button
                             Expanded(
                               flex: 2,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  gradient: responsive.purpleGradient,
-                                  borderRadius: BorderRadius.circular(responsive.radiusSmall),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                                child: ElevatedButton.icon(
-                                  onPressed: () {
-                                    Navigator.of(context).pop();
-                                    onContinue();
-                                  },
-                                  icon: Icon(
-                                    authMethod == 'apple' ? Icons.apple : Icons.g_mobiledata,
-                                    size: 18,
-                                  ),
-                                  label: Text(
-                                    'Continue with ${authMethod == 'apple' ? 'Apple' : 'Google'}',
-                                    style: responsive.labelMedium.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.transparent,
-                                    foregroundColor: Colors.white,
-                                    shadowColor: Colors.transparent,
-                                    padding: EdgeInsets.symmetric(
-                                      vertical: responsive.spacing(baseSpacing: 16),
-                                      horizontal: responsive.spacing(baseSpacing: 20),
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(responsive.radiusSmall),
-                                    ),
-                                  ),
-                                ),
+                              child: OmiButton(
+                                label: 'Continue with ${authMethod == 'apple' ? 'Apple' : 'Google'}',
+                                icon: authMethod == 'apple' ? Icons.apple : Icons.g_mobiledata,
+                                onPressed: () {
+                                  Navigator.of(context).pop();
+                                  onContinue();
+                                },
                               ),
                             ),
                           ],
@@ -552,84 +499,6 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
           ),
         );
       },
-    );
-  }
-}
-
-class _DesktopSignInButton extends StatefulWidget {
-  final IconData icon;
-  final String title;
-  final VoidCallback? onTap;
-  final bool isEnabled;
-
-  const _DesktopSignInButton({
-    required this.icon,
-    required this.title,
-    required this.onTap,
-    this.isEnabled = true,
-  });
-
-  @override
-  State<_DesktopSignInButton> createState() => _DesktopSignInButtonState();
-}
-
-class _DesktopSignInButtonState extends State<_DesktopSignInButton> {
-  bool _isHovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final responsive = ResponsiveHelper(context);
-
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: widget.isEnabled ? widget.onTap : null,
-            borderRadius: BorderRadius.circular(responsive.radiusSmall),
-            child: Container(
-              width: double.infinity,
-              padding: EdgeInsets.symmetric(
-                horizontal: responsive.spacing(baseSpacing: 24),
-                vertical: responsive.spacing(baseSpacing: 16),
-              ),
-              decoration: BoxDecoration(
-                color: _isHovered && widget.isEnabled
-                    ? ResponsiveHelper.backgroundTertiary
-                    : ResponsiveHelper.backgroundSecondary,
-                borderRadius: BorderRadius.circular(responsive.radiusSmall),
-                border: Border.all(
-                  color: _isHovered && widget.isEnabled
-                      ? ResponsiveHelper.purplePrimary.withOpacity(0.3)
-                      : ResponsiveHelper.backgroundTertiary,
-                  width: 1,
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    widget.icon,
-                    color: widget.isEnabled ? ResponsiveHelper.textPrimary : ResponsiveHelper.textQuaternary,
-                    size: 20,
-                  ),
-                  SizedBox(width: responsive.spacing(baseSpacing: 12)),
-                  Text(
-                    widget.title,
-                    style: responsive.labelMedium.copyWith(
-                      color: widget.isEnabled ? ResponsiveHelper.textPrimary : ResponsiveHelper.textQuaternary,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

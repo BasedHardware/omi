@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 
 class DesktopLanguageScreen extends StatefulWidget {
   final VoidCallback onNext;
@@ -320,53 +321,20 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Container(
-                      height: 44,
-                      decoration: BoxDecoration(
-                        gradient: selectedLanguage != null
-                            ? LinearGradient(
-                                colors: [
-                                  ResponsiveHelper.purplePrimary,
-                                  ResponsiveHelper.purplePrimary.withOpacity(0.8),
-                                ],
-                              )
-                            : null,
-                        color: selectedLanguage == null ? const Color(0xFF2A2A2A) : null,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: ElevatedButton.icon(
-                        onPressed: selectedLanguage != null ? _continueWithLanguage : null,
-                        label: Text(selectedLanguage != null ? 'Continue' : 'Select a language'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          foregroundColor: selectedLanguage != null ? Colors.white : const Color(0xFF6B7280),
-                          shadowColor: Colors.transparent,
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          textStyle: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
+                    OmiButton(
+                      label: selectedLanguage != null ? 'Continue' : 'Select a language',
+                      onPressed: selectedLanguage != null ? _continueWithLanguage : null,
+                      enabled: selectedLanguage != null,
                     ),
                   ],
                 ),
 
                 const SizedBox(height: 8),
 
-                TextButton(
+                OmiButton(
+                  label: 'Back',
+                  type: OmiButtonType.text,
                   onPressed: widget.onBack,
-                  child: const Text(
-                    'Back',
-                    style: TextStyle(
-                      color: Color(0xFF6B7280),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
                 ),
               ],
             ),

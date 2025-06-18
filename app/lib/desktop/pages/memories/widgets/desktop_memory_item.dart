@@ -4,6 +4,9 @@ import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/ui/atoms/omi_icon_badge.dart';
+import 'package:omi/ui/molecules/omi_popup_menu.dart';
+import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
 
 class DesktopMemoryItem extends StatelessWidget {
   final Memory memory;
@@ -47,17 +50,13 @@ class DesktopMemoryItem extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Category icon
-                Container(
+                OmiIconBadge(
+                  icon: _getCategoryIcon(),
+                  bgColor: _getCategoryColor().withOpacity(0.2),
+                  iconColor: _getCategoryColor(),
+                  iconSize: 16,
+                  radius: 8,
                   padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: _getCategoryColor().withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    _getCategoryIcon(),
-                    color: _getCategoryColor(),
-                    size: 16,
-                  ),
                 ),
 
                 const SizedBox(width: 12),
@@ -97,39 +96,20 @@ class DesktopMemoryItem extends StatelessWidget {
   }
 
   Widget _buildVisibilityIndicator() {
-    return Container(
+    return OmiIconBadge(
+      icon: memory.visibility == MemoryVisibility.private ? Icons.lock_outline : Icons.public,
+      bgColor: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+      iconColor: ResponsiveHelper.textTertiary,
+      iconSize: 14,
+      radius: 6,
       padding: const EdgeInsets.all(6),
-      decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Icon(
-        memory.visibility == MemoryVisibility.private ? Icons.lock_outline : Icons.public,
-        size: 14,
-        color: ResponsiveHelper.textTertiary,
-      ),
     );
   }
 
   Widget _buildQuickActions() {
     return Builder(
-      builder: (context) => PopupMenuButton<String>(
-        color: ResponsiveHelper.backgroundSecondary,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Icon(
-            Icons.more_vert,
-            color: ResponsiveHelper.textSecondary,
-            size: 16,
-          ),
-        ),
+      builder: (context) => OmiPopupMenuButton<String>(
+        icon: Icons.more_vert,
         itemBuilder: (context) => [
           const PopupMenuItem<String>(
             value: 'edit',
@@ -208,60 +188,18 @@ class DesktopMemoryItem extends StatelessWidget {
         MixpanelManager().memoryVisibilityChanged(memory, newVisibility);
         break;
       case 'delete':
-        _showDeleteConfirmation(context);
+        OmiConfirmDialog.show(
+          context,
+          title: 'Delete Memory',
+          message: 'Are you sure you want to delete this memory? This action cannot be undone.',
+        ).then((confirmed) {
+          if (confirmed == true) {
+            provider.deleteMemory(memory);
+            MixpanelManager().memoriesPageDeletedMemory(memory);
+          }
+        });
         break;
     }
-  }
-
-  void _showDeleteConfirmation(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: ResponsiveHelper.backgroundSecondary,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: const Text(
-          'Delete Memory',
-          style: TextStyle(
-            color: ResponsiveHelper.textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        content: const Text(
-          'Are you sure you want to delete this memory? This action cannot be undone.',
-          style: TextStyle(
-            color: ResponsiveHelper.textSecondary,
-            fontSize: 14,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(
-                color: ResponsiveHelper.textSecondary,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: () {
-              provider.deleteMemory(memory);
-              MixpanelManager().memoriesPageDeletedMemory(memory);
-              Navigator.pop(context);
-            },
-            child: Text(
-              'Delete',
-              style: TextStyle(
-                color: Colors.red.shade400,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Color _getCategoryColor() {

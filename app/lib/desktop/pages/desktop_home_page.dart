@@ -7,6 +7,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/desktop/pages/onboarding/desktop_onboarding_wrapper.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/settings/about.dart';
 import 'package:omi/pages/settings/developer.dart';
@@ -1253,7 +1254,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
               Navigator.of(context).pop();
               await signOut();
               if (mounted) {
-                routeToPage(context, const DeciderWidget(), replace: true);
+                routeToPage(context, const DesktopOnboardingWrapper(), replace: true);
               }
             },
             child: Text(

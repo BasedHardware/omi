@@ -3,6 +3,10 @@ import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
+import 'package:omi/ui/atoms/omi_choice_chip.dart';
+import 'package:omi/ui/atoms/omi_icon_button.dart';
+import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
 
 class DesktopMemoryDialog extends StatefulWidget {
   final Memory? memory;
@@ -75,13 +79,11 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
                   ),
                 ),
                 const Spacer(),
-                IconButton(
+                OmiIconButton(
+                  icon: Icons.close,
                   onPressed: () => Navigator.pop(context),
-                  icon: const Icon(
-                    Icons.close,
-                    color: ResponsiveHelper.textSecondary,
-                    size: 20,
-                  ),
+                  style: OmiIconButtonStyle.outline,
+                  size: 36,
                 ),
               ],
             ),
@@ -133,9 +135,19 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
             const SizedBox(height: 8),
             Row(
               children: [
-                _buildCategoryChip(MemoryCategory.interesting, 'Interesting', Icons.lightbulb_outline),
+                OmiChoiceChip(
+                  selected: _selectedCategory == MemoryCategory.interesting,
+                  label: 'Interesting',
+                  icon: Icons.lightbulb_outline,
+                  onTap: () => setState(() => _selectedCategory = MemoryCategory.interesting),
+                ),
                 const SizedBox(width: 8),
-                _buildCategoryChip(MemoryCategory.system, 'System', Icons.settings_outlined),
+                OmiChoiceChip(
+                  selected: _selectedCategory == MemoryCategory.system,
+                  label: 'System',
+                  icon: Icons.settings_outlined,
+                  onTap: () => setState(() => _selectedCategory = MemoryCategory.system),
+                ),
               ],
             ),
 
@@ -153,9 +165,25 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
             const SizedBox(height: 8),
             Row(
               children: [
-                _buildVisibilityChip(MemoryVisibility.public, 'Public', Icons.public, 'Will be used for personas'),
+                Expanded(
+                  child: OmiChoiceChip(
+                    selected: _selectedVisibility == MemoryVisibility.public,
+                    label: 'Public',
+                    icon: Icons.public,
+                    expand: true,
+                    onTap: () => setState(() => _selectedVisibility = MemoryVisibility.public),
+                  ),
+                ),
                 const SizedBox(width: 8),
-                _buildVisibilityChip(MemoryVisibility.private, 'Private', Icons.lock_outline, 'Will not be used'),
+                Expanded(
+                  child: OmiChoiceChip(
+                    selected: _selectedVisibility == MemoryVisibility.private,
+                    label: 'Private',
+                    icon: Icons.lock_outline,
+                    expand: true,
+                    onTap: () => setState(() => _selectedVisibility = MemoryVisibility.private),
+                  ),
+                ),
               ],
             ),
 
@@ -182,145 +210,19 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
                   ),
                 ],
                 const Spacer(),
-                TextButton(
+                OmiButton(
+                  label: 'Cancel',
                   onPressed: () => Navigator.pop(context),
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(
-                      color: ResponsiveHelper.textSecondary,
-                      fontSize: 14,
-                    ),
-                  ),
+                  type: OmiButtonType.text,
                 ),
                 const SizedBox(width: 12),
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: _saveMemory,
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: ResponsiveHelper.purplePrimary,
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Text(
-                        widget.memory != null ? 'Save Changes' : 'Create Memory',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
+                OmiButton(
+                  label: widget.memory != null ? 'Save Changes' : 'Create Memory',
+                  onPressed: _saveMemory,
                 ),
               ],
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCategoryChip(MemoryCategory category, String label, IconData icon) {
-    final isSelected = _selectedCategory == category;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => setState(() => _selectedCategory = category),
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: isSelected ? ResponsiveHelper.purplePrimary.withOpacity(0.2) : ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: isSelected ? ResponsiveHelper.purplePrimary : ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
-              width: 1,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 16,
-                color: isSelected ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textSecondary,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  color: isSelected ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textSecondary,
-                  fontSize: 12,
-                  fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildVisibilityChip(MemoryVisibility visibility, String label, IconData icon, String subtitle) {
-    final isSelected = _selectedVisibility == visibility;
-    return Expanded(
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => setState(() => _selectedVisibility = visibility),
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: isSelected ? ResponsiveHelper.purplePrimary.withOpacity(0.2) : ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: isSelected ? ResponsiveHelper.purplePrimary : ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
-                width: 1,
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      icon,
-                      size: 16,
-                      color: isSelected ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textSecondary,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      label,
-                      style: TextStyle(
-                        color: isSelected ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textSecondary,
-                        fontSize: 12,
-                        fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    color: ResponsiveHelper.textTertiary,
-                    fontSize: 10,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ),
       ),
     );
@@ -349,54 +251,17 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
   void _showDeleteConfirmation() {
     if (widget.memory == null) return;
 
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: ResponsiveHelper.backgroundSecondary,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: const Text(
-          'Delete Memory',
-          style: TextStyle(
-            color: ResponsiveHelper.textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        content: const Text(
-          'Are you sure you want to delete this memory? This action cannot be undone.',
-          style: TextStyle(
-            color: ResponsiveHelper.textSecondary,
-            fontSize: 14,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(
-                color: ResponsiveHelper.textSecondary,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: () {
-              widget.provider.deleteMemory(widget.memory!);
-              MixpanelManager().memoriesPageDeletedMemory(widget.memory!);
-              Navigator.pop(context);
-              Navigator.pop(context);
-            },
-            child: Text(
-              'Delete',
-              style: TextStyle(
-                color: Colors.red.shade400,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+    OmiConfirmDialog.show(
+      context,
+      title: 'Delete Memory',
+      message: 'Are you sure you want to delete this memory? This action cannot be undone.',
+    ).then((confirmed) {
+      if (confirmed == true) {
+        widget.provider.deleteMemory(widget.memory!);
+        MixpanelManager().memoriesPageDeletedMemory(widget.memory!);
+        Navigator.pop(context);
+        Navigator.pop(context);
+      }
+    });
   }
 }

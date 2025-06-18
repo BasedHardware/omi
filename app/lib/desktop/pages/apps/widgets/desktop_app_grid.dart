@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/ui/atoms/omi_badge.dart';
+import 'package:omi/ui/atoms/omi_load_more_button.dart';
 
 class DesktopAppGrid extends StatefulWidget {
   final List<App> apps;
@@ -130,45 +132,13 @@ class _DesktopAppGridState extends State<DesktopAppGrid> {
   }
 
   Widget _buildLoadMoreSection(ResponsiveHelper responsive) {
-    if (_isLoadingMore) {
-      return Center(
-        child: Padding(
-          padding: EdgeInsets.all(responsive.spacing(baseSpacing: 16)),
-          child: const CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary),
-          ),
-        ),
-      );
-    }
-
     return Center(
       child: Padding(
         padding: EdgeInsets.all(responsive.spacing(baseSpacing: 16)),
-        child: ElevatedButton.icon(
+        child: OmiLoadMoreButton(
+          remaining: widget.apps.length - _displayedApps.length,
+          loading: _isLoadingMore,
           onPressed: _loadMoreApps,
-          icon: const Icon(Icons.expand_more, size: 18),
-          label: Text(
-            'Load More (${widget.apps.length - _displayedApps.length} remaining)',
-            style: responsive.bodyMedium.copyWith(
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: ResponsiveHelper.backgroundSecondary,
-            foregroundColor: ResponsiveHelper.textSecondary,
-            elevation: 0,
-            padding: EdgeInsets.symmetric(
-              horizontal: responsive.spacing(baseSpacing: 24),
-              vertical: responsive.spacing(baseSpacing: 12),
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-              side: BorderSide(
-                color: ResponsiveHelper.backgroundTertiary.withOpacity(0.5),
-                width: 1,
-              ),
-            ),
-          ),
         ),
       ),
     );
@@ -333,26 +303,7 @@ class _DesktopAppCardState extends State<_DesktopAppCard> {
     );
   }
 
-  Widget _buildInstalledBadge() {
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: widget.responsive.spacing(baseSpacing: 8),
-        vertical: widget.responsive.spacing(baseSpacing: 4),
-      ),
-      decoration: BoxDecoration(
-        color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        'Installed',
-        style: widget.responsive.bodySmall.copyWith(
-          color: ResponsiveHelper.purplePrimary,
-          fontSize: 10,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-    );
-  }
+  Widget _buildInstalledBadge() => const OmiBadge(label: 'Installed');
 
   Widget _buildAppInfo() {
     return Column(
