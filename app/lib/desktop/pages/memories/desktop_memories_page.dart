@@ -14,6 +14,7 @@ import 'widgets/desktop_memory_dialog.dart';
 import 'package:omi/ui/organisms/memory_review_sheet.dart';
 import 'package:omi/ui/atoms/omi_search_input.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
+import 'package:omi/ui/molecules/omi_empty_state.dart';
 
 enum FilterOption { interesting, system, all }
 
@@ -166,7 +167,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
                   end: Alignment.bottomCenter,
                   colors: [
                     ResponsiveHelper.backgroundPrimary,
-                    ResponsiveHelper.backgroundSecondary.withOpacity(0.8),
+                    ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.8),
                   ],
                 ),
                 borderRadius: BorderRadius.circular(20),
@@ -178,7 +179,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
                     _buildAnimatedBackground(),
                     Container(
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.02),
+                        color: Colors.white.withValues(alpha: 0.02),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Column(
@@ -222,7 +223,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
                           filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
                           child: Container(
                             decoration: BoxDecoration(
-                              color: ResponsiveHelper.backgroundPrimary.withOpacity(0.2),
+                              color: ResponsiveHelper.backgroundPrimary.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(20),
                             ),
                           ),
@@ -262,7 +263,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
             center: Alignment.topRight,
             radius: 2.0,
             colors: [
-              ResponsiveHelper.purplePrimary.withOpacity(0.05),
+              ResponsiveHelper.purplePrimary.withValues(alpha: 0.05),
               Colors.transparent,
             ],
           ),
@@ -279,7 +280,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
               center: Alignment.topRight,
               radius: 2.0,
               colors: [
-                ResponsiveHelper.purplePrimary.withOpacity(0.05 + _pulseAnimation.value * 0.03),
+                ResponsiveHelper.purplePrimary.withValues(alpha: 0.05 + _pulseAnimation.value * 0.03),
                 Colors.transparent,
               ],
             ),
@@ -330,7 +331,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
     return Container(
       height: 44,
       decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+        color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(12),
       ),
       child: PopupMenuButton<FilterOption>(
@@ -425,7 +426,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
         child: Stack(
           children: [
             ListView(),
-            _buildModernEmptyState(provider),
+            _buildEmptyState(provider),
           ],
         ),
       );
@@ -444,15 +445,15 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: ResponsiveHelper.backgroundSecondary.withOpacity(0.8),
+          color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.8),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: Colors.white.withOpacity(0.1),
+            color: Colors.white.withValues(alpha: 0.1),
             width: 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),
@@ -510,114 +511,50 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
     );
   }
 
-  Widget _buildModernEmptyState(MemoriesProvider provider) {
-    Widget content = Container(
-      padding: const EdgeInsets.all(40),
-      margin: const EdgeInsets.all(32),
-      decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.1),
-          width: 1,
+  Widget _buildEmptyState(MemoriesProvider provider) {
+    Widget content = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        OmiEmptyState(
+          icon: FontAwesomeIcons.brain,
+          title: provider.searchQuery.isEmpty && _selectedCategory == null ? '🧠 No memories yet' : '🔍 No memories found',
+          message: provider.searchQuery.isEmpty && _selectedCategory == null ? 'Create your first memory to get started' : 'Try adjusting your search or filter',
+          color: ResponsiveHelper.purplePrimary,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 30,
-            offset: const Offset(0, 15),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _animationsInitialized
-              ? AnimatedBuilder(
-                  animation: _pulseController,
-                  builder: (context, child) {
-                    return Transform.scale(
-                      scale: 1.0 + (_pulseAnimation.value * 0.05),
-                      child: Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Icon(
-                          FontAwesomeIcons.brain,
-                          size: 48,
-                          color: ResponsiveHelper.purplePrimary,
-                        ),
-                      ),
-                    );
-                  },
-                )
-              : Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Icon(
-                    FontAwesomeIcons.brain,
-                    size: 48,
-                    color: ResponsiveHelper.purplePrimary,
-                  ),
-                ),
+
+        if (provider.searchQuery.isEmpty && _selectedCategory == null) ...[
           const SizedBox(height: 24),
-          Text(
-            provider.searchQuery.isEmpty && _selectedCategory == null ? '🧠 No memories yet' : '🔍 No memories found',
-            style: const TextStyle(
-              color: ResponsiveHelper.textPrimary,
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            provider.searchQuery.isEmpty && _selectedCategory == null ? 'Create your first memory to get started' : 'Try adjusting your search or filter',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: ResponsiveHelper.textSecondary,
-              fontSize: 14,
-              height: 1.5,
-            ),
-          ),
-          if (provider.searchQuery.isEmpty && _selectedCategory == null) ...[
-            const SizedBox(height: 24),
-            Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () => _showMemoryDialog(context, provider),
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: ResponsiveHelper.purplePrimary,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: const Text(
-                    'Add your first memory',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => _showMemoryDialog(context, provider),
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                decoration: BoxDecoration(
+                  color: ResponsiveHelper.purplePrimary,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
                     ),
+                  ],
+                ),
+                child: const Text(
+                  'Add your first memory',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
             ),
-          ],
+          ),
         ],
-      ),
+      ],
     );
 
     return Center(
@@ -716,18 +653,18 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                   colors: [
-                    ResponsiveHelper.purplePrimary.withOpacity(0.15),
-                    ResponsiveHelper.purplePrimary.withOpacity(0.05),
+                    ResponsiveHelper.purplePrimary.withValues(alpha: 0.15),
+                    ResponsiveHelper.purplePrimary.withValues(alpha: 0.05),
                   ],
                 ),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
+                  color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
                   width: 1,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: ResponsiveHelper.purplePrimary.withOpacity(0.1),
+                    color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.1),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -739,7 +676,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
+                      color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(
@@ -797,7 +734,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
                               borderRadius: BorderRadius.circular(8),
                               boxShadow: [
                                 BoxShadow(
-                                  color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
+                                  color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
                                   blurRadius: 4,
                                   offset: const Offset(0, 2),
                                 ),

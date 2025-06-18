@@ -32,15 +32,15 @@ class DesktopMemoryItem extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: ResponsiveHelper.backgroundSecondary.withOpacity(0.8),
+              color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.8),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                 width: 1,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -52,7 +52,7 @@ class DesktopMemoryItem extends StatelessWidget {
                 // Category icon
                 OmiIconBadge(
                   icon: _getCategoryIcon(),
-                  bgColor: _getCategoryColor().withOpacity(0.2),
+                  bgColor: _getCategoryColor().withValues(alpha: 0.2),
                   iconColor: _getCategoryColor(),
                   iconSize: 16,
                   radius: 8,
@@ -98,7 +98,7 @@ class DesktopMemoryItem extends StatelessWidget {
   Widget _buildVisibilityIndicator() {
     return OmiIconBadge(
       icon: memory.visibility == MemoryVisibility.private ? Icons.lock_outline : Icons.public,
-      bgColor: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+      bgColor: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
       iconColor: ResponsiveHelper.textTertiary,
       iconSize: 14,
       radius: 6,

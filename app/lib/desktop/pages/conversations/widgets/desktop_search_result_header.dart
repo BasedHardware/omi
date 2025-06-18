@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/ui/atoms/omi_badge.dart';
+import 'package:omi/ui/atoms/omi_icon_button.dart';
+import 'package:omi/ui/atoms/omi_loading_badge.dart';
 
 class DesktopSearchResultHeader extends StatelessWidget {
   const DesktopSearchResultHeader({super.key});
@@ -30,75 +33,31 @@ class DesktopSearchResultHeader extends StatelessWidget {
   }
 
   Widget _buildSearchLoadingIndicator() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 12,
-            height: 12,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                ResponsiveHelper.purplePrimary.withOpacity(0.8),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          const Text(
-            'Searching...',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: ResponsiveHelper.textSecondary,
-            ),
-          ),
-        ],
-      ),
-    );
+    return const OmiLoadingBadge(label: 'Searching...');
   }
 
   Widget _buildSearchResults(ConversationProvider provider) {
     return Row(
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: ResponsiveHelper.backgroundSecondary,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: ResponsiveHelper.backgroundTertiary,
-              width: 1,
+        const Row(
+          children: [
+            OmiIconButton(
+              icon: Icons.search_rounded,
+              style: OmiIconButtonStyle.neutral,
+              size: 24,
+              iconSize: 12,
+              borderRadius: 6,
+              onPressed: null,
             ),
-          ),
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.search_rounded,
-                size: 14,
-                color: ResponsiveHelper.textTertiary,
-              ),
-              SizedBox(width: 6),
-              Text(
-                'Search results',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: ResponsiveHelper.textTertiary,
-                ),
-              ),
-            ],
-          ),
+            SizedBox(width: 6),
+            OmiBadge(
+              label: 'Search results',
+              fontSize: 12,
+              color: ResponsiveHelper.textTertiary,
+              borderRadius: 6,
+              backgroundColor: ResponsiveHelper.backgroundSecondary,
+            ),
+          ],
         ),
         const SizedBox(width: 12),
         Text(

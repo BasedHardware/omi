@@ -26,12 +26,13 @@ import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/ui/atoms/omi_avatar.dart';
 import 'package:omi/ui/molecules/omi_chat_bubble.dart';
 import 'package:omi/ui/atoms/omi_message_input.dart';
 import 'package:omi/ui/atoms/omi_send_button.dart';
+import 'package:omi/ui/atoms/omi_icon_button.dart';
+import 'package:omi/ui/molecules/omi_section_header.dart';
 
 import 'widgets/desktop_message_action_menu.dart';
 
@@ -163,7 +164,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
               end: Alignment.bottomCenter,
               colors: [
                 ResponsiveHelper.backgroundPrimary,
-                ResponsiveHelper.backgroundSecondary.withOpacity(0.8),
+                ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.8),
               ],
             ),
             borderRadius: BorderRadius.circular(20),
@@ -178,7 +179,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                 // Main content with glassmorphism
                 Container(
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.02),
+                    color: Colors.white.withValues(alpha: 0.02),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Column(
@@ -219,7 +220,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
             center: Alignment.topRight,
             radius: 2.0,
             colors: [
-              ResponsiveHelper.purplePrimary.withOpacity(0.05),
+              ResponsiveHelper.purplePrimary.withValues(alpha: 0.05),
               Colors.transparent,
             ],
           ),
@@ -236,7 +237,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
               center: Alignment.topRight,
               radius: 2.0,
               colors: [
-                ResponsiveHelper.purplePrimary.withOpacity(0.05 + _pulseAnimation.value * 0.03),
+                ResponsiveHelper.purplePrimary.withValues(alpha: 0.05 + _pulseAnimation.value * 0.03),
                 Colors.transparent,
               ],
             ),
@@ -263,10 +264,10 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+                    color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: ResponsiveHelper.backgroundQuaternary.withOpacity(0.3),
+                      color: ResponsiveHelper.backgroundQuaternary.withValues(alpha: 0.3),
                       width: 1,
                     ),
                   ),
@@ -351,7 +352,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
               child: Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+                  color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
@@ -383,9 +384,9 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  ResponsiveHelper.purplePrimary.withOpacity(0.3),
+                  ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
                   ResponsiveHelper.purplePrimary,
-                  ResponsiveHelper.purplePrimary.withOpacity(0.3),
+                  ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
                 ],
               ),
               borderRadius: BorderRadius.circular(3),
@@ -426,15 +427,15 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: ResponsiveHelper.backgroundSecondary.withOpacity(0.8),
+            color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: Colors.white.withOpacity(0.1),
+              color: Colors.white.withValues(alpha: 0.1),
               width: 1,
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.1),
+                color: Colors.black.withValues(alpha: 0.1),
                 blurRadius: 20,
                 offset: const Offset(0, 10),
               ),
@@ -455,7 +456,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                               gradient: LinearGradient(
                                 colors: [
                                   ResponsiveHelper.purplePrimary,
-                                  ResponsiveHelper.purplePrimary.withOpacity(0.7),
+                                  ResponsiveHelper.purplePrimary.withValues(alpha: 0.7),
                                 ],
                               ),
                               borderRadius: BorderRadius.circular(20),
@@ -475,7 +476,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                         gradient: LinearGradient(
                           colors: [
                             ResponsiveHelper.purplePrimary,
-                            ResponsiveHelper.purplePrimary.withOpacity(0.7),
+                            ResponsiveHelper.purplePrimary.withValues(alpha: 0.7),
                           ],
                         ),
                         borderRadius: BorderRadius.circular(20),
@@ -520,18 +521,18 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
-            ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+            ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.6),
+            ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
           ],
         ),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: Colors.white.withOpacity(0.1),
+          color: Colors.white.withValues(alpha: 0.1),
           width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 30,
             offset: const Offset(0, 15),
           ),
@@ -551,8 +552,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              ResponsiveHelper.purplePrimary.withOpacity(0.2),
-                              ResponsiveHelper.purplePrimary.withOpacity(0.1),
+                              ResponsiveHelper.purplePrimary.withValues(alpha: 0.2),
+                              ResponsiveHelper.purplePrimary.withValues(alpha: 0.1),
                             ],
                           ),
                           borderRadius: BorderRadius.circular(20),
@@ -571,8 +572,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        ResponsiveHelper.purplePrimary.withOpacity(0.2),
-                        ResponsiveHelper.purplePrimary.withOpacity(0.1),
+                        ResponsiveHelper.purplePrimary.withValues(alpha: 0.2),
+                        ResponsiveHelper.purplePrimary.withValues(alpha: 0.1),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(20),
@@ -702,7 +703,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                     child: Text(
                       formatChatTimestamp(message.createdAt),
                       style: TextStyle(
-                        color: ResponsiveHelper.textTertiary.withOpacity(0.5),
+                        color: ResponsiveHelper.textTertiary.withValues(alpha: 0.5),
                         fontSize: 11,
                         fontWeight: FontWeight.w400,
                       ),
@@ -834,7 +835,13 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text('Was this helpful?', style: TextStyle(fontWeight: FontWeight.w500, color: Colors.grey.shade300)),
-          IconButton(
+          const SizedBox(width: 4),
+          OmiIconButton(
+            icon: Icons.thumb_down_alt_outlined,
+            style: OmiIconButtonStyle.neutral,
+            size: 28,
+            iconSize: 14,
+            borderRadius: 6,
             onPressed: () {
               setMessageNps(0);
               ScaffoldMessenger.of(context).showSnackBar(
@@ -847,9 +854,14 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                 ),
               );
             },
-            icon: const Icon(Icons.thumb_down_alt_outlined, size: 20, color: Colors.grey),
           ),
-          IconButton(
+          const SizedBox(width: 4),
+          OmiIconButton(
+            icon: Icons.thumb_up_alt_outlined,
+            style: OmiIconButtonStyle.neutral,
+            size: 28,
+            iconSize: 14,
+            borderRadius: 6,
             onPressed: () {
               setMessageNps(1);
               ScaffoldMessenger.of(context).showSnackBar(
@@ -862,7 +874,6 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                 ),
               );
             },
-            icon: const Icon(Icons.thumb_up_alt_outlined, size: 20, color: Colors.grey),
           ),
         ],
       ),
@@ -876,11 +887,11 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     return Container(
       margin: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundSecondary.withOpacity(0.95),
+        color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.95),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 30,
             offset: const Offset(0, 10),
           ),
@@ -956,7 +967,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                           child: Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
+                              color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: const Icon(
@@ -1455,28 +1466,16 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
               padding: const EdgeInsets.all(20),
               child: Row(
                 children: [
-                  const Icon(
-                    FontAwesomeIcons.robot,
-                    color: ResponsiveHelper.textSecondary,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'Select Chat Assistant',
-                    style: TextStyle(
-                      color: ResponsiveHelper.textPrimary,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  const OmiSectionHeader(icon: FontAwesomeIcons.robot, title: 'Select Chat Assistant'),
                   const Spacer(),
-                  IconButton(
+                  OmiIconButton(
+                    icon: FontAwesomeIcons.xmark,
+                    style: OmiIconButtonStyle.outline,
+                    borderOpacity: 0.1,
+                    size: 28,
+                    iconSize: 12,
+                    borderRadius: 8,
                     onPressed: () => Navigator.pop(context),
-                    icon: const Icon(
-                      FontAwesomeIcons.xmark,
-                      color: ResponsiveHelper.textSecondary,
-                      size: 16,
-                    ),
                   ),
                 ],
               ),

@@ -10,11 +10,16 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/page.dart';
 import 'package:omi/pages/chat/widgets/markdown_message_widget.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
+import 'package:omi/ui/atoms/omi_icon_button.dart';
+import 'package:omi/ui/atoms/omi_avatar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/ui/molecules/omi_empty_state.dart';
+import 'package:omi/ui/molecules/omi_panel_header.dart';
 
 class DesktopConversationSummary extends StatelessWidget {
   final ServerConversation conversation;
@@ -187,61 +192,24 @@ class DesktopConversationSummary extends StatelessWidget {
         ),
 
         // App selection dropdown
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: isReprocessing ? null : () => _showAppSelectionSheet(context, provider),
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              decoration: BoxDecoration(
-                color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    FontAwesomeIcons.chevronDown,
-                    color: isReprocessing ? ResponsiveHelper.textQuaternary : ResponsiveHelper.textSecondary,
-                    size: 12,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Apps',
-                    style: TextStyle(
-                      color: isReprocessing ? ResponsiveHelper.textQuaternary : ResponsiveHelper.textSecondary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+        OmiButton(
+          label: 'Apps',
+          type: OmiButtonType.neutral,
+          icon: FontAwesomeIcons.chevronDown,
+          enabled: !isReprocessing,
+          onPressed: () => _showAppSelectionSheet(context, provider),
         ),
 
         // Copy button (if has content)
         if (summarizedApp != null && summarizedApp.content.trim().isNotEmpty) ...[
           const SizedBox(width: 8),
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => _copySummary(context, summarizedApp, provider),
-              borderRadius: BorderRadius.circular(8),
-              child: Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  FontAwesomeIcons.copy,
-                  color: ResponsiveHelper.textSecondary,
-                  size: 12,
-                ),
-              ),
-            ),
+          OmiIconButton(
+            icon: FontAwesomeIcons.copy,
+            style: OmiIconButtonStyle.neutral,
+            size: 28,
+            iconSize: 12,
+            borderRadius: 8,
+            onPressed: () => _copySummary(context, summarizedApp, provider),
           ),
         ],
       ],
@@ -279,31 +247,12 @@ class DesktopConversationSummary extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 12),
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () => _showAppSelectionSheet(context, provider),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: const Text(
-                        'Try Another App',
-                        style: TextStyle(
-                          color: ResponsiveHelper.purplePrimary,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
+                OmiButton(
+                  label: 'Try Another App',
+                  type: OmiButtonType.neutral,
+                  enabled: true,
+                  onPressed: () => _showAppSelectionSheet(context, provider),
+                  icon: FontAwesomeIcons.chevronDown,
                 ),
               ],
             ),
@@ -354,10 +303,13 @@ class DesktopConversationSummary extends StatelessWidget {
   Widget _buildSectionHeader(String title, IconData icon) {
     return Row(
       children: [
-        Icon(
-          icon,
-          color: ResponsiveHelper.textSecondary,
-          size: 16,
+        OmiIconButton(
+          icon: icon,
+          style: OmiIconButtonStyle.neutral,
+          size: 24,
+          iconSize: 12,
+          borderRadius: 6,
+          onPressed: null,
         ),
         const SizedBox(width: 8),
         Text(
@@ -405,10 +357,9 @@ class DesktopConversationSummary extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(
-                FontAwesomeIcons.robot,
-                color: ResponsiveHelper.purplePrimary,
-                size: 14,
+              const OmiAvatar(
+                size: 20,
+                fallback: Icon(FontAwesomeIcons.robot, size: 10, color: ResponsiveHelper.purplePrimary),
               ),
               const SizedBox(width: 8),
               Text(
@@ -431,71 +382,22 @@ class DesktopConversationSummary extends StatelessWidget {
   }
 
   Widget _buildEmptyState(BuildContext context, ConversationDetailProvider provider) {
-    return Container(
+    return Padding(
       padding: const EdgeInsets.all(32),
       child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Icon(
-              FontAwesomeIcons.fileAlt,
-              size: 48,
-              color: ResponsiveHelper.purplePrimary,
-            ),
-          ),
-          const SizedBox(height: 24),
-          const Text(
-            'No Summary Available',
-            style: TextStyle(
-              color: ResponsiveHelper.textPrimary,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'This conversation doesn\'t have a summary yet.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: ResponsiveHelper.textSecondary,
-              fontSize: 14,
-              height: 1.5,
-            ),
+          const OmiEmptyState(
+            icon: FontAwesomeIcons.fileAlt,
+            title: 'No Summary Available',
+            message: 'This conversation doesn\'t have a summary yet.',
           ),
           if (!conversation.discarded) ...[
             const SizedBox(height: 24),
-            Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () => _showAppSelectionSheet(context, provider),
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: ResponsiveHelper.purplePrimary,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: const Text(
-                    'Generate Summary',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
+            OmiButton(
+              label: 'Generate Summary',
+              type: OmiButtonType.primary,
+              onPressed: () => _showAppSelectionSheet(context, provider),
+              icon: FontAwesomeIcons.wandMagicSparkles,
             ),
           ],
         ],
@@ -564,43 +466,10 @@ class _DesktopAppSelectionSheet extends StatelessWidget {
           child: Column(
             children: [
               // Header
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(
-                      color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
-                      width: 1,
-                    ),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      FontAwesomeIcons.solidStar,
-                      color: ResponsiveHelper.textSecondary,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 12),
-                    const Text(
-                      'Choose Summarization App',
-                      style: TextStyle(
-                        color: ResponsiveHelper.textPrimary,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(
-                        FontAwesomeIcons.xmark,
-                        color: ResponsiveHelper.textSecondary,
-                        size: 16,
-                      ),
-                    ),
-                  ],
-                ),
+              OmiPanelHeader(
+                icon: FontAwesomeIcons.solidStar,
+                title: 'Choose Summarization App',
+                onClose: () => Navigator.pop(context),
               ),
 
               // Apps list

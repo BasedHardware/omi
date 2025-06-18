@@ -14,6 +14,7 @@ import 'widgets/desktop_filter_chips.dart';
 import 'widgets/desktop_app_detail.dart';
 import 'package:omi/ui/atoms/omi_search_input.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
+import 'package:omi/ui/molecules/omi_empty_state.dart';
 
 class DesktopAppsPage extends StatefulWidget {
   final VoidCallback? onNavigateToCreateApp;
@@ -144,7 +145,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
           children: [
             Container(
               decoration: BoxDecoration(
-                color: ResponsiveHelper.backgroundPrimary.withOpacity(0.8),
+                color: ResponsiveHelper.backgroundPrimary.withValues(alpha: 0.8),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
@@ -176,7 +177,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                           filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
                           child: Container(
                             decoration: BoxDecoration(
-                              color: ResponsiveHelper.backgroundPrimary.withOpacity(0.2),
+                              color: ResponsiveHelper.backgroundPrimary.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(16),
                             ),
                           ),
@@ -208,7 +209,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
   Widget _buildLoadingState(ResponsiveHelper responsive) {
     return Container(
       decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundPrimary.withOpacity(0.8),
+        color: ResponsiveHelper.backgroundPrimary.withValues(alpha: 0.8),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Center(
@@ -269,7 +270,6 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                           );
                         }
 
-                        final totalApps = appProvider.isFilterActive() || appProvider.isSearchActive() ? appProvider.filteredApps.length : appProvider.apps.length;
 
                         return Text(
                           'Browse, install, and create apps',
@@ -397,10 +397,10 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
         vertical: responsive.spacing(baseSpacing: 6),
       ),
       decoration: BoxDecoration(
-        color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
+        color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
+          color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
           width: 1,
         ),
       ),
@@ -513,10 +513,10 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
+              color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.6),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                 width: 1,
               ),
             ),
@@ -536,7 +536,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
+                          color: Colors.black.withValues(alpha: 0.1),
                           blurRadius: 8,
                           offset: const Offset(0, 2),
                         ),
@@ -548,7 +548,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                     height: 48,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(10),
-                      color: ResponsiveHelper.backgroundTertiary.withOpacity(0.5),
+                      color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
                     ),
                     child: const Icon(
                       Icons.apps,
@@ -561,7 +561,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                     height: 48,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(10),
-                      color: ResponsiveHelper.backgroundTertiary.withOpacity(0.5),
+                      color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
                     ),
                     child: const Icon(
                       Icons.apps,
@@ -601,7 +601,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 12,
-                          color: ResponsiveHelper.textTertiary.withOpacity(0.7), // Reduced opacity
+                          color: ResponsiveHelper.textTertiary.withValues(alpha: 0.7), // Reduced opacity
                           height: 1.3,
                         ),
                       ),
@@ -636,7 +636,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                                 vertical: 3,
                               ),
                               decoration: BoxDecoration(
-                                color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
+                                color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: const Text(
@@ -758,7 +758,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                     vertical: responsive.spacing(baseSpacing: 2),
                   ),
                   decoration: BoxDecoration(
-                    color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+                    color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
@@ -847,7 +847,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                     vertical: responsive.spacing(baseSpacing: 2),
                   ),
                   decoration: BoxDecoration(
-                    color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+                    color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
@@ -891,10 +891,10 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
+              color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.6),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                 width: 1,
               ),
             ),
@@ -914,7 +914,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
+                          color: Colors.black.withValues(alpha: 0.1),
                           blurRadius: 8,
                           offset: const Offset(0, 2),
                         ),
@@ -926,7 +926,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                     height: 48,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(10),
-                      color: ResponsiveHelper.backgroundTertiary.withOpacity(0.5),
+                      color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
                     ),
                     child: const Icon(
                       Icons.apps,
@@ -939,7 +939,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                     height: 48,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(10),
-                      color: ResponsiveHelper.backgroundTertiary.withOpacity(0.5),
+                      color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
                     ),
                     child: const Icon(
                       Icons.apps,
@@ -979,7 +979,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 12,
-                          color: ResponsiveHelper.textTertiary.withOpacity(0.7),
+                          color: ResponsiveHelper.textTertiary.withValues(alpha: 0.7),
                           height: 1.3,
                         ),
                       ),
@@ -1014,7 +1014,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                                 vertical: 3,
                               ),
                               decoration: BoxDecoration(
-                                color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
+                                color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: const Text(
@@ -1058,50 +1058,29 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
   }
 
   Widget _buildEmptyState(ResponsiveHelper responsive, AppProvider appProvider) {
+    final title = appProvider.isSearchActive()
+        ? 'No apps found'
+        : context.read<ConnectivityProvider>().isConnected
+            ? 'No apps available'
+            : 'Unable to load apps';
+
+    final message = appProvider.isSearchActive()
+        ? 'Try adjusting your search terms or filters'
+        : context.read<ConnectivityProvider>().isConnected
+            ? 'Check back later for new apps'
+            : 'Please check your internet connection and try again';
+
     return Center(
       child: Container(
         constraints: const BoxConstraints(maxWidth: 400),
         padding: EdgeInsets.all(responsive.spacing(baseSpacing: 48)),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Icon(
-                Icons.apps_outlined,
-                color: ResponsiveHelper.textQuaternary,
-                size: 32,
-              ),
-            ),
-            SizedBox(height: responsive.spacing(baseSpacing: 24)),
-            Text(
-              appProvider.isSearchActive()
-                  ? 'No apps found'
-                  : context.read<ConnectivityProvider>().isConnected
-                      ? 'No apps available'
-                      : 'Unable to load apps',
-              style: responsive.titleMedium.copyWith(
-                color: ResponsiveHelper.textSecondary,
-              ),
-            ),
-            SizedBox(height: responsive.spacing(baseSpacing: 8)),
-            Text(
-              appProvider.isSearchActive()
-                  ? 'Try adjusting your search terms or filters'
-                  : context.read<ConnectivityProvider>().isConnected
-                      ? 'Check back later for new apps'
-                      : 'Please check your internet connection and try again',
-              style: responsive.bodyMedium.copyWith(
-                color: ResponsiveHelper.textTertiary,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
+        child: OmiEmptyState(
+          icon: Icons.apps_outlined,
+          title: title,
+          message: message,
+          color: ResponsiveHelper.purplePrimary,
+          iconSize: 48,
+          iconPadding: 24,
         ),
       ),
     );

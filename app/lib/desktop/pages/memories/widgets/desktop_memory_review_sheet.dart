@@ -6,6 +6,9 @@ import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
+import 'package:omi/ui/molecules/omi_empty_state.dart';
+import 'package:omi/ui/molecules/omi_panel_header.dart';
+import 'package:omi/ui/atoms/omi_loading_badge.dart';
 
 class DesktopMemoryReviewSheet extends StatefulWidget {
   final List<Memory> memories;
@@ -183,12 +186,12 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
               color: ResponsiveHelper.backgroundPrimary,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
+                  color: Colors.black.withValues(alpha: 0.3),
                   blurRadius: 32,
                   offset: const Offset(-8, 0),
                 ),
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
+                  color: Colors.black.withValues(alpha: 0.1),
                   blurRadius: 64,
                   offset: const Offset(-16, 0),
                 ),
@@ -212,65 +215,28 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
     return Container(
       padding: EdgeInsets.all(responsive.spacing(baseSpacing: 24)),
       decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
+        color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.6),
         border: Border(
           bottom: BorderSide(
-            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+            color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
             width: 1,
           ),
         ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Icon and title
-          Container(
-            padding: EdgeInsets.all(responsive.spacing(baseSpacing: 8)),
-            decoration: BoxDecoration(
-              color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(
-              FontAwesomeIcons.magnifyingGlass,
-              color: ResponsiveHelper.purplePrimary,
-              size: 16,
-            ),
+          OmiPanelHeader(
+            icon: FontAwesomeIcons.magnifyingGlass,
+            title: 'Review Memories',
+            onClose: _handleClose,
+            spacing: responsive.spacing(baseSpacing: 12),
           ),
-          SizedBox(width: responsive.spacing(baseSpacing: 12)),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Review Memories',
-                  style: responsive.titleLarge.copyWith(
-                    color: ResponsiveHelper.textPrimary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                SizedBox(height: responsive.spacing(baseSpacing: 2)),
-                Text(
-                  _getSubtitle(),
-                  style: responsive.bodyMedium.copyWith(
-                    color: ResponsiveHelper.textTertiary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Close button
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: _handleClose,
-              borderRadius: BorderRadius.circular(8),
-              child: Container(
-                padding: EdgeInsets.all(responsive.spacing(baseSpacing: 8)),
-                child: const Icon(
-                  Icons.close_rounded,
-                  color: ResponsiveHelper.textTertiary,
-                  size: 20,
-                ),
-              ),
+          SizedBox(height: responsive.spacing(baseSpacing: 8)),
+          Text(
+            _getSubtitle(),
+            style: responsive.bodyMedium.copyWith(
+              color: ResponsiveHelper.textTertiary,
             ),
           ),
         ],
@@ -335,10 +301,10 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
             vertical: responsive.spacing(baseSpacing: 8),
           ),
           decoration: BoxDecoration(
-            color: isSelected ? ResponsiveHelper.purplePrimary.withOpacity(0.15) : ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
+            color: isSelected ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.15) : ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.6),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: isSelected ? ResponsiveHelper.purplePrimary.withOpacity(0.4) : ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+              color: isSelected ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.4) : ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
               width: 1,
             ),
           ),
@@ -377,39 +343,15 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
       child: Container(
         constraints: const BoxConstraints(maxWidth: 300),
         padding: EdgeInsets.all(responsive.spacing(baseSpacing: 32)),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: EdgeInsets.all(responsive.spacing(baseSpacing: 16)),
-              decoration: BoxDecoration(
-                color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Icon(
-                FontAwesomeIcons.circleCheck,
-                size: 32,
-                color: ResponsiveHelper.purplePrimary,
-              ),
-            ),
-            SizedBox(height: responsive.spacing(baseSpacing: 16)),
-            Text(
-              selectedCategory == null ? 'All memories reviewed!' : 'No memories in this category',
-              style: responsive.titleMedium.copyWith(
-                color: ResponsiveHelper.textPrimary,
-                fontWeight: FontWeight.w500,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: responsive.spacing(baseSpacing: 8)),
-            Text(
-              selectedCategory == null ? 'Great work! All memories have been processed.' : 'Try switching to a different category.',
-              style: responsive.bodyMedium.copyWith(
-                color: ResponsiveHelper.textTertiary,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
+        child: OmiEmptyState(
+          icon: FontAwesomeIcons.circleCheck,
+          title: selectedCategory == null ? 'All memories reviewed!' : 'No memories in this category',
+          message: selectedCategory == null
+              ? 'Great work! All memories have been processed.'
+              : 'Try switching to a different category.',
+          color: ResponsiveHelper.purplePrimary,
+          iconSize: 32,
+          iconPadding: responsive.spacing(baseSpacing: 16),
         ),
       ),
     );
@@ -421,10 +363,10 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
       child: Container(
         padding: EdgeInsets.all(responsive.spacing(baseSpacing: 16)),
         decoration: BoxDecoration(
-          color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
+          color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.6),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+            color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
             width: 1,
           ),
         ),
@@ -435,7 +377,7 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
             Container(
               padding: EdgeInsets.all(responsive.spacing(baseSpacing: 8)),
               decoration: BoxDecoration(
-                color: _getCategoryColor(memory.category).withOpacity(0.15),
+                color: _getCategoryColor(memory.category).withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(
@@ -493,40 +435,16 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
     return Container(
       padding: EdgeInsets.all(responsive.spacing(baseSpacing: 24)),
       decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
+        color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.6),
         border: Border(
           top: BorderSide(
-            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+            color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
             width: 1,
           ),
         ),
       ),
       child: _isProcessing
-          ? Center(
-              child: Container(
-                padding: EdgeInsets.symmetric(vertical: responsive.spacing(baseSpacing: 12)),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary),
-                        strokeWidth: 2,
-                      ),
-                    ),
-                    SizedBox(width: responsive.spacing(baseSpacing: 12)),
-                    Text(
-                      'Processing...',
-                      style: responsive.bodyMedium.copyWith(
-                        color: ResponsiveHelper.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
+          ? const Center(child: OmiLoadingBadge(label: 'Processing...'))
           : Row(
               children: [
                 Expanded(

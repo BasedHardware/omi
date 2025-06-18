@@ -10,6 +10,7 @@ import 'package:omi/utils/file.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:omi/ui/atoms/omi_icon_button.dart';
 
 enum RecordingState {
   notRecording,
@@ -210,9 +211,17 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              IconButton(
-                icon: const Icon(Icons.close, color: ResponsiveHelper.textSecondary),
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: OmiIconButton(
+                icon: Icons.close,
+                style: OmiIconButtonStyle.outline,
+                borderOpacity: 0.12,
+                size: 32,
+                iconSize: 14,
+                borderRadius: 8,
                 onPressed: widget.onClose,
+              ),
               ),
               Expanded(
                 child: SizedBox(
@@ -225,22 +234,18 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
                   ),
                 ),
               ),
-              GestureDetector(
-                onTap: _processRecording,
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  margin: const EdgeInsets.only(top: 8, bottom: 8, right: 8, left: 12),
-                  decoration: BoxDecoration(
-                    color: ResponsiveHelper.purplePrimary,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.check,
-                    color: Colors.white,
-                    size: 16,
-                  ),
-                ),
-              ),
+             Padding( 
+              padding: const EdgeInsets.all(8),
+              child:OmiIconButton(
+                icon: Icons.check,
+                style: OmiIconButtonStyle.filled,
+                color: ResponsiveHelper.purplePrimary,
+                solid: true,
+                size: 32,
+                iconSize: 14,
+                borderRadius: 8,
+                onPressed: _processRecording,
+              ),)
             ],
           ),
         );
@@ -301,12 +306,24 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                IconButton(
-                  icon: const Icon(Icons.close, color: ResponsiveHelper.textSecondary),
+                OmiIconButton(
+                  icon: Icons.close,
+                  style: OmiIconButtonStyle.outline,
+                  borderOpacity: 0.12,
+                  size: 28,
+                  iconSize: 12,
+                  borderRadius: 8,
                   onPressed: widget.onClose,
                 ),
-                IconButton(
-                  icon: const Icon(Icons.send, color: ResponsiveHelper.purplePrimary),
+                const SizedBox(width: 4),
+                OmiIconButton(
+                  icon: Icons.send,
+                  style: OmiIconButtonStyle.filled,
+                  color: ResponsiveHelper.purplePrimary,
+                  solid: true,
+                  size: 28,
+                  iconSize: 12,
+                  borderRadius: 8,
                   onPressed: () => widget.onTranscriptReady(_transcript),
                 ),
               ],
@@ -350,24 +367,24 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
               ),
               Row(
                 children: [
-                  GestureDetector(
-                    onTap: _retry,
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      margin: const EdgeInsets.only(left: 8, right: 4),
-                      decoration: BoxDecoration(
-                        color: ResponsiveHelper.purplePrimary,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Icon(
-                        Icons.refresh,
-                        color: Colors.white,
-                        size: 16,
-                      ),
-                    ),
+                  OmiIconButton(
+                    icon: Icons.refresh,
+                    style: OmiIconButtonStyle.filled,
+                    color: ResponsiveHelper.purplePrimary,
+                    solid: true,
+                    size: 28,
+                    iconSize: 12,
+                    borderRadius: 6,
+                    onPressed: _retry,
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: ResponsiveHelper.textSecondary),
+                  const SizedBox(width: 4),
+                  OmiIconButton(
+                    icon: Icons.close,
+                    style: OmiIconButtonStyle.outline,
+                    borderOpacity: 0.12,
+                    size: 28,
+                    iconSize: 12,
+                    borderRadius: 8,
                     onPressed: widget.onClose,
                   ),
                 ],

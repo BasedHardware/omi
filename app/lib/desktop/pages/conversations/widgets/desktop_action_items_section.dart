@@ -5,6 +5,8 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/ui/atoms/omi_checkbox.dart';
+import 'package:omi/ui/molecules/omi_section_header.dart';
 
 class DesktopActionItemsSection extends StatelessWidget {
   final ServerConversation conversation;
@@ -24,39 +26,10 @@ class DesktopActionItemsSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Section header
-        Row(
-          children: [
-            const Icon(
-              FontAwesomeIcons.listCheck,
-              color: ResponsiveHelper.textSecondary,
-              size: 16,
-            ),
-            const SizedBox(width: 8),
-            const Text(
-              'Action Items',
-              style: TextStyle(
-                color: ResponsiveHelper.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                '${actionItems.length}',
-                style: const TextStyle(
-                  color: ResponsiveHelper.textTertiary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ],
+        OmiSectionHeader(
+          icon: FontAwesomeIcons.listCheck,
+          title: 'Action Items',
+          badgeLabel: '${actionItems.length}',
         ),
 
         const SizedBox(height: 16),
@@ -82,27 +55,12 @@ class DesktopActionItemsSection extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Checkbox
-                GestureDetector(
-                  onTap: () => _toggleCompletion(context, item, itemIndex),
-                  child: Container(
-                    width: 18,
-                    height: 18,
-                    margin: const EdgeInsets.only(top: 2),
-                    decoration: BoxDecoration(
-                      color: item.completed ? ResponsiveHelper.purplePrimary : Colors.transparent,
-                      border: Border.all(
-                        color: item.completed ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textTertiary,
-                        width: 1.5,
-                      ),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: item.completed
-                        ? const Icon(
-                            FontAwesomeIcons.check,
-                            size: 10,
-                            color: Colors.white,
-                          )
-                        : null,
+                Container(
+                  margin: const EdgeInsets.only(top: 2),
+                  child: OmiCheckbox(
+                    value: item.completed,
+                    onChanged: (_) => _toggleCompletion(context, item, itemIndex),
+                    size: 18,
                   ),
                 ),
 
