@@ -11,7 +11,9 @@ import 'package:provider/provider.dart';
 
 import 'widgets/desktop_memory_item.dart';
 import 'widgets/desktop_memory_dialog.dart';
-import 'widgets/desktop_memory_review_sheet.dart';
+import 'package:omi/ui/organisms/memory_review_sheet.dart';
+import 'package:omi/ui/atoms/omi_search_input.dart';
+import 'package:omi/ui/atoms/omi_icon_button.dart';
 
 enum FilterOption { interesting, system, all }
 
@@ -40,7 +42,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
 
   bool _animationsInitialized = false;
 
-  late FilterOption _currentFilter;
+  FilterOption _currentFilter = FilterOption.all;
 
   // Memory review panel state
   final ValueNotifier<List<Memory>?> _reviewMemoriesNotifier = ValueNotifier<List<Memory>?>(null);
@@ -233,7 +235,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
                       top: 0,
                       right: 0,
                       bottom: 0,
-                      child: DesktopMemoryReviewSheet(
+                      child: MemoryReviewSheet(
                         memories: reviewMemories,
                         provider: provider,
                         onClose: () {
@@ -293,34 +295,10 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
       child: Row(
         children: [
           Expanded(
-            child: Container(
-              height: 44,
-              decoration: BoxDecoration(
-                color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: TextField(
-                controller: _searchController,
-                style: const TextStyle(
-                  color: ResponsiveHelper.textPrimary,
-                  fontSize: 14,
-                ),
-                decoration: const InputDecoration(
-                  hintText: '🔍 Search memories...',
-                  hintStyle: TextStyle(
-                    color: ResponsiveHelper.textTertiary,
-                    fontSize: 14,
-                  ),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                ),
-                onChanged: (value) {
-                  provider.setSearchQuery(value);
-                },
-              ),
+            child: OmiSearchInput(
+              controller: _searchController,
+              hint: 'Search memories...',
+              onChanged: (value) => provider.setSearchQuery(value),
             ),
           ),
 
@@ -330,48 +308,18 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
 
           const SizedBox(width: 12),
 
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => _showMemoryDialog(context, provider),
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                height: 44,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.add,
-                  color: ResponsiveHelper.purplePrimary,
-                  size: 20,
-                ),
-              ),
-            ),
+          OmiIconButton(
+            icon: Icons.add,
+            onPressed: () => _showMemoryDialog(context, provider),
+            style: OmiIconButtonStyle.filled,
           ),
 
           const SizedBox(width: 8),
 
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => _showManagementSheet(context, provider),
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                height: 44,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.more_vert,
-                  color: ResponsiveHelper.textSecondary,
-                  size: 20,
-                ),
-              ),
-            ),
+          OmiIconButton(
+            icon: Icons.more_vert,
+            onPressed: () => _showManagementSheet(context, provider),
+            style: OmiIconButtonStyle.outline,
           ),
         ],
       ),

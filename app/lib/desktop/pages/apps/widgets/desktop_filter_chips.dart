@@ -3,6 +3,8 @@ import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/ui/atoms/omi_choice_chip.dart';
+import 'package:omi/ui/molecules/omi_popup_menu.dart';
 
 class DesktopFilterChips extends StatelessWidget {
   final VoidCallback onFilterChanged;
@@ -88,37 +90,10 @@ class DesktopFilterChips extends StatelessWidget {
     required bool isSelected,
     required VoidCallback onTap,
   }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: responsive.spacing(baseSpacing: 16),
-            vertical: responsive.spacing(baseSpacing: 8),
-          ),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? ResponsiveHelper.purplePrimary.withOpacity(0.15)
-                : ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isSelected
-                  ? ResponsiveHelper.purplePrimary.withOpacity(0.4)
-                  : ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
-              width: 1,
-            ),
-          ),
-          child: Text(
-            label,
-            style: responsive.bodyMedium.copyWith(
-              color: isSelected ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textSecondary,
-              fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400,
-            ),
-          ),
-        ),
-      ),
+    return OmiChoiceChip(
+      label: label,
+      selected: isSelected,
+      onTap: onTap,
     );
   }
 
@@ -129,13 +104,31 @@ class DesktopFilterChips extends StatelessWidget {
 
     final selectedCategory = appProvider.filters['Category'];
 
-    return PopupMenuButton<dynamic>(
-      offset: const Offset(0, 40),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      color: ResponsiveHelper.backgroundSecondary,
-      elevation: 8,
+    return OmiPopupMenuButton<dynamic>(
+      itemBuilder: (context) => [
+        if (selectedCategory != null)
+          PopupMenuItem(
+            value: 'clear',
+            child: Row(
+              children: [
+                const Icon(Icons.clear, size: 16, color: ResponsiveHelper.textTertiary),
+                const SizedBox(width: 8),
+                Text('Clear selection', style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textTertiary)),
+              ],
+            ),
+          ),
+        if (selectedCategory != null) const PopupMenuDivider(),
+        ...appProvider.categories.map((category) => PopupMenuItem(value: category, child: Text(category.title, style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textSecondary))))
+      ],
+      onSelected: (value) {
+        if (value == 'clear') {
+          appProvider.removeFilter('Category');
+        } else {
+          appProvider.addOrRemoveCategoryFilter(value);
+          MixpanelManager().appsCategoryFilter(value.title, true);
+        }
+        onFilterChanged();
+      },
       child: Container(
         padding: EdgeInsets.symmetric(
           horizontal: responsive.spacing(baseSpacing: 16),
@@ -172,49 +165,6 @@ class DesktopFilterChips extends StatelessWidget {
           ],
         ),
       ),
-      itemBuilder: (context) => [
-        if (selectedCategory != null)
-          PopupMenuItem(
-            value: 'clear',
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.clear,
-                  size: 16,
-                  color: ResponsiveHelper.textTertiary,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Clear selection',
-                  style: responsive.bodyMedium.copyWith(
-                    color: ResponsiveHelper.textTertiary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        if (selectedCategory != null) const PopupMenuDivider(),
-        ...appProvider.categories.map((category) {
-          return PopupMenuItem(
-            value: category,
-            child: Text(
-              category.title,
-              style: responsive.bodyMedium.copyWith(
-                color: ResponsiveHelper.textSecondary,
-              ),
-            ),
-          );
-        }),
-      ],
-      onSelected: (value) {
-        if (value == 'clear') {
-          appProvider.removeFilter('Category');
-        } else {
-          appProvider.addOrRemoveCategoryFilter(value);
-          MixpanelManager().appsCategoryFilter(value.title, true);
-        }
-        onFilterChanged();
-      },
     );
   }
 
@@ -222,13 +172,22 @@ class DesktopFilterChips extends StatelessWidget {
     final ratingOptions = ['4+ Stars', '3+ Stars', '2+ Stars', '1+ Stars'];
     final selectedRating = appProvider.filters['Rating'];
 
-    return PopupMenuButton<String>(
-      offset: const Offset(0, 40),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      color: ResponsiveHelper.backgroundSecondary,
-      elevation: 8,
+    return OmiPopupMenuButton<String>(
+      itemBuilder: (context) => [
+        if (selectedRating != null)
+          PopupMenuItem(value: 'clear', child: Row(children: [const Icon(Icons.clear, size: 16, color: ResponsiveHelper.textTertiary), const SizedBox(width: 8), Text('Clear selection', style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textTertiary))])),
+        if (selectedRating != null) const PopupMenuDivider(),
+        ...ratingOptions.map((rating) => PopupMenuItem(value: rating, child: Row(children: [const Icon(Icons.star_rounded, size: 16, color: ResponsiveHelper.purplePrimary), const SizedBox(width: 8), Text(rating, style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textSecondary))]))),
+      ],
+      onSelected: (value) {
+        if (value == 'clear') {
+          appProvider.removeFilter('Rating');
+        } else {
+          appProvider.addOrRemoveFilter(value, 'Rating');
+          MixpanelManager().appsRatingFilter(value, true);
+        }
+        onFilterChanged();
+      },
       child: Container(
         padding: EdgeInsets.symmetric(
           horizontal: responsive.spacing(baseSpacing: 16),
@@ -265,59 +224,6 @@ class DesktopFilterChips extends StatelessWidget {
           ],
         ),
       ),
-      itemBuilder: (context) => [
-        if (selectedRating != null)
-          PopupMenuItem(
-            value: 'clear',
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.clear,
-                  size: 16,
-                  color: ResponsiveHelper.textTertiary,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Clear selection',
-                  style: responsive.bodyMedium.copyWith(
-                    color: ResponsiveHelper.textTertiary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        if (selectedRating != null) const PopupMenuDivider(),
-        ...ratingOptions.map((rating) {
-          return PopupMenuItem(
-            value: rating,
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.star_rounded,
-                  size: 16,
-                  color: ResponsiveHelper.purplePrimary,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  rating,
-                  style: responsive.bodyMedium.copyWith(
-                    color: ResponsiveHelper.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }),
-      ],
-      onSelected: (value) {
-        if (value == 'clear') {
-          appProvider.removeFilter('Rating');
-        } else {
-          appProvider.addOrRemoveFilter(value, 'Rating');
-          MixpanelManager().appsRatingFilter(value, true);
-        }
-        onFilterChanged();
-      },
     );
   }
 
@@ -328,13 +234,22 @@ class DesktopFilterChips extends StatelessWidget {
 
     final selectedCapability = appProvider.filters['Capabilities'];
 
-    return PopupMenuButton<dynamic>(
-      offset: const Offset(0, 40),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      color: ResponsiveHelper.backgroundSecondary,
-      elevation: 8,
+    return OmiPopupMenuButton<dynamic>(
+      itemBuilder: (context) => [
+        if (selectedCapability != null)
+          PopupMenuItem(value: 'clear', child: Row(children: [const Icon(Icons.clear, size: 16, color: ResponsiveHelper.textTertiary), const SizedBox(width: 8), Text('Clear selection', style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textTertiary))])),
+        if (selectedCapability != null) const PopupMenuDivider(),
+        ...appProvider.capabilities.map((cap) => PopupMenuItem(value: cap, child: Text(cap.title, style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textSecondary))))
+      ],
+      onSelected: (value) {
+        if (value == 'clear') {
+          appProvider.removeFilter('Capabilities');
+        } else {
+          appProvider.addOrRemoveCapabilityFilter(value);
+          MixpanelManager().appsCapabilityFilter(value.title, true);
+        }
+        onFilterChanged();
+      },
       child: Container(
         padding: EdgeInsets.symmetric(
           horizontal: responsive.spacing(baseSpacing: 16),
@@ -371,49 +286,6 @@ class DesktopFilterChips extends StatelessWidget {
           ],
         ),
       ),
-      itemBuilder: (context) => [
-        if (selectedCapability != null)
-          PopupMenuItem(
-            value: 'clear',
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.clear,
-                  size: 16,
-                  color: ResponsiveHelper.textTertiary,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Clear selection',
-                  style: responsive.bodyMedium.copyWith(
-                    color: ResponsiveHelper.textTertiary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        if (selectedCapability != null) const PopupMenuDivider(),
-        ...appProvider.capabilities.map((capability) {
-          return PopupMenuItem(
-            value: capability,
-            child: Text(
-              capability.title,
-              style: responsive.bodyMedium.copyWith(
-                color: ResponsiveHelper.textSecondary,
-              ),
-            ),
-          );
-        }),
-      ],
-      onSelected: (value) {
-        if (value == 'clear') {
-          appProvider.removeFilter('Capabilities');
-        } else {
-          appProvider.addOrRemoveCapabilityFilter(value);
-          MixpanelManager().appsCapabilityFilter(value.title, true);
-        }
-        onFilterChanged();
-      },
     );
   }
 }

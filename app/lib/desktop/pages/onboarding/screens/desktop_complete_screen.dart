@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 
 class DesktopCompleteScreen extends StatefulWidget {
   final VoidCallback onComplete;
@@ -145,64 +146,20 @@ class _DesktopCompleteScreenState extends State<DesktopCompleteScreen> with Tick
                       Container(
                         constraints: const BoxConstraints(maxWidth: 400),
                         margin: const EdgeInsets.symmetric(horizontal: 40),
-                        child: Container(
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1A1A1A),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: const Color(0xFF2A2A2A),
-                              width: 1,
-                            ),
-                          ),
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(12),
-                              onTap: widget.onComplete,
-                              child: const Padding(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 24,
-                                  vertical: 18,
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      'Start Using Omi',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    SizedBox(width: 8),
-                                    Icon(
-                                      Icons.arrow_forward_rounded,
-                                      color: Colors.white,
-                                      size: 20,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
+                        child: OmiButton(
+                          label: 'Start Using Omi',
+                          icon: Icons.arrow_forward_rounded,
+                          onPressed: widget.onComplete,
                         ),
                       ),
 
                       const SizedBox(height: 16),
 
                       if (widget.onBack != null)
-                        TextButton(
+                        OmiButton(
+                          label: 'Back',
+                          type: OmiButtonType.text,
                           onPressed: widget.onBack,
-                          child: const Text(
-                            'Back',
-                            style: TextStyle(
-                              color: Color(0xFF6B7280),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w400,
-                            ),
-                          ),
                         ),
 
                       const SizedBox(height: 16),

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
+import 'package:omi/ui/molecules/omi_selectable_tile.dart';
 
 class DesktopPermissionsScreen extends StatefulWidget {
   final VoidCallback onNext;
@@ -207,11 +209,11 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               // Bluetooth Permission
-                              _buildCleanPermissionItem(
-                                icon: Icons.bluetooth_rounded,
+                              OmiSelectableTile(
+                                leading: Icon(Icons.bluetooth_rounded, color: provider.hasBluetoothPermission ? ResponsiveHelper.purplePrimary : const Color(0xFF9CA3AF), size: 20),
                                 title: 'Bluetooth Access',
                                 subtitle: 'Connect to your Omi device',
-                                value: provider.hasBluetoothPermission,
+                                selected: provider.hasBluetoothPermission,
                                 onTap: () {
                                   if (!provider.hasBluetoothPermission) {
                                     _showPermissionDialog(
@@ -230,11 +232,11 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
                               const SizedBox(height: 12),
 
                               // Location Permission
-                              _buildCleanPermissionItem(
-                                icon: Icons.location_on_rounded,
+                              OmiSelectableTile(
+                                leading: Icon(Icons.location_on_rounded, color: provider.hasLocationPermission ? ResponsiveHelper.purplePrimary : const Color(0xFF9CA3AF), size: 20),
                                 title: 'Location Services',
                                 subtitle: 'Tag conversations with location',
-                                value: provider.hasLocationPermission,
+                                selected: provider.hasLocationPermission,
                                 onTap: () {
                                   if (!provider.hasLocationPermission) {
                                     _showPermissionDialog(
@@ -253,11 +255,11 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
                               const SizedBox(height: 12),
 
                               // Notification Permission
-                              _buildCleanPermissionItem(
-                                icon: Icons.notifications_rounded,
+                              OmiSelectableTile(
+                                leading: Icon(Icons.notifications_rounded, color: provider.hasNotificationPermission ? ResponsiveHelper.purplePrimary : const Color(0xFF9CA3AF), size: 20),
                                 title: 'Notifications',
                                 subtitle: 'Receive important updates',
-                                value: provider.hasNotificationPermission,
+                                selected: provider.hasNotificationPermission,
                                 onTap: () {
                                   if (!provider.hasNotificationPermission) {
                                     _showPermissionDialog(
@@ -285,69 +287,29 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Container(
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      ResponsiveHelper.purplePrimary,
-                                      ResponsiveHelper.purplePrimary.withOpacity(0.8),
-                                    ],
-                                  ),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: ElevatedButton.icon(
-                                  onPressed: provider.isLoading
-                                      ? null
-                                      : () {
-                                          provider.setLoading(false);
-                                          widget.onNext();
-                                        },
-                                  icon: provider.isLoading
-                                      ? const SizedBox(
-                                          width: 16,
-                                          height: 16,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                          ),
-                                        )
-                                      : null,
-                                  label: Text(provider.isLoading
-                                      ? 'Please wait...'
-                                      : (provider.hasBluetoothPermission || provider.hasLocationPermission || provider.hasNotificationPermission)
-                                          ? 'Continue'
-                                          : 'Skip'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.transparent,
-                                    foregroundColor: Colors.white,
-                                    shadowColor: Colors.transparent,
-                                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    textStyle: const TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
+                              OmiButton(
+                                label: provider.isLoading
+                                    ? 'Please wait...'
+                                    : (provider.hasBluetoothPermission || provider.hasLocationPermission || provider.hasNotificationPermission)
+                                        ? 'Continue'
+                                        : 'Skip',
+                                onPressed: provider.isLoading
+                                    ? null
+                                    : () {
+                                        provider.setLoading(false);
+                                        widget.onNext();
+                                      },
+                                enabled: !provider.isLoading,
                               ),
                             ],
                           ),
 
                           const SizedBox(height: 8),
 
-                          TextButton(
+                          OmiButton(
+                            label: 'Back',
+                            type: OmiButtonType.text,
                             onPressed: widget.onBack,
-                            child: const Text(
-                              'Back',
-                              style: TextStyle(
-                                color: Color(0xFF6B7280),
-                                fontSize: 13,
-                                fontWeight: FontWeight.w400,
-                              ),
-                            ),
                           ),
                         ],
                       ),
@@ -359,101 +321,6 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
           ),
         );
       },
-    );
-  }
-
-  Widget _buildCleanPermissionItem({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required bool value,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 20,
-            vertical: 16,
-          ),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: value ? ResponsiveHelper.purplePrimary.withOpacity(0.5) : const Color(0xFF2A2A2A),
-              width: 1,
-            ),
-          ),
-          child: Row(
-            children: [
-              // Icon
-              SizedBox(
-                width: 24,
-                height: 24,
-                child: Icon(
-                  icon,
-                  color: value ? ResponsiveHelper.purplePrimary : const Color(0xFF9CA3AF),
-                  size: 20,
-                ),
-              ),
-
-              const SizedBox(width: 16),
-
-              // Text content
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        color: value ? Colors.white : const Color(0xFFE5E7EB),
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        color: Color(0xFF9CA3AF),
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(width: 16),
-
-              // Radio button
-              Container(
-                width: 20,
-                height: 20,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: value ? ResponsiveHelper.purplePrimary : const Color(0xFF6B7280),
-                    width: 2,
-                  ),
-                  color: value ? ResponsiveHelper.purplePrimary : Colors.transparent,
-                ),
-                child: value
-                    ? const Icon(
-                        Icons.check,
-                        color: Colors.white,
-                        size: 12,
-                      )
-                    : null,
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

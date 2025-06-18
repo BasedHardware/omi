@@ -1,5 +1,3 @@
-
-
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -9,7 +7,7 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
 
-import 'widgets/desktop_action_item.dart';
+import 'package:omi/ui/organisms/action_item.dart';
 import 'widgets/desktop_action_group.dart';
 
 class DesktopActionsPage extends StatefulWidget {
@@ -149,7 +147,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage> with AutomaticKe
                   ),
                   child: Column(
                     children: [
-                      _buildModernHeader(flattenedItems),
+                      _buildHeader(flattenedItems),
 
                       Expanded(
                         child: _animationsInitialized
@@ -208,7 +206,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage> with AutomaticKe
     );
   }
 
-  Widget _buildModernHeader(List<ActionItemData> flattenedItems) {
+  Widget _buildHeader(List<ActionItemData> flattenedItems) {
     final incompleteCount = flattenedItems.where((item) => !item.actionItem.completed).length;
 
     return Container(

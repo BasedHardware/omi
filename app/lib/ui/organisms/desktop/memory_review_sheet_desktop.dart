@@ -1,11 +1,9 @@
-import 'package:flutter/material.dart';
+ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:omi/ui/atoms/omi_icon_button.dart';
-import 'package:omi/ui/atoms/omi_button.dart';
 
 class DesktopMemoryReviewSheet extends StatefulWidget {
   final List<Memory> memories;
@@ -466,24 +464,53 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                OmiIconButton(
+                _buildActionButton(
+                  responsive,
                   icon: FontAwesomeIcons.trash,
-                  onPressed: () => _processSingleMemory(memory, false),
-                  style: OmiIconButtonStyle.outline,
                   color: ResponsiveHelper.errorColor,
-                  size: 32,
+                  onTap: () => _processSingleMemory(memory, false),
                 ),
                 SizedBox(width: responsive.spacing(baseSpacing: 8)),
-                OmiIconButton(
+                _buildActionButton(
+                  responsive,
                   icon: FontAwesomeIcons.check,
-                  onPressed: () => _processSingleMemory(memory, true),
-                  style: OmiIconButtonStyle.outline,
                   color: ResponsiveHelper.successColor,
-                  size: 32,
+                  onTap: () => _processSingleMemory(memory, true),
                 ),
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButton(
+    ResponsiveHelper responsive, {
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: EdgeInsets.all(responsive.spacing(baseSpacing: 8)),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: color.withOpacity(0.3),
+              width: 1,
+            ),
+          ),
+          child: Icon(
+            icon,
+            size: 14,
+            color: color,
+          ),
         ),
       ),
     );
@@ -530,25 +557,73 @@ class _DesktopMemoryReviewSheetState extends State<DesktopMemoryReviewSheet> wit
           : Row(
               children: [
                 Expanded(
-                  child: OmiButton(
+                  child: _buildBatchButton(
+                    responsive,
                     label: 'Discard All',
                     icon: FontAwesomeIcons.trash,
-                    onPressed: () => _processBatchAction(false),
-                    type: OmiButtonType.text,
+                    color: ResponsiveHelper.errorColor,
+                    onTap: () => _processBatchAction(false),
                   ),
                 ),
                 SizedBox(width: responsive.spacing(baseSpacing: 12)),
                 Expanded(
-                  child: OmiButton(
+                  child: _buildBatchButton(
+                    responsive,
                     label: 'Save All',
                     icon: FontAwesomeIcons.check,
-                    onPressed: () => _processBatchAction(true),
-                    type: OmiButtonType.primary,
                     color: ResponsiveHelper.successColor,
+                    onTap: () => _processBatchAction(true),
+                    isPrimary: true,
                   ),
                 ),
               ],
             ),
+    );
+  }
+
+  Widget _buildBatchButton(
+    ResponsiveHelper responsive, {
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+    bool isPrimary = false,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: EdgeInsets.symmetric(vertical: responsive.spacing(baseSpacing: 12)),
+          decoration: BoxDecoration(
+            color: isPrimary ? color.withOpacity(0.15) : ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isPrimary ? color.withOpacity(0.3) : ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: isPrimary ? color : ResponsiveHelper.textSecondary,
+              ),
+              SizedBox(width: responsive.spacing(baseSpacing: 8)),
+              Text(
+                label,
+                style: responsive.labelLarge.copyWith(
+                  color: isPrimary ? color : ResponsiveHelper.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

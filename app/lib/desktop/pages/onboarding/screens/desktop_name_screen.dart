@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/ui/atoms/omi_text_input.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 
 class DesktopNameScreen extends StatefulWidget {
   final VoidCallback onNext;
@@ -172,50 +174,13 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1A1A1A),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: _focusNode.hasFocus
-                                  ? ResponsiveHelper.purplePrimary.withOpacity(0.6)
-                                  : _isValid
-                                      ? const Color(0xFF2A2A2A)
-                                      : const Color(0xFFDC2626),
-                              width: 1,
-                            ),
-                          ),
-                          child: TextField(
-                            controller: _nameController,
-                            focusNode: _focusNode,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            textAlign: TextAlign.center,
-                            decoration: const InputDecoration(
-                              hintText: 'Enter your name',
-                              hintStyle: TextStyle(
-                                color: Color(0xFF6B7280),
-                                fontSize: 16,
-                              ),
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: 24,
-                                vertical: 18,
-                              ),
-                            ),
-                            onChanged: (value) {
-                              if (_hasInteracted) {
-                                setState(() {
-                                  _isValid = value.trim().isNotEmpty && value.trim().length >= 2;
-                                  _errorMessage = '';
-                                });
-                              }
-                            },
-                            onSubmitted: (_) => _validateAndProceed(),
-                          ),
+                        OmiTextInput(
+                          controller: _nameController,
+                          focusNode: _focusNode,
+                          hint: 'Enter your name',
+                          onChanged: (_) {
+                            if (_hasInteracted) setState(() {});
+                          },
                         ),
 
                         if (_errorMessage.isNotEmpty) ...[
@@ -261,41 +226,25 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
           ),
 
           Container(
-            padding: const EdgeInsets.all(40),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            padding: const EdgeInsets.fromLTRB(40, 24, 40, 40),
+            child: Column(
               children: [
-                Container(
-                  height: 44,
-                  decoration: BoxDecoration(
-                    gradient: _nameController.text.trim().isNotEmpty
-                        ? LinearGradient(
-                            colors: [
-                              ResponsiveHelper.purplePrimary,
-                              ResponsiveHelper.purplePrimary.withOpacity(0.8),
-                            ],
-                          )
-                        : null,
-                    color: _nameController.text.trim().isEmpty ? const Color(0xFF2A2A2A) : null,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: ElevatedButton.icon(
-                    onPressed: _nameController.text.trim().isNotEmpty ? _validateAndProceed : null,
-                    label: const Text('Continue'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      foregroundColor: _nameController.text.trim().isNotEmpty ? Colors.white : const Color(0xFF6B7280),
-                      shadowColor: Colors.transparent,
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      textStyle: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                      ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    OmiButton(
+                      label: 'Continue',
+                      onPressed: _validateAndProceed,
                     ),
-                  ),
+                  ],
+                ),
+
+                const SizedBox(height: 8),
+
+                OmiButton(
+                  label: 'Back',
+                  type: OmiButtonType.text,
+                  onPressed: widget.onBack,
                 ),
               ],
             ),

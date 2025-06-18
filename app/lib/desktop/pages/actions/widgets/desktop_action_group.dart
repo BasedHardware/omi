@@ -8,6 +8,9 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/ui/atoms/omi_checkbox.dart';
+import 'package:omi/ui/atoms/omi_icon_badge.dart';
+import 'package:omi/ui/atoms/omi_icon_button.dart';
 
 
 class DesktopActionGroup extends StatelessWidget {
@@ -63,17 +66,11 @@ class DesktopActionGroup extends StatelessWidget {
                 child: Row(
                   children: [
                     // Conversation icon
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        FontAwesomeIcons.message,
-                        color: ResponsiveHelper.purplePrimary,
-                        size: 14,
-                      ),
+                    OmiIconBadge(
+                      icon: FontAwesomeIcons.message,
+                      bgColor: ResponsiveHelper.purplePrimary.withOpacity(0.2),
+                      iconColor: ResponsiveHelper.purplePrimary,
+                      radius: 8,
                     ),
 
                     const SizedBox(width: 12),
@@ -161,28 +158,9 @@ class DesktopActionGroup extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Checkbox
-          GestureDetector(
-            onTap: () => _toggleCompletion(context, item, itemIndex),
-            child: Container(
-              width: 18,
-              height: 18,
-              margin: const EdgeInsets.only(top: 1),
-              decoration: BoxDecoration(
-                color: item.completed ? ResponsiveHelper.purplePrimary : Colors.transparent,
-                border: Border.all(
-                  color: item.completed ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textTertiary,
-                  width: 1.5,
-                ),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: item.completed
-                  ? const Icon(
-                      FontAwesomeIcons.check,
-                      size: 10,
-                      color: Colors.white,
-                    )
-                  : null,
-            ),
+          OmiCheckbox(
+            value: item.completed,
+            onChanged: (v) => _toggleCompletion(context, item, itemIndex),
           ),
 
           const SizedBox(width: 10),
@@ -205,20 +183,12 @@ class DesktopActionGroup extends StatelessWidget {
           const SizedBox(width: 8),
 
           // Quick action button
-          GestureDetector(
-            onTap: () => _showEditActionSheet(context, item, itemIndex),
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: const Icon(
-                FontAwesomeIcons.pen,
-                color: ResponsiveHelper.textSecondary,
-                size: 10,
-              ),
-            ),
+          OmiIconButton(
+            icon: FontAwesomeIcons.pen,
+            onPressed: () => _showEditActionSheet(context, item, itemIndex),
+            style: OmiIconButtonStyle.outline,
+            size: 24,
+            color: ResponsiveHelper.textSecondary,
           ),
         ],
       ),
