@@ -198,6 +198,15 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                     result(granted)
                 }
                 
+            case "bringAppToFront":
+                DispatchQueue.main.async {
+                    NSApp.activate(ignoringOtherApps: true)
+                    self.makeKeyAndOrderFront(nil)
+                    self.orderFrontRegardless()
+                    print("DEBUG: App brought to front after authentication")
+                }
+                result(nil)
+                
             case "start":
                 Task {
                     // Check permissions before starting
