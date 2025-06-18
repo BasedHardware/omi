@@ -7,11 +7,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/auth/custom_post_auth_page.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:google_sign_in/google_sign_in.dart' as standard_google_sign_in;
 import 'package:google_sign_in_all_platforms/google_sign_in_all_platforms.dart' as all_platforms_google_sign_in;
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'package:flutter/services.dart';
 
 /// Generates a cryptographically secure random nonce, to be included in a
 /// credential request.
@@ -31,287 +33,19 @@ String sha256ofString(String input) {
 final String _googleClientId = Env.googleClientId!;
 final String _googleClientSecret = Env.googleClientSecret!;
 
-// Custom HTML page for post-authentication redirect
-const String _customPostAuthHtml = '''
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Authentication Complete - Omi</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            min-height: 100vh;
-            overflow: hidden;
-            position: relative;
-            background: linear-gradient(180deg, #8B5CF6 0%, #EC4899 50%, #F59E0B 100%);
-        }
-        
-        /* Landscape background */
-        .landscape {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 60%;
-            z-index: 1;
-            opacity: 0;
-            animation: fadeIn 1s ease-out 0.1s forwards;
-        }
-        
-        /* Mountains */
-        .mountain-1 {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 80%;
-            background: linear-gradient(45deg, #4C1D95 0%, #7C2D92 100%);
-            clip-path: polygon(0% 100%, 20% 40%, 35% 60%, 50% 20%, 70% 50%, 85% 30%, 100% 70%, 100% 100%);
-            opacity: 0;
-            animation: slideInFromBottom 1.5s ease-out 0.2s forwards;
-        }
-        
-        .mountain-2 {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 60%;
-            background: linear-gradient(45deg, #6B21A8 0%, #BE185D 100%);
-            clip-path: polygon(0% 100%, 15% 60%, 30% 40%, 45% 70%, 60% 20%, 75% 45%, 90% 35%, 100% 80%, 100% 100%);
-            opacity: 0;
-            animation: slideInFromBottom 1.5s ease-out 0.4s forwards;
-        }
-        
-        .mountain-3 {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 40%;
-            background: linear-gradient(45deg, #7C3AED 0%, #EC4899 100%);
-            clip-path: polygon(0% 100%, 25% 50%, 40% 70%, 55% 30%, 70% 60%, 85% 40%, 100% 75%, 100% 100%);
-            opacity: 0;
-            animation: slideInFromBottom 1.5s ease-out 0.6s forwards;
-        }
-        
+// Method channel for native platform calls
+const MethodChannel _screenCaptureChannel = MethodChannel('screenCapturePlatform');
 
-        
-        /* Main content */
-        .container {
-            position: relative;
-            z-index: 10;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: flex-start;
-            min-height: 100vh;
-            text-align: center;
-            padding: 2rem;
-            padding-top: 20vh;
-        }
-        
-        .success-icon {
-            width: 80px;
-            height: 80px;
-            background: white;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 2rem;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-            animation: float 3s ease-in-out infinite;
-        }
-        
-        .success-icon svg {
-            width: 40px;
-            height: 40px;
-            fill: #10B981;
-        }
-        
-        h1 {
-            font-size: 2.5rem;
-            font-weight: 400;
-            color: white;
-            margin: 0;
-            text-shadow: 0 2px 20px rgba(0, 0, 0, 0.2);
-            opacity: 0;
-            animation: fadeInUp 1s ease-out 0.5s forwards;
-        }
-        
-        /* Close instruction */
-        .close-instruction {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            color: white;
-            font-size: 16px;
-            font-weight: 400;
-            margin-top: 2rem;
-            opacity: 0;
-            animation: fadeInUp 1s ease-out 1.2s forwards;
-        }
-        
-        @keyframes float {
-            0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(-10px); }
-        }
-        
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-        
-        @keyframes bounce {
-            0%, 20%, 50%, 80%, 100% {
-                transform: rotate(-25deg) translateY(0);
-            }
-            40% {
-                transform: rotate(-25deg) translateY(-8px);
-            }
-            60% {
-                transform: rotate(-25deg) translateY(-4px);
-            }
-        }
-        
-        /* Subtle particles */
-        .particle {
-            position: absolute;
-            width: 3px;
-            height: 3px;
-            background: rgba(255, 255, 255, 0.7);
-            border-radius: 50%;
-            pointer-events: none;
-            animation: twinkle 4s infinite linear;
-        }
-        
-        @keyframes slideInFromBottom {
-            from {
-                opacity: 0;
-                transform: translateY(100px);
-            }
-            to {
-                opacity: 0.9;
-                transform: translateY(0);
-            }
-        }
-        
-        @keyframes pulse {
-            0%, 100% { 
-                transform: scale(1);
-                opacity: 1;
-            }
-            50% { 
-                transform: scale(1.05);
-                opacity: 0.8;
-            }
-        }
-        
-        @keyframes twinkle {
-            0%, 100% { opacity: 0; transform: scale(0); }
-            50% { opacity: 1; transform: scale(1); }
-        }
-        
-        /* Responsive */
-        @media (max-width: 768px) {
-            h1 {
-                font-size: 2rem;
-            }
-            
-            .success-icon {
-                width: 70px;
-                height: 70px;
-            }
-            
-            .success-icon svg {
-                width: 35px;
-                height: 35px;
-            }
-            
-            .close-instruction {
-                font-size: 14px;
-                margin-top: 1.5rem;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="landscape">
-        <div class="mountain-1"></div>
-        <div class="mountain-2"></div>
-        <div class="mountain-3"></div>
-    </div>
-    
-
-    
-    <div class="container">
-        <div class="success-icon">
-            <svg viewBox="0 0 24 24">
-                <path d="M9,20.42L2.79,14.21L5.21,11.79L9,15.58L18.79,5.79L21.21,8.21L9,20.42Z"/>
-            </svg>
-        </div>
-        
-        <h1>You're all signed in</h1>
-        
-        <div class="close-instruction">
-            <span>Close this window to continue</span>
-        </div>
-    </div>
-    
-    <script>
-        // Create subtle twinkling particles
-        function createParticles() {
-            for (let i = 0; i < 20; i++) {
-                const particle = document.createElement('div');
-                particle.className = 'particle';
-                particle.style.left = Math.random() * 100 + '%';
-                particle.style.top = Math.random() * 50 + '%';
-                particle.style.animationDelay = Math.random() * 4 + 's';
-                document.body.appendChild(particle);
-            }
-        }
-        
-        createParticles();
-        
-        // Auto-close after 3 seconds as backup
-        setTimeout(() => {
-            try {
-                window.close();
-            } catch (e) {
-                console.log('Cannot auto-close window');
-            }
-        }, 3000);
-        
-        // Try to close immediately if possible
-        try {
-            window.close();
-        } catch (e) {
-            console.log('Cannot auto-close window');
-        }
-    </script>
-</body>
-</html>
-''';
+/// Brings the macOS app to the front (macOS only)
+Future<void> _bringAppToFront() async {
+  if (PlatformService.isMacOS) {
+    try {
+      await _screenCaptureChannel.invokeMethod('bringAppToFront');
+    } catch (e) {
+      debugPrint('Error bringing app to front: $e');
+    }
+  }
+}
 
 // Create a single GoogleSignIn instance for all platforms to avoid assertion errors
 all_platforms_google_sign_in.GoogleSignIn? _googleSignInAllPlatforms;
@@ -326,7 +60,7 @@ all_platforms_google_sign_in.GoogleSignIn _getGoogleSignInAllPlatforms() {
         'https://www.googleapis.com/auth/userinfo.email',
       ],
       redirectPort: 5000,
-      customPostAuthPage: _customPostAuthHtml,
+      customPostAuthPage: customPostAuthHtml,
     ),
   );
 }
@@ -400,6 +134,10 @@ Future<UserCredential?> signInWithApple() async {
 
     debugPrint('signInWithApple Name: ${SharedPreferencesUtil().fullName}');
     debugPrint('signInWithApple Email: ${SharedPreferencesUtil().email}');
+    
+    // Bring app to front after successful authentication
+    await _bringAppToFront();
+    
     return userCred;
   } on FirebaseAuthException catch (e) {
     debugPrint('FirebaseAuthException: ${e.code} - ${e.message}');
@@ -573,6 +311,11 @@ Future<UserCredential?> _processGoogleSignInResult(UserCredential result) async 
 
   debugPrint('signInWithGoogle Email: ${SharedPreferencesUtil().email}');
   debugPrint('signInWithGoogle Name: ${SharedPreferencesUtil().givenName}');
+  
+  // Bring app to front after successful authentication
+    _bringAppToFront();
+
+  
   return result;
 }
 
@@ -602,6 +345,10 @@ Future<UserCredential?> _processGoogleSignInResultAllPlatforms(UserCredential re
 
   debugPrint('signInWithGoogle (All Platforms) Email: ${SharedPreferencesUtil().email}');
   debugPrint('signInWithGoogle (All Platforms) Name: ${SharedPreferencesUtil().givenName}');
+  
+  // Bring app to front after successful authentication
+  await _bringAppToFront();
+  
   return result;
 }
 
