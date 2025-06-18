@@ -104,18 +104,8 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
               ),
               onPressed: () => Navigator.of(context).pop(),
             ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: ResponsiveHelper.purplePrimary,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: const Text(
-                'Continue',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                ),
-              ),
+            OmiButton(
+              label: 'Continue',
               onPressed: () {
                 Navigator.of(context).pop();
                 onContinue();

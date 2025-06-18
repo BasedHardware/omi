@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/ui/atoms/omi_avatar.dart';
+import 'package:omi/ui/atoms/omi_badge.dart';
 
 class DesktopConversationCard extends StatefulWidget {
   final ServerConversation conversation;
@@ -138,26 +139,10 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
   Widget _buildModernHeader() {
     return Row(
       children: [
-        // Conversation icon with modern styling
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                ResponsiveHelper.purplePrimary.withOpacity(0.2),
-                ResponsiveHelper.purplePrimary.withOpacity(0.1),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
-              width: 1,
-            ),
-          ),
-          child: Center(
+        // Avatar with emoji fallback
+        OmiAvatar(
+          size: 40,
+          fallback: Center(
             child: Text(
               widget.conversation.structured.getEmoji(),
               style: const TextStyle(fontSize: 18),
@@ -187,28 +172,7 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
 
         // Category chip (moved from left side)
         if (widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
-                width: 1,
-              ),
-            ),
-            child: Text(
-              widget.conversation.getTag(),
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: ResponsiveHelper.purplePrimary,
-                letterSpacing: 0.3,
-              ),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-          ),
+          OmiBadge(label: widget.conversation.getTag()),
 
         const SizedBox(width: 8),
 
@@ -224,62 +188,18 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
       children: [
         // Duration indicator
         if (widget.conversation.transcriptSegments.isNotEmpty && _getConversationDuration().isNotEmpty) ...[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  FontAwesomeIcons.clock,
-                  size: 12,
-                  color: ResponsiveHelper.textTertiary,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  _getConversationDuration(),
-                  style: const TextStyle(
-                    color: ResponsiveHelper.textTertiary,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
+          OmiBadge(
+            label: _getConversationDuration(),
+            color: ResponsiveHelper.textTertiary,
           ),
           const SizedBox(width: 8),
         ],
 
         // Action items indicator
         if (widget.conversation.structured.actionItems.isNotEmpty) ...[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  FontAwesomeIcons.listCheck,
-                  size: 10,
-                  color: ResponsiveHelper.purplePrimary,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  '${widget.conversation.structured.actionItems.length}',
-                  style: const TextStyle(
-                    color: ResponsiveHelper.purplePrimary,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
+          OmiBadge(
+            label: '${widget.conversation.structured.actionItems.length}',
+            color: ResponsiveHelper.purplePrimary,
           ),
           const SizedBox(width: 8),
         ],
@@ -319,65 +239,21 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Timestamp with icon (left aligned with description)
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
-            borderRadius: BorderRadius.circular(6),
+        OmiBadge(
+          label: dateTimeFormat(
+            'MMM d, h:mm a',
+            widget.conversation.startedAt ?? widget.conversation.createdAt,
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                FontAwesomeIcons.calendar,
-                size: 12,
-                color: ResponsiveHelper.textTertiary,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                dateTimeFormat(
-                  'MMM d, h:mm a',
-                  widget.conversation.startedAt ?? widget.conversation.createdAt,
-                ),
-                style: const TextStyle(
-                  color: ResponsiveHelper.textTertiary,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
+          color: ResponsiveHelper.textTertiary,
         ),
 
         const Spacer(),
 
         // Additional metadata
         if (widget.conversation.transcriptSegments.isNotEmpty) ...[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  FontAwesomeIcons.microphone,
-                  size: 12,
-                  color: ResponsiveHelper.textTertiary,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  '${widget.conversation.transcriptSegments.length} segments',
-                  style: const TextStyle(
-                    color: ResponsiveHelper.textTertiary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
+          OmiBadge(
+            label: '${widget.conversation.transcriptSegments.length} segments',
+            color: ResponsiveHelper.textTertiary,
           ),
         ],
       ],

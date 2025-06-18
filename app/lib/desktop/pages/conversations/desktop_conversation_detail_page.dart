@@ -11,6 +11,10 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/transcript.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/ui/atoms/omi_icon_button.dart';
+import 'package:omi/ui/atoms/omi_avatar.dart';
+import 'package:omi/ui/molecules/omi_panel_header.dart';
+import 'package:omi/ui/molecules/omi_empty_state.dart';
 
 import 'widgets/desktop_action_items_section.dart';
 import 'widgets/desktop_conversation_summary.dart';
@@ -144,7 +148,7 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
             ),
             child: Column(
               children: [
-                if (widget.showBackButton) _buildModernAppBar(),
+                if (widget.showBackButton) _buildAppBar(),
 
                 // Main content area
                 Expanded(
@@ -204,7 +208,7 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
     );
   }
 
-  Widget _buildModernAppBar() {
+  Widget _buildAppBar() {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
       decoration: BoxDecoration(
@@ -219,37 +223,25 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
       child: Row(
         children: [
           if (widget.showBackButton) ...[
-            Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: widget.onBackPressed ?? () => Navigator.pop(context),
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    FontAwesomeIcons.arrowLeft,
-                    color: ResponsiveHelper.textSecondary,
-                    size: 16,
-                  ),
-                ),
+            MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: OmiIconButton(
+                icon: Icons.arrow_back_rounded,
+                onPressed: widget.onBackPressed ?? () => Navigator.pop(context),
+                style: OmiIconButtonStyle.outline,
+                borderOpacity: 0.12,
               ),
             ),
             const SizedBox(width: 16),
           ],
 
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              widget.conversation.structured.getEmoji(),
-              style: const TextStyle(fontSize: 16),
+          OmiAvatar(
+            size: 32,
+            fallback: Center(
+              child: Text(
+                widget.conversation.structured.getEmoji(),
+                style: const TextStyle(fontSize: 16),
+              ),
             ),
           ),
 
@@ -287,14 +279,10 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
               onTap: () {
                 if (_showTranscript) {
                   _transcriptAnimationController.reverse().then((_) {
-                    setState(() {
-                      _showTranscript = false;
-                    });
+                    setState(() => _showTranscript = false);
                   });
                 } else {
-                  setState(() {
-                    _showTranscript = true;
-                  });
+                  setState(() => _showTranscript = true);
                   _transcriptAnimationController.forward();
                 }
               },
@@ -302,13 +290,12 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  color: _showTranscript ? ResponsiveHelper.purplePrimary.withOpacity(0.15) : ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+                  color: _showTranscript
+                      ? ResponsiveHelper.purplePrimary.withOpacity(0.15)
+                      : ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
                   borderRadius: BorderRadius.circular(12),
                   border: _showTranscript
-                      ? Border.all(
-                          color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
-                          width: 1,
-                        )
+                      ? Border.all(color: ResponsiveHelper.purplePrimary.withOpacity(0.3), width: 1)
                       : null,
                 ),
                 child: Row(
@@ -375,10 +362,13 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
                 ),
                 child: const Row(
                   children: [
-                    Icon(
-                      FontAwesomeIcons.fileAlt,
-                      color: ResponsiveHelper.textSecondary,
-                      size: 16,
+                    OmiIconButton(
+                      icon: FontAwesomeIcons.fileLines,
+                      style: OmiIconButtonStyle.neutral,
+                      size: 24,
+                      iconSize: 12,
+                      borderRadius: 6,
+                      onPressed: null,
                     ),
                     SizedBox(width: 8),
                     Text(
@@ -470,76 +460,20 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
               ),
               child: Column(
                 children: [
-                  // Transcript header
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
-                      border: Border(
-                        bottom: BorderSide(
-                          color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
-                          width: 1,
-                        ),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          FontAwesomeIcons.fileLines,
-                          color: ResponsiveHelper.textSecondary,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 12),
-                        const Text(
-                          'Transcript',
-                          style: TextStyle(
-                            color: ResponsiveHelper.textPrimary,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const Spacer(),
-                        if (widget.conversation.transcriptSegments.isNotEmpty)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              '${widget.conversation.transcriptSegments.length} segments',
-                              style: const TextStyle(
-                                color: ResponsiveHelper.textTertiary,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        const SizedBox(width: 12),
-                        // Close button
-                        Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () {
-                              _transcriptAnimationController.reverse().then((_) {
-                                setState(() {
-                                  _showTranscript = false;
-                                });
-                              });
-                            },
-                            borderRadius: BorderRadius.circular(8),
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              child: const Icon(
-                                FontAwesomeIcons.xmark,
-                                color: ResponsiveHelper.textSecondary,
-                                size: 16,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                  // Transcript header (replaced with OmiPanelHeader)
+                  OmiPanelHeader(
+                    icon: FontAwesomeIcons.fileLines,
+                    title: 'Transcript',
+                    badgeLabel: widget.conversation.transcriptSegments.isNotEmpty
+                        ? '${widget.conversation.transcriptSegments.length} segments'
+                        : null,
+                    onClose: () {
+                      _transcriptAnimationController.reverse().then((_) {
+                        setState(() {
+                          _showTranscript = false;
+                        });
+                      });
+                    },
                   ),
 
                   // Transcript content
@@ -565,46 +499,10 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
   }
 
   Widget _buildEmptyTranscript() {
-    return Center(
-      child: Container(
-        padding: const EdgeInsets.all(40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Icon(
-                FontAwesomeIcons.fileLines,
-                size: 48,
-                color: ResponsiveHelper.purplePrimary,
-              ),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'No Transcript Available',
-              style: TextStyle(
-                color: ResponsiveHelper.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'This conversation doesn\'t have a transcript.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: ResponsiveHelper.textSecondary,
-                fontSize: 14,
-                height: 1.5,
-              ),
-            ),
-          ],
-        ),
-      ),
+    return const OmiEmptyState(
+      icon: FontAwesomeIcons.fileLines,
+      title: 'No Transcript Available',
+      message: 'This conversation doesn\'t have a transcript.',
     );
   }
 }

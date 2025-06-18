@@ -204,7 +204,7 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
     showDialog(
       context: context,
       barrierDismissible: true,
-      barrierColor: Colors.black.withOpacity(0.6),
+      barrierColor: Colors.black.withValues(alpha: 0.6),
       builder: (BuildContext context) {
         return Dialog(
           backgroundColor: Colors.transparent,
@@ -215,17 +215,17 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
               color: ResponsiveHelper.backgroundSecondary,
               borderRadius: BorderRadius.circular(responsive.radiusLarge),
               border: Border.all(
-                color: ResponsiveHelper.backgroundTertiary.withOpacity(0.5),
+                color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
                 width: 1,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.25),
+                  color: Colors.black.withValues(alpha: 0.25),
                   blurRadius: 32,
                   offset: const Offset(0, 16),
                 ),
                 BoxShadow(
-                  color: ResponsiveHelper.purplePrimary.withOpacity(0.1),
+                  color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.1),
                   blurRadius: 16,
                   offset: const Offset(0, 8),
                 ),
@@ -259,7 +259,7 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
                             Container(
                               padding: EdgeInsets.all(responsive.spacing(baseSpacing: 8)),
                               decoration: BoxDecoration(
-                                color: ResponsiveHelper.purplePrimary.withOpacity(0.1),
+                                color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(responsive.radiusSmall),
                               ),
                               child: const Icon(
@@ -285,10 +285,10 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
                         Container(
                           padding: EdgeInsets.all(responsive.spacing(baseSpacing: 16)),
                           decoration: BoxDecoration(
-                            color: ResponsiveHelper.backgroundSecondary.withOpacity(0.8),
+                            color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.8),
                             borderRadius: BorderRadius.circular(responsive.radiusSmall),
                             border: Border.all(
-                              color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                              color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                               width: 1,
                             ),
                           ),
@@ -301,7 +301,7 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
                                   borderRadius: BorderRadius.circular(responsive.radiusSmall),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withOpacity(0.1),
+                                      color: Colors.black.withValues(alpha: 0.1),
                                       blurRadius: 4,
                                       offset: const Offset(0, 2),
                                     ),
@@ -351,10 +351,10 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
                         Container(
                           padding: EdgeInsets.all(responsive.spacing(baseSpacing: 20)),
                           decoration: BoxDecoration(
-                            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                            color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                             borderRadius: BorderRadius.circular(responsive.radiusSmall),
                             border: Border.all(
-                              color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                              color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                               width: 1,
                             ),
                           ),
@@ -396,7 +396,7 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
                         Container(
                           padding: EdgeInsets.all(responsive.spacing(baseSpacing: 16)),
                           decoration: BoxDecoration(
-                            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.2),
+                            color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(responsive.radiusSmall),
                           ),
                           child: Column(

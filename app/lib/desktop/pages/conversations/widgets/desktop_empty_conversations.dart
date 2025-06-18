@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/ui/atoms/omi_icon_button.dart';
+import 'package:omi/ui/molecules/omi_empty_state.dart';
 
 class DesktopEmptyConversations extends StatelessWidget {
   const DesktopEmptyConversations({super.key});
@@ -11,50 +13,16 @@ class DesktopEmptyConversations extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              color: ResponsiveHelper.backgroundSecondary,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: ResponsiveHelper.backgroundTertiary.withOpacity(0.5),
-                width: 1,
-              ),
-            ),
-            child: const Icon(
-              Icons.forum_rounded,
-              color: ResponsiveHelper.textTertiary,
-              size: 28,
-            ),
+          const OmiEmptyState(
+            icon: Icons.forum_rounded,
+            title: 'No conversations yet',
+            message: 'Start capturing conversations with your Omi device to see them here.',
+            iconSize: 48,
+            iconPadding: 24,
+            color: ResponsiveHelper.purplePrimary,
           ),
 
-          const SizedBox(height: 24),
-
-          const Text(
-            'No conversations yet',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w500,
-              color: ResponsiveHelper.textPrimary,
-              letterSpacing: -0.3,
-            ),
-            textAlign: TextAlign.center,
-          ),
-
-          const SizedBox(height: 8),
-
-          const Text(
-            'Start capturing conversations with your Omi device to see them here.',
-            style: TextStyle(
-              fontSize: 14,
-              color: ResponsiveHelper.textTertiary,
-              height: 1.4,
-            ),
-            textAlign: TextAlign.center,
-          ),
-
-          const SizedBox(height: 32),
+          const SizedBox(height: 16),
 
           Container(
             padding: const EdgeInsets.all(20),
@@ -96,18 +64,14 @@ class DesktopEmptyConversations extends StatelessWidget {
   }) {
     return Row(
       children: [
-        Container(
-          width: 20,
-          height: 20,
-          decoration: BoxDecoration(
-            color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Icon(
-            icon,
-            size: 12,
-            color: ResponsiveHelper.purplePrimary,
-          ),
+        OmiIconButton(
+          icon: icon,
+          style: OmiIconButtonStyle.filled,
+          color: ResponsiveHelper.purplePrimary,
+          size: 20,
+          iconSize: 12,
+          borderRadius: 4,
+          onPressed: null,
         ),
         const SizedBox(width: 12),
         Expanded(

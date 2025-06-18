@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/ui/adaptive_widget.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
-enum OmiButtonType { primary, text }
+enum OmiButtonType { primary, text, neutral }
 
 class OmiButton extends AdaptiveWidget {
   final String label;
@@ -51,7 +51,6 @@ class OmiButton extends AdaptiveWidget {
           ),
         );
       case OmiButtonType.primary:
-      default:
         final primaryColor = color ?? ResponsiveHelper.purplePrimary;
         final primaryAccent = color ?? ResponsiveHelper.purpleAccent;
 
@@ -94,6 +93,38 @@ class OmiButton extends AdaptiveWidget {
                       color: Colors.white,
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      case OmiButtonType.neutral:
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: enabled ? onPressed : null,
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (icon != null) ...[
+                    Icon(icon, size: 12, color: enabled ? ResponsiveHelper.textSecondary : ResponsiveHelper.textQuaternary),
+                    const SizedBox(width: 6),
+                  ],
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: enabled ? ResponsiveHelper.textSecondary : ResponsiveHelper.textQuaternary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],

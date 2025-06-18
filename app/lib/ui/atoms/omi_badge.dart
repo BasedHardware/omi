@@ -8,6 +8,7 @@ class OmiBadge extends AdaptiveWidget {
   final double fontSize;
   final EdgeInsetsGeometry padding;
   final double borderRadius;
+  final Color? backgroundColor;
   const OmiBadge({
     super.key,
     required this.label,
@@ -15,6 +16,7 @@ class OmiBadge extends AdaptiveWidget {
     this.fontSize = 10,
     this.padding = const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
     this.borderRadius = 6,
+    this.backgroundColor,
   });
 
   @override
@@ -26,7 +28,7 @@ class OmiBadge extends AdaptiveWidget {
   Widget _base() => Container(
         padding: padding,
         decoration: BoxDecoration(
-          color: color.withOpacity(0.15),
+          color: backgroundColor ?? color.withOpacity(0.15),
           borderRadius: BorderRadius.circular(borderRadius),
         ),
         child: Text(
