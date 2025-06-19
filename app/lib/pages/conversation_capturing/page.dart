@@ -130,6 +130,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                   provider.segments,
                                   [],
                                   deviceProvider.connectedDevice,
+                                  recordingState: provider.recordingState,
                                 ),
                               ),
                         // Summary Tab
