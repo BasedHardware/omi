@@ -944,9 +944,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                     ),
                   ),
                   child: Center(
-                    child: FirebaseAuth.instance.currentUser?.photoURL != null
-                        ? Image.network(FirebaseAuth.instance.currentUser!.photoURL!)
-                        : Text(
+                    child:Text(
                             userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
                             style: const TextStyle(
                               color: ResponsiveHelper.purplePrimary,
