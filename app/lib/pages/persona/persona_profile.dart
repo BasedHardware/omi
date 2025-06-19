@@ -284,7 +284,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    SvgPicture.asset(Assets.images.linkIcon.path),
+                                    SvgPicture.asset(Assets.images.linkIcon),
                                     const SizedBox(width: 14),
                                     Text(
                                       'Share Public Link',

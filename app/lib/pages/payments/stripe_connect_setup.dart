@@ -92,7 +92,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                           shape: BoxShape.circle,
                         ),
                         child: SvgPicture.asset(
-                          Assets.images.stripeLogo.path,
+                          Assets.images.stripeLogo,
                           width: 40,
                           color: Colors.white,
                         ),

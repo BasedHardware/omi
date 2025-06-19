@@ -436,7 +436,7 @@ class DesktopAppMetadataWidget extends StatelessWidget {
                       ),
                     ),
                     child: SvgPicture.asset(
-                      Assets.images.aiMagic.path,
+                      Assets.images.aiMagic,
                       color: ResponsiveHelper.purplePrimary,
                       width: 16,
                       height: 16,

@@ -617,7 +617,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> stopSystemAudioRecording() async {
-    if (!Platform.isMacOS) return;
+    if (!PlatformService.isDesktop) return;
     ServiceManager.instance().systemAudio.stop();
     _isPaused = false; // Clear paused state when stopping
     await _socket?.stop(reason: 'stop system audio recording from Flutter');
@@ -625,7 +625,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> pauseSystemAudioRecording() async {
-    if (!Platform.isMacOS) return;
+    if (!PlatformService.isDesktop) return;
     ServiceManager.instance().systemAudio.stop();
     _isPaused = true; // Set paused state
     await _socket?.stop(reason: 'pause system audio recording from Flutter');
@@ -634,7 +634,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> resumeSystemAudioRecording() async {
-    if (!Platform.isMacOS) return;
+    if (!PlatformService.isDesktop) return;
     _isPaused = false; // Clear paused state
     await streamSystemAudioRecording(); // Restart recording
   }
@@ -666,7 +666,7 @@ class CaptureProvider extends ChangeNotifier
         await _initiateWebsocket(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
         return;
       }
-      if (recordingState == RecordingState.systemAudioRecord && Platform.isMacOS) {
+      if (recordingState == RecordingState.systemAudioRecord && PlatformService.isDesktop) {
         debugPrint("[Provider] System audio was recording, but socket disconnected. Consider manual restart.");
       }
     });
