@@ -36,9 +36,9 @@ final String _googleClientSecret = Env.googleClientSecret!;
 // Method channel for native platform calls
 const MethodChannel _screenCaptureChannel = MethodChannel('screenCapturePlatform');
 
-/// Brings the macOS app to the front (macOS only)
+/// Brings the desktop app to the front (macOS and Windows)
 Future<void> _bringAppToFront() async {
-  if (PlatformService.isMacOS) {
+  if (PlatformService.isDesktop) {
     try {
       await _screenCaptureChannel.invokeMethod('bringAppToFront');
     } catch (e) {

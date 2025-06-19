@@ -247,18 +247,24 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     }
     
     private func startAudioEngineAndCapture() throws {
+        // Ensure engine is prepared before starting
         if !audioEngine.isRunning {
-            try audioEngine.start()
-            print("DEBUG: AVAudioEngine started with simplified pipeline.")
+            do {
+                try audioEngine.start()
+                print("DEBUG: AVAudioEngine started with simplified pipeline.")
+            } catch {
+                print("ERROR: Failed to start AVAudioEngine: \(error.localizedDescription)")
+                throw AudioManagerError.engineStartError("Failed to start audio engine: \(error.localizedDescription)")
+            }
         }
         
-        // Start the SCStream player node
-        if scStreamPlayerNode.engine != nil && !scStreamPlayerNode.isPlaying {
-            scStreamPlayerNode.play()
-            print("DEBUG: SCStream player node started.")
+        // Wait for engine to be fully running before starting player node
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self = self else { return }
+            self.safelyStartPlayerNode()
         }
         
-        print("DEBUG: Audio engine running, ready to receive SCStream audio.")
+        print("DEBUG: Audio engine startup sequence initiated.")
     }
     
     private func recordSCStream(filter: SCContentFilter) async {
@@ -285,6 +291,30 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     
     private func updateAudioSettings(sampleRate: Double, channels: AVAudioChannelCount) {
         audioSettings = [AVSampleRateKey: sampleRate, AVNumberOfChannelsKey: channels]
+    }
+    
+    private func safelyStartPlayerNode() {
+        guard audioEngine.isRunning else {
+            print("ERROR: Cannot start player node - audio engine not running")
+            return
+        }
+        
+        guard scStreamPlayerNode.engine != nil else {
+            print("ERROR: Player node not attached to engine")
+            return
+        }
+        
+        guard !scStreamPlayerNode.isPlaying else {
+            print("DEBUG: Player node already playing")
+            return
+        }
+        
+        do {
+            scStreamPlayerNode.play()
+            print("DEBUG: SCStream player node started safely")
+        } catch {
+            print("ERROR: Failed to start player node safely: \(error.localizedDescription)")
+        }
     }
     
     // MARK: - SCStream Delegate Methods
@@ -348,8 +378,13 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
                 scStreamPlayerNode.scheduleBuffer(processedBuffer, completionHandler: nil)
             } else {
                 print("Warning: SCStream player node was not playing. Attempting to start and schedule.")
-                scStreamPlayerNode.play()
-                scStreamPlayerNode.scheduleBuffer(processedBuffer, completionHandler: nil)
+                safelyStartPlayerNode()
+                // Give a small delay to ensure the node is ready
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+                    if self.scStreamPlayerNode.isPlaying {
+                        self.scStreamPlayerNode.scheduleBuffer(processedBuffer, completionHandler: nil)
+                    }
+                }
             }
         }
     }
