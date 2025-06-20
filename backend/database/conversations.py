@@ -260,7 +260,7 @@ def get_conversations_to_migrate(uid: str, target_level: str) -> List[dict]:
 
 def migrate_conversation_level(uid: str, conversation_id: str, target_level: str):
     """
-    Migrates a single conversation to the target protection level.
+    Migrates a single conversation and its photos to the target protection level, committing in batches of 450.
     """
     doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
     doc_snapshot = doc_ref.get()
@@ -291,7 +291,11 @@ def migrate_conversation_level(uid: str, conversation_id: str, target_level: str
     if not update_data.get('transcript_segments_compressed'):
         update_data['transcript_segments_compressed'] = firestore.DELETE_FIELD
 
-    doc_ref.update(update_data)
+    batch = db.batch()
+    batch_count = 0
+
+    batch.update(doc_ref, update_data)
+    batch_count += 1
 
     # Now migrate photos in the sub-collection
     photos_ref = doc_ref.collection('photos')
@@ -307,15 +311,23 @@ def migrate_conversation_level(uid: str, conversation_id: str, target_level: str
         # Re-prepare for write with the new level
         prepared_photo_data = _prepare_photo_for_write(plain_photo_data, uid, target_level)
         # Update the photo document
-        photo_doc.reference.update(prepared_photo_data)
+        batch.update(photo_doc.reference, prepared_photo_data)
+        batch_count += 1
+        if batch_count >= 450:
+            batch.commit()
+            batch = db.batch()
+            batch_count = 0
+
+    if batch_count > 0:
+        batch.commit()
 
 
 def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], target_level: str):
     """
-    Migrates a batch of conversations to the target protection level.
-    WARNING: This can be heavy. One conversation + its photos count as multiple operations in a batch.
+    Migrates a batch of conversations to the target protection level, committing in batches of 450.
     """
     batch = db.batch()
+    batch_count = 0
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     doc_refs = [conversations_ref.document(conv_id) for conv_id in conversation_ids]
     doc_snapshots = db.get_all(doc_refs)
@@ -350,6 +362,11 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             update_data['transcript_segments_compressed'] = firestore.DELETE_FIELD
 
         batch.update(doc_snapshot.reference, update_data)
+        batch_count += 1
+        if batch_count >= 450:
+            batch.commit()
+            batch = db.batch()
+            batch_count = 0
 
         # Now migrate photos for this conversation in the same batch
         photos_ref = doc_snapshot.reference.collection('photos')
@@ -366,8 +383,14 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             prepared_photo_data = _prepare_photo_for_write(plain_photo_data, uid, target_level)
             # Add photo update to the batch
             batch.update(photo_doc.reference, prepared_photo_data)
+            batch_count += 1
+            if batch_count >= 450:
+                batch.commit()
+                batch = db.batch()
+                batch_count = 0
 
-    batch.commit()
+    if batch_count > 0:
+        batch.commit()
 
 
 # **************************************
