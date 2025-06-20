@@ -1,53 +1,84 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
-import 'package:omi/widgets/dialog.dart';
-import 'package:provider/provider.dart';
-import 'package:tuple/tuple.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/widgets/photo_viewer_page.dart';
 
 class PhotosGridComponent extends StatelessWidget {
-  const PhotosGridComponent({super.key});
+  final List<ConversationPhoto> photos;
+  const PhotosGridComponent({super.key, required this.photos});
 
   @override
   Widget build(BuildContext context) {
-    return Selector<ConversationDetailProvider, List<Tuple2<String, String>>>(
-        selector: (context, provider) => provider.photosData,
-        builder: (context, photos, child) {
-          return GridView.builder(
-            padding: EdgeInsets.zero,
-            shrinkWrap: true,
-            scrollDirection: Axis.vertical,
-            itemCount: photos.length,
-            physics: const NeverScrollableScrollPhysics(),
-            itemBuilder: (context, idx) {
-              return GestureDetector(
-                onTap: () {
-                  showDialog(
-                      context: context,
-                      builder: (c) {
-                        return getDialog(
-                          context,
-                          () => Navigator.pop(context),
-                          () => Navigator.pop(context),
-                          'Description',
-                          photos[idx].item2,
-                          singleButton: true,
-                        );
-                      });
-                },
-                child: Container(
-                  decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade600, width: 0.5)),
-                  child: Image.memory(base64Decode(photos[idx].item1), fit: BoxFit.cover),
+    return GridView.builder(
+      padding: EdgeInsets.zero,
+      scrollDirection: Axis.vertical,
+      itemCount: photos.length,
+      itemBuilder: (context, idx) {
+        final photo = photos[idx];
+        final isProcessing = !photo.discarded && photo.description == null;
+
+        return GestureDetector(
+          key: ValueKey(photo.id),
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => PhotoViewerPage(
+                  photos: photos,
+                  initialIndex: idx,
                 ),
-              );
-            },
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
+              ),
+            );
+          },
+          child: Hero(
+            tag: photo.id,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8.0),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.memory(
+                    base64Decode(photo.base64),
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                    color: photo.discarded ? Colors.grey.shade800 : null,
+                    colorBlendMode: photo.discarded ? BlendMode.saturation : null,
+                  ),
+                  if (photo.discarded)
+                    Container(
+                      color: Colors.black.withOpacity(0.5),
+                      child: const Icon(
+                        Icons.visibility_off_outlined,
+                        color: Colors.white70,
+                        size: 28,
+                      ),
+                    ),
+                  if (isProcessing)
+                    Container(
+                      color: Colors.black.withOpacity(0.5),
+                      child: const Center(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.0,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
-          );
-        });
+          ),
+        );
+      },
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+        childAspectRatio: 800 / 600,
+      ),
+    );
   }
 }

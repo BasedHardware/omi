@@ -1,89 +1,132 @@
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 
-enum MessageEventType {
-  // newMemoryCreating('new_memory_creating'),
-  // newMemoryCreated('new_memory_created'),
-  conversationCreated('conversation_created'),
-  newConversationCreateFailed('new_conversation_create_failed'),
-  newProcessingConversationCreated('new_processing_conversation_created'),
-  conversationProcessingStarted('conversation_processing_started'),
-  processingConversationStatusChanged('processing_conversation_status_changed'),
-  ping('ping'),
-  conversationBackwardSynced('conversation_backward_synced'),
-  serviceStatus('service_status'),
-  lastConversation('last_conversation'),
-  translating('translating'),
-  unknown('unknown'),
-  ;
+abstract class MessageEvent {
+  final String eventType;
 
-  final String value;
-  const MessageEventType(this.value);
+  MessageEvent({required this.eventType});
 
-  static MessageEventType valuesFromString(String value) {
-    // Mapping of old event names to new event names
-    const Map<String, String> eventRenameMapping = {
-      "memory_created": "conversation_created",
-      "new_memory_create_failed": "new_conversation_create_failed",
-      "new_processing_memory_created": "new_processing_conversation_created",
-      "memory_processing_started": "conversation_processing_started",
-      "processing_memory_status_changed": "processing_conversation_status_changed",
-      "memory_backward_synced": "conversation_backward_synced",
-      "last_memory": "last_conversation",
-    };
+  factory MessageEvent.fromJson(Map<String, dynamic> json) {
+    switch (json['type']) {
+      case 'service_status':
+        return MessageServiceStatusEvent.fromJson(json);
+      case 'memory_processing_started':
+        return ConversationProcessingStartedEvent.fromJson(json);
+      case 'memory_created':
+        return ConversationEvent.fromJson(json);
+      case 'last_memory':
+        return LastConversationEvent.fromJson(json);
+      case 'translating':
+        return TranslationEvent.fromJson(json);
+      case 'photo_processing':
+        return PhotoProcessingEvent.fromJson(json);
+      case 'photo_described':
+        return PhotoDescribedEvent.fromJson(json);
+      default:
+        // Return a generic event or throw an error if the type is unknown
+        return UnknownEvent(eventType: json['type'] ?? 'unknown');
+    }
+  }
+}
 
-    // Check if the event name is in the mapping, otherwise use the original value
-    String mappedValue = eventRenameMapping[value] ?? value;
+class UnknownEvent extends MessageEvent {
+  UnknownEvent({required super.eventType});
+}
 
-    return MessageEventType.values.firstWhere(
-      (e) => e.value == mappedValue,
-      orElse: () => MessageEventType.unknown,
+class MessageServiceStatusEvent extends MessageEvent {
+  final String status;
+  final String? statusText;
+
+  MessageServiceStatusEvent({required this.status, this.statusText}) : super(eventType: 'service_status');
+
+  factory MessageServiceStatusEvent.fromJson(Map<String, dynamic> json) {
+    return MessageServiceStatusEvent(
+      status: json['status'],
+      statusText: json['status_text'],
     );
   }
 }
 
-class ServerMessageEvent {
-  MessageEventType type;
-  ServerConversation? conversation;
-  List<ServerMessage>? messages;
-  String? name;
-  String? status;
-  String? statusText;
-  String? memoryId;
-  List<TranscriptSegment>? segments;
+class ConversationProcessingStartedEvent extends MessageEvent {
+  final ServerConversation memory;
 
-  ServerMessageEvent(
-    this.type,
-    this.conversation,
-    this.messages,
-    this.name,
-    this.status,
-    this.statusText,
-    this.memoryId,
-    this.segments,
-  );
+  ConversationProcessingStartedEvent({required this.memory}) : super(eventType: 'memory_processing_started');
 
-  static ServerMessageEvent fromJson(Map<String, dynamic> json) {
-    return ServerMessageEvent(
-      MessageEventType.valuesFromString(json['type']),
-      // json['memory_id'],
-      // json['processing_memory_id'],
-      json['memory'] != null
-          ? ServerConversation.fromJson(json['memory'])
-          : (json['conversation'] != null ? ServerConversation.fromJson(json['conversation']) : null),
-      ((json['messages'] ?? []) as List<dynamic>).map((message) => ServerMessage.fromJson(message)).toList(),
-      // json['processing_memory_status'] != null
-      //     ? ServerProcessingMemoryStatus.valuesFromString(json['processing_memory_status'])
-      //     : null,
+  factory ConversationProcessingStartedEvent.fromJson(Map<String, dynamic> json) {
+    return ConversationProcessingStartedEvent(
+      memory: ServerConversation.fromJson(json['memory']),
+    );
+  }
+}
 
-      json['name'],
-      json['status'],
-      json['status_text'],
-      json['memory_id'] ?? json['conversation_id'],
-      json['segments'] != null 
-          ? (json['segments'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList()
-          : null,
+class ConversationEvent extends MessageEvent {
+  final ServerConversation memory;
+  final List messages;
+
+  ConversationEvent({required this.memory, required this.messages}) : super(eventType: 'memory_created');
+
+  factory ConversationEvent.fromJson(Map<String, dynamic> json) {
+    return ConversationEvent(
+      memory: ServerConversation.fromJson(json['memory']),
+      messages: json['messages'] ?? [],
+    );
+  }
+}
+
+class LastConversationEvent extends MessageEvent {
+  final String memoryId;
+
+  LastConversationEvent({required this.memoryId}) : super(eventType: 'last_memory');
+
+  factory LastConversationEvent.fromJson(Map<String, dynamic> json) {
+    return LastConversationEvent(
+      memoryId: json['memory_id'],
+    );
+  }
+}
+
+class TranslationEvent extends MessageEvent {
+  final List<TranscriptSegment> segments;
+
+  TranslationEvent({required this.segments}) : super(eventType: 'translating');
+
+  factory TranslationEvent.fromJson(Map<String, dynamic> json) {
+    return TranslationEvent(
+      segments: (json['segments'] as List<dynamic>).map((s) => TranscriptSegment.fromJson(s)).toList(),
+    );
+  }
+}
+
+class PhotoProcessingEvent extends MessageEvent {
+  final String tempId;
+  final String photoId;
+
+  PhotoProcessingEvent({required this.tempId, required this.photoId}) : super(eventType: 'photo_processing');
+
+  factory PhotoProcessingEvent.fromJson(Map<String, dynamic> json) {
+    return PhotoProcessingEvent(
+      tempId: json['temp_id'],
+      photoId: json['photo_id'],
+    );
+  }
+}
+
+class PhotoDescribedEvent extends MessageEvent {
+  final String photoId;
+  final String description;
+  final bool discarded;
+
+  PhotoDescribedEvent({
+    required this.photoId,
+    required this.description,
+    this.discarded = false,
+  }) : super(eventType: 'photo_described');
+
+  factory PhotoDescribedEvent.fromJson(Map<String, dynamic> json) {
+    return PhotoDescribedEvent(
+      photoId: json['photo_id'],
+      description: json['description'],
+      discarded: json['discarded'] ?? false,
     );
   }
 }

@@ -1,14 +1,12 @@
-
 import 'package:flutter/material.dart';
-import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
+import 'package:omi/widgets/photos_grid.dart';
 import 'package:provider/provider.dart';
 
 class ConversationCapturingPage extends StatefulWidget {
@@ -67,7 +65,6 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   Widget build(BuildContext context) {
     return Consumer2<CaptureProvider, DeviceProvider>(
       builder: (context, provider, deviceProvider, child) {
-        var conversationSource = ConversationSource.omi;
         return PopScope(
           canPop: true,
           child: Scaffold(
@@ -89,18 +86,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                     icon: const Icon(Icons.arrow_back_rounded, size: 24.0),
                   ),
                   const SizedBox(width: 4),
-                  const Text("🎙️"),
+                  Text(provider.photos.isNotEmpty ? "📸" : "🎙️"),
                   const SizedBox(width: 4),
                   const Expanded(child: Text("In progress")),
-                  if (SharedPreferencesUtil().devModeJoanFollowUpEnabled)
-                    IconButton(
-                      onPressed: () async {
-                        getFollowUpQuestion().then((v) {
-                          debugPrint('Follow up question: $v');
-                        });
-                      },
-                      icon: const Icon(Icons.question_answer),
-                    )
                 ],
               ),
             ),
@@ -113,24 +101,19 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                       controller: _controller,
                       physics: const NeverScrollableScrollPhysics(),
                       children: [
-                        // Transcript Tab
-                        provider.segments.isEmpty
-                            ? Center(
+                        // Transcripts, photos
+                        provider.segments.isEmpty && provider.photos.isEmpty
+                            ? const Center(
                                 child: Padding(
-                                  padding: const EdgeInsets.only(bottom: 50.0), // Adjust padding to roughly center
-                                  child: Text(
-                                    conversationSource == ConversationSource.omi ? "No transcript" : "Empty",
-                                  ),
+                                  padding: EdgeInsets.only(top: 50.0),
+                                  child: Text("Waiting for transcript or photos..."),
                                 ),
                               )
-                            : Padding(
-                                padding: const EdgeInsets.only(bottom: 80),
-                                child: getTranscriptWidget(
-                                  false,
-                                  provider.segments,
-                                  [],
-                                  deviceProvider.connectedDevice,
-                                ),
+                            : getTranscriptWidget(
+                                false,
+                                provider.segments,
+                                provider.photos,
+                                deviceProvider.connectedDevice,
                               ),
                         // Summary Tab
                         Center(
@@ -138,8 +121,8 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                             padding:
                                 const EdgeInsets.symmetric(horizontal: 32.0).copyWith(bottom: 50.0), // Adjust padding
                             child: Text(
-                              provider.segments.isEmpty
-                                  ? "No summary"
+                              provider.segments.isEmpty && provider.photos.isEmpty
+                                  ? "No summary yet"
                                   : "Conversation is summarized after 2 minutes of no speech 🤫",
                               textAlign: TextAlign.center,
                               style: TextStyle(fontSize: provider.segments.isEmpty ? 16 : 22),
@@ -156,18 +139,18 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
             floatingActionButton: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                provider.segments.isEmpty
+                (provider.segments.isEmpty && provider.photos.isEmpty)
                     ? const SizedBox()
                     : ConversationBottomBar(
                         mode: ConversationBottomBarMode.recording,
                         selectedTab: _controller!.index == 0 ? ConversationTab.transcript : ConversationTab.summary,
-                        hasSegments: provider.segments.isNotEmpty,
+                        hasSegments: provider.segments.isNotEmpty || provider.photos.isNotEmpty,
                         onTabSelected: (tab) {
                           _controller!.animateTo(tab == ConversationTab.transcript ? 0 : 1);
                           setState(() {});
                         },
                         onStopPressed: () {
-                          if (provider.segments.isNotEmpty) {
+                          if (provider.segments.isNotEmpty || provider.photos.isNotEmpty) {
                             if (!showSummarizeConfirmation) {
                               context.read<CaptureProvider>().forceProcessingCurrentConversation();
                               Navigator.of(context).pop();
@@ -188,7 +171,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                         setState(() {
                                           showSummarizeConfirmation = !value;
                                         });
-                                                                            },
+                                      },
                                       onCancel: () {
                                         Navigator.of(context).pop();
                                       },

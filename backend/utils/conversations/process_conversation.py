@@ -30,7 +30,6 @@ from utils.llm.conversation_processing import get_transcript_structure, \
     get_reprocess_transcript_structure
 from utils.llm.memories import extract_memories_from_text, new_memories_extractor
 from utils.llm.external_integrations import summarize_experience_text
-from utils.llm.openglass import summarize_open_glass
 from utils.llm.trends import trends_extractor
 from utils.llm.chat import retrieve_metadata_from_text, retrieve_metadata_from_message, retrieve_metadata_fields_from_transcript, obtain_emotional_message
 from utils.llm.external_integrations import get_message_structure
@@ -64,21 +63,25 @@ def _get_structured(
             # not supported conversation source
             raise HTTPException(status_code=400, detail=f'Invalid conversation source: {conversation.text_source}')
 
-        # from OpenGlass
-        if conversation.photos:
-            return summarize_open_glass(conversation.photos), False
+        transcript_text = conversation.get_transcript(False)
 
-        # from Omi
+        # For re-processing, we don't discard, just re-structure.
         if force_process:
             # reprocess endpoint
+            return get_reprocess_transcript_structure(
+                transcript_text, conversation.started_at, language_code, tz, conversation.structured.title,
+                photos=conversation.photos
+            ), False
 
-            return get_reprocess_transcript_structure(conversation.get_transcript(False), conversation.started_at, language_code, tz, conversation.structured.title), False
-
-        discarded = should_discard_conversation(conversation.get_transcript(False))
+        # Determine whether to discard the conversation based on its content (transcript and/or photos).
+        discarded = should_discard_conversation(transcript_text, conversation.photos)
         if discarded:
             return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
-        return get_transcript_structure(conversation.get_transcript(False), conversation.started_at, language_code, tz), False
+        # If not discarded, proceed to generate the structured summary from transcript and/or photos.
+        return get_transcript_structure(
+            transcript_text, conversation.started_at, language_code, tz, photos=conversation.photos
+        ), False
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail="Error processing conversation, please try again later")
@@ -172,7 +175,7 @@ def _trigger_apps(uid: str, conversation: Conversation, is_reprocess: bool = Fal
     threads = []
 
     def execute_app(app):
-        result = get_app_result(conversation.get_transcript(False), app, language_code=language_code).strip()
+        result = get_app_result(conversation.get_transcript(False), conversation.photos, app, language_code=language_code).strip()
         conversation.apps_results.append(AppResult(app_id=app.id, content=result))
         if not is_reprocess:
             record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, conversation_id=conversation.id)
@@ -203,7 +206,7 @@ def _extract_memories(uid: str, conversation: Conversation):
     parsed_memories = []
     for memory in new_memories:
         parsed_memories.append(MemoryDB.from_memory(memory, uid, conversation.id, False))
-        print('_extract_memories:', memory.category.value.upper(), '|', memory.content)
+        #print('_extract_memories:', memory.category.value.upper(), '|', memory.content)
 
     if len(parsed_memories) == 0:
         print(f"No memories extracted for conversation {conversation.id}")
@@ -252,7 +255,9 @@ def save_structured_vector(uid: str, conversation: Conversation, update_only: bo
     else:
         # For regular conversations with transcript segments
         segments = [t.dict() for t in conversation.transcript_segments]
-        metadata = retrieve_metadata_fields_from_transcript(uid, conversation.created_at, segments, tz)
+        metadata = retrieve_metadata_fields_from_transcript(
+            uid, conversation.created_at, segments, tz, photos=conversation.photos
+        )
 
     metadata['created_at'] = int(conversation.created_at.timestamp())
 
@@ -448,9 +453,6 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
 
     response: str = obtain_emotional_message(uid, conversation, context_str, emotion)
     message = response
-
-    print(title)
-    print(message)
 
     # Send the notification
     token = notification_db.get_token_only(uid)

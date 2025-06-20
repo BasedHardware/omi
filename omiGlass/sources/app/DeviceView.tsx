@@ -14,43 +14,9 @@ function usePhotos(device: BluetoothRemoteGATTServer) {
     React.useEffect(() => {
         (async () => {
 
-            let previousChunk = -1;
             let buffer: Uint8Array = new Uint8Array(0);
-            function onChunk(id: number | null, data: Uint8Array) {
-
-                // Resolve if packet is the first one
-                if (previousChunk === -1) {
-                    if (id === null) {
-                        return;
-                    } else if (id === 0) {
-                        previousChunk = 0;
-                        buffer = new Uint8Array(0);
-                    } else {
-                        return;
-                    }
-                } else {
-                    if (id === null) {
-                        console.log('Photo received', buffer);
-                        const timestamp = Date.now(); // Get current timestamp
-                        rotateImage(buffer, '270').then((rotated) => {
-                            console.log('Rotated photo', rotated);
-                            setPhotos((p) => [...p, { data: rotated, timestamp: timestamp }]); // Store data and timestamp
-                        });
-                        previousChunk = -1;
-                        return;
-                    } else {
-                        if (id !== previousChunk + 1) {
-                            previousChunk = -1;
-                            console.error('Invalid chunk', id, previousChunk);
-                            return;
-                        }
-                        previousChunk = id;
-                    }
-                }
-
-                // Append data
-                buffer = new Uint8Array([...buffer, ...data]);
-            }
+            let nextExpectedFrame = 0;
+            let isTransferring = false;
 
             // Subscribe for photo updates
             const service = await device.getPrimaryService('19B10000-E8F2-537E-4F6C-D104768A1214'.toLowerCase());
@@ -59,13 +25,68 @@ function usePhotos(device: BluetoothRemoteGATTServer) {
             setSubscribed(true);
             photoCharacteristic.addEventListener('characteristicvaluechanged', (e) => {
                 let value = (e.target as BluetoothRemoteGATTCharacteristic).value!;
-                let array = new Uint8Array(value.buffer);
-                if (array[0] == 0xff && array[1] == 0xff) {
-                    onChunk(null, new Uint8Array());
+                if (value.byteLength < 2) {
+                    return; // Invalid chunk
+                }
+                let chunk = new Uint8Array(value.buffer);
+                const frameIndex = chunk[0] | (chunk[1] << 8);
+
+                // End of image marker (0xFFFF)
+                if (frameIndex === 0xFFFF) {
+                    if (isTransferring && buffer.length > 0) {
+                        console.log('Complete JPEG received:', buffer.length, 'bytes');
+                        const timestamp = Date.now();
+                        const completeImage = buffer;
+
+                        // Process the complete image.
+                        rotateImage(completeImage, '270').then((rotated) => {
+                            console.log('Rotated photo', rotated.length);
+                            setPhotos((p) => [...p, { data: rotated, timestamp: timestamp }]);
+                        });
+                    }
+                    // Reset for the next image.
+                    buffer = new Uint8Array(0);
+                    isTransferring = false;
+                    nextExpectedFrame = 0;
+                    return;
+                }
+
+                // First chunk of a new image (frame index 0)
+                if (frameIndex === 0) {
+                    buffer = new Uint8Array(0);
+                    isTransferring = true;
+                    nextExpectedFrame = 0;
+                }
+
+                // If not transferring, ignore packets until a start frame is received.
+                if (!isTransferring) {
+                    console.log(`Ignoring packet with frame ${frameIndex}, waiting for frame 0.`);
+                    return;
+                }
+
+                // Check for correct frame order
+                if (frameIndex === nextExpectedFrame) {
+                    if (chunk.length > 2) {
+                        const imageData = chunk.slice(2);
+                        const newBuffer = new Uint8Array(buffer.length + imageData.length);
+                        newBuffer.set(buffer);
+                        newBuffer.set(imageData, buffer.length);
+                        buffer = newBuffer;
+                    }
+                    nextExpectedFrame++;
                 } else {
-                    let packetId = array[0] + (array[1] << 8);
-                    let packet = array.slice(2);
-                    onChunk(packetId, packet);
+                    console.error(`Frame out of order. Expected ${nextExpectedFrame}, got ${frameIndex}. Discarding image.`);
+                    buffer = new Uint8Array(0);
+                    isTransferring = false;
+                    nextExpectedFrame = 0;
+                }
+
+                // Safety break for oversized buffer
+                if (buffer.length > 200 * 1024) {
+                    console.error("Buffer size exceeded 200KB without a complete image. Resetting.");
+                    buffer = new Uint8Array(0);
+                    isTransferring = false;
+                    nextExpectedFrame = 0;
                 }
             });
             // Start automatic photo capture every 5s

@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, ValidationError
 from database.redis_db import add_filter_category_item
 from models.app import App
 from models.chat import Message, MessageSender
-from models.conversation import  CategoryEnum, Conversation, ActionItem, Event
+from models.conversation import CategoryEnum, Conversation, ActionItem, Event, ConversationPhoto
 from models.transcript_segment import TranscriptSegment
 from utils.llms.memory import get_prompt_memories
 
@@ -347,7 +347,7 @@ def qa_rag(uid: str, question: str, context: str, plugin: Optional[App] = None, 
 def qa_rag_stream(uid: str, question: str, context: str, plugin: Optional[App] = None, cited: Optional[bool] = False,
                   messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]) -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
-    # print('qa_rag prompt', prompt)
+    #print('qa_rag prompt', prompt)
     return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content
 
 
@@ -520,20 +520,33 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
 
 
 def retrieve_metadata_fields_from_transcript(
-        uid: str, created_at: datetime, transcript_segment: List[dict], tz: str
+        uid: str, created_at: datetime, transcript_segment: List[dict], tz: str, photos: List[ConversationPhoto] = None
 ) -> ExtractedInformation:
-    transcript = ''
-    for segment in transcript_segment:
-        transcript += f'{segment["text"].strip()}\n\n'
+    context_parts = []
+    if transcript_segment:
+        transcript = ''
+        for segment in transcript_segment:
+            transcript += f'{segment["text"].strip()}\n\n'
+        if transcript.strip():
+            context_parts.append(f"Conversation Transcript:\n```\n{transcript.strip()}\n```")
+
+    if photos:
+        photo_descriptions = ConversationPhoto.photos_as_string(photos, include_timestamps=True)
+        if photo_descriptions != 'None':
+            context_parts.append(f"Photo Descriptions from a wearable camera:\n{photo_descriptions}")
+
+    if not context_parts:
+        return {'people': [], 'topics': [], 'entities': [], 'dates': []}
+
+    full_context = "\n\n".join(context_parts)
 
     # TODO: ask it to use max 2 words? to have more standardization possibilities
     prompt = f'''
-    You will be given the raw transcript of a conversation, this transcript has about 20% word error rate,
-    and diarization is also made very poorly.
+    You will be given content which could be a raw transcript of a conversation, a series of photo descriptions from a wearable camera, or both. The transcript has about 20% word error rate, and diarization is also made very poorly.
 
-    Your task is to extract the most accurate information from the conversation in the output object indicated below.
+    Your task is to extract the most accurate information from the content in the output object indicated below.
 
-    Make sure as a first step, you infer and fix the raw transcript errors and then proceed to extract the information.
+    Make sure as a first step, you infer and fix any raw transcript errors and then proceed to extract the information from the entire content.
 
     For context when extracting dates, today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} in UTC. {tz} is the user's timezone, convert it to UTC and respond in UTC.
     If one says "today", it means the current day.
@@ -542,9 +555,9 @@ def retrieve_metadata_fields_from_transcript(
     If one says "next week", it means the next monday.
     Do not include dates greater than 2025.
 
-    Conversation Transcript:
+    Content:
     ```
-    {transcript}
+    {full_context}
     ```
     '''.replace('    ', '')
     try:
@@ -582,8 +595,8 @@ def retrieve_metadata_fields_from_transcript(
     for date in result.dates:
         try:
             date = datetime.strptime(date, '%Y-%m-%d')
-            if date.year > 2025:
-                continue
+            #if date.year > 2025:
+            #    continue
             metadata['dates'].append(date.strftime('%Y-%m-%d'))
         except Exception as e:
             print(f'Error parsing date: {e}')

@@ -104,8 +104,8 @@ class SdCardSocketService {
 
           // object message event
           if (jsonEvent.containsKey("type")) {
-            var messageEvent = ServerMessageEvent.fromJson(jsonEvent);
-            onMessageReceived();
+            var messageEvent = MessageEvent.fromJson(jsonEvent);
+            onMessageReceived(messageEvent);
             // if (onMessageEventReceived != null) {
             //   // onMessageEventReceived(messageEvent);
             //   return;
