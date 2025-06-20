@@ -308,10 +308,18 @@ def migrate_conversation_level(uid: str, conversation_id: str, target_level: str
 
         # Decrypt first to get a clean state
         plain_photo_data = _prepare_photo_for_read(photo_data, uid)
-        # Re-prepare for write with the new level
-        prepared_photo_data = _prepare_photo_for_write(plain_photo_data, uid, target_level)
-        # Update the photo document
-        batch.update(photo_doc.reference, prepared_photo_data)
+
+        # Prepare the specific fields for update
+        photo_update_payload = {
+            'data_protection_level': target_level
+        }
+        if target_level == 'enhanced':
+            photo_update_payload['base64'] = encryption.encrypt(plain_photo_data['base64'], uid)
+        else:  # Moving from enhanced to standard
+            photo_update_payload['base64'] = plain_photo_data['base64']
+
+        # Update the photo document with only the changed fields
+        batch.update(photo_doc.reference, photo_update_payload)
         batch_count += 1
         if batch_count >= 450:
             batch.commit()
@@ -379,10 +387,18 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 
             # Decrypt first to get a clean state
             plain_photo_data = _prepare_photo_for_read(photo_data, uid)
-            # Re-prepare for write with the new level
-            prepared_photo_data = _prepare_photo_for_write(plain_photo_data, uid, target_level)
+
+            # Prepare the specific fields for update
+            photo_update_payload = {
+                'data_protection_level': target_level
+            }
+            if target_level == 'enhanced':
+                photo_update_payload['base64'] = encryption.encrypt(plain_photo_data['base64'], uid)
+            else:  # Moving from enhanced to standard
+                photo_update_payload['base64'] = plain_photo_data['base64']
+
             # Add photo update to the batch
-            batch.update(photo_doc.reference, prepared_photo_data)
+            batch.update(photo_doc.reference, photo_update_payload)
             batch_count += 1
             if batch_count >= 450:
                 batch.commit()
