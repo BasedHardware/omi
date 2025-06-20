@@ -56,6 +56,7 @@ class ConversationPhoto(BaseModel):
     description: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     discarded: bool = False
+    data_protection_level: Optional[str] = None
 
     @staticmethod
     def photos_as_string(photos: List['ConversationPhoto'], include_timestamps: bool = False) -> str:

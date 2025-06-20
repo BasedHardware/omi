@@ -361,7 +361,7 @@ def get_public_conversations(offset: int = 0, limit: int = 1000):
     data = [[uid, conversation_id] for conversation_id, uid in conversation_uids.items() if uid]
     # TODO: sort in some way to have proper pagination
 
-    conversations = conversations_db.run_get_public_conversations(data[offset:offset + limit])
+    conversations = conversations_db.get_public_conversations(data[offset:offset + limit])
     for conversation in conversations:
         conversation['geolocation'] = None
     return conversations
