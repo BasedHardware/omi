@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/capture.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
@@ -39,7 +40,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
       return GestureDetector(
         onTap: () async {
-          if (provider.segments.isEmpty) return;
+          if (provider.segments.isEmpty && provider.photos.isEmpty) return;
           routeToPage(context, ConversationCapturingPage(topConversationId: topConvoId));
         },
         child: Container(
@@ -56,7 +57,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 header,
-                provider.segments.isNotEmpty
+                (provider.segments.isNotEmpty || provider.photos.isNotEmpty)
                     ? const Column(
                         children: [
                           SizedBox(height: 8),
@@ -128,6 +129,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     bool deviceServiceStateOk = captureProvider.recordingDeviceServiceReady;
     bool transcriptServiceStateOk = captureProvider.transcriptServiceReady;
     bool isHavingTranscript = captureProvider.segments.isNotEmpty;
+    bool isHavingPhotos = captureProvider.photos.isNotEmpty;
     bool isHavingDesireDevice = SharedPreferencesUtil().btDevice.id.isNotEmpty;
     bool isHavingRecordingDevice = captureProvider.havingRecordingDevice;
 
@@ -178,7 +180,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Text(
-              isHavingTranscript ? 'In progress...' : 'Say something...',
+              (isHavingTranscript || isHavingPhotos) ? 'In progress...' : 'Say something...',
               style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
               maxLines: 1,
             ),
@@ -194,12 +196,16 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       stateText = "";
     } else if (transcriptServiceStateOk && (isUsingPhoneMic || isHavingRecordingDevice)) {
       var lastEvent = captureProvider.transcriptionServiceStatuses.lastOrNull;
-      if (lastEvent?.status == "ready") {
-        stateText = "Listening";
-        statusIndicator = const RecordingStatusIndicator();
+      if (lastEvent is MessageServiceStatusEvent) {
+        if (lastEvent.status == "ready") {
+          stateText = "Listening";
+          statusIndicator = const RecordingStatusIndicator();
+        } else {
+          bool transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
+          stateText = transcriptionDiagnosticEnabled ? (lastEvent.statusText ?? "") : "Connecting";
+        }
       } else {
-        bool transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
-        stateText = transcriptionDiagnosticEnabled ? (lastEvent?.statusText ?? "") : "Connecting";
+        stateText = "Connecting";
       }
     } else if (!internetConnectionStateOk) {
       stateText = "Waiting for network";
@@ -396,12 +402,12 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
         builder: (context, provider, deviceProvider, connectivityProvider, child) {
       return GestureDetector(
           onTap: () async {
-            if (widget.conversation.transcriptSegments.isEmpty) return;
             routeToPage(
-                context,
-                ProcessingConversationPage(
-                  conversation: widget.conversation,
-                ));
+              context,
+              ProcessingConversationPage(
+                conversation: widget.conversation,
+              ),
+            );
           },
           child: Container(
             margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -417,13 +423,13 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _getConversationHeader(context),
-                  widget.conversation.transcriptSegments.isNotEmpty
+                  (widget.conversation.transcriptSegments.isNotEmpty || widget.conversation.photos.isNotEmpty)
                       ? Column(
                           children: [
                             const SizedBox(height: 8),
                             getLiteTranscriptWidget(
                               widget.conversation.transcriptSegments,
-                              [],
+                              widget.conversation.photos,
                               null,
                             ),
                             const SizedBox(height: 8),

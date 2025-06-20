@@ -16,7 +16,7 @@ from models.conversation import ConversationPhoto, PostProcessingStatus, PostPro
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
 from ._client import db
-from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
+from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 
 conversations_collection = 'conversations'
 
@@ -98,8 +98,8 @@ def upsert_conversation(uid: str, conversation_data: dict):
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
     conversation_ref.set(conversation_data)
 
-
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@with_photos()
 def get_conversation(uid, conversation_id):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
@@ -108,6 +108,7 @@ def get_conversation(uid, conversation_id):
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@with_photos()
 def get_conversations(uid: str, limit: int = 100, offset: int = 0, include_discarded: bool = False,
                       statuses: List[str] = [], start_date: Optional[datetime] = None,
                       end_date: Optional[datetime] = None, categories: Optional[List[str]] = None):
@@ -167,6 +168,7 @@ def delete_conversation(uid, conversation_id):
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@with_photos()
 def filter_conversations_by_date(uid, start_date, end_date):
     user_ref = db.collection('users').document(uid)
     query = (
@@ -181,6 +183,7 @@ def filter_conversations_by_date(uid, start_date, end_date):
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@with_photos()
 def get_conversations_by_id(uid, conversation_ids):
     user_ref = db.collection('users').document(uid)
     conversations_ref = user_ref.collection(conversations_collection)
@@ -309,6 +312,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 # **************************************
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@with_photos()
 def get_in_progress_conversation(uid: str):
     user_ref = db.collection('users').document(uid)
     conversations_ref = (
@@ -321,6 +325,7 @@ def get_in_progress_conversation(uid: str):
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@with_photos()
 def get_processing_conversations(uid: str):
     user_ref = db.collection('users').document(uid)
     conversations_ref = (
@@ -398,6 +403,9 @@ async def _get_public_conversation(db_client: AsyncClient, uid: str, conversatio
     if conversation_doc.exists:
         conversation_data = conversation_doc.to_dict()
         if conversation_data.get('visibility') in ['public']:
+            photos_ref = conversation_ref.collection('photos')
+            photos_docs = await photos_ref.stream()
+            conversation_data['photos'] = [doc.to_dict() for doc in photos_docs]
             return conversation_data
     return None
 
@@ -492,14 +500,41 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
 # ********** OPENGLASS **************
 # ***********************************
 
+def add_conversation_photo(uid: str, conversation_id: str, photo_data: dict) -> str:
+    """
+    Adds a single photo to a conversation's 'photos' sub-collection and returns the new photo's ID.
+    """
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    photos_ref = conversation_ref.collection('photos')
+
+    photo_id = str(uuid.uuid4())
+    photo_data['id'] = photo_id
+
+    photo_doc_ref = photos_ref.document(photo_id)
+    photo_doc_ref.set(photo_data)
+
+    return photo_id
+
+
+def update_conversation_photo(uid: str, conversation_id: str, photo_id: str, updates: dict):
+    """
+    Updates a specific photo document in a conversation's 'photos' sub-collection.
+    """
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    photo_ref = conversation_ref.collection('photos').document(photo_id)
+    photo_ref.update(updates)
+
+
 def store_conversation_photos(uid: str, conversation_id: str, photos: List[ConversationPhoto]):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     photos_ref = conversation_ref.collection('photos')
     batch = db.batch()
     for photo in photos:
-        photo_id = str(uuid.uuid4())
-        photo_ref = photos_ref.document(str(uuid.uuid4()))
+        photo_id = photo.id or str(uuid.uuid4())
+        photo_ref = photos_ref.document(photo_id)
         data = photo.dict()
         data['id'] = photo_id
         batch.set(photo_ref, data)
@@ -518,6 +553,7 @@ def get_conversation_photos(uid: str, conversation_id: str):
 # ********************************
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@with_photos()
 def get_closest_conversation_to_timestamps(
         uid: str, start_timestamp: int, end_timestamp: int
 ) -> Optional[dict]:
@@ -559,6 +595,7 @@ def get_closest_conversation_to_timestamps(
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@with_photos()
 def get_last_completed_conversation(uid: str) -> Optional[dict]:
     query = (
         db.collection('users').document(uid).collection(conversations_collection)

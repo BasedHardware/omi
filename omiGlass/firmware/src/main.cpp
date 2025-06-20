@@ -38,6 +38,8 @@ unsigned long lastCaptureTime = 0;
 size_t sent_photo_bytes = 0;
 size_t sent_photo_frames = 0;
 bool photoDataUploading = false;
+const int chunkSize = 200;
+uint8_t s_compressed_frame_2[chunkSize + 2];
 
 // -------------------------------------------------------------------------
 // Camera Frame
@@ -57,6 +59,11 @@ class ServerHandler : public BLEServerCallbacks {
   }
   void onDisconnect(BLEServer *server) override {
     connected = false;
+    photoDataUploading = false; // Reset on disconnect
+    if (fb) {
+      esp_camera_fb_return(fb);
+      fb = nullptr;
+    }
     Serial.println("<<< BLE Client disconnected. Restarting advertising.");
     BLEDevice::startAdvertising();
   }
@@ -171,16 +178,14 @@ void handlePhotoControl(int8_t controlValue) {
     isCapturingPhotos = false;
     captureInterval = 0;
   }
-  else if (controlValue >= 5 && controlValue <= 300) {
+  else if (controlValue > 0) { // Any positive value is an interval in seconds
     Serial.print("Received command: Start interval capture with parameter ");
     Serial.println(controlValue);
 
-    // ---------------------------
-    // Hard-code 30s interval here
-    // ---------------------------
-    captureInterval = 30000;  // 30 seconds
+    captureInterval = (int)controlValue * 1000;
 
     isCapturingPhotos = true;
+    // Start immediately
     lastCaptureTime = millis() - captureInterval;
   }
 }
@@ -209,26 +214,13 @@ void configure_camera() {
   config.pin_sccb_scl = SIOC_GPIO_NUM;
   config.pin_pwdn     = PWDN_GPIO_NUM;
   config.pin_reset    = RESET_GPIO_NUM;
-  config.xclk_freq_hz = 20000000;
-  config.frame_size   = FRAMESIZE_UXGA; // 1600x1200
+  config.xclk_freq_hz = 6000000;
+  config.frame_size   = FRAMESIZE_VGA; // 640x480
   config.pixel_format = PIXFORMAT_JPEG;
-  config.grab_mode    = CAMERA_GRAB_WHEN_EMPTY;
+  config.grab_mode    = CAMERA_GRAB_LATEST;
   config.fb_location  = CAMERA_FB_IN_PSRAM;
-  config.jpeg_quality = 10;
+  config.jpeg_quality = 25;
   config.fb_count     = 1;
-
-  // if PSRAM IC present, init with higher framesize
-  bool psramFound = psramInit();
-  if (psramFound) {
-    Serial.println("PSRAM found.");
-    config.jpeg_quality = 10;
-    config.fb_count = 1;
-    config.grab_mode = CAMERA_GRAB_LATEST;
-  } else {
-    Serial.println("WARNING: PSRAM not found, limiting frame size to SVGA");
-    config.frame_size = FRAMESIZE_SVGA;
-    config.fb_location = CAMERA_FB_IN_DRAM;
-  }
 
   // initialize the camera
   esp_err_t err = esp_camera_init(&config);
@@ -276,8 +268,8 @@ void setup() {
 }
 
 void loop() {
-  if (isCapturingPhotos) {
-    // Decide whether to capture
+  // Photo capture logic
+  if (isCapturingPhotos && !photoDataUploading) { // Don't take a new photo while uploading
     if (captureInterval == 0 || millis() - lastCaptureTime >= captureInterval) {
       if (captureInterval > 0) {
         lastCaptureTime = millis();
@@ -286,15 +278,62 @@ void loop() {
       }
 
       if (take_photo()) {
-        // Send the photo over BLE
         if (connected) {
-          // ... add your BLE sending logic here
-          photoDataCharacteristic->notify();
-          Serial.println("Data sent via BLE");
+          photoDataUploading = true;
+          sent_photo_bytes = 0;
+          sent_photo_frames = 0;
+          Serial.printf("Starting photo upload of %d bytes.\n", fb->len);
+        } else {
+          // Not connected, so just free the buffer
+          esp_camera_fb_return(fb);
+          fb = nullptr;
         }
       }
     }
   }
 
+  // Photo upload logic
+  if (photoDataUploading && fb) {
+    if (connected) {
+      size_t remaining = fb->len - sent_photo_bytes;
+      if (remaining > 0) {
+        // Prepare chunk
+        s_compressed_frame_2[0] = (uint8_t)(sent_photo_frames & 0xFF);
+        s_compressed_frame_2[1] = (uint8_t)((sent_photo_frames >> 8) & 0xFF);
+        size_t bytes_to_copy = (remaining > chunkSize) ? chunkSize : remaining;
+        memcpy(&s_compressed_frame_2[2], &fb->buf[sent_photo_bytes], bytes_to_copy);
+
+        photoDataCharacteristic->setValue(s_compressed_frame_2, bytes_to_copy + 2);
+        photoDataCharacteristic->notify();
+
+        sent_photo_bytes += bytes_to_copy;
+        sent_photo_frames++;
+
+        // A small delay is crucial to prevent overwhelming the BLE stack on either device.
+        delay(3);
+      } else {
+        // End of photo marker
+        uint8_t endMarker[2] = {0xFF, 0xFF};
+        photoDataCharacteristic->setValue(endMarker, 2);
+        photoDataCharacteristic->notify();
+        Serial.println("Photo upload complete.");
+
+        photoDataUploading = false;
+        sent_photo_bytes = 0;
+        sent_photo_frames = 0;
+        // Free camera buffer
+        esp_camera_fb_return(fb);
+        fb = nullptr;
+        Serial.println("Camera frame buffer freed.");
+      }
+    } else {
+      // Disconnected during upload
+      photoDataUploading = false;
+      esp_camera_fb_return(fb);
+      fb = nullptr;
+      Serial.println("Disconnected during upload. Aborting.");
+    }
+  }
+
   delay(10);
-} 
+}

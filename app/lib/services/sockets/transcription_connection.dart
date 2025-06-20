@@ -11,7 +11,7 @@ import 'package:omi/services/notifications.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 
 abstract interface class ITransctipSegmentSocketServiceListener {
-  void onMessageEventReceived(ServerMessageEvent event);
+  void onMessageEventReceived(MessageEvent event);
 
   void onSegmentReceived(List<TranscriptSegment> segments);
 
@@ -136,7 +136,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
     // Message event
     if (jsonEvent.containsKey("type")) {
-      var event = ServerMessageEvent.fromJson(jsonEvent);
+      var event = MessageEvent.fromJson(jsonEvent);
       _listeners.forEach((k, v) {
         v.onMessageEventReceived(event);
       });

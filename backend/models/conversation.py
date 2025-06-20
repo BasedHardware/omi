@@ -51,8 +51,28 @@ class UpdateConversation(BaseModel):
 
 
 class ConversationPhoto(BaseModel):
+    id: Optional[str] = None
     base64: str
-    description: str
+    description: Optional[str] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    discarded: bool = False
+
+    @staticmethod
+    def photos_as_string(photos: List['ConversationPhoto'], include_timestamps: bool = False) -> str:
+        if not photos:
+            return 'None'
+        descriptions = []
+        for p in photos:
+            if p.description and p.description.strip():
+                timestamp_str = ''
+                if include_timestamps:
+                    timestamp_str = f"[{p.created_at.strftime('%H:%M:%S')}] "
+                descriptions.append(f'- {timestamp_str}"{p.description}"')
+
+        if not descriptions:
+            return 'None'
+        return '\n'.join(descriptions)
+
 
 # TODO: remove this class when the app is updated to use apps_results
 class PluginResult(BaseModel):
@@ -222,7 +242,7 @@ class Conversation(BaseModel):
         self.processing_memory_id = self.processing_conversation_id
 
     @staticmethod
-    def conversations_to_string(conversations: List['Conversation'], use_transcript: bool = False) -> str:
+    def conversations_to_string(conversations: List['Conversation'], use_transcript: bool = False, include_timestamps: bool = False) -> str:
         result = []
         for i, conversation in enumerate(conversations):
             if isinstance(conversation, dict):
@@ -243,8 +263,16 @@ class Conversation(BaseModel):
                 for event in conversation.structured.events:
                     conversation_str += f"- {event.title} ({event.start} - {event.duration} minutes)\n"
 
+            if conversation.apps_results and len(conversation.apps_results) > 0:
+                conversation_str += "Summarization:\n"
+                conversation_str += f"{conversation.apps_results[0].content}"
+
             if use_transcript:
-                conversation_str += (f"\nTranscript:\n{conversation.get_transcript(include_timestamps=False)}\n")
+                conversation_str += (f"\nTranscript:\n{conversation.get_transcript(include_timestamps=include_timestamps)}\n")
+                # photos
+                photo_descriptions = conversation.get_photos_descriptions(include_timestamps=include_timestamps)
+                if photo_descriptions != 'None':
+                    conversation_str += f"Photo Descriptions from a wearable camera:\n{photo_descriptions}\n"
 
             result.append(conversation_str.strip())
 
@@ -253,6 +281,9 @@ class Conversation(BaseModel):
     def get_transcript(self, include_timestamps: bool) -> str:
         # Warn: missing transcript for workflow source, external integration source
         return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
+
+    def get_photos_descriptions(self, include_timestamps: bool = False) -> str:
+        return ConversationPhoto.photos_as_string(self.photos, include_timestamps=include_timestamps)
 
     def as_dict_cleaned_dates(self):
         conversation_dict = self.dict()

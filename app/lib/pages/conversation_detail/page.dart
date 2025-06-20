@@ -5,6 +5,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/person.dart';
+import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/settings/people.dart';
@@ -189,18 +190,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                         return TabBarView(
                           controller: _controller,
                           physics: const NeverScrollableScrollPhysics(),
-                          children: [
-                            Selector<ConversationDetailProvider, ConversationSource?>(
-                              selector: (context, provider) => provider.conversation.source,
-                              builder: (context, source, child) {
-                                return source == ConversationSource.openglass
-                                    ? ListView(
-                                        shrinkWrap: true, children: const [PhotosGridComponent(), SizedBox(height: 32)])
-                                    : const TranscriptWidgets();
-                              },
-                            ),
-                            const SummaryTab(),
-                            const ActionItemsTab(),
+                          children: const [
+                            TranscriptWidgets(),
+                            SummaryTab(),
+                            ActionItemsTab(),
                           ],
                         );
                       }),
@@ -220,8 +213,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                     return ConversationBottomBar(
                       mode: ConversationBottomBarMode.detail,
                       selectedTab: selectedTab,
-                      hasSegments:
-                          conversation.transcriptSegments.isNotEmpty || conversation.externalIntegration != null,
+                      hasSegments: conversation.transcriptSegments.isNotEmpty ||
+                          conversation.photos.isNotEmpty ||
+                          conversation.externalIntegration != null,
                       onTabSelected: (tab) {
                         int index;
                         switch (tab) {
@@ -397,9 +391,11 @@ class TranscriptWidgets extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<ConversationDetailProvider>(
       builder: (context, provider, child) {
-        final segments = provider.conversation.transcriptSegments;
+        final conversation = provider.conversation;
+        final segments = conversation.transcriptSegments;
+        final photos = conversation.photos;
 
-        if (segments.isEmpty) {
+        if (segments.isEmpty && photos.isEmpty) {
           return Padding(
             padding: const EdgeInsets.only(top: 32),
             child: ExpandableTextWidget(
@@ -415,14 +411,16 @@ class TranscriptWidgets extends StatelessWidget {
           );
         }
 
-        // Use a Container with fixed height for large lists to enable proper scrolling
-        return TranscriptWidget(
-          segments: segments,
+        return getTranscriptWidget(
+          false,
+          segments,
+          photos,
+          null,
           horizontalMargin: false,
           topMargin: false,
           canDisplaySeconds: provider.canDisplaySeconds,
           isConversationDetail: true,
-          bottomMargin: 200,
+          bottomMargin: 0, // Removed extra bottom margin
           editSegment: (i, j) {
             final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
             if (!connectivityProvider.isConnected) {

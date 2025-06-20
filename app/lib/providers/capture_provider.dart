@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
@@ -55,8 +56,8 @@ class CaptureProvider extends ChangeNotifier
 
   get internetStatus => _internetStatus;
 
-  List<ServerMessageEvent> _transcriptionServiceStatuses = [];
-  List<ServerMessageEvent> get transcriptionServiceStatuses => _transcriptionServiceStatuses;
+  List<MessageEvent> _transcriptionServiceStatuses = [];
+  List<MessageEvent> get transcriptionServiceStatuses => _transcriptionServiceStatuses;
 
   CaptureProvider() {
     _internetStatusListener = PureCore().internetConnection.onStatusChange.listen((InternetStatus status) {
@@ -72,10 +73,12 @@ class CaptureProvider extends ChangeNotifier
 
   BtDevice? _recordingDevice;
   List<TranscriptSegment> segments = [];
+  List<ConversationPhoto> photos = [];
 
   bool hasTranscripts = false;
 
   StreamSubscription? _bleBytesStream;
+  StreamSubscription? _blePhotoStream;
 
   get bleBytesStream => _bleBytesStream;
 
@@ -124,6 +127,7 @@ class CaptureProvider extends ChangeNotifier
 
   Future _resetStateVariables() async {
     segments = [];
+    photos = [];
     hasTranscripts = false;
     notifyListeners();
   }
@@ -288,10 +292,20 @@ class CaptureProvider extends ChangeNotifier
   Future<void> _resetState() async {
     debugPrint('resetState');
     await _cleanupCurrentState();
+
+    // Always try to stream audio if a device is present
     await _ensureDeviceSocketConnection();
     await _initiateDeviceAudioStreaming();
-    await initiateStorageBytesStreaming();
 
+    // Additionally, stream photos if the device supports it
+    if (_recordingDevice != null) {
+      var connection = await ServiceManager.instance().device.ensureConnection(_recordingDevice!.id);
+      if (connection != null && await connection.hasPhotoStreamingCharacteristic()) {
+        await _initiateDevicePhotoStreaming();
+      }
+    }
+
+    await initiateStorageBytesStreaming();
     notifyListeners();
   }
 
@@ -383,6 +397,48 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
+  Future<void> _initiateDevicePhotoStreaming() async {
+    if (_recordingDevice == null) return;
+    final deviceId = _recordingDevice!.id;
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) return;
+
+    await connection.performCameraStartPhotoController();
+    _blePhotoStream = await connection.performGetImageListener(onImageReceived: (photoBytes) async {
+      final String tempId = 'temp_img_${DateTime.now().millisecondsSinceEpoch}';
+      final String base64Image = base64Encode(photoBytes);
+
+      // Add placeholder to UI for immediate feedback
+      photos.add(ConversationPhoto(id: tempId, base64: base64Image, createdAt: DateTime.now()));
+      photos = List.from(photos);
+      notifyListeners();
+
+      // Chunking Logic
+      const int chunkSize = 8192; // 8KB chunks
+      final totalChunks = (base64Image.length / chunkSize).ceil();
+
+      for (int i = 0; i < totalChunks; i++) {
+        final start = i * chunkSize;
+        final end = (start + chunkSize > base64Image.length) ? base64Image.length : start + chunkSize;
+        final chunk = base64Image.substring(start, end);
+
+        final payload = jsonEncode({
+          'type': 'image_chunk',
+          'id': tempId,
+          'index': i,
+          'total': totalChunks,
+          'data': chunk,
+        });
+
+        if (_socket?.state == SocketServiceState.connected) {
+          _socket?.send(payload); // Send the JSON string
+        }
+        await Future.delayed(const Duration(milliseconds: 20)); // Small delay to prevent flooding
+      }
+    });
+    notifyListeners();
+  }
+
   void clearTranscripts() {
     segments = [];
     hasTranscripts = false;
@@ -391,12 +447,20 @@ class CaptureProvider extends ChangeNotifier
 
   Future _closeBleStream() async {
     await _bleBytesStream?.cancel();
+    await _blePhotoStream?.cancel();
+    if (_recordingDevice != null) {
+      var connection = await ServiceManager.instance().device.ensureConnection(_recordingDevice!.id);
+      if (connection != null && await connection.hasPhotoStreamingCharacteristic()) {
+        await connection.performCameraStopPhotoController();
+      }
+    }
     notifyListeners();
   }
 
   @override
   void dispose() {
     _bleBytesStream?.cancel();
+    _blePhotoStream?.cancel();
     _socket?.unsubscribe(this);
     _keepAliveTimer?.cancel();
     _internetStatusListener?.cancel();
@@ -439,15 +503,15 @@ class CaptureProvider extends ChangeNotifier
   Future streamDeviceRecording({BtDevice? device}) async {
     debugPrint("streamDeviceRecording $device");
     if (device != null) _updateRecordingDevice(device);
-
+    await _resetStateVariables();
     await _resetState();
   }
 
   Future stopStreamDeviceRecording({bool cleanDevice = false}) async {
+    await _cleanupCurrentState();
     if (cleanDevice) {
       _updateRecordingDevice(null);
     }
-    await _cleanupCurrentState();
     updateRecordingState(RecordingState.stop);
     await _socket?.stop(reason: 'stop stream device recording');
   }
@@ -670,62 +734,68 @@ class CaptureProvider extends ChangeNotifier
     var convo = convos.isNotEmpty ? convos.first : null;
     if (convo != null) {
       segments = convo.transcriptSegments;
+      photos = convo.photos;
     } else {
       segments = [];
+      photos = [];
     }
     setHasTranscripts(segments.isNotEmpty);
     notifyListeners();
   }
 
   @override
-  void onMessageEventReceived(ServerMessageEvent event) {
-    if (event.type == MessageEventType.conversationProcessingStarted) {
-      if (event.conversation == null) {
-        debugPrint("Conversation data not received in event. Content is: $event");
-        return;
-      }
-      conversationProvider!.addProcessingConversation(event.conversation!);
+  void onMessageEventReceived(MessageEvent event) {
+    if (event is ConversationProcessingStartedEvent) {
+      conversationProvider!.addProcessingConversation(event.memory);
       _resetStateVariables();
       return;
     }
 
-    if (event.type == MessageEventType.conversationCreated) {
-      if (event.conversation == null) {
-        debugPrint("Conversation data not received in event. Content is: $event");
-        return;
-      }
-      event.conversation!.isNew = true;
-      conversationProvider!.removeProcessingConversation(event.conversation!.id);
-      _processConversationCreated(event.conversation, event.messages ?? []);
+    if (event is ConversationEvent) {
+      event.memory.isNew = true;
+      conversationProvider!.removeProcessingConversation(event.memory.id);
+      _processConversationCreated(event.memory, event.messages as List<ServerMessage>);
       return;
     }
 
-    if (event.type == MessageEventType.lastConversation) {
-      if (event.memoryId == null) {
-        debugPrint("Conversation ID not received in last_memory event. Content is: $event");
-        return;
-      }
-      _handleLastConvoEvent(event.memoryId!);
+    if (event is LastConversationEvent) {
+      _handleLastConvoEvent(event.memoryId);
       return;
     }
 
-    if (event.type == MessageEventType.translating) {
-      if (event.segments == null || event.segments?.isEmpty == true) {
-        debugPrint("No segments received in translating event. Content is: $event");
-        return;
-      }
-      _handleTranslationEvent(event.segments!);
+    if (event is TranslationEvent) {
+      _handleTranslationEvent(event.segments);
       return;
     }
 
-    if (event.type == MessageEventType.serviceStatus) {
-      if (event.status == null) {
-        return;
-      }
-
+    if (event is MessageServiceStatusEvent) {
       _transcriptionServiceStatuses.add(event);
       _transcriptionServiceStatuses = List.from(_transcriptionServiceStatuses);
       notifyListeners();
+      return;
+    }
+
+    if (event is PhotoProcessingEvent) {
+      final tempId = event.tempId;
+      final permanentId = event.photoId;
+      final photoIndex = photos.indexWhere((p) => p.id == tempId);
+      if (photoIndex != -1) {
+        photos[photoIndex].id = permanentId;
+        notifyListeners();
+      }
+      return;
+    }
+
+    if (event is PhotoDescribedEvent) {
+      final photoId = event.photoId;
+      final description = event.description;
+      final discarded = event.discarded;
+      final photoIndex = photos.indexWhere((p) => p.id == photoId);
+      if (photoIndex != -1) {
+        photos[photoIndex].description = description;
+        photos[photoIndex].discarded = discarded;
+        notifyListeners();
+      }
       return;
     }
   }
