@@ -145,23 +145,3 @@ class Event {
     };
   }
 }
-
-class ConversationPhoto {
-  int id = 0;
-
-  String base64;
-  String description;
-
-  ConversationPhoto(this.base64, this.description, {this.id = 0});
-
-  factory ConversationPhoto.fromJson(Map<String, dynamic> json) {
-    return ConversationPhoto(json['base64'], json['description']);
-  }
-
-  toJson() {
-    return {
-      'base64': base64,
-      'description': description,
-    };
-  }
-}

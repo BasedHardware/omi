@@ -13,6 +13,7 @@ import 'package:omi/services/devices/errors.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:image/image.dart' as img;
 
 class OmiDeviceConnection extends DeviceConnection {
   BluetoothService? _batteryService;
@@ -460,8 +461,8 @@ class OmiDeviceConnection extends DeviceConnection {
       return;
     }
 
-    // Capture photo once every 10s
-    await imageCaptureControlCharacteristic.write([0x0A]);
+    // Capture photo once every 5s
+    await imageCaptureControlCharacteristic.write([0x05]);
 
     print('cameraStartPhotoController');
   }
@@ -482,6 +483,25 @@ class OmiDeviceConnection extends DeviceConnection {
     await imageCaptureControlCharacteristic.write([0x00]);
 
     print('cameraStopPhotoController');
+  }
+
+  @override
+  Future performCameraTakePhoto() async {
+    if (_omiService == null) {
+      logServiceNotFoundError('Omi', deviceId);
+      return;
+    }
+
+    var imageCaptureControlCharacteristic = getCharacteristic(_omiService!, imageCaptureControlCharacteristicUuid);
+    if (imageCaptureControlCharacteristic == null) {
+      logCharacteristicNotFoundError('Image capture control', deviceId);
+      return;
+    }
+
+    // -1 tells the firmware to take a single photo
+    await imageCaptureControlCharacteristic.write([-1]);
+
+    print('cameraTakePhoto');
   }
 
   @override
@@ -539,16 +559,72 @@ class OmiDeviceConnection extends DeviceConnection {
       return null;
     }
     print("OpenGlassDevice getImageListener called");
-    ImageBytesUtil imageBytesUtil = ImageBytesUtil();
+
+    var buffer = BytesBuilder();
+    var nextExpectedFrame = 0;
+    var isTransferring = false;
+
     var bleBytesStream = await _getBleImageBytesListener(
       onImageBytesReceived: (List<int> value) async {
-        if (value.isEmpty) return;
-        Uint8List data = Uint8List.fromList(value);
-        // print(data);
-        Uint8List? completedImage = imageBytesUtil.processChunk(data);
-        if (completedImage != null && completedImage.isNotEmpty) {
-          debugPrint('Completed image bytes length: ${completedImage.length}');
-          onImageReceived(completedImage);
+        if (value.length < 2) return;
+
+        Uint8List chunk = Uint8List.fromList(value);
+        int frameIndex = chunk[0] | (chunk[1] << 8);
+
+        // End of image marker 0xFFFF
+        if (frameIndex == 0xFFFF) {
+          if (isTransferring) {
+            final imageBytes = buffer.toBytes();
+            if (imageBytes.isNotEmpty) {
+              debugPrint('Completed image bytes length: ${imageBytes.length}');
+              try {
+                onImageReceived(imageBytes);
+              } catch (e) {
+                debugPrint('Error processing image: $e');
+              }
+            }
+          }
+          // Reset for next image
+          buffer.clear();
+          isTransferring = false;
+          nextExpectedFrame = 0;
+          return;
+        }
+
+        // If we get frame 0, it's the start of a new image. Reset everything.
+        if (frameIndex == 0) {
+          buffer.clear();
+          isTransferring = true;
+          nextExpectedFrame = 0;
+        }
+
+        // If we are not in a transfer state, ignore the packet unless it's frame 0.
+        if (!isTransferring) {
+          debugPrint("Ignoring packet with frame $frameIndex, waiting for frame 0 to start transfer.");
+          return;
+        }
+
+        // Check if the frame is the one we expect.
+        if (frameIndex == nextExpectedFrame) {
+          if (chunk.length > 2) {
+            buffer.add(chunk.sublist(2));
+          }
+          nextExpectedFrame++;
+        } else {
+          // Out of order frame. The image is now corrupt.
+          // We should discard everything and wait for the next frame 0.
+          debugPrint('Frame out of order. Expected $nextExpectedFrame, got $frameIndex. Discarding image.');
+          buffer.clear();
+          isTransferring = false;
+          nextExpectedFrame = 0;
+        }
+
+        // Safety break for oversized buffer
+        if (buffer.length > 200 * 1024) {
+          debugPrint("Buffer size exceeded 200KB without a complete image. Resetting.");
+          buffer.clear();
+          isTransferring = false;
+          nextExpectedFrame = 0;
         }
       },
     );

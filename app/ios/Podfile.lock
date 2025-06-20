@@ -246,7 +246,7 @@ PODS:
     - Flutter
     - FlutterMacOS
   - SwiftCBOR (0.4.4)
-  - SwiftProtobuf (1.30.0)
+  - SwiftProtobuf (1.29.0)
   - SwiftyGif (5.4.5)
   - url_launcher_ios (0.0.1):
     - Flutter
@@ -500,7 +500,7 @@ SPEC CHECKSUMS:
   sign_in_with_apple: c5dcc141574c8c54d5ac99dd2163c0c72ad22418
   sqflite_darwin: 20b2a3a3b70e43edae938624ce550a3cbf66a3d0
   SwiftCBOR: ce5354ec8b660da2d6fc754462881119dbe1f963
-  SwiftProtobuf: 3697407f0d5b23bedeba9c2eaaf3ec6fdff69349
+  SwiftProtobuf: b7aa08087e2ab6d162862d143020091254095f69
   SwiftyGif: 706c60cf65fa2bc5ee0313beece843c8eb8194d4
   url_launcher_ios: 694010445543906933d732453a59da0a173ae33d
   webview_flutter_wkwebview: 1821ceac936eba6f7984d89a9f3bcb4dea99ebb2

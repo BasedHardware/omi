@@ -86,7 +86,7 @@ class ConversationBottomBar extends StatelessWidget {
 
   Widget _buildTranscriptTab() {
     return TabButton(
-      icon: Icons.graphic_eq_rounded,
+      icon: Icons.forum_outlined,
       isSelected: selectedTab == ConversationTab.transcript,
       onTap: () => onTabSelected(ConversationTab.transcript),
     );

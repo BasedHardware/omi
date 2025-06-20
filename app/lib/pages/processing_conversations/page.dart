@@ -48,7 +48,9 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
       // }
 
       // Conversation source
-      var convoSource = ConversationSource.omi;
+      var convoSource = widget.conversation.source;
+      bool hasPhotos = (widget.conversation.photos ?? []).isNotEmpty;
+
       return PopScope(
         canPop: true,
         child: Scaffold(
@@ -70,7 +72,7 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
                   icon: const Icon(Icons.arrow_back_rounded, size: 24.0),
                 ),
                 const SizedBox(width: 4),
-                const Text("🎙️"),
+                Text(hasPhotos ? "📸" : "🎙️"),
                 const SizedBox(width: 4),
                 const Expanded(child: Text("In progress")),
               ],
@@ -91,7 +93,7 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
                         ? 'Photos'
                         : convoSource == ConversationSource.screenpipe
                             ? 'Raw Data'
-                            : 'Transcript',
+                            : 'Content',
                   ),
                   const Tab(text: 'Summary')
                 ],
@@ -107,14 +109,18 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
                       ListView(
                         shrinkWrap: true,
                         children: [
-                          widget.conversation.transcriptSegments.isEmpty
-                              ? const Column(
-                                  children: [
-                                    SizedBox(height: 80),
-                                    Center(child: Text("No Transcript")),
-                                  ],
-                                )
-                              : getTranscriptWidget(false, widget.conversation.transcriptSegments, [], null)
+                          if (widget.conversation.transcriptSegments.isNotEmpty ||
+                              widget.conversation.photos.isNotEmpty)
+                            getTranscriptWidget(
+                                false, widget.conversation.transcriptSegments, widget.conversation.photos, null),
+                          if (!hasPhotos && widget.conversation.transcriptSegments.isEmpty)
+                            const Column(
+                              children: [
+                                SizedBox(height: 80),
+                                Center(child: Text("No content to display")),
+                              ],
+                            ),
+                          const SizedBox(height: 32),
                         ],
                       ),
                       ListView(

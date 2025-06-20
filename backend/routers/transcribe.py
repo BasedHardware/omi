@@ -2,6 +2,7 @@ import os
 import uuid
 import asyncio
 import struct
+import json
 from datetime import datetime, timezone, timedelta, time
 from enum import Enum
 
@@ -16,9 +17,10 @@ import database.conversations as conversations_db
 import database.users as user_db
 from database import redis_db
 from database.redis_db import get_cached_user_geolocation
-from models.conversation import Conversation, TranscriptSegment, ConversationStatus, Structured, Geolocation
+from models.conversation import Conversation, TranscriptSegment, ConversationStatus, Structured, Geolocation, \
+    ConversationPhoto, ConversationSource
 from models.message_event import ConversationEvent, MessageEvent, MessageServiceStatusEvent, LastConversationEvent, \
-    TranslationEvent
+    TranslationEvent, PhotoProcessingEvent, PhotoDescribedEvent
 from models.transcript_segment import Translation
 from utils.apps import is_audio_bytes_app_enabled
 from utils.conversations.location import get_google_maps_location
@@ -87,7 +89,7 @@ async def _listen(
         except WebSocketDisconnect:
             print("WebSocket disconnected", uid)
             websocket_active = False
-        except RuntimeError as e:
+        except Exception as e:
             print(f"Can not send message event, error: {e}", uid)
 
         return False
@@ -227,7 +229,7 @@ async def _listen(
         seconds_to_add = None
 
         conversation = retrieve_in_progress_conversation(uid)
-        if not conversation or not conversation['transcript_segments']:
+        if not conversation or (not conversation.get('transcript_segments') and not conversation.get('photos')):
             return
         await _create_conversation(conversation)
 
@@ -268,20 +270,33 @@ async def _listen(
         MessageServiceStatusEvent(status="in_progress_memories_processing", status_text="Processing Memories"))
     _process_in_progess_memories()
 
-    def _upsert_in_progress_conversation(segments: List[TranscriptSegment], finished_at: datetime):
+    def _upsert_in_progress_conversation(segments: List[TranscriptSegment], photos: List[ConversationPhoto],
+                                         finished_at: datetime):
         if existing := retrieve_in_progress_conversation(uid):
             conversation = Conversation(**existing)
-            conversation.transcript_segments, (starts, ends) = TranscriptSegment.combine_segments(
-                conversation.transcript_segments, segments)
-            conversations_db.update_conversation_segments(uid, conversation.id,
-                                                          [segment.dict() for segment in
-                                                           conversation.transcript_segments])
+            starts, ends = (0, 0)
+            if segments:
+                conversation.transcript_segments, (starts, ends) = TranscriptSegment.combine_segments(
+                    conversation.transcript_segments, segments)
+                conversations_db.update_conversation_segments(uid, conversation.id,
+                                                              [segment.dict() for segment in
+                                                               conversation.transcript_segments])
+            if photos:
+                conversations_db.store_conversation_photos(uid, conversation.id, photos)
+
             conversations_db.update_conversation_finished_at(uid, conversation.id, finished_at)
             redis_db.set_in_progress_conversation_id(uid, conversation.id)
             return conversation, (starts, ends)
 
-        # new
-        started_at = datetime.now(timezone.utc) - timedelta(seconds=segments[0].end - segments[0].start)
+        # new conversation
+        if not segments and not photos:
+            return None, (0, 0)
+
+        if segments:
+            started_at = datetime.now(timezone.utc) - timedelta(seconds=segments[0].end - segments[0].start)
+        else:  # No segments, only photos
+            started_at = finished_at
+
         conversation = Conversation(
             id=str(uuid.uuid4()),
             uid=uid,
@@ -289,9 +304,11 @@ async def _listen(
             language=language,
             created_at=started_at,
             started_at=started_at,
-            finished_at=datetime.now(timezone.utc),
+            finished_at=finished_at,
             transcript_segments=segments,
+            photos=photos,
             status=ConversationStatus.in_progress,
+            source=ConversationSource.openglass if photos else ConversationSource.omi
         )
         print('_get_in_progress_conversation new', conversation, uid)
         conversations_db.upsert_conversation(uid, conversation_data=conversation.dict())
@@ -330,6 +347,7 @@ async def _listen(
     speech_profile_duration = 0
 
     realtime_segment_buffers = []
+    realtime_photo_buffers = []
 
     def stream_transcript(segments):
         nonlocal realtime_segment_buffers
@@ -619,115 +637,124 @@ async def _listen(
             print(f"Translation error: {e}", uid)
 
     async def stream_transcript_process():
-        nonlocal websocket_active
-        nonlocal realtime_segment_buffers
-        nonlocal websocket
-        nonlocal seconds_to_trim
-        nonlocal current_conversation_id
-        nonlocal including_combined_segments
-        nonlocal translation_enabled
+        nonlocal websocket_active, realtime_segment_buffers, realtime_photo_buffers, websocket, seconds_to_trim
+        nonlocal current_conversation_id, including_combined_segments, translation_enabled
 
-        while websocket_active or len(realtime_segment_buffers) > 0:
-            try:
-                await asyncio.sleep(0.3)  # 300ms
+        while websocket_active or len(realtime_segment_buffers) > 0 or len(realtime_photo_buffers) > 0:
+            await asyncio.sleep(0.3)
 
-                if not realtime_segment_buffers or len(realtime_segment_buffers) == 0:
-                    continue
+            if not realtime_segment_buffers and not realtime_photo_buffers:
+                continue
 
-                segments = realtime_segment_buffers.copy()
-                realtime_segment_buffers = []
+            segments_to_process = realtime_segment_buffers.copy()
+            realtime_segment_buffers = []
 
-                # Align the start, end segment
+            photos_to_process = realtime_photo_buffers.copy()
+            realtime_photo_buffers = []
+
+            finished_at = datetime.now(timezone.utc)
+            await create_conversation_on_segment_received_task(finished_at)
+
+            transcript_segments = []
+            if segments_to_process:
                 if seconds_to_trim is None:
-                    seconds_to_trim = segments[0]["start"]
+                    seconds_to_trim = segments_to_process[0]["start"]
 
-                finished_at = datetime.now(timezone.utc)
-                await create_conversation_on_segment_received_task(finished_at)
-
-                # Segments aligning duration seconds.
                 if seconds_to_add:
-                    for i, segment in enumerate(segments):
+                    for i, segment in enumerate(segments_to_process):
                         segment["start"] += seconds_to_add
                         segment["end"] += seconds_to_add
-                        segments[i] = segment
+                        segments_to_process[i] = segment
                 elif seconds_to_trim:
-                    for i, segment in enumerate(segments):
+                    for i, segment in enumerate(segments_to_process):
                         segment["start"] -= seconds_to_trim
                         segment["end"] -= seconds_to_trim
-                        segments[i] = segment
+                        segments_to_process[i] = segment
 
-                transcript_segments, _ = TranscriptSegment.combine_segments([],
-                                                                            [TranscriptSegment(**segment) for segment in
-                                                                             segments])
+                transcript_segments, _ = TranscriptSegment.combine_segments(
+                    [], [TranscriptSegment(**s) for s in segments_to_process]
+                )
 
-                # can trigger race condition? increase soniox utterance?
-                conversation, (starts, ends) = _upsert_in_progress_conversation(transcript_segments, finished_at)
-                current_conversation_id = conversation.id
+            result = _upsert_in_progress_conversation(transcript_segments, photos_to_process, finished_at)
+            if not result or not result[0]:
+                continue
+            conversation, (starts, ends) = result
+            current_conversation_id = conversation.id
 
-                # Send to client
+            if transcript_segments:
                 if including_combined_segments:
                     updates_segments = [segment.dict() for segment in conversation.transcript_segments[starts:ends]]
                 else:
                     updates_segments = [segment.dict() for segment in transcript_segments]
-
                 await websocket.send_json(updates_segments)
 
-                # Send to external trigger
                 if transcript_send is not None:
                     transcript_send([segment.dict() for segment in transcript_segments], current_conversation_id)
 
-                # Translate
                 if translation_enabled:
                     await translate(conversation.transcript_segments[starts:ends], conversation.id)
 
-            except Exception as e:
-                print(f'Could not process transcript: error {e}', uid)
+    image_chunks = {}  # A temporary in-memory cache for image chunks
 
-    # Audio bytes
-    #
-    # # Initiate a separate vad for each websocket
-    # w_vad = webrtcvad.Vad()
-    # w_vad.set_mode(1)
+    async def process_photo(uid: str, image_b64: str, temp_id: str, send_event_func, photo_buffer: list):
+        from utils.llm.openglass import describe_image
+
+        photo_id = str(uuid.uuid4())
+        await send_event_func(PhotoProcessingEvent(temp_id=temp_id, photo_id=photo_id))
+
+        try:
+            description = await describe_image(image_b64)
+            discarded = not description or not description.strip()
+        except Exception as e:
+            print(f"Error describing image: {e}", uid)
+            description = "Could not generate description."
+            discarded = True
+
+        final_photo = ConversationPhoto(id=photo_id, base64=image_b64, description=description, discarded=discarded)
+        photo_buffer.append(final_photo)
+        await send_event_func(PhotoDescribedEvent(photo_id=photo_id, description=description, discarded=discarded))
+
+    async def handle_image_chunk(uid: str, chunk_data: dict, image_chunks_cache: dict, send_event_func,
+                                 photo_buffer: list):
+        temp_id = chunk_data.get('id')
+        index = chunk_data.get('index')
+        total = chunk_data.get('total')
+        data = chunk_data.get('data')
+
+        if not all([temp_id, isinstance(index, int), isinstance(total, int), data]):
+            print(f"Invalid image chunk received: {chunk_data}", uid)
+            return
+
+        if temp_id not in image_chunks_cache:
+            if total <= 0: return
+            image_chunks_cache[temp_id] = [None] * total
+
+        if index < total and image_chunks_cache[temp_id][index] is None:
+            image_chunks_cache[temp_id][index] = data
+
+        if all(chunk is not None for chunk in image_chunks_cache[temp_id]):
+            b64_image_data = "".join(image_chunks_cache[temp_id])
+            del image_chunks_cache[temp_id]
+            safe_create_task(process_photo(uid, b64_image_data, temp_id, send_event_func, photo_buffer))
 
     decoder = opuslib.Decoder(sample_rate, 1)
 
-    # # A  frame must be either 10, 20, or 30 ms in duration
-    # def _has_speech(data, sample_rate):
-    #     sample_size = 320 if sample_rate == 16000 else 160
-    #     offset = 0
-    #     while offset < len(data):
-    #         sample = data[offset:offset + sample_size]
-    #         if len(sample) < sample_size:
-    #             sample = sample + bytes([0x00] * (sample_size - len(sample) % sample_size))
-    #         has_speech = w_vad.is_speech(sample, sample_rate)
-    #         if has_speech:
-    #             return True
-    #         offset += sample_size
-    #     return False
-
-    async def receive_audio(dg_socket1, dg_socket2, soniox_socket, soniox_socket2, speechmatics_socket1):
-        nonlocal websocket_active
-        nonlocal websocket_close_code
-        nonlocal last_audio_received_time
+    async def receive_data(dg_socket1, dg_socket2, soniox_socket, soniox_socket2, speechmatics_socket1):
+        nonlocal websocket_active, websocket_close_code, last_audio_received_time, current_conversation_id
+        nonlocal realtime_photo_buffers
 
         timer_start = time.time()
         last_audio_received_time = timer_start
         try:
             while websocket_active:
-                data = await websocket.receive_bytes()
+                message = await websocket.receive()
                 last_audio_received_time = time.time()
-                if codec == 'opus' and sample_rate == 16000:
-                    data = decoder.decode(bytes(data), frame_size=frame_size)
-                    # audio_data.extend(data)
 
-                # STT
-                has_speech = True
-                # thinh's comment: disabled cause bad performance
-                # if include_speech_profile and codec != 'opus':  # don't do for opus 1.0.4 for now
-                #     has_speech = _has_speech(data, sample_rate)
+                if message.get("bytes") is not None:
+                    data = message.get("bytes")
+                    if codec == 'opus' and sample_rate == 16000:
+                        data = decoder.decode(bytes(data), frame_size=frame_size)
 
-                if has_speech:
-                    # Handle Soniox sockets
                     if soniox_socket is not None:
                         elapsed_seconds = time.time() - timer_start
                         if elapsed_seconds > speech_profile_duration or not soniox_socket2:
@@ -739,11 +766,9 @@ async def _listen(
                         else:
                             await soniox_socket2.send(data)
 
-                    # Handle Speechmatics socket
                     if speechmatics_socket1 is not None:
                         await speechmatics_socket1.send(data)
 
-                    # Handle Deepgram sockets
                     if dg_socket1 is not None:
                         elapsed_seconds = time.time() - timer_start
                         if elapsed_seconds > speech_profile_duration or not dg_socket2:
@@ -755,14 +780,22 @@ async def _listen(
                         else:
                             dg_socket2.send(data)
 
-                # Send to external trigger
-                if audio_bytes_send is not None:
-                    audio_bytes_send(data)
+                    if audio_bytes_send is not None:
+                        audio_bytes_send(data)
+
+                elif message.get("text") is not None:
+                    try:
+                        json_data = json.loads(message.get("text"))
+                        if json_data.get('type') == 'image_chunk':
+                            await handle_image_chunk(uid, json_data, image_chunks, _asend_message_event,
+                                                     realtime_photo_buffers)
+                    except json.JSONDecodeError:
+                        print(f"Received non-json text message: {message.get('text')}", uid)
 
         except WebSocketDisconnect:
             print("WebSocket disconnected", uid)
         except Exception as e:
-            print(f'Could not process audio: error {e}', uid)
+            print(f'Could not process data: error {e}', uid)
             websocket_close_code = 1011
         finally:
             websocket_active = False
@@ -780,8 +813,8 @@ async def _listen(
             audio_bytes_send, audio_bytes_consume = create_pusher_task_handler()
 
         # Tasks
-        audio_process_task = asyncio.create_task(
-            receive_audio(deepgram_socket, deepgram_socket2, soniox_socket, soniox_socket2, speechmatics_socket)
+        data_process_task = asyncio.create_task(
+            receive_data(deepgram_socket, deepgram_socket2, soniox_socket, soniox_socket2, speechmatics_socket)
         )
         stream_transcript_task = asyncio.create_task(stream_transcript_process())
 
@@ -794,7 +827,7 @@ async def _listen(
 
         _send_message_event(MessageServiceStatusEvent(status="ready"))
 
-        tasks = [audio_process_task, stream_transcript_task, heartbeat_task] + pusher_tasks
+        tasks = [data_process_task, stream_transcript_task, heartbeat_task] + pusher_tasks
         await asyncio.gather(*tasks)
 
     except Exception as e:
