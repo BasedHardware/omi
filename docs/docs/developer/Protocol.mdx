@@ -2,15 +2,15 @@
 title: "App-device protocol"
 ---
 
-## BLE Discovery[​](#ble-discovery "Direct link to BLE Discovery")
+## BLE Discovery
 
 The official app discovers the device by scanning for BLE devices with the name `Omi`.
 
-## BLE Services and Characteristics[​](#ble-services-and-characteristics "Direct link to BLE Services and Characteristics")
+## BLE Services and Characteristics
 
 The Omi wearable device implements several services:
 
-### the standard BLE [Battery Service](https://www.bluetooth.com/specifications/specs/battery-service)[​](#the-standard-ble-battery-service "Direct link to the-standard-ble-battery-service")
+### the standard BLE [Battery Service](https://www.bluetooth.com/specifications/specs/battery-service)
 
 The service uses the official UUID of 0x180F and exposes the standard Battery Level characteristic with UUID 0x2A19. The characteristic supports notification to provide regular updates of the level (this does not work with firmware 1.0.x and requires at least v1.5).
 
@@ -32,7 +32,7 @@ The main service has UUID of `19B10000-E8F2-537E-4F6C-D104768A1214` and has two 
 * Audio data with UUID of `19B10001-E8F2-537E-4F6C-D104768A1214`, used to send the audio data from the device to the app.
 * Codec type with UUID of `19B10002-E8F2-537E-4F6C-D104768A1214`, determines what codec should be used to decode the audio data.
 
-### Codec Type[​](#codec-type "Direct link to Codec Type")
+### Codec Type
 
 The possible values for the codec type are:
 
@@ -44,7 +44,7 @@ The possible values for the codec type are:
 
 Starting with version 1.0.3 of the firmware, the device default is Opus. On earlier versions it was PCM 16-bit, 8kHz, mono.
 
-### Audio Data[​](#audio-data "Direct link to Audio Data")
+### Audio Data
 
 The audio data is sent as notifications on the audio characteristic. The format of the data depends on the codec type. The data is split into audio packets, with each packet containing 160 samples. A packet could be sent in multiple value updates if it is larger than (negotiated BLE MTU - 3 bytes). Each value update has a three byte header:
 

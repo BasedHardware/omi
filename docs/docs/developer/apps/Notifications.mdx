@@ -3,9 +3,9 @@ Title: "Sending Notifications with OMI"
 description: "Learn how to send notifications to OMI users from your applications, including direct text notifications and best practices for implementation."
 ---
 
-## Types of Notifications 📬
+## Types of Notifications
 
-### 1. 📱 Direct Text Notifications
+### 1. Direct Text Notifications
 
 Direct text notifications allow you to send immediate messages to specific OMI users. This is useful for alerts, updates, or responses to user actions.
 
@@ -19,113 +19,115 @@ Direct text notifications allow you to send immediate messages to specific OMI u
 
 ## Implementing Notifications 🛠️
 
-### Step 1: Set Up Authentication 🔑
+<Steps>
+  <Step title="Set Up Authentication">
+    Before sending notifications, you'll need:
 
-Before sending notifications, you'll need:
+    1. Your OMI App ID (`app_id`)
+    2. Your OMI App Secret (API Key)
 
-1. Your OMI App ID (`app_id`)
-2. Your OMI App Secret (API Key)
+    Store these securely as environment variables:
+    ```bash
+    OMI_APP_ID=your_app_id_here
+    OMI_APP_SECRET=your_app_secret_here
+    ```
+  </Step>
 
-Store these securely as environment variables:
-```bash
-OMI_APP_ID=your_app_id_here
-OMI_APP_SECRET=your_app_secret_here
-```
+  <Step title="Configure Your Endpoint">
+    #### Base URL and Endpoint
 
-### Step 2: Configure Your Endpoint 🔌
+    ```markdown
+    * **Method:** `POST`
+    * **URL:** `/v2/integrations/{app_id}/notification`
+    * **Base URL:** `api.omi.me`
+    ```
 
-#### Base URL and Endpoint
+    #### Required Headers
 
-```markdown
-* **Method:** `POST`
-* **URL:** `/v2/integrations/{app_id}/notification`
-* **Base URL:** `api.omi.me`
-```
+    ```markdown
+    * **Authorization:** `Bearer <YOUR_APP_SECRET>`
+    * **Content-Type:** `application/json`
+    * **Content-Length:** `0`
+    ```
 
-#### Required Headers
+    #### Query Parameters
 
-```markdown
-* **Authorization:** `Bearer <YOUR_APP_SECRET>`
-* **Content-Type:** `application/json`
-* **Content-Length:** `0`
-```
+    ```markdown
+    * `uid` (string, **required**): The target user's OMI ID
+    * `message` (string, **required**): The notification text
+    ```
+  </Step>
 
-#### Query Parameters
+  <Step title="Implement the Code">
+    Here's a complete Node.js implementation:
 
-```markdown
-* `uid` (string, **required**): The target user's OMI ID
-* `message` (string, **required**): The notification text
-```
+    ```javascript
+    const https = require('https');
 
-### Step 3: Implement the Code 💻
+    /**
+     * Sends a direct notification to an Omi user.
+     * @param {string} userId - The Omi user's unique ID
+     * @param {string} message - The notification text
+     * @returns {Promise<object>} Response data or error
+     */
+    function sendOmiNotification(userId, message) {
+        const appId = process.env.OMI_APP_ID;
+        const appSecret = process.env.OMI_APP_SECRET;
 
-Here's a complete Node.js implementation:
+        if (!appId) throw new Error("OMI_APP_ID not set");
+        if (!appSecret) throw new Error("OMI_APP_SECRET not set");
 
-```javascript
-const https = require('https');
+        const options = {
+            hostname: 'api.omi.me',
+            path: `/v2/integrations/${appId}/notification?uid=${encodeURIComponent(userId)}&message=${encodeURIComponent(message)}`,
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${appSecret}`,
+                'Content-Type': 'application/json',
+                'Content-Length': 0
+            }
+        };
 
-/**
- * Sends a direct notification to an Omi user.
- * @param {string} userId - The Omi user's unique ID
- * @param {string} message - The notification text
- * @returns {Promise<object>} Response data or error
- */
-function sendOmiNotification(userId, message) {
-    const appId = process.env.OMI_APP_ID;
-    const appSecret = process.env.OMI_APP_SECRET;
-
-    if (!appId) throw new Error("OMI_APP_ID not set");
-    if (!appSecret) throw new Error("OMI_APP_SECRET not set");
-
-    const options = {
-        hostname: 'api.omi.me',
-        path: `/v2/integrations/${appId}/notification?uid=${encodeURIComponent(userId)}&message=${encodeURIComponent(message)}`,
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${appSecret}`,
-            'Content-Type': 'application/json',
-            'Content-Length': 0
-        }
-    };
-
-    return new Promise((resolve, reject) => {
-        const req = https.request(options, (res) => {
-            let data = '';
-            res.on('data', chunk => data += chunk);
-            res.on('end', () => {
-                if (res.statusCode >= 200 && res.statusCode < 300) {
-                    try {
-                        resolve(data ? JSON.parse(data) : {});
-                    } catch (e) {
-                        resolve({ raw: data });
+        return new Promise((resolve, reject) => {
+            const req = https.request(options, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                    if (res.statusCode >= 200 && res.statusCode < 300) {
+                        try {
+                            resolve(data ? JSON.parse(data) : {});
+                        } catch (e) {
+                            resolve({ raw: data });
+                        }
+                    } else {
+                        reject(new Error(`API Error (${res.statusCode}): ${data}`));
                     }
-                } else {
-                    reject(new Error(`API Error (${res.statusCode}): ${data}`));
-                }
+                });
             });
+            req.on('error', reject);
+            req.end();
         });
-        req.on('error', reject);
-        req.end();
-    });
-}
-```
+    }
+    ```
+  </Step>
 
-### Step 4: Test Your Implementation 🧪
+  <Step title="Test Your Implementation">
+    1. Set up your environment variables:
+       ```bash
+       export OMI_APP_ID="your_app_id"
+       export OMI_APP_SECRET="your_app_secret"
+       ```
 
-1. Set up your environment variables:
-   ```bash
-   export OMI_APP_ID="your_app_id"
-   export OMI_APP_SECRET="your_app_secret"
-   ```
+    2. Test with a sample notification:
+       ```javascript
+       sendOmiNotification("user_id_here", "Test notification!")
+           .then(response => console.log("Success:", response))
+           .catch(error => console.error("Error:", error));
+       ```
 
-2. Test with a sample notification:
-   ```javascript
-   sendOmiNotification("user_id_here", "Test notification!")
-       .then(response => console.log("Success:", response))
-       .catch(error => console.error("Error:", error));
-   ```
-
-3. Verify the notification appears in the user's OMI app
+    3. Verify the notification appears in the user's OMI app
+  </Step>
+</Steps>
 
 ## Best Practices 🎯
 
@@ -149,7 +151,7 @@ function sendOmiNotification(userId, message) {
    - Validate user IDs before sending
    - Implement request timeouts
 
-## Troubleshooting 🔍
+## Troubleshooting ��
 
 ### Common Issues
 
@@ -177,7 +179,7 @@ function sendOmiNotification(userId, message) {
 | 429 | Too many requests | Implement rate limiting |
 | 500 | Server error | Retry with backoff |
 
-## Example Implementations 💡
+## Example Implementations
 
 ### 1. Task Reminder
 
@@ -197,8 +199,8 @@ function sendServiceUpdate(userId, serviceName, status) {
 }
 ```
 
-## Need Help? 🤝
+## Need Help?
 
 - Check our [API Reference](https://docs.omi.me/docs/api)
 - Join our [Discord community](https://discord.com/invite/omi)
-- Contact [support](https://docs.omi.me/docs/info/Support) 
+- Contact [support](https://docs.omi.me/docs/info/Support)
