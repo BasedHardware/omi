@@ -36,10 +36,10 @@ public:
     // Other permissions (not applicable on Windows but needed for API compatibility)
     std::string CheckBluetoothPermission() { return "granted"; }
     bool RequestBluetoothPermission() { return true; }
-    std::string CheckLocationPermission() { return "granted"; }
-    bool RequestLocationPermission() { return true; }
-    std::string CheckNotificationPermission() { return "granted"; }
-    bool RequestNotificationPermission() { return true; }
+    std::string CheckLocationPermission();
+    bool RequestLocationPermission();
+    std::string CheckNotificationPermission();
+    bool RequestNotificationPermission();
 
     // Set Flutter method channel for sending data back
     void SetMethodChannel(std::shared_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel);

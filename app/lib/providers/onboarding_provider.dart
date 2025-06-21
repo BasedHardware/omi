@@ -82,6 +82,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         hasScreenCapturePermission = false;
       }
     } else {
+      // Mobile platforms (iOS/Android)
       hasBluetoothPermission = await Permission.bluetooth.isGranted;
       hasLocationPermission = await Permission.location.isGranted;
       hasNotificationPermission = await Permission.notification.isGranted;
