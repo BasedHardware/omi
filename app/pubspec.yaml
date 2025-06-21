@@ -3,7 +3,7 @@ description: A new Flutter project.
 
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.64+316
+version: 1.0.64+318
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -15,6 +15,10 @@ dependencies:
   # State Management
   provider: ^6.1.2
   flutter_provider_utilities: ^1.0.6
+
+
+  # Desktop
+  window_manager: 0.3.7
 
   # Localizations
   flutter_localizations:

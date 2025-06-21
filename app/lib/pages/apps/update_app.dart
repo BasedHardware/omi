@@ -245,7 +245,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                             child: Container(
                                               padding: const EdgeInsets.all(4),
                                               decoration: BoxDecoration(
-                                                color: Colors.black.withOpacity(0.6),
+                                                color: Colors.black.withValues(alpha: 0.6),
                                                 shape: BoxShape.circle,
                                               ),
                                               child: const Icon(Icons.close, size: 16),
@@ -387,7 +387,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                     borderRadius: BorderRadius.circular(12.0),
                     color: Colors.grey.shade900,
                     gradient: LinearGradient(
-                      colors: [Colors.black, Colors.black.withOpacity(0)],
+                      colors: [Colors.black, Colors.black.withValues(alpha: 0)],
                       begin: Alignment.bottomCenter,
                       end: Alignment.topCenter,
                     ),

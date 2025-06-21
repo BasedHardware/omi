@@ -154,8 +154,8 @@ class _AddAppPageState extends State<AddAppPage> {
                                     itemCount: provider.thumbnailUrls.length + 1,
                                     itemBuilder: (context, index) {
                                       // Calculate dimensions to maintain 2:3 ratio
-                                      final width = 120.0;
-                                      final height = width * 1.5; // 2:3 ratio
+                                      const width = 120.0;
+                                      const height = width * 1.5; // 2:3 ratio
 
                                       if (index == provider.thumbnailUrls.length) {
                                         return GestureDetector(
@@ -250,7 +250,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                               child: Container(
                                                 padding: const EdgeInsets.all(4),
                                                 decoration: BoxDecoration(
-                                                  color: Colors.black.withOpacity(0.6),
+                                                  color: Colors.black.withValues(alpha: 0.6),
                                                   shape: BoxShape.circle,
                                                 ),
                                                 child: const Icon(Icons.close, size: 16),
@@ -431,7 +431,7 @@ class _AddAppPageState extends State<AddAppPage> {
                   borderRadius: BorderRadius.circular(12.0),
                   color: Colors.grey.shade900,
                   gradient: LinearGradient(
-                    colors: [Colors.black, Colors.black.withOpacity(0)],
+                    colors: [Colors.black, Colors.black.withValues(alpha: 0)],
                     begin: Alignment.bottomCenter,
                     end: Alignment.topCenter,
                   ),
