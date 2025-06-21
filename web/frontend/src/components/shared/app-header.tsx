@@ -5,6 +5,10 @@ import { useEffect, useState } from 'react';
 import ShareButton from '../memories/share-button';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '../../hooks/useAuth';
+import MicMuteToggle from './MicMuteToggle'; // Make sure the path is correct
+
+// MicMuteToggle requires the user's MediaStream
+// See below for how it's integrated
 
 interface NavItem {
   href: string;
@@ -117,6 +121,18 @@ export default function AppHeader({
   const pathname = usePathname();
   const router = useRouter();
   const { user, loading, signIn, signOut, isAuthenticated } = useAuth();
+
+  // New: Microphone stream state for mute toggle
+  const [micStream, setMicStream] = useState<MediaStream | null>(null);
+
+  useEffect(() => {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(setMicStream)
+      .catch(err => {
+        // Optionally: Show error or notification
+        console.error("Could not access microphone:", err);
+      });
+  }, []);
 
   const dreamforcePage = pathname.includes('dreamforce');
 
@@ -243,12 +259,16 @@ export default function AppHeader({
               )}
             </button>
           ))}
+          {/* Add the mic mute toggle to the app bar */}
+          {micStream && <MicMuteToggle stream={micStream} />}
         </nav>
 
-        <div className="md:hidden">
+        <div className="md:hidden flex items-center">
+          {/* Optionally add the mic mute toggle for mobile as well */}
+          {micStream && <MicMuteToggle stream={micStream} />}
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="text-white focus:outline-none"
+            className="text-white focus:outline-none ml-2"
             aria-controls={mobileMenuId}
             aria-expanded={isMobileMenuOpen}
           >
@@ -322,6 +342,12 @@ export default function AppHeader({
               )}
             </button>
           ))}
+          {/* Optionally add the mic mute toggle for mobile menu */}
+          {micStream && (
+            <div className="mt-4">
+              <MicMuteToggle stream={micStream} />
+            </div>
+          )}
         </nav>
         {showShareButton && (
           <div className="mt-4 border-t border-gray-700 pt-4">
