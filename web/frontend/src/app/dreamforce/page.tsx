@@ -6,6 +6,9 @@ import { ErrorBoundary } from 'next/dist/client/components/error-boundary';
 import Image from 'next/image';
 import { Fragment } from 'react';
 
+// Skip static generation - load this page dynamically
+export const dynamic = 'force-dynamic';
+
 export default function DreamforcePage() {
   return (
     <Fragment>
