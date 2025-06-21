@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "me.omi" "\0"
-            VALUE "FileDescription", "omi" "\0"
+            VALUE "FileDescription", "Omi AI" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "omi" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2025 me.omi. All rights reserved." "\0"
             VALUE "OriginalFilename", "omi.exe" "\0"
-            VALUE "ProductName", "omi" "\0"
+            VALUE "ProductName", "Omi" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

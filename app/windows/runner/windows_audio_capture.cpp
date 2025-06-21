@@ -436,11 +436,6 @@ void WindowsAudioCapture::CaptureLoop() {
                         mic_accumulator_.insert(mic_accumulator_.end(), temp_resampled.begin(), temp_resampled.end());
                         got_new_data = true;
                         
-                        if (debug_counter % 100 == 0) {
-                            std::cout << "MIC: " << mic_frames_available << " frames @" << microphone_format_->nSamplesPerSec 
-                                      << "Hz -> " << resampled_frames << " frames @" << FLUTTER_SAMPLE_RATE 
-                                      << "Hz. Accumulator: " << mic_accumulator_.size() << " frames" << std::endl;
-                        }
                     }
                     microphone_capture_->ReleaseBuffer(mic_frames_available);
                 }
@@ -469,16 +464,6 @@ void WindowsAudioCapture::CaptureLoop() {
                         system_accumulator_.insert(system_accumulator_.end(), temp_resampled.begin(), temp_resampled.end());
                         got_new_data = true;
                         
-                        if (debug_counter % 100 == 0) {
-                            std::cout << "SYS: " << system_frames_available << " frames @" << loopback_format_->nSamplesPerSec 
-                                      << "Hz -> " << resampled_frames << " frames @" << FLUTTER_SAMPLE_RATE 
-                                      << "Hz. Accumulator: " << system_accumulator_.size() << " frames" << std::endl;
-                        }
-                    } else {
-                        // Debug silent system audio
-                        if (debug_counter % 200 == 0) {
-                            std::cout << "SYS: Got " << system_frames_available << " SILENT frames" << std::endl;
-                        }
                     }
                     loopback_capture_->ReleaseBuffer(system_frames_available);
                 } else {
@@ -781,16 +766,9 @@ void WindowsAudioCapture::ResampleAudio(const float* input, int input_frames, in
     // Calculate the ratio between input and output sample rates
     double ratio = static_cast<double>(input_rate) / static_cast<double>(output_rate);
     
-    // Calculate expected output frames
-    int expected_output_frames = static_cast<int>(input_frames / ratio);
-    
     // Debug: Show resampling calculation
     static int debug_resample_counter = 0;
-    if (debug_resample_counter % 100 == 0) {
-        std::cout << "RESAMPLE DEBUG: " << input_frames << " frames at " << input_rate 
-                  << "Hz -> Expected " << expected_output_frames << " frames at " << output_rate 
-                  << "Hz (ratio: " << ratio << ", buffer size: " << output_frames << ")" << std::endl;
-    }
+
     debug_resample_counter++;
     
     // Resample using linear interpolation
