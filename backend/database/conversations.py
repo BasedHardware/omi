@@ -371,7 +371,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 
         batch.update(doc_snapshot.reference, update_data)
         batch_count += 1
-        if batch_count >= 450:
+        if batch_count >= 100:
             batch.commit()
             batch = db.batch()
             batch_count = 0
@@ -400,7 +400,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             # Add photo update to the batch
             batch.update(photo_doc.reference, photo_update_payload)
             batch_count += 1
-            if batch_count >= 450:
+            if batch_count >= 100:
                 batch.commit()
                 batch = db.batch()
                 batch_count = 0
