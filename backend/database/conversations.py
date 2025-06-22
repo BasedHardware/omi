@@ -338,7 +338,9 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
     batch_count = 0
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     doc_refs = [conversations_ref.document(conv_id) for conv_id in conversation_ids]
-    doc_snapshots = db.get_all(doc_refs)
+    doc_snapshots = db.get_all(doc_refs, field_paths=[
+        'data_protection_level', 'transcript_segments', 'transcript_segments_compressed'
+    ])
 
     for doc_snapshot in doc_snapshots:
         if not doc_snapshot.exists:
@@ -378,7 +380,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 
         # Now migrate photos for this conversation in the same batch
         photos_ref = doc_snapshot.reference.collection('photos')
-        photos_stream = photos_ref.stream()
+        photos_stream = photos_ref.select(['data_protection_level', 'base64']).stream()
         for photo_doc in photos_stream:
             photo_data = photo_doc.to_dict()
             current_photo_level = photo_data.get('data_protection_level', 'standard')
