@@ -143,12 +143,10 @@ def prepare_for_read(decrypt_func: Callable[[Dict[str, Any], str], Dict[str, Any
             sig = inspect.signature(func)
             bound_args = sig.bind(*args, **kwargs)
             bound_args.apply_defaults()
-
             uid = bound_args.arguments.get('uid')
             if not uid:
                 raise TypeError(f"Function {func.__name__} decorated with prepare_for_read must have a 'uid' argument.")
 
-            # Execute the original function to get the data from the database
             result = func(*args, **kwargs)
 
             if result is None:
@@ -175,16 +173,15 @@ def prepare_for_read(decrypt_func: Callable[[Dict[str, Any], str], Dict[str, Any
                     else:
                         processed_elements.append(element)
                 return tuple(processed_elements)
-
             return result
         return wrapper
     return decorator
 
 
-def with_photos():
+def with_photos(photos_getter: Callable):
     """
     Decorator to automatically populate the 'photos' field for a conversation or a list of conversations.
-    It fetches documents from the 'photos' sub-collection and attaches them.
+    It fetches documents from the 'photos' sub-collection and attaches them using the provided getter.
     This should be applied to functions that return conversation dicts and have a 'uid' parameter.
     """
     def decorator(func):
@@ -214,9 +211,7 @@ def with_photos():
                     return conversation_data
 
                 conversation_id = conversation_data['id']
-                photos_ref = db.collection('users').document(uid).collection('conversations').document(conversation_id).collection('photos')
-                photos_query = photos_ref.order_by('created_at', direction=firestore.Query.ASCENDING)
-                photos = [doc.to_dict() for doc in photos_query.stream()]
+                photos = photos_getter(uid=uid, conversation_id=conversation_id)
                 conversation_data['photos'] = photos
                 return conversation_data
 
