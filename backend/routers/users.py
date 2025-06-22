@@ -296,7 +296,7 @@ def handle_migration_requests(
         # This is for migrating a single object
         if request.type == 'conversation':
             try:
-                conversations_db.migrate_conversation_level(uid, request.id, request.target_level)
+                conversations_db.migrate_conversations_level_batch(uid, [request.id], request.target_level)
                 return {'status': 'ok'}
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Failed to migrate conversation {request.id}: {e}")
