@@ -302,13 +302,13 @@ def handle_migration_requests(
                 raise HTTPException(status_code=500, detail=f"Failed to migrate conversation {request.id}: {e}")
         elif request.type == 'memory':
             try:
-                memories_db.migrate_memory_level(uid, request.id, request.target_level)
+                memories_db.migrate_memories_level_batch(uid, [request.id], request.target_level)
                 return {'status': 'ok'}
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Failed to migrate memory {request.id}: {e}")
         elif request.type == 'chat':
             try:
-                chat_db.migrate_chat_level(uid, request.id, request.target_level)
+                chat_db.migrate_chats_level_batch(uid, [request.id], request.target_level)
                 return {'status': 'ok'}
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Failed to migrate chat message {request.id}: {e}")

@@ -240,38 +240,6 @@ def get_memories_to_migrate(uid: str, target_level: str) -> List[dict]:
     return to_migrate
 
 
-def migrate_memory_level(uid: str, memory_id: str, target_level: str):
-    """
-    Migrates a single memory to the target protection level.
-    """
-    doc_ref = db.collection(users_collection).document(uid).collection(memories_collection).document(memory_id)
-    doc_snapshot = doc_ref.get()
-    if not doc_snapshot.exists:
-        raise ValueError("Memory not found")
-
-    memory_data = doc_snapshot.to_dict()
-    current_level = memory_data.get('data_protection_level', 'standard')
-
-    if current_level == target_level:
-        return  # Nothing to do
-
-    # Decrypt the data first (if needed) to get a clean slate.
-    plain_data = _prepare_memory_for_read(memory_data, uid)
-
-    plain_content = plain_data.get('content')
-    migrated_content = plain_content
-    if target_level == 'enhanced':
-        if isinstance(plain_content, str):
-            migrated_content = encryption.encrypt(plain_content, uid)
-
-    # Update the document with the migrated data and the new protection level.
-    update_data = {
-        'data_protection_level': target_level,
-        'content': migrated_content
-    }
-    doc_ref.update(update_data)
-
-
 def migrate_memories_level_batch(uid: str, memory_ids: List[str], target_level: str):
     """
     Migrates a batch of memories to the target protection level.
