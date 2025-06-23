@@ -37,8 +37,9 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
             else:
                 # Old format: encrypted(json)
                 data['transcript_segments'] = json.loads(decrypted_payload)
-        except (json.JSONDecodeError, TypeError, zlib.error, ValueError):
-            pass
+        except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
+            print(e, uid)
+            data['transcript_segments'] = []
 
     return data
 
