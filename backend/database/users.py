@@ -189,16 +189,16 @@ def get_data_protection_level(uid: str) -> str:
         uid: User ID
 
     Returns:
-        'enhanced' or 'e2ee'. Defaults to 'enhanced'.
+        'standard', 'enhanced', or 'e2ee'. Defaults to 'standard'.
     """
     user_ref = db.collection('users').document(uid)
     user_doc = user_ref.get()
 
     if user_doc.exists:
         user_data = user_doc.to_dict()
-        return user_data.get('data_protection_level', 'enhanced')
+        return user_data.get('data_protection_level', 'standard')
 
-    return 'enhanced'
+    return 'standard'
 
 
 def set_data_protection_level(uid: str, level: str) -> None:
@@ -207,10 +207,10 @@ def set_data_protection_level(uid: str, level: str) -> None:
 
     Args:
         uid: User ID
-        level: 'enhanced', or 'e2ee'
+        level: 'standard', 'enhanced', or 'e2ee'
     """
-    if level not in ['enhanced', 'e2ee']:
-        raise ValueError("Invalid data protection level. Only 'enhanced' or 'e2ee' are supported.")
+    if level not in ['standard', 'enhanced', 'e2ee']:
+        raise ValueError("Invalid data protection level")
     user_ref = db.collection('users').document(uid)
     user_ref.set({'data_protection_level': level}, merge=True)
 

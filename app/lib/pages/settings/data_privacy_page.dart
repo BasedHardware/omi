@@ -147,7 +147,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Your data is secured by default with strong encryption. Review your settings and future privacy options below.',
+                    'Choose how your data is stored and protected on our servers.',
                     style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                   ),
                   const SizedBox(height: 16),
