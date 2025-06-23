@@ -316,8 +316,8 @@ def handle_migration_requests(
             raise HTTPException(status_code=400, detail=f"Unknown object type for migration: {request.type}")
     elif isinstance(request, MigrationTargetRequest):
         # This is for starting the migration process
-        if request.target_level not in ['standard', 'enhanced']:
-            raise HTTPException(status_code=400, detail="Invalid or missing target_level.")
+        if request.target_level != 'enhanced':
+            raise HTTPException(status_code=400, detail="Invalid target_level. Only migration to 'enhanced' is supported.")
 
         set_migration_status(uid, request.target_level)
         return {'status': 'ok', 'message': 'Migration status set.'}
@@ -326,8 +326,8 @@ def handle_migration_requests(
 @router.get('/v1/users/migration/requests', tags=['v1'])
 def get_migration_requests(target_level: str, uid: str = Depends(auth.get_current_user_uid)):
     """Checks which documents need to be migrated to the target level."""
-    if target_level not in ['standard', 'enhanced']:
-        raise HTTPException(status_code=400, detail="Invalid target_level.")
+    if target_level != 'enhanced':
+        raise HTTPException(status_code=400, detail="Invalid target_level. Only migration to 'enhanced' is supported.")
 
     conversations_to_migrate = conversations_db.get_conversations_to_migrate(uid, target_level)
     memories_to_migrate = memories_db.get_memories_to_migrate(uid, target_level)
@@ -376,8 +376,8 @@ def handle_batch_migration_requests(
 @router.post('/v1/users/migration/requests/data-protection-level/finalize', tags=['v1'])
 def finalize_migration_request(request: MigrationTargetRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Finalizes the migration by setting the user's global protection level."""
-    if request.target_level not in ['standard', 'enhanced']:
-        raise HTTPException(status_code=400, detail="Invalid or missing target_level.")
+    if request.target_level != 'enhanced':
+        raise HTTPException(status_code=400, detail="Invalid target_level. Only migration to 'enhanced' is supported.")
 
     finalize_migration(uid, request.target_level)
     set_user_data_protection_level(uid, request.target_level)
