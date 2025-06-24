@@ -95,8 +95,8 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
     int err;
 
     // Voltage divider circuit
-    const uint16_t R1 = 1037; // Calibrated from 1M ohm
-    const uint16_t R2 = 510;  // 510K ohm
+    const uint16_t R1 = 1000;
+    const uint16_t R2 = 499;
 
     k_mutex_lock(&battery_mut, K_FOREVER);
 
