@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 
 import 'widgets/desktop_memory_item.dart';
 import 'widgets/desktop_memory_dialog.dart';
+import 'widgets/desktop_memory_management_dialog.dart';
 import 'package:omi/ui/organisms/memory_review_sheet.dart';
 import 'package:omi/ui/atoms/omi_search_input.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
@@ -784,14 +785,10 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
   }
 
   void _showManagementSheet(BuildContext context, MemoriesProvider provider) {
-    // TODO: Implement desktop memory management sheet
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Management options coming soon'),
-        backgroundColor: ResponsiveHelper.purplePrimary,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(milliseconds: 2000),
+    showDialog(
+      context: context,
+      builder: (context) => DesktopMemoryManagementDialog(
+        provider: provider,
       ),
     );
   }
