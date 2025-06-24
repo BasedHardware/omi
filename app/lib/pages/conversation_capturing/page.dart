@@ -4,6 +4,7 @@ import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/utils/enums.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/widgets/photos_grid.dart';
@@ -118,12 +119,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                         // Summary Tab
                         Center(
                           child: Padding(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 32.0).copyWith(bottom: 50.0), // Adjust padding
+                            padding: const EdgeInsets.symmetric(horizontal: 32.0).copyWith(bottom: 50.0), // Adjust padding
                             child: Text(
-                              provider.segments.isEmpty && provider.photos.isEmpty
-                                  ? "No summary yet"
-                                  : "Conversation is summarized after 2 minutes of no speech 🤫",
+                              provider.segments.isEmpty && provider.photos.isEmpty ? "No summary yet" : "Conversation is summarized after 2 minutes of no speech 🤫",
                               textAlign: TextAlign.center,
                               style: TextStyle(fontSize: provider.segments.isEmpty ? 16 : 22),
                             ),
@@ -149,10 +147,22 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                           _controller!.animateTo(tab == ConversationTab.transcript ? 0 : 1);
                           setState(() {});
                         },
-                        onStopPressed: () {
+                        onStopPressed: () async {
                           if (provider.segments.isNotEmpty || provider.photos.isNotEmpty) {
+                            // Helper function to stop recording and process conversation
+                            Future<void> stopRecordingAndProcess() async {
+                              // Stop any active recording (phone mic or system audio)
+                              if (provider.recordingState == RecordingState.record) {
+                                await provider.stopStreamRecording();
+                              } else if (provider.recordingState == RecordingState.systemAudioRecord) {
+                                await provider.stopSystemAudioRecording();
+                              }
+                              // Then process the conversation
+                              provider.forceProcessingCurrentConversation();
+                            }
+
                             if (!showSummarizeConfirmation) {
-                              context.read<CaptureProvider>().forceProcessingCurrentConversation();
+                              await stopRecordingAndProcess();
                               Navigator.of(context).pop();
                               return;
                             }
@@ -163,8 +173,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                   builder: (context, setState) {
                                     return ConfirmationDialog(
                                       title: "Finished Conversation?",
-                                      description:
-                                          "Are you sure you want to stop recording and summarize the conversation now?\n\nHints: Conversation is summarized after 2 minutes of no speech.",
+                                      description: "Are you sure you want to stop recording and summarize the conversation now?\n\nHints: Conversation is summarized after 2 minutes of no speech.",
                                       checkboxValue: !showSummarizeConfirmation,
                                       checkboxText: "Don't ask me again",
                                       onCheckboxChanged: (value) {
@@ -175,9 +184,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                       onCancel: () {
                                         Navigator.of(context).pop();
                                       },
-                                      onConfirm: () {
+                                      onConfirm: () async {
                                         SharedPreferencesUtil().showSummarizeConfirmation = showSummarizeConfirmation;
-                                        context.read<CaptureProvider>().forceProcessingCurrentConversation();
+                                        await stopRecordingAndProcess();
                                         Navigator.of(context).pop();
                                         Navigator.of(context).pop();
                                       },
