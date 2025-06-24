@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:gradient_borders/gradient_borders.dart';
+
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -398,23 +398,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           if (home.isChatFieldFocused || home.isConvoSearchFieldFocused || home.isAppsSearchFieldFocused || home.isMemoriesSearchFieldFocused) {
                             return const SizedBox.shrink();
                           } else {
-                            return Align(
-                              alignment: Alignment.bottomCenter,
-                              child: Container(
-                                width: double.infinity,
-                                height: 80,
-                                decoration: const BoxDecoration(
-                                  color: Colors.black,
-                                  border: GradientBoxBorder(
-                                    gradient: LinearGradient(colors: [Color.fromARGB(127, 208, 208, 208), Color.fromARGB(127, 188, 99, 121), Color.fromARGB(127, 86, 101, 182), Color.fromARGB(127, 126, 190, 236)]),
-                                    width: 2,
-                                  ),
-                                  shape: BoxShape.rectangle,
-                                ),
-                                child: Stack(
-                                  children: [
-                                    // Regular navigation tabs
-                                    Row(
+                            return Stack(
+                              children: [
+                                // Bottom Navigation Bar
+                                Align(
+                                  alignment: Alignment.bottomCenter,
+                                  child: Container(
+                                    width: double.infinity,
+                                    height: 90,
+                                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                                    decoration: const BoxDecoration(
+                                      color: Color.fromARGB(255, 15, 15, 15),
+                                    ),
+                                    child: Row(
                                       children: [
                                         // Home tab
                                         Expanded(
@@ -429,24 +425,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                               _controller?.animateToPage(0, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                             },
                                             child: Container(
-                                              height: 80,
-                                              child: Column(
-                                                mainAxisAlignment: MainAxisAlignment.center,
-                                                children: [
-                                                  Icon(
-                                                    FontAwesomeIcons.house,
-                                                    color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
-                                                    size: 18,
-                                                  ),
-                                                  const SizedBox(height: 6),
-                                                  Text(
-                                                    'Home',
-                                                    style: TextStyle(
+                                              height: 90,
+                                              child: Padding(
+                                                padding: const EdgeInsets.only(bottom: 15),
+                                                child: Column(
+                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  children: [
+                                                    Icon(
+                                                      FontAwesomeIcons.house,
                                                       color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
-                                                      fontSize: 12,
+                                                      size: 24,
                                                     ),
-                                                  ),
-                                                ],
+                                                  ],
+                                                ),
                                               ),
                                             ),
                                           ),
@@ -464,24 +455,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                               _controller?.animateToPage(1, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                             },
                                             child: Container(
-                                              height: 80,
-                                              child: Column(
-                                                mainAxisAlignment: MainAxisAlignment.center,
-                                                children: [
-                                                  Icon(
-                                                    FontAwesomeIcons.solidMessage,
-                                                    color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
-                                                    size: 18,
-                                                  ),
-                                                  const SizedBox(height: 6),
-                                                  Text(
-                                                    'Chat',
-                                                    style: TextStyle(
+                                              height: 90,
+                                              child: Padding(
+                                                padding: const EdgeInsets.only(bottom: 15),
+                                                child: Column(
+                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  children: [
+                                                    Icon(
+                                                      FontAwesomeIcons.solidMessage,
                                                       color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
-                                                      fontSize: 12,
+                                                      size: 24,
                                                     ),
-                                                  ),
-                                                ],
+                                                  ],
+                                                ),
                                               ),
                                             ),
                                           ),
@@ -501,24 +487,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                               _controller?.animateToPage(2, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                             },
                                             child: Container(
-                                              height: 80,
-                                              child: Column(
-                                                mainAxisAlignment: MainAxisAlignment.center,
-                                                children: [
-                                                  Icon(
-                                                    FontAwesomeIcons.listCheck,
-                                                    color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
-                                                    size: 18,
-                                                  ),
-                                                  const SizedBox(height: 6),
-                                                  Text(
-                                                    'Actions',
-                                                    style: TextStyle(
+                                              height: 90,
+                                              child: Padding(
+                                                padding: const EdgeInsets.only(bottom: 15),
+                                                child: Column(
+                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  children: [
+                                                    Icon(
+                                                      FontAwesomeIcons.listCheck,
                                                       color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
-                                                      fontSize: 12,
+                                                      size: 24,
                                                     ),
-                                                  ),
-                                                ],
+                                                  ],
+                                                ),
                                               ),
                                             ),
                                           ),
@@ -536,79 +517,67 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                               _controller?.animateToPage(3, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                                             },
                                             child: Container(
-                                              height: 80,
-                                              child: Column(
-                                                mainAxisAlignment: MainAxisAlignment.center,
-                                                children: [
-                                                  Icon(
-                                                    FontAwesomeIcons.search,
-                                                    color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
-                                                    size: 18,
-                                                  ),
-                                                  const SizedBox(height: 6),
-                                                  Text(
-                                                    'Explore',
-                                                    style: TextStyle(
+                                              height: 90,
+                                              child: Padding(
+                                                padding: const EdgeInsets.only(bottom: 15),
+                                                child: Column(
+                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  children: [
+                                                    Icon(
+                                                      FontAwesomeIcons.search,
                                                       color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
-                                                      fontSize: 12,
+                                                      size: 24,
                                                     ),
-                                                  ),
-                                                ],
+                                                  ],
+                                                ),
                                               ),
                                             ),
                                           ),
                                         ),
                                       ],
                                     ),
-                                    // Central Record Button
-                                    Positioned(
-                                      left: MediaQuery.of(context).size.width / 2 - 40,
-                                      top: -10,
-                                      child: Consumer<CaptureProvider>(
-                                        builder: (context, captureProvider, child) {
-                                          bool isRecording = captureProvider.recordingState == RecordingState.record;
-                                          bool isInitializing = captureProvider.recordingState == RecordingState.initialising;
-                                          return GestureDetector(
-                                            onTap: () async {
-                                              if (isInitializing) return;
-                                              await _handleRecordButtonPress(context, captureProvider);
-                                            },
-                                            child: Container(
-                                              width: 80,
-                                              height: 80,
-                                              decoration: BoxDecoration(
-                                                shape: BoxShape.circle,
-                                                gradient: LinearGradient(
-                                                  colors: isRecording ? [Colors.red.shade400, Colors.red.shade600] : [const Color.fromARGB(255, 188, 99, 121), const Color.fromARGB(255, 86, 101, 182)],
-                                                  begin: Alignment.topLeft,
-                                                  end: Alignment.bottomRight,
-                                                ),
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                    color: (isRecording ? Colors.red : Colors.purple).withOpacity(0.3),
-                                                    blurRadius: 10,
-                                                    spreadRadius: 2,
-                                                  ),
-                                                ],
-                                              ),
-                                              child: isInitializing
-                                                  ? const CircularProgressIndicator(
-                                                      color: Colors.white,
-                                                      strokeWidth: 2,
-                                                    )
-                                                  : Icon(
-                                                      isRecording ? Icons.stop : Icons.mic,
-                                                      color: Colors.white,
-                                                      size: 32,
-                                                    ),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ],
+                                  ),
                                 ),
-                              ),
+                                // Central Record Button - Now positioned outside the navbar container
+                                Positioned(
+                                  left: MediaQuery.of(context).size.width / 2 - 40,
+                                  bottom: 40, // Position it to protrude above the taller navbar (90px height)
+                                  child: Consumer<CaptureProvider>(
+                                    builder: (context, captureProvider, child) {
+                                      bool isRecording = captureProvider.recordingState == RecordingState.record;
+                                      bool isInitializing = captureProvider.recordingState == RecordingState.initialising;
+                                      return GestureDetector(
+                                        onTap: () async {
+                                          if (isInitializing) return;
+                                          await _handleRecordButtonPress(context, captureProvider);
+                                        },
+                                        child: Container(
+                                          width: 80,
+                                          height: 80,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: isRecording ? Colors.red : Colors.deepPurple,
+                                            border: Border.all(
+                                              color: Colors.black,
+                                              width: 5,
+                                            ),
+                                          ),
+                                          child: isInitializing
+                                              ? const CircularProgressIndicator(
+                                                  color: Colors.white,
+                                                  strokeWidth: 2,
+                                                )
+                                              : Icon(
+                                                  isRecording ? FontAwesomeIcons.stop : FontAwesomeIcons.microphone,
+                                                  color: Colors.white,
+                                                  size: 24,
+                                                ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
                             );
                           }
                         },
@@ -628,8 +597,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     var recordingState = captureProvider.recordingState;
 
     if (recordingState == RecordingState.record) {
-      // Stop recording
+      // Stop recording and summarize conversation
       await captureProvider.stopStreamRecording();
+      captureProvider.forceProcessingCurrentConversation();
       MixpanelManager().phoneMicRecordingStopped();
     } else if (recordingState == RecordingState.initialising) {
       // Already initializing, do nothing
