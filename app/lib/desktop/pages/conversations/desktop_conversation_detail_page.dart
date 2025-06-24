@@ -2,7 +2,9 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -273,6 +275,30 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
             ),
           ),
 
+          // Share button
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => _handleShareConversation(),
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  FontAwesomeIcons.share,
+                  color: ResponsiveHelper.textSecondary,
+                  size: 14,
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 12),
+
+          // Transcript button
           Material(
             color: Colors.transparent,
             child: InkWell(
@@ -503,6 +529,34 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
       icon: FontAwesomeIcons.fileLines,
       title: 'No Transcript Available',
       message: 'This conversation doesn\'t have a transcript.',
+    );
+  }
+
+  Future<void> _handleShareConversation() async {
+    try {
+      bool shared = await setConversationVisibility(widget.conversation.id);
+      if (!shared) {
+        _showSnackBar('Conversation URL could not be shared.');
+        return;
+      }
+      
+      await Clipboard.setData(
+        ClipboardData(text: 'https://h.omi.me/memories/${widget.conversation.id}')
+      );
+      _showSnackBar('Share link copied to clipboard');
+    } catch (e) {
+      _showSnackBar('Failed to generate share link');
+    }
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: ResponsiveHelper.backgroundTertiary,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
     );
   }
 }
