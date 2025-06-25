@@ -341,9 +341,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
         context.read<HomeProvider>().setupHasSpeakerProfile();
         context.read<HomeProvider>().setupUserPrimaryLanguage();
         try {
-          await PlatformManager.instance.intercom.intercom.loginIdentifiedUser(
-            userId: SharedPreferencesUtil().uid,
-          );
+          await PlatformManager.instance.intercom.loginIdentifiedUser(SharedPreferencesUtil().uid);
         } catch (e) {
           debugPrint('Failed to login to Intercom: $e');
         }
