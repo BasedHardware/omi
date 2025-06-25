@@ -111,9 +111,8 @@ class SocketServicePool extends ISocketService {
     // If STT settings not provided, get them from SharedPreferences
     if (sttServerType == null || wyomingServerIp == null) {
       final prefs = SharedPreferencesUtil();
-      sttServerType ??= prefs.getString('stt_server_type') ?? 'traditional';
-      wyomingServerIp ??=
-          prefs.getString('wyoming_server_ip') ?? 'localhost:10300';
+      sttServerType ??= prefs.sttServerType;
+      wyomingServerIp ??= prefs.wyomingServerIp;
     }
 
     return await socket(
@@ -136,9 +135,8 @@ class SocketServicePool extends ISocketService {
 
     // Speech profile also uses STT settings
     final prefs = SharedPreferencesUtil();
-    final sttServerType = prefs.getString('stt_server_type') ?? 'traditional';
-    final wyomingServerIp =
-        prefs.getString('wyoming_server_ip') ?? 'localhost:10300';
+    final sttServerType = prefs.sttServerType;
+    final wyomingServerIp = prefs.wyomingServerIp;
 
     return await socket(
       codec: codec,

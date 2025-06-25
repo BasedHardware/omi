@@ -95,16 +95,11 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
     // Build parameters
     var params =
-        '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${prefs.uid}'
-        '&include_speech_profile=$includeSpeechProfile';
+        '?language=$language&sample_rate=$sampleRate&codec=$codec&include_speech_profile=$includeSpeechProfile';
 
-    if (sttServerType == 'wyoming') {
-      params += '&stt_service=$sttServerType&wyoming_server=$wyomingServerIp';
-    }
+    // Get UID from prefs
+    final uid = prefs.uid;
 
-    debugPrint('[TranscriptionService] URL parameters: $params');
-
-    // Convert to WebSocket URL
     String wsUrl;
     if (backendUrl.startsWith('https://')) {
       wsUrl = backendUrl.replaceFirst('https://', 'wss://');
@@ -132,11 +127,19 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       wsUrl = wsUrl.substring(0, wsUrl.length - 1);
     }
 
-    String finalUrl = '$wsUrl/v4/listen$params';
-    debugPrint('[TranscriptionService] Final WebSocket URL: $finalUrl');
-    debugPrint('[TranscriptionService] STT Service Type: $sttServerType');
+    String finalUrl;
     if (sttServerType == 'wyoming') {
-      debugPrint('[TranscriptionService] Wyoming Server IP: $wyomingServerIp');
+      // Use Wyoming endpoint
+      finalUrl = '$wsUrl/ws/transcribe/$uid$params';
+      debugPrint('[TranscriptionService] Using Wyoming endpoint: $finalUrl');
+    } else if (sttServerType == 'classic' || sttServerType == 'legacy') {
+      finalUrl = '$wsUrl/ws/transcribe_legacy/$uid$params';
+      debugPrint('[TranscriptionService] Using legacy endpoint: $finalUrl');
+    } else {
+      // Default to legacy deepgram
+      finalUrl = '$wsUrl/ws/transcribe_legacy/$uid$params';
+      debugPrint(
+          '[TranscriptionService] Defaulting to legacy endpoint: $finalUrl');
     }
 
     _socket = PureSocket(finalUrl);

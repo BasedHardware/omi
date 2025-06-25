@@ -42,7 +42,8 @@ class CaptureProvider extends ChangeNotifier
   Timer? _keepAliveTimer;
 
   // Method channel for system audio permissions
-  static const MethodChannel _screenCaptureChannel = MethodChannel('screenCapturePlatform');
+  static const MethodChannel _screenCaptureChannel =
+      MethodChannel('screenCapturePlatform');
 
   IWalService get _wal => ServiceManager.instance().wal;
 
@@ -147,7 +148,11 @@ class CaptureProvider extends ChangeNotifier
   }) async {
     print("changeAudioRecordProfile");
     await _resetState();
-    await _initiateWebsocket(audioCodec: audioCodec, sampleRate: sampleRate, channels: channels, isPcm: isPcm);
+    await _initiateWebsocket(
+        audioCodec: audioCodec,
+        sampleRate: sampleRate,
+        channels: channels,
+        isPcm: isPcm);
   }
 
   Future<void> _initiateWebsocket({
@@ -161,16 +166,17 @@ class CaptureProvider extends ChangeNotifier
 
     BleAudioCodec codec = audioCodec;
     sampleRate ??= mapCodecToSampleRate(codec);
-    channels ??= (codec == BleAudioCodec.pcm16 || codec == BleAudioCodec.pcm8) ? 1 : 2;
+    channels ??=
+        (codec == BleAudioCodec.pcm16 || codec == BleAudioCodec.pcm8) ? 1 : 2;
 
     debugPrint('is ws null: ${_socket == null}');
-    print('Initiating WebSocket with: codec=$codec, sampleRate=$sampleRate, channels=$channels, isPcm=$isPcm');
+    print(
+        'Initiating WebSocket with: codec=$codec, sampleRate=$sampleRate, channels=$channels, isPcm=$isPcm');
 
     // Get STT server settings from SharedPreferences
     final prefs = SharedPreferencesUtil();
-    final sttServerType = prefs.getString('stt_server_type') ?? 'traditional';
-    final wyomingServerIp =
-        prefs.getString('wyoming_server_ip') ?? 'localhost:10300';
+    final sttServerType = prefs.sttServerType;
+    final wyomingServerIp = prefs.wyomingServerIp;
 
     // Connect to the transcript socket with STT settings
     String language = SharedPreferencesUtil().hasSetPrimaryLanguage
@@ -408,9 +414,8 @@ class CaptureProvider extends ChangeNotifier
 
     // Get current STT settings
     final prefs = SharedPreferencesUtil();
-    final sttServerType = prefs.getString('stt_server_type') ?? 'traditional';
-    final wyomingServerIp =
-        prefs.getString('wyoming_server_ip') ?? 'localhost:10300';
+    final sttServerType = prefs.sttServerType;
+    final wyomingServerIp = prefs.wyomingServerIp;
 
     // Check if we need to reconnect due to STT settings change
     bool needsReconnection = language != _socket?.language ||
@@ -517,40 +522,49 @@ class CaptureProvider extends ChangeNotifier
 
     try {
       // Check microphone permission first
-      String micStatus = await _screenCaptureChannel.invokeMethod('checkMicrophonePermission');
+      String micStatus =
+          await _screenCaptureChannel.invokeMethod('checkMicrophonePermission');
       if (micStatus != 'granted') {
         debugPrint('Microphone permission not granted: $micStatus');
         if (micStatus == 'undetermined') {
-          bool micGranted = await _screenCaptureChannel.invokeMethod('requestMicrophonePermission');
+          bool micGranted = await _screenCaptureChannel
+              .invokeMethod('requestMicrophonePermission');
           if (!micGranted) {
-            AppSnackbar.showSnackbarError('Microphone permission is required for system audio recording.');
+            AppSnackbar.showSnackbarError(
+                'Microphone permission is required for system audio recording.');
             updateRecordingState(RecordingState.stop);
             return;
           }
         } else if (micStatus == 'denied') {
-          AppSnackbar.showSnackbarError('Microphone permission denied. Please grant permission in System Preferences.');
+          AppSnackbar.showSnackbarError(
+              'Microphone permission denied. Please grant permission in System Preferences.');
           updateRecordingState(RecordingState.stop);
           return;
         }
       }
 
       // Check screen capture permission
-      String screenStatus = await _screenCaptureChannel.invokeMethod('checkScreenCapturePermission');
+      String screenStatus = await _screenCaptureChannel
+          .invokeMethod('checkScreenCapturePermission');
       if (screenStatus != 'granted') {
         debugPrint('Screen capture permission not granted: $screenStatus');
         if (screenStatus == 'undetermined' || screenStatus == 'denied') {
-          bool screenGranted = await _screenCaptureChannel.invokeMethod('requestScreenCapturePermission');
+          bool screenGranted = await _screenCaptureChannel
+              .invokeMethod('requestScreenCapturePermission');
           if (!screenGranted) {
-            AppSnackbar.showSnackbarError('Screen capture permission is required for system audio recording.');
+            AppSnackbar.showSnackbarError(
+                'Screen capture permission is required for system audio recording.');
             updateRecordingState(RecordingState.stop);
             return;
           }
         }
       }
 
-      await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
+      await changeAudioRecordProfile(
+          audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
 
-      await ServiceManager.instance().systemAudio.start(onFormatReceived: (Map<String, dynamic> format) async {
+      await ServiceManager.instance().systemAudio.start(
+          onFormatReceived: (Map<String, dynamic> format) async {
         final int sampleRate = format['sampleRate'] as int? ?? 16000;
         final int channels = format['channels'] as int? ?? 1;
         BleAudioCodec determinedCodec = BleAudioCodec.pcm16;
@@ -612,8 +626,10 @@ class CaptureProvider extends ChangeNotifier
             audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
         return;
       }
-      if (recordingState == RecordingState.systemAudioRecord && Platform.isMacOS) {
-        debugPrint("[Provider] System audio was recording, but socket disconnected. Consider manual restart.");
+      if (recordingState == RecordingState.systemAudioRecord &&
+          Platform.isMacOS) {
+        debugPrint(
+            "[Provider] System audio was recording, but socket disconnected. Consider manual restart.");
       }
     });
   }

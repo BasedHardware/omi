@@ -7,8 +7,7 @@ from enum import Enum
 
 import opuslib
 import webrtcvad
-from fastapi import APIRouter, Depends
-from fastapi.websockets import WebSocketDisconnect, WebSocket
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from pydub import AudioSegment
 from starlette.websockets import WebSocketState
 
@@ -37,10 +36,10 @@ from utils.translation_cache import TranscriptSegmentLanguageCache
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists
 
-from services.transcribe.session import WebSocketTranscribeSession
+# --- Wyoming Handler Import ---
+from services.transcribe.wyoming_simple import _listen as wyoming_listen
 
 router = APIRouter()
-
 
 # Replace your _listen function with this fixed debug version:
 async def _listen(
@@ -213,3 +212,51 @@ async def listen_handler(
     )
     
     await session.run()
+
+# --- Classic/Legaacy Endpoint ---
+@router.websocket("/ws/transcribe_legacy/{uid}")
+async def websocket_legacy_endpoint(
+    websocket: WebSocket,
+    uid: str,
+    language: str = 'en',
+    sample_rate: int = 8000,
+    codec: str = 'pcm8',
+    channels: int = 1,
+    include_speech_profile: bool = True,
+    including_combined_segments: bool = False,
+):
+    """Classic/legacy WebSocket endpoint for transcription (original logic)."""
+    await _listen(
+        websocket=websocket,
+        uid=uid,
+        language=language,
+        sample_rate=sample_rate,
+        codec=codec,
+        channels=channels,
+        include_speech_profile=include_speech_profile,
+        including_combined_segments=including_combined_segments,
+    )
+
+# --- Wyoming Endpoint ---
+@router.websocket("/ws/transcribe/{uid}")
+async def websocket_wyoming_endpoint(
+    websocket: WebSocket,
+    uid: str,
+    language: str = 'en',
+    sample_rate: int = 8000,
+    codec: str = 'pcm8',
+    channels: int = 1,
+    include_speech_profile: bool = True,
+    including_combined_segments: bool = False,
+):
+    """Wyoming-based WebSocket endpoint for transcription (new logic)."""
+    await wyoming_listen(
+        websocket=websocket,
+        uid=uid,
+        language=language,
+        sample_rate=sample_rate,
+        codec=codec,
+        channels=channels,
+        include_speech_profile=include_speech_profile,
+        including_combined_segments=including_combined_segments,
+    )
