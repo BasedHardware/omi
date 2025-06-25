@@ -12,7 +12,7 @@ LOG_MODULE_REGISTER(battery, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define BATTERY_STATES_COUNT 16
 
-#define ADC_TOTAL_SAMPLES 20
+#define ADC_TOTAL_SAMPLES 10
 // +1 for the calibration sample
 int16_t sample_buffer[ADC_TOTAL_SAMPLES + 1];
 
@@ -95,8 +95,8 @@ int battery_get_millivolt(uint16_t *battery_millivolt)
     int err;
 
     // Voltage divider circuit
-    const uint16_t R1 = 1000; // Multiplier fix
-    const uint16_t R2 = 499;  // For accurate readings
+    const uint16_t R1 = 1115; // based on practical measurements adjusted on the omi device, in theory, R1 is > 1MOhm.
+    const uint16_t R2 = 499;
 
     k_mutex_lock(&battery_mut, K_FOREVER);
 
