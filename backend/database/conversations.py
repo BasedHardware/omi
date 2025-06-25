@@ -26,17 +26,29 @@ conversations_collection = 'conversations'
 def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
     data = copy.deepcopy(conversation_data)
 
-    if 'transcript_segments' in data and isinstance(data['transcript_segments'], str):
+    if 'transcript_segments' not in data:
+        return data
+
+    if isinstance(data['transcript_segments'], str):
         try:
             decrypted_payload = encryption.decrypt(data['transcript_segments'], uid)
             if data.get('transcript_segments_compressed'):
-                # New format: encrypted(compressed(json))
                 compressed_bytes = bytes.fromhex(decrypted_payload)
                 decompressed_json = zlib.decompress(compressed_bytes).decode('utf-8')
                 data['transcript_segments'] = json.loads(decompressed_json)
+            # backward compatibility, will be removed soon
             else:
-                # Old format: encrypted(json)
                 data['transcript_segments'] = json.loads(decrypted_payload)
+        except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
+            print(e, uid)
+            data['transcript_segments'] = []
+    # backward compatibility, will be removed soon
+    elif isinstance(data['transcript_segments'], bytes):
+        try:
+            compressed_bytes = data['transcript_segments']
+            if data.get('transcript_segments_compressed'):
+                decompressed_json = zlib.decompress(compressed_bytes).decode('utf-8')
+                data['transcript_segments'] = json.loads(decompressed_json)
         except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
             print(e, uid)
             data['transcript_segments'] = []
@@ -75,7 +87,8 @@ def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], 
             try:
                 decompressed_json = zlib.decompress(data['transcript_segments']).decode('utf-8')
                 data['transcript_segments'] = json.loads(decompressed_json)
-            except (json.JSONDecodeError, TypeError, zlib.error):
+            except (json.JSONDecodeError, TypeError, zlib.error) as e:
+                print(e)
                 pass
 
     return data
