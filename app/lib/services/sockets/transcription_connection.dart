@@ -93,12 +93,9 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       debugPrint('[TranscriptionService] Removed trailing slash: $backendUrl');
     }
 
-    // Build parameters
-    var params =
-        '?language=$language&sample_rate=$sampleRate&codec=$codec&include_speech_profile=$includeSpeechProfile';
-
     // Get UID from prefs
     final uid = prefs.uid;
+    debugPrint('[TranscriptionService] Using UID: $uid');
 
     String wsUrl;
     if (backendUrl.startsWith('https://')) {
@@ -127,20 +124,11 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       wsUrl = wsUrl.substring(0, wsUrl.length - 1);
     }
 
-    String finalUrl;
-    if (sttServerType == 'wyoming') {
-      // Use Wyoming endpoint
-      finalUrl = '$wsUrl/ws/transcribe/$uid$params';
-      debugPrint('[TranscriptionService] Using Wyoming endpoint: $finalUrl');
-    } else if (sttServerType == 'classic' || sttServerType == 'legacy') {
-      finalUrl = '$wsUrl/ws/transcribe_legacy/$uid$params';
-      debugPrint('[TranscriptionService] Using legacy endpoint: $finalUrl');
-    } else {
-      // Default to legacy deepgram
-      finalUrl = '$wsUrl/ws/transcribe_legacy/$uid$params';
-      debugPrint(
-          '[TranscriptionService] Defaulting to legacy endpoint: $finalUrl');
-    }
+    // use v4/listen endpoint with uid as query param
+    var params =
+        '?uid=$uid&language=$language&sample_rate=$sampleRate&codec=$codec&include_speech_profile=$includeSpeechProfile';
+    final finalUrl = '$wsUrl/v4/listen$params';
+    debugPrint('[TranscriptionService] Using v4/listen endpoint: $finalUrl');
 
     _socket = PureSocket(finalUrl);
     _socket.setListener(this);

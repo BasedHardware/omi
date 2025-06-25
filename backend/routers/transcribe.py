@@ -198,65 +198,28 @@ async def listen_handler(
     
     print(f"✅ Starting session for UID: {uid}")
     
-    # Create and run session
-    session = WebSocketTranscribeSession(
-        websocket=websocket,
-        uid=uid,
-        language=language,
-        sample_rate=sample_rate,
-        codec=codec,
-        channels=channels,
-        include_speech_profile=include_speech_profile,
-        stt_service=stt_service,
-        including_combined_segments=True
-    )
-    
-    await session.run()
-
-# --- Classic/Legaacy Endpoint ---
-@router.websocket("/ws/transcribe_legacy/{uid}")
-async def websocket_legacy_endpoint(
-    websocket: WebSocket,
-    uid: str,
-    language: str = 'en',
-    sample_rate: int = 8000,
-    codec: str = 'pcm8',
-    channels: int = 1,
-    include_speech_profile: bool = True,
-    including_combined_segments: bool = False,
-):
-    """Classic/legacy WebSocket endpoint for transcription (original logic)."""
-    await _listen(
-        websocket=websocket,
-        uid=uid,
-        language=language,
-        sample_rate=sample_rate,
-        codec=codec,
-        channels=channels,
-        include_speech_profile=include_speech_profile,
-        including_combined_segments=including_combined_segments,
-    )
-
-# --- Wyoming Endpoint ---
-@router.websocket("/ws/transcribe/{uid}")
-async def websocket_wyoming_endpoint(
-    websocket: WebSocket,
-    uid: str,
-    language: str = 'en',
-    sample_rate: int = 8000,
-    codec: str = 'pcm8',
-    channels: int = 1,
-    include_speech_profile: bool = True,
-    including_combined_segments: bool = False,
-):
-    """Wyoming-based WebSocket endpoint for transcription (new logic)."""
-    await wyoming_listen(
-        websocket=websocket,
-        uid=uid,
-        language=language,
-        sample_rate=sample_rate,
-        codec=codec,
-        channels=channels,
-        include_speech_profile=include_speech_profile,
-        including_combined_segments=including_combined_segments,
-    )
+    # Determine the best STT service
+    stt_service_enum, stt_language, stt_model = get_stt_service_for_language(language)
+    if stt_service_enum == STTService.wyoming:
+        await wyoming_listen(
+            websocket=websocket,
+            uid=uid,
+            language=language,
+            sample_rate=sample_rate,
+            codec=codec,
+            channels=channels,
+            include_speech_profile=include_speech_profile,
+            including_combined_segments=True
+        )
+    else:
+        await _listen(
+            websocket=websocket,
+            uid=uid,
+            language=language,
+            sample_rate=sample_rate,
+            codec=codec,
+            channels=channels,
+            include_speech_profile=include_speech_profile,
+            stt_service=stt_service,
+            including_combined_segments=True
+        )
