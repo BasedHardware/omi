@@ -69,14 +69,16 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   BleAudioCodec codec;
   String language;
   bool includeSpeechProfile;
+  String? sttServerType;
+  String? wyomingServerIp;
 
   TranscriptSegmentSocketService.create(
     this.sampleRate,
     this.codec,
     this.language, {
     this.includeSpeechProfile = false,
-    String? sttServerType,
-    String? wyomingServerIp,
+    this.sttServerType,
+    this.wyomingServerIp,
   }) {
     // Get STT settings from SharedPreferences if not provided
     final prefs = SharedPreferencesUtil();
@@ -127,6 +129,16 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     // use v4/listen endpoint with uid as query param
     var params =
         '?uid=$uid&language=$language&sample_rate=$sampleRate&codec=$codec&include_speech_profile=$includeSpeechProfile';
+
+    // Add Wyoming server IP if using Wyoming STT
+    if (sttServerType == 'wyoming' &&
+        wyomingServerIp != null &&
+        wyomingServerIp!.isNotEmpty) {
+      params += '&wyoming_server_ip=$wyomingServerIp';
+      debugPrint(
+          '[TranscriptionService] Adding Wyoming server IP: $wyomingServerIp');
+    }
+
     final finalUrl = '$wsUrl/v4/listen$params';
     debugPrint('[TranscriptionService] Using v4/listen endpoint: $finalUrl');
 
@@ -264,8 +276,8 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       return;
     }
 
-    // Message event
-    if (jsonEvent.containsKey("type")) {
+    // Message event - check for both "type" and "event_type"
+    if (jsonEvent.containsKey("type") || jsonEvent.containsKey("event_type")) {
       var event = ServerMessageEvent.fromJson(jsonEvent);
       debugPrint(
           '[TranscriptionService] Received message event: ${event.type}');

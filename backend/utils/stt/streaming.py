@@ -535,19 +535,42 @@ async def process_audio_speechmatics(stream_transcript, sample_rate: int, langua
         print(f"Exception in process_audio_speechmatics: {e}")
         raise
 
-async def process_audio_wyoming(stream_transcript, language: str, sample_rate: int, channels: int, preseconds: int = 0):
+async def process_audio_wyoming(stream_transcript, language: str, sample_rate: int, channels: int, preseconds: int = 0, wyoming_server_ip: str = None):
     """Process audio using Wyoming Whisper backend - Batch Processing Like Working Client"""
     print(f'🐍 process_audio_wyoming START - Batch Processing Mode')
     print(f'📋 Parameters: language={language}, sample_rate={sample_rate}, channels={channels}, preseconds={preseconds}')
+    print(f'🔗 Wyoming server IP: {wyoming_server_ip}')
     
     from wyoming.asr import Transcribe, Transcript
     from wyoming.audio import AudioStart, AudioStop, AudioChunk
     from wyoming.client import AsyncTcpClient
 
-    WYOMING_HOST = os.getenv('WYOMING_HOST', 'localhost')
-    WYOMING_PORT = int(os.getenv('WYOMING_PORT', '10300'))
+    # Parse Wyoming server IP from parameter or fall back to environment variables
+    if wyoming_server_ip:
+        # Parse IP:port format (e.g., "192.168.1.2:10300")
+        if ':' in wyoming_server_ip:
+            WYOMING_HOST, port_str = wyoming_server_ip.split(':', 1)
+            WYOMING_PORT = int(port_str)
+        else:
+            WYOMING_HOST = wyoming_server_ip
+            WYOMING_PORT = 10300  # Default port
+    else:
+        # Fall back to environment variables
+        WYOMING_HOST = os.getenv('WYOMING_HOST', 'localhost')
+        WYOMING_PORT = int(os.getenv('WYOMING_PORT', '10300'))
 
     print(f'🔗 Wyoming connection details: {WYOMING_HOST}:{WYOMING_PORT}')
+    
+    # Test connection to Wyoming server before proceeding
+    print(f'🔍 Testing connection to Wyoming server...')
+    try:
+        test_client = AsyncTcpClient(WYOMING_HOST, WYOMING_PORT)
+        await asyncio.wait_for(test_client.connect(), timeout=5)
+        await test_client.disconnect()
+        print(f'✅ Wyoming server connection test successful')
+    except Exception as e:
+        print(f'❌ Wyoming server connection test failed: {e}')
+        raise Exception(f"Failed to connect to Wyoming server at {WYOMING_HOST}:{WYOMING_PORT}: {e}")
 
     # Audio buffering for batch processing
     audio_buffer = bytearray()
@@ -557,6 +580,7 @@ async def process_audio_wyoming(stream_transcript, language: str, sample_rate: i
     chunks_processed = 0
     transcript_received = False
     last_process_time = time.time()
+    session_start_time = time.time()  # Track session start for proper timing
     
     print(f'📊 Batch processing config: segment_size={target_buffer_size} bytes, duration={buffer_duration_seconds}s')
     
@@ -586,9 +610,9 @@ async def process_audio_wyoming(stream_transcript, language: str, sample_rate: i
             last_process_time = current_time
             
             # Process this segment in background (like working client)
-            asyncio.create_task(process_audio_segment(audio_to_process, chunks_processed))
+            asyncio.create_task(process_audio_segment(audio_to_process, chunks_processed, chunk_duration))
 
-    async def process_audio_segment(audio_data, segment_number):
+    async def process_audio_segment(audio_data, segment_number, segment_duration):
         """Process a single audio segment - exactly like working client"""
         try:
             print(f'🔄 [Segment-{segment_number}] Starting transcription...')
@@ -621,18 +645,23 @@ async def process_audio_wyoming(stream_transcript, language: str, sample_rate: i
                         transcript = Transcript.from_event(event)
                         text = transcript.text.strip()
                         if text:
-                            duration = len(audio_data) / (sample_rate * channels * 2)
-                            print(f'🗣️  [Segment-{segment_number}] ({duration:.1f}s): "{text}"')
+                            print(f'🗣️  [Segment-{segment_number}] ({segment_duration:.1f}s): "{text}"')
                             
-                            # Create segment for UI
-                            current_time = time.time()
+                            # Calculate proper timestamps based on session start and segment number
+                            # Each segment should follow the previous one in time
+                            segment_start_time = session_start_time + (segment_number - 1) * buffer_duration_seconds
+                            segment_end_time = segment_start_time + segment_duration
+                            
+                            # Create transcript segment with unique ID
+                            segment_id = f"wyoming_{int(time.time() * 1000)}_{chunks_processed}"
                             segment = {
-                                'speaker': "SPEAKER_1",
-                                'start': max(0, current_time - duration),
-                                'end': current_time,
+                                'id': segment_id,
+                                'speaker': 'SPEAKER_1',
+                                'start': segment_start_time,
+                                'end': segment_end_time,
                                 'text': text,
-                                'is_user': True if preseconds > 0 else False,
-                                'person_id': None,
+                                'is_user': False,
+                                'person_id': None
                             }
                             
                             print(f'📤 [Segment-{segment_number}] Sending to UI: {segment}')
@@ -658,7 +687,7 @@ async def process_audio_wyoming(stream_transcript, language: str, sample_rate: i
             if len(audio_buffer) > 16000:  # At least 0.5 seconds
                 print(f'🎤 Processing final audio buffer: {len(audio_buffer)} bytes')
                 audio_to_process = bytes(audio_buffer)
-                await process_audio_segment(audio_to_process, chunks_processed + 1)
+                await process_audio_segment(audio_to_process, chunks_processed + 1, 0.5)
             
             print(f'✅ Wyoming batch processing cleanup completed')
         except Exception as e:

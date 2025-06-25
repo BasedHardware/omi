@@ -184,7 +184,8 @@ async def listen_handler(
         codec: str = 'pcm8',
         channels: int = 1, 
         include_speech_profile: bool = True, 
-        stt_service: str = None
+        stt_service: str = None,
+        wyoming_server_ip: str = None
 ):
     """Main WebSocket endpoint for transcription."""
     print(f"🚨 WebSocket endpoint hit: {websocket.query_params}")
@@ -193,33 +194,267 @@ async def listen_handler(
     uid = websocket.query_params.get('uid')
     if not uid:
         print("❌ No UID provided in query params")
-        await websocket.close(code=1008, reason="Missing uid parameter")
+        await websocket.close(code=1008, reason="No UID provided")
         return
     
-    print(f"✅ Starting session for UID: {uid}")
+    print(f"✅ UID from query params: {uid}")
     
-    # Determine the best STT service
-    stt_service_enum, stt_language, stt_model = get_stt_service_for_language(language)
-    if stt_service_enum == STTService.wyoming:
-        await wyoming_listen(
-            websocket=websocket,
-            uid=uid,
-            language=language,
-            sample_rate=sample_rate,
-            codec=codec,
-            channels=channels,
-            include_speech_profile=include_speech_profile,
-            including_combined_segments=True
+    # Determine STT service based on language
+    stt_service, actual_language, model = get_stt_service_for_language(language)
+    print(f"🎯 Selected STT service: {stt_service}, language: {actual_language}, model: {model}")
+    
+    # Route to appropriate handler based on STT service
+    if stt_service == STTService.wyoming:
+        print(f"🐍 Routing to Wyoming handler with server IP: {wyoming_server_ip}")
+        await _listen_wyoming(
+            websocket, uid, actual_language, sample_rate, codec, channels, 
+            include_speech_profile, wyoming_server_ip=wyoming_server_ip
         )
     else:
+        print(f"🔧 Routing to classic handler")
         await _listen(
-            websocket=websocket,
-            uid=uid,
-            language=language,
-            sample_rate=sample_rate,
-            codec=codec,
-            channels=channels,
-            include_speech_profile=include_speech_profile,
-            stt_service=stt_service,
-            including_combined_segments=True
+            websocket, uid, actual_language, sample_rate, codec, channels, 
+            include_speech_profile
         )
+
+async def _listen_wyoming(
+    websocket: WebSocket, 
+    uid: str, 
+    language: str = 'en', 
+    sample_rate: int = 8000, 
+    codec: str = 'pcm8',
+    channels: int = 1, 
+    include_speech_profile: bool = True,
+    wyoming_server_ip: str = None
+):
+    """Wyoming WebSocket handler with configurable server IP."""
+    print(f'🎤 Wyoming transcribe session for {uid}: {language}, {sample_rate}Hz, {codec}')
+    print(f'🔗 Wyoming server IP: {wyoming_server_ip}')
+    
+    # Validate user ID
+    if not uid or len(uid) <= 0:
+        await websocket.close(code=1008, reason="Bad uid")
+        return
+    
+    # Handle codec and frame size
+    frame_size = 160
+    if codec == "opus_fs320":
+        codec = "opus"
+        frame_size = 320
+    
+    # Convert 'auto' to 'multi' for consistency
+    language = 'multi' if language == 'auto' else language
+    
+    # Accept WebSocket connection
+    try:
+        await websocket.accept()
+        print(f'✅ WebSocket accepted for {uid}')
+    except RuntimeError as e:
+        print(f"❌ WebSocket accept error: {e}")
+        await websocket.close(code=1011, reason="Dirty state")
+        return
+    
+    # Session state
+    websocket_active = True
+    websocket_close_code = 1001
+    realtime_segment_buffers = []
+    
+    # Heartbeat management
+    started_at = time.time()
+    timeout_seconds = 420  # 7 minutes
+    has_timeout = os.getenv('NO_SOCKET_TIMEOUT') is None
+    inactivity_timeout_seconds = 30
+    last_audio_received_time = None
+    
+    async def send_heartbeat():
+        """Send heartbeat to keep connection alive."""
+        nonlocal websocket_active, websocket_close_code, started_at, last_audio_received_time
+        
+        try:
+            while websocket_active:
+                # Send ping
+                if websocket.client_state == WebSocketState.CONNECTED:
+                    await websocket.send_text("ping")
+                else:
+                    break
+                
+                # Check timeout
+                if has_timeout and time.time() - started_at >= timeout_seconds:
+                    print(f"Session timeout hit: {timeout_seconds}s for {uid}")
+                    websocket_close_code = 1001
+                    websocket_active = False
+                    break
+                
+                # Check inactivity timeout
+                if last_audio_received_time and time.time() - last_audio_received_time > inactivity_timeout_seconds:
+                    print(f"Session timeout due to inactivity: {inactivity_timeout_seconds}s for {uid}")
+                    websocket_close_code = 1001
+                    websocket_active = False
+                    break
+                
+                await asyncio.sleep(10)
+        except WebSocketDisconnect:
+            print(f"WebSocket disconnected for {uid}")
+        except Exception as e:
+            print(f'Heartbeat error for {uid}: {e}')
+            websocket_close_code = 1011
+        finally:
+            websocket_active = False
+    
+    # Start heartbeat
+    heartbeat_task = asyncio.create_task(send_heartbeat())
+    
+    # Send initial status
+    print(f'📤 [Wyoming-{uid}] Sending initial status: initiating')
+    await websocket.send_json(MessageServiceStatusEvent(
+        event_type="service_status", 
+        status="initiating", 
+        status_text="Service Starting"
+    ).dict())
+    
+    # Define stream_transcript function before using it
+    def stream_transcript(segments):
+        """Buffer transcript segments for processing."""
+        nonlocal realtime_segment_buffers
+        realtime_segment_buffers.extend(segments)
+    
+    # Initialize Wyoming STT
+    wyoming_send_audio = None
+    wyoming_cleanup = None
+    decoder = None
+    
+    try:
+        # Initialize Opus decoder if needed
+        if codec == 'opus' and sample_rate == 16000:
+            decoder = opuslib.Decoder(sample_rate, 1)
+            print(f'🎵 Opus decoder initialized for {sample_rate}Hz')
+        
+        # Send STT connecting status
+        print(f'📤 [Wyoming-{uid}] Sending STT connecting status')
+        await websocket.send_json(MessageServiceStatusEvent(
+            event_type="service_status", 
+            status="stt_connecting", 
+            status_text="Connecting to Wyoming STT"
+        ).dict())
+        
+        # Initialize Wyoming connection with custom server IP
+        print(f'🔗 [Wyoming-{uid}] Initializing Wyoming connection...')
+        wyoming_send_audio, wyoming_cleanup = await process_audio_wyoming(
+            stream_transcript, 
+            language, 
+            sample_rate, 
+            channels, 
+            preseconds=0,
+            wyoming_server_ip=wyoming_server_ip
+        )
+        
+        # Send ready status
+        print(f'📤 [Wyoming-{uid}] Sending ready status: ready')
+        await websocket.send_json(MessageServiceStatusEvent(
+            event_type="service_status", 
+            status="ready", 
+            status_text="Listening"
+        ).dict())
+        
+        print(f'✅ Wyoming STT initialized successfully for {uid}')
+        
+    except Exception as e:
+        print(f'❌ Wyoming initialization failed for {uid}: {e}')
+        print(f'📤 [Wyoming-{uid}] Sending error status')
+        await websocket.send_json(MessageServiceStatusEvent(
+            event_type="service_status", 
+            status="error", 
+            status_text="STT Service Failed"
+        ).dict())
+        await websocket.close(code=1011, reason="STT initialization failed")
+        return
+    
+    # Audio processing task
+    async def process_audio():
+        """Process incoming audio data."""
+        nonlocal last_audio_received_time, websocket_active, websocket_close_code
+        
+        try:
+            while websocket_active:
+                data = await websocket.receive_bytes()
+                last_audio_received_time = time.time()
+                
+                # Decode Opus if needed
+                if decoder:
+                    try:
+                        data = decoder.decode(bytes(data), frame_size=frame_size)
+                    except Exception as e:
+                        print(f"❌ Opus decode error for {uid}: {e}")
+                        continue
+                
+                # Send to Wyoming STT
+                if wyoming_send_audio:
+                    await wyoming_send_audio(data)
+                    
+        except WebSocketDisconnect:
+            print(f"WebSocket disconnected for {uid}")
+        except Exception as e:
+            print(f'❌ Could not process audio for {uid}: {e}')
+            websocket_close_code = 1011
+        finally:
+            websocket_active = False
+    
+    # Transcript processing task
+    async def process_transcripts():
+        """Process and send transcript segments to client."""
+        nonlocal websocket_active, realtime_segment_buffers
+        
+        try:
+            while websocket_active:
+                if realtime_segment_buffers:
+                    segments_to_send = realtime_segment_buffers.copy()
+                    realtime_segment_buffers.clear()
+                    
+                    # Send segments to client
+                    await websocket.send_json(segments_to_send)
+                    print(f'📤 Sent {len(segments_to_send)} segments to {uid}')
+                
+                await asyncio.sleep(0.1)  # Small delay to prevent busy waiting
+                
+        except WebSocketDisconnect:
+            print(f"WebSocket disconnected for {uid}")
+        except Exception as e:
+            print(f'❌ Could not process transcripts for {uid}: {e}')
+        finally:
+            websocket_active = False
+    
+    # Start processing tasks
+    audio_task = asyncio.create_task(process_audio())
+    transcript_task = asyncio.create_task(process_transcripts())
+    
+    try:
+        # Wait for any task to complete (indicating an error or disconnect)
+        done, pending = await asyncio.wait(
+            [heartbeat_task, audio_task, transcript_task],
+            return_when=asyncio.FIRST_COMPLETED
+        )
+        
+        # Cancel remaining tasks
+        for task in pending:
+            task.cancel()
+            
+    except Exception as e:
+        print(f'❌ Session error for {uid}: {e}')
+        websocket_close_code = 1011
+    finally:
+        websocket_active = False
+        
+        # Cleanup Wyoming STT
+        if wyoming_cleanup:
+            try:
+                await wyoming_cleanup()
+            except Exception as e:
+                print(f'❌ Wyoming cleanup error for {uid}: {e}')
+        
+        # Close WebSocket
+        try:
+            await websocket.close(code=websocket_close_code)
+        except Exception as e:
+            print(f'❌ WebSocket close error for {uid}: {e}')
+        
+        print(f'🔚 Wyoming session ended for {uid}')
