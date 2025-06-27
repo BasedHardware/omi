@@ -34,9 +34,7 @@ class GetSummaryWidgets extends StatelessWidget {
   const GetSummaryWidgets({super.key});
 
   String setTime(DateTime? startedAt, DateTime createdAt, DateTime? finishedAt) {
-    return startedAt == null
-        ? dateTimeFormat('h:mm a', createdAt)
-        : '${dateTimeFormat('h:mm a', startedAt)} to ${dateTimeFormat('h:mm a', finishedAt)}';
+    return startedAt == null ? dateTimeFormat('h:mm a', createdAt) : '${dateTimeFormat('h:mm a', startedAt)} to ${dateTimeFormat('h:mm a', finishedAt)}';
   }
 
   String setTimeSDCard(DateTime? startedAt, DateTime createdAt) {
@@ -50,6 +48,64 @@ class GetSummaryWidgets extends StatelessWidget {
     if (durationSeconds <= 0) return '';
 
     return secondsToHumanReadable(durationSeconds);
+  }
+
+  Widget _buildInfoChips(ServerConversation conversation) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        // Date chip
+        _buildChip(
+          label: dateTimeFormat('MMM d, yyyy', conversation.createdAt),
+          icon: Icons.calendar_today,
+        ),
+        // Time chip
+        _buildChip(
+          label: conversation.source == ConversationSource.sdcard ? setTimeSDCard(conversation.startedAt, conversation.createdAt) : setTime(conversation.startedAt, conversation.createdAt, conversation.finishedAt),
+          icon: Icons.access_time,
+        ),
+        // Duration chip (only if segments exist)
+        if (conversation.transcriptSegments.isNotEmpty && _getDuration(conversation).isNotEmpty)
+          _buildChip(
+            label: _getDuration(conversation),
+            icon: Icons.timelapse,
+          ),
+      ],
+    );
+  }
+
+  Widget _buildChip({required String label, required IconData icon}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.grey.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.grey.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 14,
+            color: Colors.grey.shade300,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.grey.shade300,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -76,26 +132,7 @@ class GetSummaryWidgets extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32, color: Colors.white),
                   ),
             const SizedBox(height: 16),
-            Text(
-              conversation.source == ConversationSource.sdcard
-                  ? 'Imported at ${dateTimeFormat('MMM d,  yyyy', conversation.createdAt)}, ${setTimeSDCard(conversation.startedAt, conversation.createdAt)}'
-                  : '${dateTimeFormat('MMM d,  yyyy', conversation.createdAt)} ${conversation.startedAt == null ? 'at' : 'from'} ${setTime(conversation.startedAt, conversation.createdAt, conversation.finishedAt)}',
-              style: const TextStyle(color: Colors.grey, fontSize: 16),
-            ),
-            if (conversation.transcriptSegments.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 4.0),
-                child: Row(
-                  children: [
-                    const Icon(Icons.access_time, color: Colors.grey, size: 14),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Duration: ${_getDuration(conversation)}',
-                      style: const TextStyle(color: Colors.grey, fontSize: 14),
-                    ),
-                  ],
-                ),
-              ),
+            _buildInfoChips(conversation),
             const SizedBox(height: 16),
             conversation.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
           ],
@@ -125,8 +162,7 @@ class ActionItemsListWidget extends StatelessWidget {
                     IconButton(
                       onPressed: () {
                         Clipboard.setData(ClipboardData(
-                          text:
-                              '- ${provider.conversation.structured.actionItems.map((e) => e.description.decodeString).join('\n- ')}',
+                          text: '- ${provider.conversation.structured.actionItems.map((e) => e.description.decodeString).join('\n- ')}',
                         ));
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                           content: Text('Action items copied to clipboard'),
@@ -312,12 +348,7 @@ class ReprocessDiscardedWidget extends StatelessWidget {
               Container(
                 decoration: BoxDecoration(
                   border: const GradientBoxBorder(
-                    gradient: LinearGradient(colors: [
-                      Color.fromARGB(127, 208, 208, 208),
-                      Color.fromARGB(127, 188, 99, 121),
-                      Color.fromARGB(127, 86, 101, 182),
-                      Color.fromARGB(127, 126, 190, 236)
-                    ]),
+                    gradient: LinearGradient(colors: [Color.fromARGB(127, 208, 208, 208), Color.fromARGB(127, 188, 99, 121), Color.fromARGB(127, 86, 101, 182), Color.fromARGB(127, 126, 190, 236)]),
                     width: 2,
                   ),
                   borderRadius: BorderRadius.circular(12),
@@ -327,9 +358,7 @@ class ReprocessDiscardedWidget extends StatelessWidget {
                     await provider.reprocessConversation();
                   },
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                      child: Text('Summarize', style: TextStyle(color: Colors.white, fontSize: 16))),
+                  child: const Padding(padding: EdgeInsets.symmetric(horizontal: 16, vertical: 0), child: Text('Summarize', style: TextStyle(color: Colors.white, fontSize: 16))),
                 ),
               ),
             ],
@@ -380,9 +409,7 @@ class AppResultDetailWidget extends StatelessWidget {
                             );
                           },
                           child: RichText(
-                            text: const TextSpan(
-                                style: TextStyle(color: Colors.grey),
-                                text: "No summary available for this app. Try another app for better results."),
+                            text: const TextSpan(style: TextStyle(color: Colors.grey), text: "No summary available for this app. Try another app for better results."),
                           ),
                         ),
                       ),
@@ -568,12 +595,7 @@ class GetAppsWidgets extends StatelessWidget {
               Container(
                 decoration: BoxDecoration(
                   border: const GradientBoxBorder(
-                    gradient: LinearGradient(colors: [
-                      Color.fromARGB(127, 208, 208, 208),
-                      Color.fromARGB(127, 188, 99, 121),
-                      Color.fromARGB(127, 86, 101, 182),
-                      Color.fromARGB(127, 126, 190, 236)
-                    ]),
+                    gradient: LinearGradient(colors: [Color.fromARGB(127, 208, 208, 208), Color.fromARGB(127, 188, 99, 121), Color.fromARGB(127, 86, 101, 182), Color.fromARGB(127, 126, 190, 236)]),
                     width: 2,
                   ),
                   borderRadius: BorderRadius.circular(12),
@@ -588,9 +610,7 @@ class GetAppsWidgets extends StatelessWidget {
                     );
                   },
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                      child: Text('Generate Summary', style: TextStyle(color: Colors.white, fontSize: 16))),
+                  child: const Padding(padding: EdgeInsets.symmetric(horizontal: 16, vertical: 0), child: Text('Generate Summary', style: TextStyle(color: Colors.white, fontSize: 16))),
                 ),
               ),
             ],
@@ -1043,9 +1063,7 @@ class GetSheetMainOptions extends StatelessWidget {
                                 context,
                                 () => Navigator.pop(context),
                                 () {
-                                  context
-                                      .read<ConversationProvider>()
-                                      .deleteConversation(provider.conversation, provider.conversationIdx);
+                                  context.read<ConversationProvider>().deleteConversation(provider.conversation, provider.conversationIdx);
                                   Navigator.pop(context, true);
                                   Navigator.pop(context, true);
                                   Navigator.pop(context, {'deleted': true});
@@ -1057,14 +1075,7 @@ class GetSheetMainOptions extends StatelessWidget {
                             );
                           } else {
                             showDialog(
-                              builder: (c) => getDialog(
-                                  context,
-                                  () => Navigator.pop(context),
-                                  () => Navigator.pop(context),
-                                  'Unable to Delete Conversation',
-                                  'Please check your internet connection and try again.',
-                                  singleButton: true,
-                                  okButtonText: 'OK'),
+                              builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context), 'Unable to Delete Conversation', 'Please check your internet connection and try again.', singleButton: true, okButtonText: 'OK'),
                               context: context,
                             );
                           }
