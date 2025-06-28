@@ -2,8 +2,8 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
@@ -15,6 +15,7 @@ import 'package:omi/widgets/transcript.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/atoms/omi_avatar.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/ui/molecules/omi_panel_header.dart';
 import 'package:omi/ui/molecules/omi_empty_state.dart';
 
@@ -50,6 +51,7 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
 
   bool _animationsInitialized = false;
   bool _showTranscript = false;
+  bool _isSharing = false;
 
   @override
   void initState() {
@@ -276,75 +278,31 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
           ),
 
           // Share button
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => _handleShareConversation(),
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  FontAwesomeIcons.share,
-                  color: ResponsiveHelper.textSecondary,
-                  size: 14,
-                ),
-              ),
-            ),
+          OmiButton(
+            label: _isSharing ? 'Sharing...' : 'Share',
+            icon: _isSharing ? null : FontAwesomeIcons.share,
+            type: OmiButtonType.neutral,
+            enabled: !_isSharing,
+            onPressed: _isSharing ? null : _handleShareConversation,
           ),
 
           const SizedBox(width: 12),
 
           // Transcript button
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () {
-                if (_showTranscript) {
-                  _transcriptAnimationController.reverse().then((_) {
-                    setState(() => _showTranscript = false);
-                  });
-                } else {
-                  setState(() => _showTranscript = true);
-                  _transcriptAnimationController.forward();
-                }
-              },
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: _showTranscript
-                      ? ResponsiveHelper.purplePrimary.withOpacity(0.15)
-                      : ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
-                  borderRadius: BorderRadius.circular(12),
-                  border: _showTranscript
-                      ? Border.all(color: ResponsiveHelper.purplePrimary.withOpacity(0.3), width: 1)
-                      : null,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      _showTranscript ? FontAwesomeIcons.eye : FontAwesomeIcons.fileLines,
-                      color: _showTranscript ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textSecondary,
-                      size: 14,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      _showTranscript ? 'Hide Transcript' : 'View Transcript',
-                      style: TextStyle(
-                        color: _showTranscript ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textSecondary,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          OmiButton(
+            label: _showTranscript ? 'Hide Transcript' : 'View Transcript',
+            icon: _showTranscript ? FontAwesomeIcons.eye : FontAwesomeIcons.fileLines,
+            type: _showTranscript ? OmiButtonType.primary : OmiButtonType.neutral,
+            onPressed: () {
+              if (_showTranscript) {
+                _transcriptAnimationController.reverse().then((_) {
+                  setState(() => _showTranscript = false);
+                });
+              } else {
+                setState(() => _showTranscript = true);
+                _transcriptAnimationController.forward();
+              }
+            },
           ),
         ],
       ),
@@ -533,19 +491,23 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
   }
 
   Future<void> _handleShareConversation() async {
+    if (_isSharing) return;
+    setState(() => _isSharing = true);
+    
     try {
       bool shared = await setConversationVisibility(widget.conversation.id);
       if (!shared) {
         _showSnackBar('Conversation URL could not be shared.');
+        setState(() => _isSharing = false);
         return;
       }
       
-      await Clipboard.setData(
-        ClipboardData(text: 'https://h.omi.me/memories/${widget.conversation.id}')
-      );
-      _showSnackBar('Share link copied to clipboard');
+      String content = 'https://h.omi.me/memories/${widget.conversation.id}';
+      await Share.share(content);
     } catch (e) {
       _showSnackBar('Failed to generate share link');
+    } finally {
+      setState(() => _isSharing = false);
     }
   }
 
