@@ -20,6 +20,7 @@ import 'package:omi/providers/app_provider.dart';
 import 'package:omi/ui/atoms/omi_typing_indicator.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
@@ -1212,15 +1213,14 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     if (buttonBox == null) return;
 
     final Offset buttonPosition = buttonBox.localToGlobal(Offset.zero);
-    final Size buttonSize = buttonBox.size;
 
     showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
-        buttonPosition.dx, // Left edge aligned with button
-        buttonPosition.dy - 220, // Position above the button (220px up to account for menu height)
-        buttonPosition.dx + 200, // Right edge (200px wide menu)
-        buttonPosition.dy, // Bottom edge at button top
+        buttonPosition.dx,
+        buttonPosition.dy - (PlatformService.isDesktop ? 160 : 220),
+        buttonPosition.dx + 200,
+        buttonPosition.dy,
       ),
       color: ResponsiveHelper.backgroundSecondary.withOpacity(0.95),
       elevation: 8,
@@ -1228,21 +1228,22 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
         borderRadius: BorderRadius.circular(16),
       ),
       items: [
-        PopupMenuItem<String>(
-          value: 'camera',
-          padding: EdgeInsets.zero,
-          child: _buildPopupFileOption(
-            icon: Icons.camera_alt_rounded,
-            title: "Take a Photo",
-            subtitle: "Capture with camera",
+        if (PlatformService.isMobile)
+          PopupMenuItem<String>(
+            value: 'camera',
+            padding: EdgeInsets.zero,
+            child: _buildPopupFileOption(
+              icon: Icons.camera_alt_rounded,
+              title: "Take a Photo",
+              subtitle: "Capture with camera",
+            ),
           ),
-        ),
         PopupMenuItem<String>(
           value: 'gallery',
           padding: EdgeInsets.zero,
           child: _buildPopupFileOption(
             icon: Icons.photo_library_rounded,
-            title: "Select a Photo",
+            title: "Select Images",
             subtitle: "Choose from gallery",
           ),
         ),

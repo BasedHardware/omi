@@ -43,6 +43,13 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
     super.initState();
     _textController = TextEditingController();
     _focusNode = FocusNode();
+    
+    // Listen for focus changes to save when user clicks outside
+    _focusNode.addListener(() {
+      if (!_focusNode.hasFocus && _isEditing) {
+        _saveChanges();
+      }
+    });
   }
 
   @override
@@ -72,8 +79,11 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
   void _cancelEditing() => setState(() => _isEditing = false);
 
   void _saveChanges() async {
+    if (!_isEditing) return;
+    
     final newText = _textController.text.trim();
     final originalText = widget.actionItem.description;
+    
     if (newText.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -86,6 +96,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
       );
       return;
     }
+    
     if (newText == originalText) {
       _cancelEditing();
       return;
@@ -167,14 +178,27 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _isEditing
-                      ? TextField(
-                          controller: _textController,
-                          focusNode: _focusNode,
-                          style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 15, height: 1.4, fontWeight: FontWeight.w500),
-                          decoration: const InputDecoration(border: InputBorder.none, contentPadding: EdgeInsets.zero, isDense: true),
-                          maxLines: null,
-                          onSubmitted: (_) => _saveChanges(),
-                          onChanged: (_) => setState(() {}),
+                      ? KeyboardListener(
+                          focusNode: FocusNode(),
+                          onKeyEvent: (KeyEvent event) {
+                            if (event is KeyDownEvent) {
+                              if (event.logicalKey == LogicalKeyboardKey.enter) {
+                                if (!HardwareKeyboard.instance.isShiftPressed) {
+                                  // Enter without Shift: save changes
+                                  _saveChanges();
+                                }
+                                // Enter with Shift: allow new line (default behavior)
+                              }
+                            }
+                          },
+                          child: TextField(
+                            controller: _textController,
+                            focusNode: _focusNode,
+                            style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 15, height: 1.4, fontWeight: FontWeight.w500),
+                            decoration: const InputDecoration(border: InputBorder.none, contentPadding: EdgeInsets.zero, isDense: true),
+                            maxLines: null,
+                            onChanged: (_) => setState(() {}),
+                          ),
                         )
                       : GestureDetector(
                           onTap: _startEditing,
