@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -432,6 +431,8 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
               child: DesktopConversationCard(
                 conversation: conversation,
                 onTap: () => _navigateToConversationDetail(conversation, index, date),
+                index: index,
+                date: date,
               ),
             );
           }),
