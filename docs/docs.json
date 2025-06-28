@@ -13,8 +13,8 @@
       {
         "group": "Get Started",
         "pages": [
-          "docs/get_started/introduction",
-          "docs/get_started/Flash_device",
+          "doc/get_started/introduction",
+          "doc/get_started/Flash_device",
            "getstartedwithomi"
         ]
       },
@@ -24,52 +24,52 @@
           {
             "group": "Apps",
             "pages": [
-              "docs/developer/apps/Introduction",
-              "docs/developer/apps/PromptBased",
-              "docs/developer/apps/Integrations",
-              "docs/developer/apps/AudioStreaming",
-              "docs/developer/apps/Import",
-              "docs/developer/apps/Submitting",
-              "docs/developer/apps/Oauth",
-              "docs/developer/apps/Notifications"
+              "doc/developer/apps/Introduction",
+              "doc/developer/apps/PromptBased",
+              "doc/developer/apps/Integrations",
+              "doc/developer/apps/AudioStreaming",
+              "doc/developer/apps/Import",
+              "doc/developer/apps/Submitting",
+              "doc/developer/apps/Oauth",
+              "doc/developer/apps/Notifications"
             ]
           },
-          "docs/developer/AppSetup",
+          "doc/developer/AppSetup",
           {
             "group": "Backend",
             "pages": [
-              "docs/developer/backend/Backend_Setup",
-              "docs/developer/backend/backend_deepdive",
-              "docs/developer/backend/StoringMemory",
-              "docs/developer/backend/transcription",
-              "docs/developer/backend/memory_embeddings",
-              "docs/developer/backend/postprocessing"
+              "doc/developer/backend/Backend_Setup",
+              "doc/developer/backend/backend_deepdive",
+              "doc/developer/backend/StoringMemory",
+              "doc/developer/backend/transcription",
+              "doc/developer/backend/memory_embeddings",
+              "doc/developer/backend/postprocessing"
             ]
           },
           {
             "group": "Firmware",
             "pages": [
-              "docs/developer/firmware/Compile_firmware"
+              "doc/developer/firmware/Compile_firmware"
             ]
           },
           {
             "group": "SDK",
             "pages": [
-              "docs/developer/sdk/sdk",
-              "docs/developer/sdk/python",
-              "docs/developer/sdk/ReactNative",
-              "docs/developer/sdk/swift"
+              "doc/developer/sdk/sdk",
+              "doc/developer/sdk/python",
+              "doc/developer/sdk/ReactNative",
+              "doc/developer/sdk/swift"
             ]
           },
-          "docs/developer/Protocol",
-          "docs/developer/Contribution",
-          "docs/developer/MCP",
+          "doc/developer/Protocol",
+          "doc/developer/Contribution",
+          "doc/developer/MCP",
           {
             "group": "Audio & Testing",
             "pages": [
-              "docs/developer/savingaudio",
-              "docs/developer/AudioStreaming",
-              "docs/developer/DevKit2Testing"
+              "doc/developer/savingaudio",
+              "doc/developer/AudioStreaming",
+              "doc/developer/DevKit2Testing"
             ]
           }
         ]
@@ -77,26 +77,26 @@
       {
         "group": "Hardware",
         "pages": [
-          "docs/hardware/DevKit1",
-          "docs/hardware/DevKit2",
-          "docs/hardware/omiGlass"
+          "doc/hardware/DevKit1",
+          "doc/hardware/DevKit2",
+          "doc/hardware/omiGlass"
         ]
       },
       {
         "group": "DIY Guide",
         "pages": [
-          "docs/assembly/introduction",
-          "docs/assembly/Buying_Guide",
-          "docs/assembly/Build_the_device"
+          "doc/assembly/introduction",
+          "doc/assembly/Buying_Guide",
+          "doc/assembly/Build_the_device"
         ]
       },
       {
         "group": "Info",
         "pages": [
-          "docs/info/Support",
-          "docs/info/License",
-          "docs/info/Disclaimer",
-          "docs/info/Privacy"
+          "doc/info/Support",
+          "doc/info/License",
+          "doc/info/Disclaimer",
+          "doc/info/Privacy"
         ]
       }
     ]
