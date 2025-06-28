@@ -502,7 +502,7 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
         return;
       }
       
-      String content = 'https://h.omi.me/memories/${widget.conversation.id}';
+      String content = 'https://h.omi.me/conversations/${widget.conversation.id}';
       await Share.share(content);
     } catch (e) {
       _showSnackBar('Failed to generate share link');
