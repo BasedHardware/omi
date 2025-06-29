@@ -99,9 +99,9 @@ async def _listen(
 
     # Heart beat
     started_at = time.time()
-    timeout_seconds = 420  # 7m # Soft timeout, should < MODAL_TIME_OUT - 3m
+    timeout_seconds = 3600  # 1h # Soft timeout, should < MODAL_TIME_OUT - 3m
     has_timeout = os.getenv('NO_SOCKET_TIMEOUT') is None
-    inactivity_timeout_seconds = 30
+    inactivity_timeout_seconds = 3600
     last_audio_received_time = None
 
     # Send pong every 10s then handle it in the app \
