@@ -20,6 +20,7 @@ import 'package:omi/pages/home/widgets/chat_apps_dropdown_widget.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/page.dart';
+import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -136,7 +137,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   ///Screens with respect to subpage
   final Map<String, Widget> screensWithRespectToPath = {
-    '/settings': const SettingsPage(),
     '/facts': const MemoriesPage(),
   };
   bool? previousConnection;
@@ -239,11 +239,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           }
           break;
         case "settings":
-          MyApp.navigatorKey.currentState?.push(
-            MaterialPageRoute(
-              builder: (context) => const SettingsPage(),
-            ),
-          );
+          // Use context from the current widget instead of navigator key for bottom sheet
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              SettingsDrawer.show(context);
+            }
+          });
           if (detailPageId == 'data-privacy') {
             MyApp.navigatorKey.currentState?.push(
               MaterialPageRoute(
@@ -733,7 +734,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     String language = SharedPreferencesUtil().userPrimaryLanguage;
                     bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
                     String transcriptModel = SharedPreferencesUtil().transcriptionModel;
-                    routeToPage(context, const SettingsPage());
+                    SettingsDrawer.show(context);
                     if (language != SharedPreferencesUtil().userPrimaryLanguage || hasSpeech != SharedPreferencesUtil().hasSpeakerProfile || transcriptModel != SharedPreferencesUtil().transcriptionModel) {
                       if (context.mounted) {
                         context.read<CaptureProvider>().onRecordProfileSettingChanged();
