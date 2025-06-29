@@ -1,6 +1,8 @@
 {
   "dependencies": {
+    "dotenv": "^16.5.0",
     "expo-file-system": "^18.0.12",
+    "imap": "^0.8.19",
     "ioredis": "^5.6.1"
   },
   "devDependencies": {
