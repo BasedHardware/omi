@@ -72,6 +72,7 @@ dist/
 **/macos/.generated/
 **/macos/Runner.xcworkspace
 **/macos/**/GeneratedPluginRegistrant.*
+**/macos/GoogleService-Info.plist
 **/macos/Runner/GoogleService-Info.plist
 **/macos/GoogleService-Info.plist
 **/macos/Config/*

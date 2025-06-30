@@ -127,6 +127,22 @@ function setup_provisioning_profile() {
         --git_url "git@github.com:BasedHardware/omi-community-certs.git"
 }
 
+######################################
+# Setup provisioning profile macOS
+######################################
+function setup_provisioning_profile_macos() {
+    # Only install fastlane if it doesn't exist
+    if ! command -v fastlane &> /dev/null; then
+        echo "Installing fastlane..."
+        brew install fastlane
+    fi
+    
+    MATCH_PASSWORD=omi fastlane match development --readonly \
+        --platform macos \
+        --app_identifier com.friend-app-with-wearable.ios12.development \
+        --git_url "git@github.com:BasedHardware/omi-community-certs.git"
+}
+
 
 #################
 # Set up App .env
@@ -145,18 +161,20 @@ function setup_keystore_android() {
 # #####
 # Build
 # #####
-function build() {
+function run_build() {
   flutter pub get \
-    && dart run build_runner build
+    && dart run build_runner build \
+    && flutter run --flavor dev
 }
 
 # #########
 # Build iOS
 # #########
-function build_ios() {
+function run_build_ios() {
   flutter pub get \
     && pushd ios && pod install --repo-update && popd \
-    && dart run build_runner build
+    && dart run build_runner build \
+    && flutter run --flavor dev
 }
 
 # #########
@@ -165,28 +183,31 @@ function build_ios() {
 function build_macos() {
   flutter pub get \
     && pushd macos && pod install --repo-update && popd \
-    && dart run build_runner build
+    && dart run build_runner build \
+    && flutter build macos --flavor dev
+
+  echo "Note: To run the app on your macOS device, we need to register your Mac's device ID to our provisioning profile. Please send us your device ID on Discord (http://discord.omi.me)."
 }
 
-# #######
-# Run dev
-# #######
-function run_dev() {
-  flutter run --flavor dev
-}
 
 case "${1}" in
+  macos)
+    setup_firebase \
+      && setup_app_env \
+      && setup_provisioning_profile_macos \
+      && build_macos
+    ;;
   ios)
     setup_firebase \
       && setup_app_env \
       && setup_provisioning_profile \
-      && build_ios
+      && run_build_ios
     ;;
   android)
     setup_keystore_android \
       && setup_firebase \
       && setup_app_env \
-      && build
+      && run_build
     ;;
   macos)
     setup_firebase \
