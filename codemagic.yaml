@@ -673,7 +673,7 @@ workflows:
     environment:
       ios_signing:
         provisioning_profiles:
-          - codemagic_v3
+          - codemagic_mac_v1
         certificates:
           - codemagic_v3
       groups:
