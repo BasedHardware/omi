@@ -762,22 +762,33 @@ workflows:
       - name: Set up keychain to be used for code signing using Codemagic CLI 'keychain' command
         script: keychain initialize
 
-      - name: Fetch signing files
+      - name: Set up provisioning profiles from environment variables
         script: | 
-          app-store-connect fetch-signing-files "$BUNDLE_ID" \
-            --platform MAC_OS \
-            --type MAC_APP_STORE \
-            --create
-
-      - name: Fetch Mac Installer Distribution certificates
-        script: |  
-          # You may omit the first command if you already have
-          # the installer certificate and provided the corresponding private key
-          app-store-connect certificates list --type MAC_INSTALLER_DISTRIBUTION --save || \
-          app-store-connect certificates create --type MAC_INSTALLER_DISTRIBUTION --save
+          PROFILES_HOME="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILES_HOME"
+          PROFILE_PATH="$(mktemp "$PROFILES_HOME"/$(uuidgen).mobileprovision)"
+          echo ${CM_PROVISIONING_PROFILE} | base64 --decode > "$PROFILE_PATH"
+          echo "Saved provisioning profile $PROFILE_PATH"
 
       - name: Set up signing certificate
-        script: keychain add-certificates
+        script: | 
+          echo $CM_CERTIFICATE | base64 --decode > /tmp/certificate.p12
+          if [ -z ${CM_CERTIFICATE_PASSWORD+x} ]; then
+              # when using a certificate that is not password-protected
+              keychain add-certificates --certificate /tmp/certificate.p12
+          else
+              # when using a password-protected certificate
+              keychain add-certificates --certificate /tmp/certificate.p12 --certificate-password $CM_CERTIFICATE_PASSWORD
+          fi
+
+          echo $CM_INSTALLER_CERTIFICATE | base64 --decode > /tmp/installer_certificate.p12
+          if [ -z ${CM_INSTALLER_CERTIFICATE_PASSWORD+x} ]; then
+              # when using a certificate that is not password-protected
+              keychain add-certificates --certificate /tmp/installer_certificate.p12
+          else
+              # when using a password-protected certificate
+              keychain add-certificates --certificate /tmp/installer_certificate.p12 --certificate-password $CM_INSTALLER_CERTIFICATE_PASSWORD
+          fi
 
       - name: Set up code signing settings on Xcode project
         script: xcode-project use-profiles
@@ -812,7 +823,7 @@ workflows:
           INSTALLER_CERT_NAME=$(keychain list-certificates \
             | jq '.[]
             | select(.common_name
-            | contains("Mac Developer Installer"))
+            | contains("Mac Installer Distribution"))
             | .common_name' \
             | xargs)
       
