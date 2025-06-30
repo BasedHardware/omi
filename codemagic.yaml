@@ -764,7 +764,7 @@ workflows:
             --release \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
-            --flavor prod
+            --flavor prod \
             --release
 
       - name: Package macOS app
