@@ -663,3 +663,122 @@ workflows:
         notify:
           success: true
           failure: false
+
+  macos-prod-testflight:
+    name: Release macOS to TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 120
+    integrations:
+      app_store_connect: codemagic_v3
+    environment:
+      ios_signing:
+        provisioning_profiles:
+          - codemagic_v3_macos
+        certificates:
+          - codemagic_v3_macos
+      groups:
+        - app_env
+        - firebase
+      vars:
+        APP_ID: 6502156163
+      flutter: 3.32.4
+      xcode: 16.4
+      cocoapods: 1.16.2
+    cache:
+      cache_paths:
+        - $HOME/.pub-cache
+        - $HOME/.gradle/caches
+        - $HOME/Library/Caches/CocoaPods
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: "v*-mobile-cm"
+          include: true
+    working_directory: app
+    scripts:
+
+      - name: Set up Firebase
+        script: |
+          dart pub global activate flutterfire_cli
+
+          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
+          flutterfire config \
+            --platforms="macos" \
+            --out=lib/firebase_options_prod.dart \
+            --macos-bundle-id=com.friend-app-with-wearable.ios12 \
+            --macos-out=macos/Config/Prod/ \
+            --service-account="./firebase_key.json" \
+            --project="based-hardware" \
+            --macos-target="Runner" \
+            --yes
+
+      - name: Set up App .env
+        script: |
+          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
+          echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
+          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
+          echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
+          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
+          echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
+          echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
+          echo INTERCOM_MACOS_API_KEY=$INTERCOM_MACOS_API_KEY >> .env
+          echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
+          echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
+          echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+
+      - name: Run build runner
+        script: |
+          dart run build_runner build --delete-conflicting-outputs
+
+      - name: Install CocoaPods dependencies
+        script: |
+          cd macos && pod install --repo-update
+
+      - name: Flutter build macOS
+        script: |
+          # Set up code signing settings on Xcode project
+          xcode-project use-profiles
+
+          # Build
+          BUILD_NAME=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\1/')
+          BUILD_NUMBER=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\2/')
+          flutter build macos \
+            --release \
+            --build-name=$BUILD_NAME \
+            --build-number=$BUILD_NUMBER \
+            --flavor prod
+
+      - name: Package macOS app
+        script: |
+          # Create app bundle for distribution
+          APP_NAME="omi"
+          BUILD_DIR="build/macos/Build/Products/Release-prod"
+          
+
+    artifacts:
+      - build/macos/Build/Products/Release-prod/*.app
+      - /tmp/xcodebuild_logs/*.log
+      - flutter_drive.log
+    publishing:
+      email:
+        recipients:
+          - ngocthinhdp@gmail.com
+          - joan@basedhardware.com
+          - nik@basedhardware.com
+          - mohsin.lp710@gmail.com
+        notify:
+          success: true
+          failure: false
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        beta_groups:
+          - Internal
+          - Discord Folks
+        submit_to_app_store: false
