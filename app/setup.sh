@@ -21,6 +21,7 @@
 # Usages: 
 # - $bash setup.sh ios
 # - $bash setup.sh android
+# - $bash setup.sh macos
 
 set -euo pipefail
 
@@ -41,9 +42,15 @@ echo "- Android SDK Platform (API 35)"
 echo "- JDK (v21)"
 echo "- Gradle (v8.10)"
 echo "- NDK (27.0.12077973)"
+echo ""
+echo "For macOS Developers:"
+echo "- Xcode (v16.4)"
+echo "- CocoaPods (v1.16.2)"
+echo ""
 echo "Usages:"
 echo "- bash setup.sh ios"
 echo "- bash setup.sh android"
+echo "- bash setup.sh macos"
 echo ""
 
 
@@ -152,6 +159,15 @@ function build_ios() {
     && dart run build_runner build
 }
 
+# #########
+# Build macOS
+# #########
+function build_macos() {
+  flutter pub get \
+    && pushd macos && pod install --repo-update && popd \
+    && dart run build_runner build
+}
+
 # #######
 # Run dev
 # #######
@@ -171,6 +187,12 @@ case "${1}" in
       && setup_firebase \
       && setup_app_env \
       && build
+    ;;
+  macos)
+    setup_firebase \
+      && setup_app_env \
+      && setup_provisioning_profile \
+      && build_macos
     ;;
   *)
     error "Unexpected platform '${1}'"
