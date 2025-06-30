@@ -671,16 +671,13 @@ workflows:
     integrations:
       app_store_connect: codemagic_v3
     environment:
-      ios_signing:
-        provisioning_profiles:
-          - codemagic_mac_v1
-        certificates:
-          - codemagic_v3
       groups:
         - app_env
         - firebase
+        - appstore_credentials
       vars:
         APP_ID: 6502156163
+        BUNDLE_ID: "com.friend-app-with-wearable.ios12"
       flutter: 3.32.4
       xcode: 16.4
       cocoapods: 1.16.2
@@ -693,10 +690,16 @@ workflows:
       events:
         - tag
       tag_patterns:
+        - pattern: "v*-ios-cm"
+          include: true
         - pattern: "v*-mobile-cm"
           include: true
     working_directory: app
     scripts:
+      - name: Installing Opus
+        script: |
+          brew install opus
+          brew install opus-tools
 
       - name: Set up Firebase
         script: |
@@ -756,11 +759,34 @@ workflows:
         script: |
           cd macos && pod install --repo-update
 
+      - name: Set up keychain to be used for code signing using Codemagic CLI 'keychain' command
+        script: keychain initialize
+
+      - name: Fetch signing files
+        script: | 
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --platform MAC_OS \
+            --type MAC_APP_STORE \
+            --create
+
+      - name: Fetch Mac Installer Distribution certificates
+        script: |  
+          # You may omit the first command if you already have
+          # the installer certificate and provided the corresponding private key
+          app-store-connect certificates list --type MAC_INSTALLER_DISTRIBUTION --save || \
+          app-store-connect certificates create --type MAC_INSTALLER_DISTRIBUTION --save
+
+      - name: Set up signing certificate
+        script: keychain add-certificates
+
+      - name: Set up code signing settings on Xcode project
+        script: xcode-project use-profiles
+
       - name: Flutter build macOS
         script: |
-          # Set up code signing settings on Xcode project
-          xcode-project use-profiles
-
+          # Enable macOS desktop support
+          flutter config --enable-macos-desktop
+          
           # Build
           BUILD_NAME=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\1/')
           BUILD_NUMBER=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\2/')
@@ -768,17 +794,36 @@ workflows:
             --release \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
-            --flavor prod \
-            --release
+            --flavor prod
 
-      - name: Package macOS app
-        script: |
-          # Create app bundle for distribution
-          APP_NAME="omi"
-          BUILD_DIR="build/macos/Build/Products/Release-prod"
+      - name: Package application
+        script: | 
+          set -x
+    
+          # Command to find the path to your generated app, may be different
+          APP_NAME=$(find $(pwd) -name "*.app")  
+          cd $(dirname "$APP_NAME")
+    
+          # Create unsigned package
+          PACKAGE_NAME=$(basename "$APP_NAME" .app).pkg
+          xcrun productbuild --component "$APP_NAME" /Applications/ unsigned.pkg
+
+          # Find the installer certificate common name in keychain
+          INSTALLER_CERT_NAME=$(keychain list-certificates \
+            | jq '.[]
+            | select(.common_name
+            | contains("Mac Developer Installer"))
+            | .common_name' \
+            | xargs)
+      
+          # Sign the package
+          xcrun productsign --sign "$INSTALLER_CERT_NAME" unsigned.pkg "$PACKAGE_NAME" 
+    
+          rm -f unsigned.pkg
           
 
     artifacts:
+      - build/macos/**/*.pkg
       - build/macos/Build/Products/Release-prod/*.app
       - /tmp/xcodebuild_logs/*.log
       - flutter_drive.log
@@ -793,9 +838,11 @@ workflows:
           success: true
           failure: false
       app_store_connect:
-        auth: integration
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+=
         submit_to_testflight: true
         beta_groups:
           - Internal
-          - Discord Folks
         submit_to_app_store: false
