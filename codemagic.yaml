@@ -725,6 +725,10 @@ workflows:
             --macos-target="Runner" \
             --yes
 
+      - name: Set up macOS GoogleService-Info.plist from environment
+        script: |
+          echo "$GOOGLE_INFO_PLIST_KEY" > "$(pwd)/macos/GoogleService-Info.plist"
+
       - name: Set up App .env
         script: |
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
