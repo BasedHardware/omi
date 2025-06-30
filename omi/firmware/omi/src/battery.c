@@ -12,7 +12,7 @@ LOG_MODULE_REGISTER(battery, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define BATTERY_STATES_COUNT 16
 
-#define ADC_TOTAL_SAMPLES 10
+#define ADC_TOTAL_SAMPLES 20
 // +1 for the calibration sample
 int16_t sample_buffer[ADC_TOTAL_SAMPLES + 1];
 
