@@ -111,6 +111,22 @@ function setup_provisioning_profile() {
         --git_url "git@github.com:BasedHardware/omi-community-certs.git"
 }
 
+######################################
+# Setup provisioning profile macOS
+######################################
+function setup_provisioning_profile_macos() {
+    # Only install fastlane if it doesn't exist
+    if ! command -v fastlane &> /dev/null; then
+        echo "Installing fastlane..."
+        brew install fastlane
+    fi
+    
+    MATCH_PASSWORD=omi fastlane match development --readonly \
+        --platform macos \
+        --app_identifier com.friend-app-with-wearable.ios12.development \
+        --git_url "git@github.com:BasedHardware/omi-community-certs.git"
+}
+
 
 #################
 # Set up App .env
@@ -143,6 +159,15 @@ function build_ios() {
     && dart run build_runner build
 }
 
+# #########
+# Build macOS
+# #########
+function build_macos() {
+  flutter pub get \
+    && pushd macos && pod install --repo-update && popd \
+    && dart run build_runner build
+}
+
 # #######
 # Run dev
 # #######
@@ -151,6 +176,12 @@ function run_dev() {
 }
 
 case "${1}" in
+  macos)
+    setup_firebase \
+      && setup_app_env \
+      && setup_provisioning_profile_macos \
+      && build_macos
+    ;;
   ios)
     setup_firebase \
       && setup_app_env \
