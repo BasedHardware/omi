@@ -71,15 +71,15 @@ class DefaultFirebaseOptions {
     storageBucket: 'based-hardware-dev.firebasestorage.app',
   );
 
-    static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyBPlXLWWpBIlJQ3WTi82tMOaLSdHsSwU7k',
-    appId: '1:1031333818730:ios:f65848bf37a9ebc3afb513',
+  static const FirebaseOptions macos = FirebaseOptions(
+    apiKey: 'AIzaSyBK-G7KmEoC72mR10gmQyb2NFBbZyDvcqM',
+    appId: '1:1031333818730:ios:3bea63d8e4f41dbfafb513',
     messagingSenderId: '1031333818730',
     projectId: 'based-hardware-dev',
     storageBucket: 'based-hardware-dev.firebasestorage.app',
     androidClientId: '1031333818730-1cgqp3jc5p8n2rk467pl4t56qc4lnnbr.apps.googleusercontent.com',
-    iosClientId: '1031333818730-tkgo4devf1la4aek0e4ipfcsdda6jne6.apps.googleusercontent.com',
-    iosBundleId: 'com.friend-app-with-wearable.ios12.develop',
+    iosClientId: '1031333818730-dusn243nct6i5rgfpfkj5mchuj1qnmde.apps.googleusercontent.com',
+    iosBundleId: 'com.friend-app-with-wearable.ios12.development',
   );
 
 }
