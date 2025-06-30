@@ -161,10 +161,10 @@ function setup_keystore_android() {
 # #####
 # Build
 # #####
-function run_build() {
+function run_build_android() {
   flutter pub get \
     && dart run build_runner build \
-    && flutter run --flavor dev
+    && flutter run -d android --debug --flavor dev
 }
 
 # #########
@@ -174,17 +174,18 @@ function run_build_ios() {
   flutter pub get \
     && pushd ios && pod install --repo-update && popd \
     && dart run build_runner build \
-    && flutter run --flavor dev
+    && flutter run -d ios --debug --flavor dev
 }
 
 # #########
 # Build macOS
 # #########
-function build_macos() {
+function run_build_macos() {
   flutter pub get \
     && pushd macos && pod install --repo-update && popd \
     && dart run build_runner build \
-    && flutter build macos --flavor dev
+    && flutter build macos --debug --flavor dev \
+    && open build/macos/Build/Products/Debug-dev/Omi.app
 
   echo "Note: To run the app on your macOS device, we need to register your Mac's device ID to our provisioning profile. Please send us your device ID on Discord (http://discord.omi.me)."
 }
@@ -195,7 +196,7 @@ case "${1}" in
     setup_firebase \
       && setup_app_env \
       && setup_provisioning_profile_macos \
-      && build_macos
+      && run_build_macos
     ;;
   ios)
     setup_firebase \
@@ -207,7 +208,7 @@ case "${1}" in
     setup_keystore_android \
       && setup_firebase \
       && setup_app_env \
-      && run_build
+      && run_build_android
     ;;
   macos)
     setup_firebase \
