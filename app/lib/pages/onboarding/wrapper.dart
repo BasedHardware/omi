@@ -42,7 +42,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   static const int kSpeechProfilePage = 6; // Now always the last index
 
   // Special index values used in comparisons
-  static const List<int> kHiddenHeaderPages = [-1, 5, 6];
+  static const List<int> kHiddenHeaderPages = [-1, 0, 5, 6];
 
   TabController? _controller;
   bool get hasSpeechProfile => SharedPreferencesUtil().hasSpeakerProfile;
@@ -182,110 +182,123 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
         backgroundColor: Theme.of(context).colorScheme.primary,
-        body: SingleChildScrollView(
-          child: Stack(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: ListView(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  children: [
-                    DeviceAnimationWidget(animatedBackground: _controller!.index != -1),
-                    const SizedBox(height: 24),
-                    kHiddenHeaderPages.contains(_controller?.index)
-                        ? const SizedBox.shrink()
-                        : Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: Text(
-                              'Your personal growth journey with AI that listens to your every word.',
-                              style: TextStyle(color: Colors.grey.shade300, fontSize: 24),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                    SizedBox(
-                      height: (_controller!.index == kFindDevicesPage || _controller!.index == kSpeechProfilePage)
-                          ? max(MediaQuery.of(context).size.height - 500 - 10,
-                              maxHeightWithTextScale(context, _controller!.index))
-                          : max(MediaQuery.of(context).size.height - 500 - 30,
-                              maxHeightWithTextScale(context, _controller!.index)),
-                      child: Padding(
-                        padding: EdgeInsets.only(bottom: MediaQuery.sizeOf(context).height <= 700 ? 10 : 64),
-                        child: TabBarView(
-                          controller: _controller,
-                          physics: const NeverScrollableScrollPhysics(),
-                          children: pages,
-                        ),
+        body: _controller!.index == kAuthPage
+            ? Stack(
+                children: [
+                  // Background image for auth page
+                  Container(
+                    height: MediaQuery.of(context).size.height,
+                    decoration: const BoxDecoration(
+                      image: DecorationImage(
+                        image: AssetImage('assets/images/onboarding-bg-2.png'),
+                        fit: BoxFit.cover,
                       ),
                     ),
+                  ),
+                  // Auth component
+                  pages[kAuthPage],
+                ],
+              )
+            : SingleChildScrollView(
+                child: Stack(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: ListView(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        children: [
+                          DeviceAnimationWidget(animatedBackground: _controller!.index != -1),
+                          const SizedBox(height: 24),
+                          kHiddenHeaderPages.contains(_controller?.index)
+                              ? const SizedBox.shrink()
+                              : Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                                  child: Text(
+                                    'Your personal growth journey with AI that listens to your every word.',
+                                    style: TextStyle(color: Colors.grey.shade300, fontSize: 24),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                          SizedBox(
+                            height: (_controller!.index == kFindDevicesPage || _controller!.index == kSpeechProfilePage)
+                                ? max(MediaQuery.of(context).size.height - 500 - 10, maxHeightWithTextScale(context, _controller!.index))
+                                : max(MediaQuery.of(context).size.height - 500 - 30, maxHeightWithTextScale(context, _controller!.index)),
+                            child: Padding(
+                              padding: EdgeInsets.only(bottom: MediaQuery.sizeOf(context).height <= 700 ? 10 : 64),
+                              child: TabBarView(
+                                controller: _controller,
+                                physics: const NeverScrollableScrollPhysics(),
+                                children: pages,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (_controller!.index == kWelcomePage)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(0, 40, 16, 0),
+                        child: Align(
+                          alignment: Alignment.topRight,
+                          child: TextButton(
+                            onPressed: () {
+                              if (_controller!.index == kPermissionsPage) {
+                                _controller!.animateTo(_controller!.index + 1);
+                              } else {
+                                routeToPage(context, const HomePageWrapper(), replace: true);
+                              }
+                            },
+                            child: Text(
+                              'Skip',
+                              style: TextStyle(color: Colors.grey.shade200),
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (_controller!.index > kNamePage)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 40, 0, 0),
+                        child: Align(
+                          alignment: Alignment.topLeft,
+                          child: TextButton(
+                            onPressed: () {
+                              if (_controller!.index > kNamePage) {
+                                _controller!.animateTo(_controller!.index - 1);
+                              }
+                            },
+                            child: Text(
+                              'Back',
+                              style: TextStyle(color: Colors.grey.shade200),
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (_controller!.index != kAuthPage)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 56, 16, 0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: List.generate(
+                            6,
+                            (index) {
+                              int pageIndex = index + 1; // Name=1, Lang=2, ..., Speech=6
+                              return Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 4.0),
+                                width: pageIndex == _controller!.index ? 12.0 : 8.0,
+                                height: pageIndex == _controller!.index ? 12.0 : 8.0,
+                                decoration: BoxDecoration(
+                                  color: pageIndex <= _controller!.index ? Theme.of(context).colorScheme.secondary : Colors.grey.shade400,
+                                  shape: BoxShape.circle,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
-              if (_controller!.index == kWelcomePage)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(0, 40, 16, 0),
-                  child: Align(
-                    alignment: Alignment.topRight,
-                    child: TextButton(
-                      onPressed: () {
-                        if (_controller!.index == kPermissionsPage) {
-                          _controller!.animateTo(_controller!.index + 1);
-                        } else {
-                          routeToPage(context, const HomePageWrapper(), replace: true);
-                        }
-                      },
-                      child: Text(
-                        'Skip',
-                        style: TextStyle(color: Colors.grey.shade200),
-                      ),
-                    ),
-                  ),
-                ),
-              if (_controller!.index > kNamePage)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 40, 0, 0),
-                  child: Align(
-                    alignment: Alignment.topLeft,
-                    child: TextButton(
-                      onPressed: () {
-                        if (_controller!.index > kNamePage) {
-                          _controller!.animateTo(_controller!.index - 1);
-                        }
-                      },
-                      child: Text(
-                        'Back',
-                        style: TextStyle(color: Colors.grey.shade200),
-                      ),
-                    ),
-                  ),
-                ),
-              if (_controller!.index != kAuthPage)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 56, 16, 0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(
-                      6,
-                      (index) {
-                        int pageIndex = index + 1; // Name=1, Lang=2, ..., Speech=6
-                        return Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 4.0),
-                          width: pageIndex == _controller!.index ? 12.0 : 8.0,
-                          height: pageIndex == _controller!.index ? 12.0 : 8.0,
-                          decoration: BoxDecoration(
-                            color: pageIndex <= _controller!.index
-                                ? Theme.of(context).colorScheme.secondary
-                                : Colors.grey.shade400,
-                            shape: BoxShape.circle,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
       ),
     );
   }

@@ -203,6 +203,10 @@ class $AssetsImagesGen {
   AssetGenImage get notionLogo =>
       const AssetGenImage('assets/images/notion_logo.png');
 
+  /// File path: assets/images/onboarding-bg-1.png
+  AssetGenImage get onboardingBg1 =>
+      const AssetGenImage('assets/images/onboarding-bg-1.png');
+
   /// File path: assets/images/recording_green_circle_icon.png
   AssetGenImage get recordingGreenCircleIcon =>
       const AssetGenImage('assets/images/recording_green_circle_icon.png');
@@ -306,6 +310,7 @@ class $AssetsImagesGen {
         logoTransparentV2,
         newBackground,
         notionLogo,
+        onboardingBg1,
         recordingGreenCircleIcon,
         slackLogo,
         speaker0Icon,
