@@ -844,12 +844,29 @@ workflows:
             exit 1
           fi
           
-          # Sign the app bundle
-          echo "Signing app bundle with: $APP_CERT_NAME"
-          codesign --force --sign "$APP_CERT_NAME" --preserve-metadata=identifier,entitlements,flags --strict "$APP_NAME"
+          # Use the existing entitlements file that matches the build flavor
+          # We're in build/macos/Build/Products/Release-prod, need to get back to app root
+          ENTITLEMENTS_FILE="$(pwd)/../../../../../macos/Runner/RunnerRelease-prod.entitlements"
           
-          # Verify the app signature
+          echo "Using existing entitlements file: $ENTITLEMENTS_FILE"
+          
+          if [ ! -f "$ENTITLEMENTS_FILE" ]; then
+            echo "Entitlements file not found at: $ENTITLEMENTS_FILE"
+            echo "Current directory: $(pwd)"
+            ls -la ../../../../../macos/Runner/ || echo "Runner directory not found"
+            exit 1
+          fi
+          
+          cat "$ENTITLEMENTS_FILE"
+          
+          # Sign the app bundle with the same entitlements Flutter used
+          echo "Signing app bundle with: $APP_CERT_NAME"
+          codesign --force --sign "$APP_CERT_NAME" --entitlements "$ENTITLEMENTS_FILE" --options runtime --strict "$APP_NAME"
+          
+          # Verify the app signature and show entitlements
           codesign --verify --deep --strict "$APP_NAME"
+          echo "=== App entitlements ==="
+          codesign -d --entitlements - "$APP_NAME"
           
           # Create unsigned package
           PACKAGE_NAME=$(basename "$APP_NAME" .app).pkg
