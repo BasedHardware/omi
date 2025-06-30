@@ -819,13 +819,25 @@ workflows:
           PACKAGE_NAME=$(basename "$APP_NAME" .app).pkg
           xcrun productbuild --component "$APP_NAME" /Applications/ unsigned.pkg
 
+          # Debug: List all certificates to see what's available
+          echo "=== Available certificates ==="
+          keychain list-certificates
+          
           # Find the installer certificate common name in keychain
+          # Try multiple patterns to find the certificate
           INSTALLER_CERT_NAME=$(keychain list-certificates \
-            | jq '.[]
-            | select(.common_name
-            | contains("Mac Installer Distribution"))
+            | jq -r '.[]
+            | select(.common_name | test("Mac Installer Distribution|Installer.*Distribution"))
             | .common_name' \
-            | xargs)
+            | head -1)
+          
+          echo "Found installer certificate: '$INSTALLER_CERT_NAME'"
+          
+          if [ -z "$INSTALLER_CERT_NAME" ]; then
+            echo "No installer certificate found. Available certificates:"
+            keychain list-certificates | jq -r '.[].common_name'
+            exit 1
+          fi
       
           # Sign the package
           xcrun productsign --sign "$INSTALLER_CERT_NAME" unsigned.pkg "$PACKAGE_NAME" 
@@ -846,7 +858,7 @@ workflows:
           - nik@basedhardware.com
           - mohsin.lp710@gmail.com
         notify:
-          success: true
+          success: false
           failure: false
       app_store_connect:
         api_key: $APP_STORE_CONNECT_PRIVATE_KEY
