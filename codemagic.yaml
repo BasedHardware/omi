@@ -815,31 +815,48 @@ workflows:
           APP_NAME=$(find $(pwd) -name "*.app")  
           cd $(dirname "$APP_NAME")
     
-          # Create unsigned package
-          PACKAGE_NAME=$(basename "$APP_NAME" .app).pkg
-          xcrun productbuild --component "$APP_NAME" /Applications/ unsigned.pkg
-
-          # Debug: List all certificates to see what's available
-          echo "=== Available certificates ==="
-          keychain list-certificates
-          
-          # Find the installer certificate common name in keychain
-          # Try multiple patterns to find the certificate
-          INSTALLER_CERT_NAME=$(keychain list-certificates \
+          # Find the application certificate for signing the app bundle
+          APP_CERT_NAME=$(keychain list-certificates \
             | jq -r '.[]
-            | select(.common_name | test("Mac Installer Distribution|Installer.*Distribution"))
+            | select(.common_name | test("3rd Party Mac Developer Application|Mac.*App.*Distribution"))
             | .common_name' \
             | head -1)
           
+          # Find the installer certificate for signing the package
+          INSTALLER_CERT_NAME=$(keychain list-certificates \
+            | jq -r '.[]
+            | select(.common_name | test("3rd Party Mac Developer Installer|Mac.*Installer.*Distribution"))
+            | .common_name' \
+            | head -1)
+          
+          echo "Found app certificate: '$APP_CERT_NAME'"
           echo "Found installer certificate: '$INSTALLER_CERT_NAME'"
+          
+          if [ -z "$APP_CERT_NAME" ]; then
+            echo "No application certificate found. Available certificates:"
+            keychain list-certificates | jq -r '.[].common_name'
+            exit 1
+          fi
           
           if [ -z "$INSTALLER_CERT_NAME" ]; then
             echo "No installer certificate found. Available certificates:"
             keychain list-certificates | jq -r '.[].common_name'
             exit 1
           fi
-      
+          
+          # Sign the app bundle
+          echo "Signing app bundle with: $APP_CERT_NAME"
+          codesign --force --sign "$APP_CERT_NAME" --preserve-metadata=identifier,entitlements,flags --strict "$APP_NAME"
+          
+          # Verify the app signature
+          codesign --verify --deep --strict "$APP_NAME"
+          
+          # Create unsigned package
+          PACKAGE_NAME=$(basename "$APP_NAME" .app).pkg
+          xcrun productbuild --component "$APP_NAME" /Applications/ unsigned.pkg
+
           # Sign the package
+          echo "Signing installer package with: $INSTALLER_CERT_NAME"
           xcrun productsign --sign "$INSTALLER_CERT_NAME" unsigned.pkg "$PACKAGE_NAME" 
     
           rm -f unsigned.pkg
