@@ -21,6 +21,7 @@
 # Usages: 
 # - $bash setup.sh ios
 # - $bash setup.sh android
+# - $bash setup.sh macos
 
 set -euo pipefail
 
@@ -44,6 +45,7 @@ echo "- NDK (27.0.12077973)"
 echo "Usages:"
 echo "- bash setup.sh ios"
 echo "- bash setup.sh android"
+echo "- bash setup.sh macos"
 echo ""
 
 
@@ -58,6 +60,7 @@ function setup_firebase() {
   cp setup/prebuilt/google-services.json android/app/src/dev/
   cp setup/prebuilt/GoogleService-Info.plist ios/Config/Dev/
   cp setup/prebuilt/GoogleService-Info.plist ios/Runner/
+  cp setup/prebuilt/GoogleService-Info.plist macos/
 
   # Warn: Mocking, should remove
   mkdir -p android/app/src/prod/ ios/Config/Prod/
@@ -145,18 +148,20 @@ function setup_keystore_android() {
 # #####
 # Build
 # #####
-function build() {
+function run_build() {
   flutter pub get \
-    && dart run build_runner build
+    && dart run build_runner build \
+    && flutter run --flavor dev
 }
 
 # #########
 # Build iOS
 # #########
-function build_ios() {
+function run_build_ios() {
   flutter pub get \
     && pushd ios && pod install --repo-update && popd \
-    && dart run build_runner build
+    && dart run build_runner build \
+    && flutter run --flavor dev
 }
 
 # #########
@@ -165,15 +170,12 @@ function build_ios() {
 function build_macos() {
   flutter pub get \
     && pushd macos && pod install --repo-update && popd \
-    && dart run build_runner build
+    && dart run build_runner build \
+    && flutter build macos --flavor dev
+
+  echo "Note: To run the app on your macOS device, we need to register your Mac's device ID to our provisioning profile. Please send us your device ID on Discord (http://discord.omi.me)."
 }
 
-# #######
-# Run dev
-# #######
-function run_dev() {
-  flutter run --flavor dev
-}
 
 case "${1}" in
   macos)
@@ -186,13 +188,13 @@ case "${1}" in
     setup_firebase \
       && setup_app_env \
       && setup_provisioning_profile \
-      && build_ios
+      && run_build_ios
     ;;
   android)
     setup_keystore_android \
       && setup_firebase \
       && setup_app_env \
-      && build
+      && run_build
     ;;
   *)
     error "Unexpected platform '${1}'"

@@ -72,6 +72,7 @@ dist/
 **/macos/.generated/
 **/macos/Runner.xcworkspace
 **/macos/**/GeneratedPluginRegistrant.*
+**/macos/GoogleService-Info.plist
 
 # Linux specific
 **/linux/.dart_tool/
