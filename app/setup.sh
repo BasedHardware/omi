@@ -66,7 +66,7 @@ function setup_firebase() {
   cp setup/prebuilt/GoogleService-Info.plist ios/Config/Dev/
   cp setup/prebuilt/GoogleService-Info.plist ios/Runner/
   cp setup/prebuilt/GoogleService-Info.plist macos/
-      cp setup/prebuilt/GoogleService-Info.plist macos/Config/Dev/
+  cp setup/prebuilt/GoogleService-Info.plist macos/Config/Dev/
 
   # Warn: Mocking, should remove
   mkdir -p android/app/src/prod/ ios/Config/Prod/ macos/Config/Prod
