@@ -259,7 +259,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         }
         
         // Wait for engine to be fully running before starting player node
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             guard let self = self else { return }
             self.safelyStartPlayerNode()
         }
@@ -310,10 +310,20 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         }
         
         do {
+            // Check if the node is ready to play
+            guard scStreamPlayerNode.engine?.isRunning == true else {
+                print("ERROR: Audio engine not ready for player node")
+                return
+            }
+            
             scStreamPlayerNode.play()
             print("DEBUG: SCStream player node started safely")
         } catch {
             print("ERROR: Failed to start player node safely: \(error.localizedDescription)")
+            // Notify Flutter of the error
+            if isFlutterEngineActive {
+                self.screenCaptureChannel?.invokeMethod("captureError", arguments: "Player node start failed: \(error.localizedDescription)")
+            }
         }
     }
     
@@ -372,21 +382,8 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             }
         }
         
-        // Schedule processed audio on the dedicated SCStream player node
-        if scStreamPlayerNode.engine != nil && audioEngine.isRunning {
-            if scStreamPlayerNode.isPlaying {
-                scStreamPlayerNode.scheduleBuffer(processedBuffer, completionHandler: nil)
-            } else {
-                print("Warning: SCStream player node was not playing. Attempting to start and schedule.")
-                safelyStartPlayerNode()
-                // Give a small delay to ensure the node is ready
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
-                    if self.scStreamPlayerNode.isPlaying {
-                        self.scStreamPlayerNode.scheduleBuffer(processedBuffer, completionHandler: nil)
-                    }
-                }
-            }
-        }
+        // USE THE NEW SAFE METHOD
+        safelyScheduleBuffer(processedBuffer)
     }
     
     func stream(_ stream: SCStream, didStopWithError error: Error) {
@@ -395,6 +392,29 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             self.screenCaptureChannel?.invokeMethod("captureError", arguments: "SCStream stopped: \(error.localizedDescription)")
         }
         self.stream = nil
+    }
+    
+    // ADD NEW METHOD for safer SCStream handling
+    private func safelyScheduleBuffer(_ buffer: AVAudioPCMBuffer) {
+        guard scStreamPlayerNode.engine != nil && audioEngine.isRunning else {
+            print("ERROR: Cannot schedule buffer - audio engine not ready")
+            return
+        }
+        
+        if scStreamPlayerNode.isPlaying {
+            scStreamPlayerNode.scheduleBuffer(buffer, completionHandler: nil)
+        } else {
+            print("Warning: SCStream player node was not playing. Attempting to start and schedule.")
+            safelyStartPlayerNode()
+            // Give a longer delay to ensure the node is ready
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                if self.scStreamPlayerNode.isPlaying {
+                    self.scStreamPlayerNode.scheduleBuffer(buffer, completionHandler: nil)
+                } else {
+                    print("ERROR: Failed to start player node for buffer scheduling")
+                }
+            }
+        }
     }
 }
 

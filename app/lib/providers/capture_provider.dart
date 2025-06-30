@@ -59,6 +59,10 @@ class CaptureProvider extends ChangeNotifier
   List<MessageEvent> _transcriptionServiceStatuses = [];
   List<MessageEvent> get transcriptionServiceStatuses => _transcriptionServiceStatuses;
 
+  // ADD STATE TRACKING
+  bool _isSystemAudioStarting = false;
+  bool _isSystemAudioStopping = false;
+
   CaptureProvider() {
     _internetStatusListener = PureCore().internetConnection.onStatusChange.listen((InternetStatus status) {
       onInternetSatusChanged(status);
@@ -525,13 +529,19 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
 
-    updateRecordingState(RecordingState.initialising);
+    // PREVENT RACE CONDITIONS
+    if (_isSystemAudioStarting || _isSystemAudioStopping) {
+      debugPrint('System audio operation already in progress, ignoring request');
+      return;
+    }
 
-    // WORKAROUND FOR MACOS SONOMA BUG: Try recording first without checking permissions
-    // This works around the bug where permissions show as undetermined even when granted
-    debugPrint('Attempting to start system audio recording directly (macOS bug workaround)');
+    updateRecordingState(RecordingState.initialising);
+    _isSystemAudioStarting = true;
 
     try {
+      // WORKAROUND FOR MACOS SONOMA BUG: Try recording first without checking permissions
+      debugPrint('Attempting to start system audio recording directly (macOS bug workaround)');
+
       await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
 
       // Try to start recording immediately - if permissions are actually granted, this will work
@@ -575,6 +585,8 @@ class CaptureProvider extends ChangeNotifier
     } catch (e) {
       debugPrint('Error attempting direct system audio start: $e');
       await _checkAndRequestPermissions();
+    } finally {
+      _isSystemAudioStarting = false;
     }
   }
 
@@ -682,10 +694,23 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> stopSystemAudioRecording() async {
     if (!PlatformService.isDesktop) return;
-    ServiceManager.instance().systemAudio.stop();
-    _isPaused = false; // Clear paused state when stopping
-    await _socket?.stop(reason: 'stop system audio recording from Flutter');
-    await _cleanupCurrentState();
+    
+    // PREVENT RACE CONDITIONS
+    if (_isSystemAudioStopping) {
+      debugPrint('System audio stop already in progress, ignoring request');
+      return;
+    }
+    
+    _isSystemAudioStopping = true;
+    
+    try {
+      ServiceManager.instance().systemAudio.stop();
+      _isPaused = false; // Clear paused state when stopping
+      await _socket?.stop(reason: 'stop system audio recording from Flutter');
+      await _cleanupCurrentState();
+    } finally {
+      _isSystemAudioStopping = false;
+    }
   }
 
   Future<void> pauseSystemAudioRecording() async {

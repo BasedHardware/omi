@@ -13,6 +13,9 @@ flavors:
       icon: "assets/images/app_launcher_icon.png"
       firebase:
         config: "app/ios/Config/Prod/GoogleService-Info.plist"
+    macos:
+      bundleId: "com.friend-app-with-wearable.ios12"
+      icon: "assets/images/app_launcher_icon.png"
   dev:
     app:
       name: "Omi Dev"
@@ -27,3 +30,6 @@ flavors:
       icon: "assets/images/app_launcher_icon.png"
       firebase:
         config: "app/ios/Config/Dev/GoogleService-Info.plist"
+    macos:
+      bundleId: "com.friend-app-with-wearable.ios12.development"
+      icon: "assets/images/app_launcher_icon.png"

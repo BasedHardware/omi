@@ -395,6 +395,7 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
 
   // To keep track of recording state from Dart's perspective
   bool _isRecording = false;
+  bool _isStarting = false; // ADD STATE TRACKING
 
   DesktopSystemAudioRecorderService() {
     _channel.setMethodCallHandler(_handleMethodCall);
@@ -455,11 +456,13 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
     Function()? onStop,
     Function(String error)? onError,
   }) async {
-    if (_isRecording) {
-      // Potentially call onError or throw if already recording
-      onError?.call("Already recording. Please stop the current recording first.");
+    if (_isRecording || _isStarting) {
+      // PREVENT RACE CONDITIONS
+      onError?.call("Already recording or starting. Please wait.");
       return;
     }
+
+    _isStarting = true;
 
     // Store the callbacks
     _onByteReceived = onByteReceived;
@@ -475,7 +478,7 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
         _onRecording!();
       }
     } catch (e) {
-      debugPrint("Error starting system audio recording: \$e");
+      debugPrint("Error starting system audio recording: $e");
       _isRecording = false;
       if (_onError != null) {
         _onError!(e.toString());
@@ -485,16 +488,16 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
         _onStop!();
       }
       _clearCallbacks(); // Clear callbacks if start fails
+    } finally {
+      _isStarting = false;
     }
   }
 
   @override
   void stop() {
-    if (!_isRecording) {
+    if (!_isRecording && !_isStarting) {
       // Optionally, log or call onError if trying to stop when not recording
-      // _onError?.call("Not recording.");
-      // return;
-      // Or silently do nothing if preferred
+      return;
     }
     try {
       _channel.invokeMethod('stop');
@@ -502,9 +505,10 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
       // when 'audioStreamEnded' is received from native code.
       // If the invokeMethod 'stop' itself fails, we might not get 'audioStreamEnded'.
     } catch (e) {
-      debugPrint("Error stopping system audio recording: \$e");
+      debugPrint("Error stopping system audio recording: $e");
       // If stopping failed, force cleanup on Dart side.
       _isRecording = false;
+      _isStarting = false;
       if (_onError != null) {
         _onError!(e.toString());
       }
