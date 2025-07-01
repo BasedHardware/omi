@@ -1,3 +1,4 @@
+import os
 from enum import Enum
 import json
 from typing import List, Optional
@@ -57,10 +58,9 @@ class ConversationCategory(str, Enum):
     environment = "environment"
     other = "other"
 
-
-base_url = "https://backend-208440318997.us-central1.run.app/v1/mcp/"
-# base_url = "http://127.0.0.1:8000/v1/mcp/"
-
+base_url = os.getenv("OMI_API_BASE_URL", "https://api.omi.me/v1/mcp/")
+if not base_url or base_url == "":
+    raise Exception("Base URL not found")
 
 class OmiTools(str, Enum):
     GET_MEMORIES = "get_memories"
