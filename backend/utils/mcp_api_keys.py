@@ -2,17 +2,17 @@ import hashlib
 import secrets
 from typing import Tuple
 
-API_KEY_PREFIX_LENGTH = 8
-API_KEY_LENGTH = 32
 
-
-def generate_api_key() -> Tuple[str, str]:
+def generate_api_key() -> Tuple[str, str, str]:
     """
-    Generates a new API key.
-    Returns a tuple of (key_prefix, api_key).
+    Generates a new MCP API key.
+    Returns a tuple of (raw_key, hashed_key, key_prefix).
     """
-    api_key = secrets.token_urlsafe(API_KEY_LENGTH)
-    return api_key[:API_KEY_PREFIX_LENGTH], api_key
+    secret_part = secrets.token_hex(16)
+    raw_key = f"omi_mcp_{secret_part}"
+    hashed_key = hash_api_key(secret_part)
+    key_prefix = f"omi_mcp_{secret_part[:4]}...{secret_part[-4:]}"
+    return raw_key, hashed_key, key_prefix
 
 
 def hash_api_key(api_key: str) -> str:
