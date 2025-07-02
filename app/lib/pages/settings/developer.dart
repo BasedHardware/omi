@@ -4,7 +4,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/settings/widgets/create_mcp_api_key_dialog.dart';
+import 'package:omi/pages/settings/widgets/mcp_api_key_list_item.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
+import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
@@ -26,6 +29,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await Provider.of<DeveloperModeProvider>(context, listen: false).initialize();
+      context.read<McpProvider>().fetchKeys();
     });
     super.initState();
   }
@@ -232,6 +236,48 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   //     setState(() => provider.loadingImportMemories = false);
                   //   },
                   // ),
+                  const SizedBox(height: 16),
+                  Divider(color: Colors.grey.shade500),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'MCP API Keys',
+                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
+                      ),
+                      TextButton.icon(
+                        onPressed: () => showDialog(
+                          context: context,
+                          builder: (context) => const CreateMcpApiKeyDialog(),
+                        ),
+                        icon: const Icon(Icons.add, color: Colors.white),
+                        label: const Text('Create Key', style: TextStyle(color: Colors.white)),
+                      )
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Consumer<McpProvider>(
+                    builder: (context, provider, child) {
+                      if (provider.isLoading && provider.keys.isEmpty) {
+                        return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+                      }
+                      if (provider.error != null) {
+                        return Center(child: Text('Error: ${provider.error}'));
+                      }
+                      if (provider.keys.isEmpty) {
+                        return const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(16.0),
+                            child: Text('No API keys found. Create one to get started.'),
+                          ),
+                        );
+                      }
+                      return Column(
+                        children: provider.keys.map((key) => McpApiKeyListItem(apiKey: key)).toList(),
+                      );
+                    },
+                  ),
                   const SizedBox(height: 16),
                   Divider(color: Colors.grey.shade500),
                   const SizedBox(height: 16),

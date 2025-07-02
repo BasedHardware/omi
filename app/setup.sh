@@ -163,8 +163,7 @@ function setup_keystore_android() {
 # #####
 function run_build_android() {
   flutter pub get \
-    && dart run build_runner build \
-    && flutter run -d android --debug --flavor dev
+    && dart run build_runner build
 }
 
 # #########
@@ -173,8 +172,7 @@ function run_build_android() {
 function run_build_ios() {
   flutter pub get \
     && pushd ios && pod install --repo-update && popd \
-    && dart run build_runner build \
-    && flutter run -d ios --debug --flavor dev
+    && dart run build_runner build
 }
 
 # #########
