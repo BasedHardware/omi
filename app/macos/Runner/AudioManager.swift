@@ -56,6 +56,13 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
         self.availableContent = content
         
+        guard !content.displays.isEmpty else {
+            throw AudioManagerError.audioFormatError("No displays available for screen capture. Found \(content.displays.count) displays.")
+        }
+        
+        let primaryDisplay = content.displays.first!
+        print("DEBUG: Using primary display: \(primaryDisplay.displayID), Frame: \(primaryDisplay.frame)")
+        
         // Setup audio formats for Flutter output
         let flutterOutputSampleRate = 16000.0
         let flutterOutputChannels: AVAudioChannelCount = 1
@@ -137,6 +144,40 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         audioFormatSentToFlutter = false
     }
     
+    func isRecording() -> Bool {
+        let engineRunning = audioEngine.isRunning
+        let streamActive = stream != nil
+        let formatSent = audioFormatSentToFlutter
+        
+        return engineRunning && formatSent
+    }
+    
+    // Check if current display setup is still valid
+    func validateDisplaySetup() async -> Bool {
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
+            let hasDisplays = !content.displays.isEmpty
+            print("DEBUG: Display validation - Available displays: \(content.displays.count)")
+            return hasDisplays
+        } catch {
+            print("ERROR: Failed to validate display setup: \(error.localizedDescription)")
+            return false
+        }
+    }
+    
+    // Refresh available content (when displays change)
+    func refreshAvailableContent() async throws {
+        print("DEBUG: Refreshing available content...")
+        let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
+        self.availableContent = content
+        
+        print("DEBUG: Content refreshed - Displays: \(content.displays.count), Applications: \(content.applications.count)")
+        
+        guard !content.displays.isEmpty else {
+            throw AudioManagerError.audioFormatError("No displays available after refresh")
+        }
+    }
+    
     // MARK: - Private Setup Methods
     
     private func setupAudioComponents() {
@@ -200,7 +241,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             
             let outputBufferFrameCapacity = AVAudioFrameCount(Double(buffer.frameLength) * (finalOutputFormat.sampleRate / buffer.format.sampleRate))
             guard let outputPCMBuffer = AVAudioPCMBuffer(pcmFormat: finalOutputFormat, frameCapacity: outputBufferFrameCapacity) else {
-                print("Failed to create output PCM buffer for final converter.")
+                print("ERROR: Failed to create output PCM buffer for final converter.")
                 return
             }
             
@@ -211,7 +252,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             }
             
             if status == .error || error != nil {
-                print("Final audio conversion error from mixer tap: \(error?.localizedDescription ?? "Unknown error")")
+                print("ERROR: Final audio conversion error from mixer tap: \(error?.localizedDescription ?? "Unknown error")")
                 return
             }
             
@@ -222,25 +263,47 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
                         let audioData = Data(bytes: int16Data, count: dataSize)
                         if self.audioFormatSentToFlutter && self.isFlutterEngineActive {
                             self.screenCaptureChannel?.invokeMethod("audioFrame", arguments: audioData)
+                        } else {
+                            print("WARNING: Audio data NOT sent to Flutter - Format sent: \(self.audioFormatSentToFlutter), Engine active: \(self.isFlutterEngineActive)")
                         }
                     } else if dataSize == 0 && outputPCMBuffer.frameLength > 0 {
-                        print("DEBUG: Final converter output dataSize is 0 but frameLength > 0. Format: \(finalOutputFormat)")
+                        print("WARNING: Final converter output dataSize is 0 but frameLength > 0. Format: \(finalOutputFormat)")
                     }
+                } else {
+                    print("WARNING: Unexpected audio format in mixer tap: \(finalOutputFormat)")
                 }
+            } else {
+                print("WARNING: Mixer tap converter produced no data - Status: \(status)")
             }
         }
         
-        print("DEBUG: Mixer NOT connected to outputNode to prevent echo feedback loop.")
-        print("DEBUG: Simplified pipeline - SCStream will feed directly to mixer, no systemAudioPlayerNode needed.")
         
         audioEngine.prepare()
     }
     
     private func prepSCStreamFilter() {
-        let excluded = availableContent?.applications.filter { app in
+        guard let content = availableContent else {
+            print("ERROR: No available content when preparing SCStream filter")
+            return
+        }
+        
+        guard !content.displays.isEmpty else {
+            print("ERROR: No displays available when preparing SCStream filter")
+            return
+        }
+        
+        let primaryDisplay = content.displays.first!
+        print("DEBUG: Preparing filter for display: \(primaryDisplay.displayID)")
+        
+        // Exclude our own app from being captured
+        let excluded = content.applications.filter { app in
             Bundle.main.bundleIdentifier == app.bundleIdentifier
         }
-        filter = SCContentFilter(display: availableContent!.displays.first!, excludingApplications: excluded ?? [], exceptingWindows: [])
+        print("DEBUG: Excluding \(excluded.count) applications from capture")
+        
+        // Create filter with primary display
+        filter = SCContentFilter(display: primaryDisplay, excludingApplications: excluded, exceptingWindows: [])
+        print("DEBUG: SCStream filter created successfully")
         
         // Reset SCStream source format for a new session
         scStreamSourceFormat = nil
@@ -259,7 +322,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         }
         
         // Wait for engine to be fully running before starting player node
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             guard let self = self else { return }
             self.safelyStartPlayerNode()
         }
@@ -276,12 +339,37 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         conf.capturesAudio = true
         
         stream = SCStream(filter: filter, configuration: conf, delegate: self)
+        
+        guard let stream = stream else {
+            print("ERROR: Failed to create SCStream instance")
+            if isFlutterEngineActive {
+                self.screenCaptureChannel?.invokeMethod("captureError", arguments: "Failed to create SCStream instance")
+            }
+            return
+        }
+        
         do {
-            try stream?.addStreamOutput(self, type: .audio, sampleHandlerQueue: .global(qos: .userInitiated))
-            try await stream?.startCapture()
-            print("DEBUG: SCStream capture started.")
+            try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: .global(qos: .userInitiated))
+            
+            try await stream.startCapture()
         } catch {
-            print("Error starting SCStream capture: \(error.localizedDescription)")
+            print("ERROR: SCStream capture failed: \(error.localizedDescription)")
+            print("ERROR: Error details: \(error)")
+            
+            if error.localizedDescription.contains("displays") || error.localizedDescription.contains("windows") {
+                
+                // Try to refresh available content and retry once
+                do {
+                    let refreshedContent = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
+                    
+                    if !refreshedContent.displays.isEmpty {
+                        self.availableContent = refreshedContent
+                    }
+                } catch {
+                    print("ERROR: Failed to refresh content: \(error.localizedDescription)")
+                }
+            }
+            
             if isFlutterEngineActive {
                 self.screenCaptureChannel?.invokeMethod("captureError", arguments: "SCStream: \(error.localizedDescription)")
             }
@@ -310,20 +398,32 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         }
         
         do {
+            // Check if the node is ready to play
+            guard scStreamPlayerNode.engine?.isRunning == true else {
+                print("ERROR: Audio engine not ready for player node")
+                return
+            }
+            
             scStreamPlayerNode.play()
             print("DEBUG: SCStream player node started safely")
         } catch {
             print("ERROR: Failed to start player node safely: \(error.localizedDescription)")
+            if isFlutterEngineActive {
+                self.screenCaptureChannel?.invokeMethod("captureError", arguments: "Player node start failed: \(error.localizedDescription)")
+            }
         }
     }
     
     // MARK: - SCStream Delegate Methods
     
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
-        guard sampleBuffer.isValid, type == .audio else { return }
+        guard sampleBuffer.isValid, type == .audio else { 
+            print("SCStream: Invalid sample buffer or non-audio type: \(type)")
+            return 
+        }
         
         guard let pcmBufferFromSCStream = sampleBuffer.asPCMBuffer else {
-            print("SCStream: Failed to get PCM buffer from CMSampleBuffer")
+            print("ERROR: SCStream: Failed to get PCM buffer from CMSampleBuffer")
             return
         }
         
@@ -372,21 +472,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             }
         }
         
-        // Schedule processed audio on the dedicated SCStream player node
-        if scStreamPlayerNode.engine != nil && audioEngine.isRunning {
-            if scStreamPlayerNode.isPlaying {
-                scStreamPlayerNode.scheduleBuffer(processedBuffer, completionHandler: nil)
-            } else {
-                print("Warning: SCStream player node was not playing. Attempting to start and schedule.")
-                safelyStartPlayerNode()
-                // Give a small delay to ensure the node is ready
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
-                    if self.scStreamPlayerNode.isPlaying {
-                        self.scStreamPlayerNode.scheduleBuffer(processedBuffer, completionHandler: nil)
-                    }
-                }
-            }
-        }
+        safelyScheduleBuffer(processedBuffer)
     }
     
     func stream(_ stream: SCStream, didStopWithError error: Error) {
@@ -395,6 +481,27 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             self.screenCaptureChannel?.invokeMethod("captureError", arguments: "SCStream stopped: \(error.localizedDescription)")
         }
         self.stream = nil
+    }
+    
+    private func safelyScheduleBuffer(_ buffer: AVAudioPCMBuffer) {
+        guard scStreamPlayerNode.engine != nil && audioEngine.isRunning else {
+            print("ERROR: Cannot schedule buffer - audio engine not ready")
+            return
+        }
+        
+        if scStreamPlayerNode.isPlaying {
+            scStreamPlayerNode.scheduleBuffer(buffer, completionHandler: nil)
+        } else {
+            print("Warning: SCStream player node was not playing. Attempting to start and schedule.")
+            safelyStartPlayerNode()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                if self.scStreamPlayerNode.isPlaying {
+                    self.scStreamPlayerNode.scheduleBuffer(buffer, completionHandler: nil)
+                } else {
+                    print("ERROR: Failed to start player node for buffer scheduling")
+                }
+            }
+        }
     }
 }
 
