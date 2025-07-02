@@ -52,7 +52,7 @@ class McpProvider with ChangeNotifier {
     // Optimistically remove the key from the UI
     final keyIndex = _keys.indexWhere((key) => key.id == keyId);
     if (keyIndex == -1) return;
-    
+
     final keyToRemove = _keys[keyIndex];
     _keys.removeAt(keyIndex);
     notifyListeners();

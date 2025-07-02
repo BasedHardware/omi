@@ -51,19 +51,19 @@ class _CreateMcpApiKeyDialogState extends State<CreateMcpApiKeyDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Create New API Key'),
+      title: const Text('Create New Key'),
       content: Form(
         key: _formKey,
         child: TextFormField(
           controller: _nameController,
           autofocus: true,
           decoration: const InputDecoration(
-            labelText: 'Key Name',
-            hintText: 'e.g., My Laptop',
+            labelText: 'Name',
+            hintText: 'e.g., Claude Desktop',
           ),
           validator: (value) {
             if (value == null || value.trim().isEmpty) {
-              return 'Please enter a name for the key.';
+              return 'Please enter a name.';
             }
             return null;
           },
@@ -76,7 +76,13 @@ class _CreateMcpApiKeyDialogState extends State<CreateMcpApiKeyDialog> {
         ),
         ElevatedButton(
           onPressed: _isCreating ? null : _createKey,
-          child: _isCreating ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Create'),
+          style: ElevatedButton.styleFrom(
+            foregroundColor: Colors.white,
+            backgroundColor: Theme.of(context).colorScheme.secondary,
+          ),
+          child: _isCreating
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Create'),
         ),
       ],
     );

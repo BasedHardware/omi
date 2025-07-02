@@ -72,7 +72,10 @@ class OmiTools(str, Enum):
 
 
 class GetMemories(BaseModel):
-    api_key: str = Field(description="The user's MCP API key.")
+    api_key: Optional[str] = Field(
+        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable.",
+        default=None,
+    )
     categories: List[MemoryCategory] = Field(
         description="The categories of memories to filter by.", default=[]
     )
@@ -81,7 +84,10 @@ class GetMemories(BaseModel):
 
 
 class CreateMemory(BaseModel):
-    api_key: str = Field(description="The user's MCP API key.")
+    api_key: Optional[str] = Field(
+        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable.",
+        default=None,
+    )
     content: str = Field(description="The content of the memory.")
     category: MemoryCategory = Field(
         description="The category of the memory to create."
@@ -89,18 +95,27 @@ class CreateMemory(BaseModel):
 
 
 class DeleteMemory(BaseModel):
-    api_key: str = Field(description="The user's MCP API key.")
+    api_key: Optional[str] = Field(
+        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable.",
+        default=None,
+    )
     memory_id: str = Field(description="The ID of the memory to delete.")
 
 
 class EditMemory(BaseModel):
-    api_key: str = Field(description="The user's MCP API key.")
+    api_key: Optional[str] = Field(
+        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable.",
+        default=None,
+    )
     memory_id: str = Field(description="The ID of the memory to edit.")
     content: str = Field(description="The new content for the memory.")
 
 
 class GetConversations(BaseModel):
-    api_key: str = Field(description="The user's MCP API key.")
+    api_key: Optional[str] = Field(
+        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable.",
+        default=None,
+    )
     start_date: Optional[str] = Field(
         description="Filter conversations after this date (yyyy-mm-dd)", default=None
     )
@@ -115,7 +130,10 @@ class GetConversations(BaseModel):
 
 
 class GetConversationById(BaseModel):
-    api_key: str = Field(description="The user's MCP API key.")
+    api_key: Optional[str] = Field(
+        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable.",
+        default=None,
+    )
     conversation_id: str = Field(description="The ID of the conversation to retrieve.")
 
 
@@ -257,7 +275,12 @@ async def serve(uid: str | None) -> None:
     async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         logger.info(f"Calling tool: {name} with arguments: {arguments}")
 
-        api_key = arguments["api_key"]
+        api_key = arguments.get("api_key") or os.getenv("OMI_API_KEY")
+        if not api_key:
+            raise ValueError(
+                "API key not provided and OMI_API_KEY environment variable not set."
+            )
+
         if name == OmiTools.GET_MEMORIES:
             # return [TextContent(type="text", text=json.dumps(arguments, indent=2))]
             categories: List[str] = arguments.get("categories", [])

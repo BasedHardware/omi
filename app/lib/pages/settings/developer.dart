@@ -4,10 +4,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:omi/pages/settings/widgets/create_mcp_api_key_dialog.dart';
 import 'package:omi/pages/settings/widgets/mcp_api_key_list_item.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
@@ -243,16 +246,51 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
-                        'MCP API Keys',
+                        'MCP',
                         style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          launchUrl(Uri.parse('https://docs.omi.me/doc/developer/MCP'));
+                          MixpanelManager().pageOpened('MCP Docs');
+                        },
+                        child: const Padding(
+                          padding: EdgeInsets.all(8.0),
+                          child: Text(
+                            'Docs',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'To connect Omi with other applications to read, search, and manage your memories and conversations. Create a key to get started.',
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'API Keys',
+                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                       ),
                       TextButton.icon(
                         onPressed: () => showDialog(
                           context: context,
                           builder: (context) => const CreateMcpApiKeyDialog(),
                         ),
-                        icon: const Icon(Icons.add, color: Colors.white),
+                        icon: const Icon(Icons.add, color: Colors.white, size: 18),
                         label: const Text('Create Key', style: TextStyle(color: Colors.white)),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
                       )
                     ],
                   ),
@@ -276,6 +314,38 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                       return Column(
                         children: provider.keys.map((key) => McpApiKeyListItem(apiKey: key)).toList(),
                       );
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Claude Desktop Integration',
+                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Add the following to your claude_desktop_config.json file. Remember to replace "your_api_key_here" with a valid key.',
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.copy, size: 16),
+                    label: const Text('Copy Config'),
+                    style: ElevatedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      backgroundColor: Colors.grey.shade700,
+                      minimumSize: const Size(double.infinity, 40),
+                    ),
+                    onPressed: () {
+                      const config = '''{
+  "mcpServers": {
+    "omi": {
+      "command": "docker",
+      "args": ["run", "--rm", "-i", "-e", "OMI_API_KEY=your_api_key_here", "omi/mcp-server-omi"]
+    }
+  }
+}''';
+                      Clipboard.setData(const ClipboardData(text: config));
+                      AppSnackbar.showSnackbar('Claude config copied to clipboard.');
                     },
                   ),
                   const SizedBox(height: 16),

@@ -11,16 +11,16 @@ class McpApiKeyCreatedDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('API Key Created'),
+      title: const Text('Key Created'),
       content: SingleChildScrollView(
         child: ListBody(
           children: <Widget>[
-            const Text('Your new API key has been created. Please copy it now. You will not be able to see it again.'),
+            const Text('Your new key has been created. Please copy it now. You will not be able to see it again.'),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.grey.shade800,
+                color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: SelectableText(
@@ -33,16 +33,20 @@ class McpApiKeyCreatedDialog extends StatelessWidget {
       ),
       actions: <Widget>[
         TextButton(
-          child: const Text('Copy'),
-          onPressed: () {
-            Clipboard.setData(ClipboardData(text: apiKey.key));
-            AppSnackbar.showSnackbar('API Key copied to clipboard.');
-          },
-        ),
-        ElevatedButton(
           child: const Text('Done'),
           onPressed: () {
             Navigator.of(context).pop();
+          },
+        ),
+        ElevatedButton(
+          child: const Text('Copy'),
+          style: ElevatedButton.styleFrom(
+            foregroundColor: Colors.white,
+            backgroundColor: Theme.of(context).colorScheme.secondary,
+          ),
+          onPressed: () {
+            Clipboard.setData(ClipboardData(text: apiKey.key));
+            AppSnackbar.showSnackbar('Key copied to clipboard.');
           },
         ),
       ],
