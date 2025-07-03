@@ -51,7 +51,7 @@ class LiteCaptureWidgetState extends State<LiteCaptureWidget> with AutomaticKeep
     return Consumer2<CaptureProvider, DeviceProvider>(builder: (context, provider, deviceProvider, child) {
       return getLiteTranscriptWidget(
         provider.segments,
-        [],
+        provider.photos,
         deviceProvider.connectedDevice,
       );
     });

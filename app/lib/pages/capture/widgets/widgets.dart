@@ -1,7 +1,13 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/speech_profile/page.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -134,12 +140,51 @@ class UpdateFirmwareCardWidget extends StatelessWidget {
   }
 }
 
+class PhotosPreviewWidget extends StatelessWidget {
+  final List<ConversationPhoto> photos;
+  const PhotosPreviewWidget({super.key, required this.photos});
+
+  @override
+  Widget build(BuildContext context) {
+    // Show the last 3 photos, newest first.
+    final displayPhotos = photos.length > 3 ? photos.sublist(photos.length - 3) : photos;
+    return SizedBox(
+      height: 80,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.start,
+        children: displayPhotos.reversed.map((photo) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2.0),
+            child: AspectRatio(
+              aspectRatio: 800 / 600,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8.0),
+                child: Image.memory(
+                  base64Decode(photo.base64),
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true, // Avoids flicker when image updates
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
 getTranscriptWidget(
   bool conversationCreating,
   List<TranscriptSegment> segments,
-  List<ImageSegment> images,
-  BtDevice? btDevice,
-) {
+  List<ConversationPhoto> photos,
+  BtDevice? btDevice, {
+  bool horizontalMargin = true,
+  bool topMargin = true,
+  bool canDisplaySeconds = true,
+  bool isConversationDetail = false,
+  double bottomMargin = 100.0,
+  Function(int, int)? editSegment,
+}) {
   if (conversationCreating) {
     return const Padding(
       padding: EdgeInsets.only(top: 80),
@@ -147,48 +192,61 @@ getTranscriptWidget(
     );
   }
 
-  final bool showPhotos = images.isNotEmpty;
+  final bool showPhotos = photos.isNotEmpty;
   final bool showTranscript = segments.isNotEmpty;
+
+  Widget buildPhotos() {
+    return PhotosGridComponent(
+      photos: photos,
+    );
+  }
+
+  Widget buildTranscriptSegments() {
+    return TranscriptWidget(
+      segments: segments,
+      horizontalMargin: horizontalMargin,
+      topMargin: topMargin,
+      canDisplaySeconds: canDisplaySeconds,
+      isConversationDetail: isConversationDetail,
+      bottomMargin: bottomMargin,
+      editSegment: editSegment,
+    );
+  }
 
   if (showPhotos && showTranscript) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        SizedBox(
+          height: 250,
+          child: buildPhotos(),
+        ),
         Expanded(
-          child: TranscriptWidget(
-            segments: segments,
-            images: images,
-            bottomMargin: 100,
-          ),
+          child: buildTranscriptSegments(),
         ),
       ],
     );
-  } else if (showPhotos) {
-    return TranscriptWidget(
-      segments: [],
-      images: images,
-      bottomMargin: 100,
-    );
-  } else if (showTranscript) {
-    return TranscriptWidget(
-      segments: segments,
-      images: [],
-      bottomMargin: 100,
-    );
-  } else {
-    return const SizedBox.shrink();
   }
+
+  if (showPhotos) {
+    return buildPhotos();
+  }
+
+  if (showTranscript) {
+    return buildTranscriptSegments();
+  }
+  return const SizedBox.shrink();
 }
 
 getLiteTranscriptWidget(
   List<TranscriptSegment> segments,
-  List<Tuple2<String, String>> photos,
+  List<ConversationPhoto> photos,
   BtDevice? btDevice,
 ) {
   return Column(
     children: [
-      // TODO: thinh, be reenabled soon
-      //if (photos.isNotEmpty) PhotosGridComponent(photos: photos),
+      if (photos.isNotEmpty) PhotosPreviewWidget(photos: photos),
+      if (photos.isNotEmpty && segments.isNotEmpty) const SizedBox(height: 8),
       if (segments.isNotEmpty)
         LiteTranscriptWidget(
           segments: segments,
@@ -197,17 +255,8 @@ getLiteTranscriptWidget(
   );
 }
 
-getPhoneMicRecordingButton(BuildContext context, VoidCallback recordingToggled, RecordingState state) {
-  // Use real-time device state from DeviceProvider instead of cached SharedPreferencesUtil
-  final deviceProvider = context.read<DeviceProvider>();
-  final connectedDevice = deviceProvider.connectedDevice;
-  
-  // Only hide the phone mic button if an Omi device is connected
-  // Allow phone mic when: no device connected, OpenGlass connected, or any other device type
-  if (connectedDevice != null && connectedDevice.type == DeviceType.omi) {
-    return const SizedBox.shrink();
-  }
-  
+getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordingState state) {
+  if (SharedPreferencesUtil().btDevice.id.isNotEmpty) return const SizedBox.shrink();
   return Visibility(
     visible: true,
     child: Padding(
@@ -239,15 +288,11 @@ getPhoneMicRecordingButton(BuildContext context, VoidCallback recordingToggled, 
                         ? const Icon(Icons.stop, color: Colors.red, size: 24)
                         : const Icon(Icons.mic)),
                 const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    state == RecordingState.initialising
-                        ? 'Initialising Recorder'
-                        : (state == RecordingState.record ? 'Stop Recording' : 'Try With Phone Mic'),
-                    style: const TextStyle(fontSize: 14),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
+                Text(
+                  state == RecordingState.initialising
+                      ? 'Initialising Recorder'
+                      : (state == RecordingState.record ? 'Stop Recording' : 'Try With Phone Mic'),
+                  style: const TextStyle(fontSize: 14),
                 ),
                 const SizedBox(width: 4),
               ],

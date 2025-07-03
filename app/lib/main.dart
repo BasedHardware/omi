@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:app_links/app_links.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -24,13 +23,14 @@ import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart'
 import 'package:omi/pages/onboarding/device_selection.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/pages/persona/persona_profile.dart';
+import 'package:omi/core/app_shell.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
-import 'package:omi/providers/calendar_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
+import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -44,7 +44,6 @@ import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
-import 'package:omi/utils/features/calendar.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -55,6 +54,7 @@ import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/debugging/instabug_manager.dart';
+import 'package:window_manager/window_manager.dart';
 
 Future<bool> _init() async {
   // Service manager
@@ -83,7 +83,6 @@ Future<bool> _init() async {
   if (PlatformService.isMobile) initOpus(await opus_flutter.load());
 
   await GrowthbookUtil.init();
-  CalendarUtil.init();
   if (!PlatformService.isWindows) {
     ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   }
@@ -101,8 +100,20 @@ Future<void> initPostHog() async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  if (PlatformService.isDesktop) {
+    await windowManager.ensureInitialized();
+    windowManager.waitUntilReadyToShow().then((_) async {
+      await windowManager.setAsFrameless();
+      // Enforce a minimum window size so the desktop layout doesn't collapse into the mobile view
+      // Width chosen slightly above the small-screen breakpoint (1000px) used in ResponsiveHelper.
+      // Height is set to a sensible value to keep vertical content usable.
+      await windowManager.setMinimumSize(const Size(1100, 600));
+      await windowManager.setSize(const Size(1100, 700));
+    });
+  }
+
   if (PlatformService.isWindows) {
-    // Windows does not support flavors
+    // Windows does not support flavors`
     Env.init(ProdEnv());
   } else {
     if (F.env == Environment.prod) {
@@ -113,7 +124,7 @@ void main() async {
   }
 
   FlutterForegroundTask.initCommunicationPort();
-  if (Env.posthogApiKey != null) {
+  if (Env.posthogApiKey != null && !PlatformService.isDesktop) {
     await initPostHog();
   }
   // _setupAudioSession();
@@ -191,41 +202,34 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ListenableProvider(create: (context) => AppProvider()),
           ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
             create: (context) => MessageProvider(),
-            update: (BuildContext context, value, MessageProvider? previous) =>
-                (previous?..updateAppProvider(value)) ?? MessageProvider(),
+            update: (BuildContext context, value, MessageProvider? previous) => (previous?..updateAppProvider(value)) ?? MessageProvider(),
           ),
           ChangeNotifierProxyProvider2<ConversationProvider, MessageProvider, CaptureProvider>(
             create: (context) => CaptureProvider(),
-            update: (BuildContext context, conversation, message, CaptureProvider? previous) =>
-                (previous?..updateProviderInstances(conversation, message)) ?? CaptureProvider(),
+            update: (BuildContext context, conversation, message, CaptureProvider? previous) => (previous?..updateProviderInstances(conversation, message)) ?? CaptureProvider(),
           ),
           ChangeNotifierProxyProvider<CaptureProvider, DeviceProvider>(
             create: (context) => DeviceProvider(),
-            update: (BuildContext context, captureProvider, DeviceProvider? previous) =>
-                (previous?..setProviders(captureProvider)) ?? DeviceProvider(),
+            update: (BuildContext context, captureProvider, DeviceProvider? previous) => (previous?..setProviders(captureProvider)) ?? DeviceProvider(),
           ),
           ChangeNotifierProxyProvider<DeviceProvider, OnboardingProvider>(
             create: (context) => OnboardingProvider(),
-            update: (BuildContext context, value, OnboardingProvider? previous) =>
-                (previous?..setDeviceProvider(value)) ?? OnboardingProvider(),
+            update: (BuildContext context, value, OnboardingProvider? previous) => (previous?..setDeviceProvider(value)) ?? OnboardingProvider(),
           ),
           ListenableProvider(create: (context) => HomeProvider()),
           ChangeNotifierProxyProvider<DeviceProvider, SpeechProfileProvider>(
             create: (context) => SpeechProfileProvider(),
-            update: (BuildContext context, device, SpeechProfileProvider? previous) =>
-                (previous?..setProviders(device)) ?? SpeechProfileProvider(),
+            update: (BuildContext context, device, SpeechProfileProvider? previous) => (previous?..setProviders(device)) ?? SpeechProfileProvider(),
           ),
           ChangeNotifierProxyProvider2<AppProvider, ConversationProvider, ConversationDetailProvider>(
             create: (context) => ConversationDetailProvider(),
-            update: (BuildContext context, app, conversation, ConversationDetailProvider? previous) =>
-                (previous?..setProviders(app, conversation)) ?? ConversationDetailProvider(),
+            update: (BuildContext context, app, conversation, ConversationDetailProvider? previous) => (previous?..setProviders(app, conversation)) ?? ConversationDetailProvider(),
           ),
-          ChangeNotifierProvider(create: (context) => CalenderProvider()),
           ChangeNotifierProvider(create: (context) => DeveloperModeProvider()),
+          ChangeNotifierProvider(create: (context) => McpProvider()),
           ChangeNotifierProxyProvider<AppProvider, AddAppProvider>(
             create: (context) => AddAppProvider(),
-            update: (BuildContext context, value, AddAppProvider? previous) =>
-                (previous?..setAppProvider(value)) ?? AddAppProvider(),
+            update: (BuildContext context, value, AddAppProvider? previous) => (previous?..setAppProvider(value)) ?? AddAppProvider(),
           ),
           ChangeNotifierProvider(create: (context) => PaymentMethodProvider()),
           ChangeNotifierProvider(create: (context) => PersonaProvider()),
@@ -236,8 +240,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           return WithForegroundTask(
             child: MaterialApp(
               navigatorObservers: [
-                if (Env.instabugApiKey != null && PlatformManager.instance.instabug.getNavigatorObserver() != null)
-                  PlatformManager.instance.instabug.getNavigatorObserver()!,
+                if (Env.instabugApiKey != null && PlatformManager.instance.instabug.getNavigatorObserver() != null) PlatformManager.instance.instabug.getNavigatorObserver()!,
                 if (Env.posthogApiKey != null) PosthogObserver(),
               ],
               debugShowCheckedModeBanner: F.env == Environment.dev,
@@ -298,7 +301,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     return LoggerSnackbar(exception: data);
                   },
                 ),
-                child: const DeciderWidget(),
+                child: const AppShell(), // Use AppShell instead of DeciderWidget
               ),
             ),
           );
@@ -387,9 +390,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
           } else {
             return const OnboardingWrapper();
           }
-        } else if (SharedPreferencesUtil().hasOmiDevice == false &&
-            SharedPreferencesUtil().hasPersonaCreated &&
-            SharedPreferencesUtil().verifiedPersonaId != null) {
+        } else if (SharedPreferencesUtil().hasOmiDevice == false && SharedPreferencesUtil().hasPersonaCreated && SharedPreferencesUtil().verifiedPersonaId != null) {
           return const PersonaProfilePage();
         } else {
           return const DeviceSelectionPage();

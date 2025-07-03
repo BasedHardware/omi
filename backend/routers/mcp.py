@@ -2,7 +2,7 @@ from datetime import datetime
 import threading
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
 import database.memories as memories_db
@@ -16,12 +16,37 @@ from utils.apps import update_personas_async
 from firebase_admin import auth
 
 from utils.llm.memories import identify_category_for_memory
+from dependencies import get_uid_from_mcp_api_key, get_current_user_id
+import database.mcp_api_key as mcp_api_key_db
+from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated
 
 router = APIRouter()
 
 
+@router.get("/v1/mcp/keys", response_model=List[McpApiKey], tags=["mcp"])
+def get_keys(uid: str = Depends(get_current_user_id)):
+    return mcp_api_key_db.get_mcp_keys_for_user(uid)
+
+
+@router.post("/v1/mcp/keys", response_model=McpApiKeyCreated, tags=["mcp"])
+def create_key(
+    key_data: McpApiKeyCreate, uid: str = Depends(get_current_user_id)
+):
+    if not key_data.name or len(key_data.name.strip()) == 0:
+        raise HTTPException(status_code=422, detail="Key name cannot be empty")
+
+    raw_key, api_key_data = mcp_api_key_db.create_mcp_key(uid, key_data.name.strip())
+    return McpApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
+
+
+@router.delete("/v1/mcp/keys/{key_id}", status_code=204, tags=["mcp"])
+def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
+    mcp_api_key_db.delete_mcp_key(uid, key_id)
+    return
+
+
 @router.post("/v1/mcp/memories", tags=["mcp"], response_model=Memory)
-def create_memory(memory: Memory, uid: str = Header()):
+def create_memory(memory: Memory, uid: str = Depends(get_uid_from_mcp_api_key)):
     categories = [category for category in MemoryCategory]
     memory.category = identify_category_for_memory(memory.content, categories)
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
@@ -31,13 +56,13 @@ def create_memory(memory: Memory, uid: str = Header()):
 
 
 @router.delete("/v1/mcp/memories/{memory_id}", tags=["mcp"])
-def delete_memory(memory_id: str, uid: str = Header()):
+def delete_memory(memory_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
     memories_db.delete_memory(uid, memory_id)
     return {"status": "ok"}
 
 
 @router.patch("/v1/mcp/memories/{memory_id}", tags=["mcp"])
-def edit_memory(memory_id: str, value: str, uid: str = Header()):
+def edit_memory(memory_id: str, value: str, uid: str = Depends(get_uid_from_mcp_api_key)):
     memories_db.edit_memory(uid, memory_id, value)
     return {"status": "ok"}
 
@@ -50,7 +75,7 @@ class CleanerMemory(BaseModel):
 
 @router.get("/v1/mcp/memories", tags=["mcp"], response_model=List[CleanerMemory])
 def get_memories(
-    uid: str = Header(),
+    uid: str = Depends(get_uid_from_mcp_api_key),
     limit: int = 25,
     offset: int = 0,
     categories: Optional[str] = None,
@@ -108,13 +133,12 @@ class FullConversation(SimpleConversation):
     "/v1/mcp/conversations", response_model=List[SimpleConversation], tags=["mcp"]
 )
 def get_conversations(
-    include_transcript_segments: bool = False,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     categories: Optional[str] = None,
     limit: int = 25,
     offset: int = 0,
-    uid: str = Header(),
+    uid: str = Depends(get_uid_from_mcp_api_key),
 ):
     print("get_conversations", uid, limit, offset, start_date, end_date, categories)
     try:
@@ -136,9 +160,6 @@ def get_conversations(
         end_date=end_date,
         categories=[c.value for c in category_list],
     )
-    for i in range(len(conversations)):
-        if not include_transcript_segments:
-            conversations[i]["transcript_segments"] = []
     return conversations
 
 
@@ -147,25 +168,8 @@ def get_conversations(
     response_model=FullConversation,
     tags=["mcp"],
 )
-def get_conversation_by_id(conversation_id: str, uid: str = Header(None)):
+def get_conversation_by_id(
+    conversation_id: str, uid: str = Depends(get_uid_from_mcp_api_key)
+):
     print("get_conversation_by_id", uid, conversation_id)
     return conversations_db.get_conversation(uid, conversation_id)
-
-
-class UserCredentials(BaseModel):
-    email: str
-    password: str
-    name: Optional[str] = None
-
-
-@router.post("/v1/mcp/users", tags=["mcp"])
-def create_user(credentials: UserCredentials):
-    try:
-        user = auth.create_user(
-            email=credentials.email,
-            password=credentials.password,
-            display_name=credentials.name,
-        )
-        return {"status": "ok", "message": "User created successfully", "uid": user.uid}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))

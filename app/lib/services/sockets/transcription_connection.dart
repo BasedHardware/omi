@@ -11,7 +11,7 @@ import 'package:omi/services/notifications.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 
 abstract interface class ITransctipSegmentSocketServiceListener {
-  void onMessageEventReceived(ServerMessageEvent event);
+  void onMessageEventReceived(MessageEvent event);
 
   void onSegmentReceived(List<TranscriptSegment> segments);
 
@@ -20,10 +20,6 @@ abstract interface class ITransctipSegmentSocketServiceListener {
   void onConnected();
 
   void onClosed();
-
-  void onImageReceived(dynamic imageData);
-
-  void onClearLiveImages(dynamic clearData);
 }
 
 class SpeechProfileTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
@@ -126,39 +122,6 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       return;
     }
 
-    // Handle image data
-    if (jsonEvent is Map<String, dynamic> && jsonEvent['type'] == 'image') {
-      var imageData = jsonEvent['data'];
-      _listeners.forEach((k, v) {
-        if (v is ITransctipSegmentSocketServiceListener) {
-          v.onImageReceived(imageData);
-        }
-      });
-      return;
-    }
-
-    // Handle image description data (OpenGlass images with AI descriptions)
-    if (jsonEvent is Map<String, dynamic> && jsonEvent['type'] == 'image_description') {
-      var imageData = jsonEvent['image_data'];
-      _listeners.forEach((k, v) {
-        if (v is ITransctipSegmentSocketServiceListener) {
-          v.onImageReceived(imageData);
-        }
-      });
-      return;
-    }
-
-    // Handle clear live images notification
-    if (jsonEvent is Map<String, dynamic> && jsonEvent['type'] == 'clear_live_images') {
-      var clearData = jsonEvent['data'];
-      _listeners.forEach((k, v) {
-        if (v is ITransctipSegmentSocketServiceListener) {
-          v.onClearLiveImages(clearData);
-        }
-      });
-      return;
-    }
-
     // Transcript segments
     if (jsonEvent is List) {
       var segments = jsonEvent;
@@ -173,7 +136,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
     // Message event
     if (jsonEvent.containsKey("type")) {
-      var event = ServerMessageEvent.fromJson(jsonEvent);
+      var event = MessageEvent.fromJson(jsonEvent);
       _listeners.forEach((k, v) {
         v.onMessageEventReceived(event);
       });

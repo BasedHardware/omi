@@ -5,8 +5,6 @@ import database.redis_db as redis_db
 from database.vector_db import delete_vector
 from models.conversation import *
 from models.conversation import SearchRequest
-from datetime import datetime, timezone
-from models.conversation import Structured
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.conversations.search import search_conversations
@@ -30,62 +28,7 @@ def process_in_progress_conversation(uid: str = Depends(auth.get_current_user_ui
     conversation = retrieve_in_progress_conversation(uid)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation in progress not found")
-    
     redis_db.remove_in_progress_conversation_id(uid)
-    
-    # Add finished_at if missing
-    if 'finished_at' not in conversation or conversation['finished_at'] is None:
-        conversation['finished_at'] = datetime.now(timezone.utc)
-    
-    # Add other required fields if missing
-    if 'created_at' not in conversation or conversation['created_at'] is None:
-        conversation['created_at'] = datetime.now(timezone.utc)
-    
-    if 'started_at' not in conversation or conversation['started_at'] is None:
-        conversation['started_at'] = datetime.now(timezone.utc)
-    
-    # Ensure status is set
-    if 'status' not in conversation:
-        conversation['status'] = ConversationStatus.in_progress
-    
-    # CRITICAL: Ensure structured field exists
-    if 'structured' not in conversation or conversation['structured'] is None:
-        conversation['structured'] = Structured().dict()
-        print(f"🔧 Added missing structured field to conversation {conversation.get('id')}")
-
-    # CRITICAL: Load photos from database before creating Conversation object
-    # Photos are stored separately in Firestore, so they need to be loaded explicitly
-    conversation_id = conversation.get('id')
-    if conversation_id:
-        photos = conversations_db.get_conversation_photos(uid, conversation_id)
-        conversation['photos'] = [photo.dict() if hasattr(photo, 'dict') else photo for photo in photos]
-        
-        # ELEGANT: Wait for AI descriptions before creating summary
-        # Only process conversation if all photos have descriptions
-        if photos:
-            photos_without_descriptions = []
-            for photo in photos:
-                # Handle both dict and object types from database
-                if hasattr(photo, 'description'):
-                    # Photo is an object
-                    description = getattr(photo, 'description', '')
-                elif isinstance(photo, dict):
-                    # Photo is a dictionary
-                    description = photo.get('description', '')
-                else:
-                    # Unknown type, assume no description
-                    description = ''
-                
-                if not description or not description.strip():
-                    photos_without_descriptions.append(photo)
-            
-            if photos_without_descriptions:
-                print(f"Waiting for AI descriptions: {len(photos_without_descriptions)} photos still pending")
-                # Re-add to Redis to wait for descriptions
-                redis_db.set_in_progress_conversation_id(uid, conversation_id, ttl=3600)
-                raise HTTPException(status_code=202, detail=f"Waiting for AI descriptions on {len(photos_without_descriptions)} photos")
-    else:
-        conversation['photos'] = []
 
     conversation = Conversation(**conversation)
     conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
@@ -158,6 +101,7 @@ def get_conversation_transcripts_by_models(conversation_id: str, uid: str = Depe
 
 @router.delete("/v1/conversations/{conversation_id}", status_code=204, tags=['conversations'])
 def delete_conversation(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    print('delete_conversation', conversation_id, uid)
     conversations_db.delete_conversation(uid, conversation_id)
     delete_vector(conversation_id)
     return {"status": "Ok"}
@@ -417,7 +361,7 @@ def get_public_conversations(offset: int = 0, limit: int = 1000):
     data = [[uid, conversation_id] for conversation_id, uid in conversation_uids.items() if uid]
     # TODO: sort in some way to have proper pagination
 
-    conversations = conversations_db.run_get_public_conversations(data[offset:offset + limit])
+    conversations = conversations_db.get_public_conversations(data[offset:offset + limit])
     for conversation in conversations:
         conversation['geolocation'] = None
     return conversations

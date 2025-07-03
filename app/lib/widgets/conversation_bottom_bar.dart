@@ -10,7 +10,7 @@ import 'package:provider/provider.dart';
 
 enum ConversationBottomBarMode {
   recording, // During active recording (no summary icon)
-  detail, // For viewing completed conversations
+  detail // For viewing completed conversations
 }
 
 enum ConversationTab { transcript, summary, actionItems }
@@ -49,7 +49,7 @@ class ConversationBottomBar extends StatelessWidget {
       borderRadius: BorderRadius.circular(28),
       child: Container(
         height: 56,
-        width: _getBarWidth(),
+        width: mode == ConversationBottomBarMode.recording ? 180 : 360,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: Colors.grey.shade900,
@@ -65,36 +65,28 @@ class ConversationBottomBar extends StatelessWidget {
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: _buildControls(context),
+          children: [
+            // Transcript tab
+            _buildTranscriptTab(),
+
+            // Stop button or Summary/Action Items tabs
+            ...switch (mode) {
+              ConversationBottomBarMode.recording => [_buildStopButton()],
+              ConversationBottomBarMode.detail => [
+                  _buildSummaryTab(context),
+                  _buildActionItemsTab(),
+                ],
+              _ => [_buildSummaryTab(context)],
+            },
+          ],
         ),
       ),
     );
   }
 
-  double _getBarWidth() {
-    return switch (mode) {
-      ConversationBottomBarMode.recording => 180,
-      ConversationBottomBarMode.detail => 360,
-    };
-  }
-
-  List<Widget> _buildControls(BuildContext context) {
-    return switch (mode) {
-      ConversationBottomBarMode.recording => [
-        _buildTranscriptTab(),
-        _buildStopButton(),
-      ],
-      ConversationBottomBarMode.detail => [
-        _buildTranscriptTab(),
-        _buildSummaryTab(context),
-        _buildActionItemsTab(),
-      ],
-    };
-  }
-
   Widget _buildTranscriptTab() {
     return TabButton(
-      icon: Icons.graphic_eq_rounded,
+      icon: Icons.forum_outlined,
       isSelected: selectedTab == ConversationTab.transcript,
       onTap: () => onTabSelected(ConversationTab.transcript),
     );
@@ -154,7 +146,7 @@ class ConversationBottomBar extends StatelessWidget {
           icon: null,
           customIcon: app == null && reprocessingApp == null
               ? SvgPicture.asset(
-                  Assets.images.aiMagic.path,
+                  Assets.images.aiMagic,
                   color: Colors.white,
                 )
               : null,

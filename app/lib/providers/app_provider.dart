@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:collection/collection.dart';
 import 'package:flutter/widgets.dart';
 import 'package:omi/backend/http/api/apps.dart';
@@ -153,51 +154,72 @@ class AppProvider extends BaseProvider {
   }
 
   void filterApps() {
-    Iterable<App> currentlyFiltered = apps;
-
-    filters.forEach((key, value) {
-      switch (key) {
-        case 'Apps':
-          if (value == 'Installed Apps') {
-            currentlyFiltered = currentlyFiltered.where((app) => app.enabled);
-          } else if (value == 'My Apps') {
-            currentlyFiltered = currentlyFiltered.where((app) => app.isOwner(SharedPreferencesUtil().uid));
-          }
-          break;
-        case 'Category':
-          if (value is Category) {
-            currentlyFiltered = currentlyFiltered.where((app) => app.category == value.id);
-          }
-          break;
-        case 'Rating':
-          if (value is String) {
-            String ratingStr = value.replaceAll('+ Stars', '');
-            double minRating = double.tryParse(ratingStr) ?? 0.0;
-            currentlyFiltered = currentlyFiltered.where((app) => (app.ratingAvg ?? 0.0) >= minRating);
-          }
-          break;
-        case 'Capabilities':
-          if (value is AppCapability) {
-            currentlyFiltered = currentlyFiltered.where((app) => app.capabilities.contains(value.id));
-          }
-          break;
-        default:
-          break;
-      }
-    });
-
-    if (searchQuery.isNotEmpty) {
-      currentlyFiltered = currentlyFiltered.where((app) => app.name.toLowerCase().contains(searchQuery));
+    // Performance optimization: Early return if no apps
+    if (apps.isEmpty) {
+      filteredApps = [];
+      return;
     }
 
-    List<App> finalFilteredList = currentlyFiltered.toList();
+    // Performance optimization: Cache commonly used values
+    final currentUid = SharedPreferencesUtil().uid;
+    final lowercaseQuery = searchQuery.toLowerCase();
 
+    // Use where clause directly on list instead of chaining iterables for better performance
+    List<App> result = apps.where((app) {
+      // Apply all filters in a single pass for better performance
+      bool passesFilters = true;
+
+      // Apply filter conditions
+      for (final entry in filters.entries) {
+        final key = entry.key;
+        final value = entry.value;
+
+        switch (key) {
+          case 'Apps':
+            if (value == 'Installed Apps') {
+              if (!app.enabled) passesFilters = false;
+            } else if (value == 'My Apps') {
+              if (!app.isOwner(currentUid)) passesFilters = false;
+            }
+            break;
+          case 'Category':
+            if (value is Category) {
+              if (app.category != value.id) passesFilters = false;
+            }
+            break;
+          case 'Rating':
+            if (value is String) {
+              String ratingStr = value.replaceAll('+ Stars', '');
+              double minRating = double.tryParse(ratingStr) ?? 0.0;
+              if ((app.ratingAvg ?? 0.0) < minRating) passesFilters = false;
+            }
+            break;
+          case 'Capabilities':
+            if (value is AppCapability) {
+              if (!app.capabilities.contains(value.id)) passesFilters = false;
+            }
+            break;
+        }
+
+        // Early exit if filter fails
+        if (!passesFilters) break;
+      }
+
+      // Apply search filter
+      if (passesFilters && lowercaseQuery.isNotEmpty) {
+        passesFilters = app.name.toLowerCase().contains(lowercaseQuery);
+      }
+
+      return passesFilters;
+    }).toList();
+
+    // Apply sorting if needed
     final Comparator<App>? comparator = _getSortComparator();
     if (comparator != null) {
-      finalFilteredList.sort(comparator);
+      result.sort(comparator);
     }
 
-    filteredApps = finalFilteredList;
+    filteredApps = result;
   }
 
   void setIsLoading(bool value) {
@@ -233,29 +255,59 @@ class AppProvider extends BaseProvider {
   Future getApps() async {
     if (isLoading) return;
     setIsLoading(true);
-    apps = await retrieveApps();
-    appLoading = List.filled(apps.length, false, growable: true);
-    filterApps();
-    setIsLoading(false);
+
+    try {
+      // Performance optimization: Load from cache first for immediate UI
+      if (apps.isEmpty) {
+        setAppsFromCache();
+      }
+
+      // Fetch fresh data from server
+      final freshApps = await retrieveApps();
+      apps = freshApps;
+      appLoading = List.filled(apps.length, false, growable: true);
+
+      // Delay filtering to prevent UI freezing with large datasets
+      await Future.delayed(const Duration(milliseconds: 50));
+      filterApps();
+    } catch (e) {
+      debugPrint('Error loading apps: $e');
+      // Fallback to cached data
+      setAppsFromCache();
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   Future getPopularApps() async {
-    setIsLoading(true);
-    popularApps = await retrievePopularApps();
-    setIsLoading(false);
+    if (isLoading) return; // Prevent concurrent operations
+
+    try {
+      setIsLoading(true);
+      popularApps = await retrievePopularApps();
+    } catch (e) {
+      debugPrint('Error loading popular apps: $e');
+      // Fallback to cached data or empty list
+      popularApps = [];
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   void updateLocalApp(App app) {
     var idx = apps.indexWhere((element) => element.id == app.id);
     if (idx != -1) {
       apps[idx] = app;
-      updatePrefApps();
-      // filterApps();
+
+      // Update filtered apps in place for better performance
       var filteredIdx = filteredApps.indexWhere((element) => element.id == app.id);
       if (filteredIdx != -1) {
         filteredApps[filteredIdx] = app;
       }
-      notifyListeners(); // Notify after potential changes
+
+      // Debounced preference update to prevent database locks
+      updatePrefApps();
+      notifyListeners();
     }
   }
 
@@ -325,9 +377,50 @@ class AppProvider extends BaseProvider {
       AppSnackbar.showSnackbarSuccess('App visibility changed successfully. It may take a few minutes to reflect.');
       notifyListeners();
     }
-    // TODO: Consider calling getApps() after a delay or pull-to-refresh
-    // to get server-confirmed state later, but avoid immediate perf hit.
-    // getApps(); // This would re-fetch everything
+    // Refresh apps after a delay to get server-confirmed state
+    _scheduleAppsRefresh();
+  }
+
+  // Add method to refresh apps after installation/changes
+  Timer? _refreshTimer;
+
+  void _scheduleAppsRefresh() {
+    // Cancel any existing refresh timer
+    _refreshTimer?.cancel();
+
+    // Schedule refresh after a short delay to avoid immediate performance hit
+    _refreshTimer = Timer(const Duration(seconds: 2), () {
+      if (!isLoading) {
+        refreshAppsAfterChange();
+      }
+    });
+  }
+
+  Future<void> refreshAppsAfterChange() async {
+    try {
+      debugPrint('Refreshing apps after installation/change...');
+      final freshApps = await retrieveApps();
+      apps = freshApps;
+      appLoading = List.filled(apps.length, false, growable: true);
+
+      // Refresh popular apps too
+      popularApps = await retrievePopularApps();
+
+      // Update filtered apps and preferences
+      filterApps();
+      updatePrefApps();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error refreshing apps after change: $e');
+    }
+  }
+
+  // Method to force immediate refresh (useful for critical updates)
+  Future<void> forceRefreshApps() async {
+    if (isLoading) return;
+
+    _refreshTimer?.cancel(); // Cancel any scheduled refresh
+    await refreshAppsAfterChange();
   }
 
   void setAppsFromCache() {
@@ -338,8 +431,21 @@ class AppProvider extends BaseProvider {
     }
   }
 
+  // Performance optimization: Debounced preference updates to prevent database locks
+  Timer? _prefsUpdateTimer;
+
   void updatePrefApps() {
-    SharedPreferencesUtil().appsList = apps;
+    // Cancel previous timer if still running
+    _prefsUpdateTimer?.cancel();
+
+    // Debounce preference updates to avoid frequent writes with large datasets
+    _prefsUpdateTimer = Timer(const Duration(milliseconds: 500), () {
+      try {
+        SharedPreferencesUtil().appsList = apps;
+      } catch (e) {
+        debugPrint('Error updating preferences: $e');
+      }
+    });
   }
 
   void setApps() {
@@ -490,18 +596,24 @@ class AppProvider extends BaseProvider {
     }
 
     if (success) {
+      // Update local preferences for app status
       if (isEnabled) {
         prefs.enableApp(appId);
       } else {
         prefs.disableApp(appId);
       }
 
+      // Update local app state
       var appIndex = apps.indexWhere((a) => a.id == appId);
       if (appIndex != -1) {
         apps[appIndex].enabled = isEnabled;
         App toggledApp = apps[appIndex];
 
+        // Update filtered apps efficiently
         _updateFilteredAppStatus(toggledApp);
+
+        // Debounced preferences update to prevent database locks
+        updatePrefApps();
       } else {
         debugPrint("Error: Toggled app $appId not found in local 'apps' list after successful toggle.");
       }
@@ -510,6 +622,20 @@ class AppProvider extends BaseProvider {
     if (loadingIndex != -1) {
       appLoading[loadingIndex] = false;
     }
+
+    // Refresh apps after successful installation/uninstallation
+    if (success) {
+      _scheduleAppsRefresh();
+    }
+
     notifyListeners();
+  }
+
+  // Performance optimization: Dispose method to clean up resources
+  @override
+  void dispose() {
+    _prefsUpdateTimer?.cancel();
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 }

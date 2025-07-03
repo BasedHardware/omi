@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
@@ -58,13 +59,16 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
   }
 
   @override
-  Future<void> onDestroy(DateTime timestamp) async {
+  Future<void> onDestroy(DateTime timestamp,  bool isTimeout) async {
     debugPrint("Destroying foreground task");
     FlutterForegroundTask.stopService();
   }
 }
 
 class ForegroundUtil {
+  static bool _isInitialized = false;
+  static bool _isStarting = false;
+
   static Future<void> requestPermissions() async {
     // Android 13+, you need to allow notification permission to display foreground service notification.
     //
@@ -89,56 +93,98 @@ class ForegroundUtil {
 
   static Future<void> initializeForegroundService() async {
     if (PlatformService.isDesktop) return;
-    if (await FlutterForegroundTask.isRunningService) return;
+    
+    if (_isInitialized) {
+      debugPrint('ForegroundService already initialized, skipping');
+      return;
+    }
+    
+    if (await FlutterForegroundTask.isRunningService) {
+      _isInitialized = true;
+      return;
+    }
+    
     debugPrint('initializeForegroundService');
-    // await Location().requestPermission();
-    FlutterForegroundTask.init(
-      androidNotificationOptions: AndroidNotificationOptions(
-        channelId: 'foreground_service',
-        channelName: 'Foreground Service Notification',
-        channelDescription: 'Transcription service is running in the background.',
-        channelImportance: NotificationChannelImportance.LOW,
-        priority: NotificationPriority.HIGH,
-        // iconData: const NotificationIconData(
-        //   resType: ResourceType.mipmap,
-        //   resPrefix: ResourcePrefix.ic,
-        //   name: 'launcher',
-        // ),
-      ),
-      iosNotificationOptions: const IOSNotificationOptions(
-        showNotification: false,
-        playSound: false,
-      ),
-      foregroundTaskOptions: ForegroundTaskOptions(
-        // Warn: 5m, for location tracking. If we want to support other services, we use the differenct interval,
-        // such as 1m + self-validation in each service.
-        eventAction: ForegroundTaskEventAction.repeat(60 * 1000 * 5),
-        autoRunOnBoot: false,
-        allowWakeLock: true,
-        allowWifiLock: true,
-      ),
-    );
+
+    
+    try {
+      FlutterForegroundTask.init(
+        androidNotificationOptions: AndroidNotificationOptions(
+          channelId: 'foreground_service',
+          channelName: 'Foreground Service Notification',
+          channelDescription: 'Transcription service is running in the background.',
+          channelImportance: NotificationChannelImportance.LOW,
+          priority: NotificationPriority.HIGH,
+          // iconData: const NotificationIconData(
+          //   resType: ResourceType.mipmap,
+          //   resPrefix: ResourcePrefix.ic,
+          //   name: 'launcher',
+          // ),
+        ),
+        iosNotificationOptions: const IOSNotificationOptions(
+          showNotification: false,
+          playSound: false,
+        ),
+        foregroundTaskOptions: ForegroundTaskOptions(
+          // Warn: 5m, for location tracking. If we want to support other services, we use the differenct interval,
+          // such as 1m + self-validation in each service.
+          eventAction: ForegroundTaskEventAction.repeat(60 * 1000 * 5),
+          autoRunOnBoot: false,
+          allowWakeLock: true,
+          allowWifiLock: true,
+        ),
+      );
+      _isInitialized = true;
+      debugPrint('ForegroundService initialized successfully');
+    } catch (e) {
+      debugPrint('ForegroundService initialization failed: $e');
+      _isInitialized = false;
+    }
   }
 
   static Future<ServiceRequestResult> startForegroundTask() async {
-    if (PlatformService.isDesktop) return ServiceRequestResult.success();
+    if (PlatformService.isDesktop) return const ServiceRequestSuccess();
+    
+    if (_isStarting) {
+      debugPrint('ForegroundTask already starting, skipping');
+      return const ServiceRequestSuccess();
+    }
+    
+    _isStarting = true;
     debugPrint('startForegroundTask');
-    if (await FlutterForegroundTask.isRunningService) {
-      return FlutterForegroundTask.restartService();
-    } else {
-      return await FlutterForegroundTask.startService(
-        notificationTitle: 'Your Omi Device is connected.',
-        notificationText: 'Transcription service is running in the background.',
-        callback: _startForegroundCallback,
-      );
+    
+    try {
+      ServiceRequestResult result;
+      if (await FlutterForegroundTask.isRunningService) {
+        result = await FlutterForegroundTask.restartService();
+      } else {
+        result = await FlutterForegroundTask.startService(
+          notificationTitle: 'Your Omi Device is connected.',
+          notificationText: 'Transcription service is running in the background.',
+          callback: _startForegroundCallback,
+        );
+      }
+      debugPrint('ForegroundTask started successfully');
+      return result;
+    } catch (e) {
+      debugPrint('ForegroundTask start failed: $e');
+      return ServiceRequestFailure(error: e.toString());
+    } finally {
+      _isStarting = false;
     }
   }
 
   static Future<void> stopForegroundTask() async {
     if (PlatformService.isDesktop) return;
     debugPrint('stopForegroundTask');
-    if (await FlutterForegroundTask.isRunningService) {
-      await FlutterForegroundTask.stopService();
+    
+    try {
+      if (await FlutterForegroundTask.isRunningService) {
+        await FlutterForegroundTask.stopService();
+        _isInitialized = false;
+      }
+    } catch (e) {
+      debugPrint('ForegroundTask stop failed: $e');
     }
   }
 }

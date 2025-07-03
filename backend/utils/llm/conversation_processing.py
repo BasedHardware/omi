@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from models.app import App
 from models.conversation import Structured, Conversation, ActionItem, Event, ConversationPhoto
-from .clients import llm_mini, llm_medium_experiment, parser
+from .clients import llm_mini, parser, llm_high, llm_medium_experiment
 
 
 class DiscardConversation(BaseModel):
@@ -18,42 +18,56 @@ class SpeakerIdMatch(BaseModel):
     speaker_id: int = Field(description="The speaker id assigned to the segment")
 
 
-def should_discard_conversation(transcript: str) -> bool:
-    if len(transcript.split(' ')) > 100:
+def should_discard_conversation(transcript: str, photos: List[ConversationPhoto] = None) -> bool:
+    # If there's a long transcript, it's very unlikely we want to discard it.
+    # This is a performance optimization to avoid unnecessary LLM calls.
+    if transcript and len(transcript.split(' ')) > 100:
         return False
 
-    custom_parser = PydanticOutputParser(pydantic_object=DiscardConversation)  # Renamed to avoid conflict
+    context_parts = []
+    if transcript and transcript.strip():
+        context_parts.append(f"Transcript: ```{transcript.strip()}```")
+
+    if photos:
+        photo_descriptions = ConversationPhoto.photos_as_string(photos)
+        if photo_descriptions != 'None':
+            context_parts.append(f"Photo Descriptions from a wearable camera:\n{photo_descriptions}")
+
+    # If there is no content to process (e.g., empty transcript and no photo descriptions), discard.
+    if not context_parts:
+        return True
+
+    full_context = "\n\n".join(context_parts)
+
+    custom_parser = PydanticOutputParser(pydantic_object=DiscardConversation)
     prompt = ChatPromptTemplate.from_messages([
-        '''
-    You will receive a transcript snippet. Length is never a reason to discard.
+        '''You will receive a transcript, a series of photo descriptions from a wearable camera, or both. Your task is to decide if this content is meaningful enough to be saved as a memory. Length is never a reason to discard.
 
-        Task
-        Decide if the snippet should be saved as a memory.
+Task: Decide if the content should be saved as a memory.
 
-        KEEP  → output:  discard = False
-        DISCARD → output: discard = True
+KEEP (output: discard = False) if the content contains any of the following:
+• A task, request, or action item.
+• A decision, commitment, or plan.
+• A question that requires follow-up.
+• Personal facts, preferences, or details likely useful later (e.g., remembering a person, place, or object).
+• An important event, social interaction, or significant moment.
+• An insight, summary, or key takeaway.
+• A visually significant scene (e.g., a whiteboard with notes, a document, a memorable view, a person's face).
 
-        KEEP (discard = False) if it contains any of the following:
-        • a task, request, or action item
-        • a decision, commitment, or plan
-        • a question that requires follow-up
-        • personal facts, preferences, or details likely useful later
-        • an insight, summary, or key takeaway
+If none of these are present, DISCARD (output: discard = True). For example, discard blurry photos, uninteresting scenery with no context, or trivial conversation snippets.
 
-        If none of these are present, DISCARD (discard = True).
+Return exactly one line:
+discard = <True|False>
 
-        Return exactly one line:
-        discard = <True|False>
+Content:
+{full_context}
 
-
-    Transcript: ```{transcript}```
-
-    {format_instructions}'''.replace('    ', '').strip()
+{format_instructions}'''.replace('    ', '').strip()
     ])
     chain = prompt | llm_mini | custom_parser
     try:
         response: DiscardConversation = chain.invoke({
-            'transcript': transcript.strip(),
+            'full_context': full_context,
             'format_instructions': custom_parser.get_format_instructions(),
         })
         return response.discard
@@ -63,13 +77,27 @@ def should_discard_conversation(transcript: str) -> bool:
         return False
 
 
-def get_transcript_structure(transcript: str, started_at: datetime, language_code: str, tz: str) -> Structured:
-    prompt_text = '''You are an expert conversation analyzer. Your task is to analyze the conversation and provide structure and clarity to the recording transcription of a conversation.
-    The conversation language is {language_code}. Use the same language {language_code} for your response.
+def get_transcript_structure(transcript: str, started_at: datetime, language_code: str, tz: str, photos: List[ConversationPhoto] = None) -> Structured:
+    context_parts = []
+    if transcript and transcript.strip():
+        context_parts.append(f"Transcript: ```{transcript.strip()}```")
+
+    if photos:
+        photo_descriptions = ConversationPhoto.photos_as_string(photos)
+        if photo_descriptions != 'None':
+            context_parts.append(f"Photo Descriptions from a wearable camera:\n{photo_descriptions}")
+
+    if not context_parts:
+        return Structured()  # Should be caught by discard logic, but as a safeguard.
+
+    full_context = "\n\n".join(context_parts)
+
+    prompt_text = '''You are an expert content analyzer. Your task is to analyze the provided content (which could be a transcript, a series of photo descriptions from a wearable camera, or both) and provide structure and clarity.
+    The content language is {language_code}. Use the same language {language_code} for your response.
 
     For the title, Write a clear, compelling headline (≤ 10 words) that captures the central topic and outcome. Use Title Case, avoid filler words, and include a key noun + verb where possible (e.g., "Team Finalizes Q2 Budget" or "Family Plans Weekend Road Trip")
-    For the overview, condense the conversation into a summary with the main topics discussed, making sure to capture the key points and important details from the conversation.
-    For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the conversation. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
+    For the overview, condense the content into a summary with the main topics discussed or scenes observed, making sure to capture the key points and important details.
+    For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the content. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
 
     For the action items, apply a strict filter and use the format below:  
     • Include **only** tasks that have  
@@ -91,7 +119,7 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
         - ⚠️ Fix server issue (urgent)
         - 📝 Review quarterly report (when convenient)  
 
-    For the category, classify the conversation into one of the available categories.
+    For the category, classify the content into one of the available categories.
 
     For Calendar Events, apply strict filtering to include ONLY events that meet ALL these criteria:
     • **Confirmed commitment**: Not suggestions or "maybe" - actual scheduled events
@@ -113,9 +141,11 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
     • Vague suggestions ("let's grab coffee soon")
     • Hypothetical scenarios ("if we meet Tuesday...")
     
-    For date context, this conversation happened on {started_at}. {tz} is the user's timezone; convert all event times to UTC and respond in UTC.
+    For date context, this content was captured on {started_at}. {tz} is the user's timezone; convert all event times to UTC and respond in UTC.
 
-    Transcript: ```{transcript}```
+
+    Content:
+    {full_context}
 
     {format_instructions}'''.replace('    ', '').strip()
 
@@ -123,7 +153,7 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
     chain = prompt | llm_medium_experiment | parser  # parser is imported from .clients
 
     response = chain.invoke({
-        'transcript': transcript.strip(),
+        'full_context': full_context,
         'format_instructions': parser.get_format_instructions(),
         'language_code': language_code,
         'started_at': started_at.isoformat(),
@@ -138,13 +168,27 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
 
 
 def get_reprocess_transcript_structure(transcript: str, started_at: datetime, language_code: str, tz: str,
-                                       title: str) -> Structured:
-    prompt_text = '''You are an expert conversation analyzer. Your task is to analyze the conversation and provide structure and clarity to the recording transcription of a conversation.
-    The conversation language is {language_code}. Use the same language {language_code} for your response.
+                                       title: str, photos: List[ConversationPhoto] = None) -> Structured:
+    context_parts = []
+    if transcript and transcript.strip():
+        context_parts.append(f"Transcript: ```{transcript.strip()}```")
 
-    For the title, use ```{title}```, if it is empty, use the main topic of the conversation.
-    For the overview, condense the conversation into a summary with the main topics discussed, making sure to capture the key points and important details from the conversation.
-    For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the conversation. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
+    if photos:
+        photo_descriptions = ConversationPhoto.photos_as_string(photos)
+        if photo_descriptions != 'None':
+            context_parts.append(f"Photo Descriptions from a wearable camera:\n{photo_descriptions}")
+
+    if not context_parts:
+        return Structured()
+
+    full_context = "\n\n".join(context_parts)
+    
+    prompt_text = '''You are an expert content analyzer. Your task is to analyze the provided content (which could be a transcript, a series of photo descriptions from a wearable camera, or both) and provide structure and clarity.
+    The content language is {language_code}. Use the same language {language_code} for your response.
+
+    For the title, use ```{title}```, if it is empty, use the main topic of the content.
+    For the overview, condense the content into a summary with the main topics discussed or scenes observed, making sure to capture the key points and important details.
+    For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the content. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
 
     For the action items, apply a strict filter and use the format below:  
     • Include **only** tasks that have  
@@ -166,7 +210,7 @@ def get_reprocess_transcript_structure(transcript: str, started_at: datetime, la
         - ⚠️ Fix server issue (urgent)
         - 📝 Review quarterly report (when convenient)  
 
-    For the category, classify the conversation into one of the available categories.
+    For the category, classify the content into one of the available categories.
 
     For Calendar Events, apply strict filtering to include ONLY events that meet ALL these criteria:
     • **Confirmed commitment**: Not suggestions or "maybe" - actual scheduled events
@@ -188,9 +232,10 @@ def get_reprocess_transcript_structure(transcript: str, started_at: datetime, la
     • Vague suggestions ("let's grab coffee soon")
     • Hypothetical scenarios ("if we meet Tuesday...")
     
-    For date context, this conversation happened on {started_at}. {tz} is the user's timezone; convert all event times to UTC and respond in UTC.
+    For date context, this content was captured on {started_at}. {tz} is the user's timezone; convert all event times to UTC and respond in UTC.
 
-    Transcript: ```{transcript}```
+    Content:
+    {full_context}
 
     {format_instructions}'''.replace('    ', '').strip()
 
@@ -198,7 +243,7 @@ def get_reprocess_transcript_structure(transcript: str, started_at: datetime, la
     chain = prompt | llm_medium_experiment | parser  # parser is imported from .clients
 
     response = chain.invoke({
-        'transcript': transcript.strip(),
+        'full_context': full_context,
         'title': title,
         'format_instructions': parser.get_format_instructions(),
         'language_code': language_code,
@@ -213,7 +258,21 @@ def get_reprocess_transcript_structure(transcript: str, started_at: datetime, la
     return response
 
 
-def get_app_result(transcript: str, app: App, language_code: str = 'en') -> str:
+def get_app_result(transcript: str, photos: List[ConversationPhoto], app: App, language_code: str = 'en') -> str:
+    context_parts = []
+    if transcript and transcript.strip():
+        context_parts.append(f"Transcript: ```{transcript.strip()}```")
+
+    if photos:
+        photo_descriptions = ConversationPhoto.photos_as_string(photos)
+        if photo_descriptions != 'None':
+            context_parts.append(f"Photo Descriptions from a wearable camera:\n{photo_descriptions}")
+
+    if not context_parts:
+        return ""
+
+    full_context = "\n\n".join(context_parts)
+
     prompt = f'''
     You are an AI with the following characteristics:
     Name: {app.name},
@@ -222,7 +281,8 @@ def get_app_result(transcript: str, app: App, language_code: str = 'en') -> str:
 
     Language: The conversation language is {language_code}. Use the same language {language_code} for your response.
 
-    Conversation: ```{transcript.strip()}```,
+    Conversation:
+    {full_context}
     '''
 
     response = llm_medium_experiment.invoke(prompt)
@@ -320,47 +380,3 @@ def generate_summary_with_prompt(conversation_text: str, prompt: str) -> str:
     """
     response = llm_medium_experiment.invoke(prompt)
     return response.content
-
-
-def get_combined_transcript_and_photos_structure(transcript: str, photos: List[ConversationPhoto], started_at: datetime, language_code: str, tz: str) -> Structured:
-    """
-    Enhanced structure generation for conversations that combine both transcript and photos.
-    This is used when OpenGlass images are added to ongoing Omi/phone mic conversations.
-    """
-    
-    # Create photos description section
-    photos_str = ''
-    if photos:
-        photos_str = '\n\nVisual Context (Photos captured during conversation):\n'
-        for i, photo in enumerate(photos):
-            photos_str += f'{i + 1}. {photo.description}\n'
-    
-    prompt_text = '''You are an expert conversation analyzer. Your task is to analyze a conversation that includes both spoken content and visual context from photos.
-    The conversation language is {language_code}. Use the same language {language_code} for your response.
-
-    This conversation combines:
-    1. Spoken/audio content (transcript)
-    2. Visual context (photos captured during the conversation)
-
-    For the title, use the main topic that combines both the spoken conversation and visual context.
-    For the overview, create a comprehensive summary that weaves together the spoken content and visual elements, highlighting how they relate to each other and provide context.
-    For the emoji, select a single emoji that reflects the combined nature of the conversation - both what was discussed and what was visually observed.
-    For the action items, include tasks or commitments from the spoken conversation, enhanced with visual context when relevant.
-    For the category, classify based on the combined conversation content.
-    For Calendar Events, include events from the transcript, enhanced with location/context details from the photos if relevant. For date context, this conversation happened on {started_at}. {tz} is the user's timezone, convert it to UTC and respond in UTC.
-
-    Transcript: ```{transcript}```{photos_str}
-
-    {format_instructions}'''.replace('    ', '').strip()
-
-    prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | llm_medium_experiment | parser
-
-    return chain.invoke({
-        'transcript': transcript,
-        'photos_str': photos_str,
-        'started_at': started_at.strftime('%B %d, %Y at %H:%M UTC'),
-        'language_code': language_code,
-        'tz': tz,
-        'format_instructions': parser.get_format_instructions()
-    })

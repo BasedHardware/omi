@@ -2,7 +2,7 @@ from typing import List, Optional, Any
 
 from pydantic import BaseModel
 
-from models.conversation import Conversation, Message
+from models.conversation import Conversation, Message, ConversationPhoto
 
 
 class MessageEvent(BaseModel):
@@ -117,22 +117,26 @@ class TranslationEvent(MessageEvent):
         return j
 
 
-class ClearLiveImagesEvent(MessageEvent):
-    event_type: str = "clear_live_images"
-    conversation_id: str
-    reason: str = "conversation_created"
-    processed_image_count: int = 0
+class PhotoProcessingEvent(MessageEvent):
+    event_type: str = "photo_processing"
+    temp_id: str
+    photo_id: str
 
     def to_json(self):
         j = self.model_dump(mode="json")
         j["type"] = self.event_type
-        j["data"] = {
-            "conversation_id": self.conversation_id,
-            "reason": self.reason,
-            "processed_image_count": self.processed_image_count
-        }
         del j["event_type"]
-        del j["conversation_id"]
-        del j["reason"]  
-        del j["processed_image_count"]
+        return j
+
+
+class PhotoDescribedEvent(MessageEvent):
+    event_type: str = "photo_described"
+    photo_id: str
+    description: str
+    discarded: bool
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        del j["event_type"]
         return j

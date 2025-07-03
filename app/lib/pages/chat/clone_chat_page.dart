@@ -75,7 +75,7 @@ class CloneChatPageState extends State<CloneChatPage> {
                 IconButton(
                   padding: const EdgeInsets.all(8.0),
                   icon: SvgPicture.asset(
-                    Assets.images.icPersonaProfile.path,
+                    Assets.images.icPersonaProfile,
                     width: 28,
                     height: 28,
                   ),

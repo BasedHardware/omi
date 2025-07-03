@@ -1,30 +1,20 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/env/env.dart';
 import 'package:omi/http/api/device.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/devices.dart';
-import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/device.dart';
-import 'package:omi/widgets/confirmation_dialog.dart';
-import 'package:instabug_flutter/instabug_flutter.dart';
-import 'package:http/http.dart' as http;
 import 'package:omi/utils/logger.dart';
-import 'package:omi/backend/http/shared.dart';
-import 'package:dio/dio.dart';
-import 'package:http_parser/http_parser.dart';
+import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
-
 
 class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption {
   CaptureProvider? captureProvider;
@@ -51,9 +41,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   Timer? _disconnectNotificationTimer;
 
-  // Image stream listener
-  StreamSubscription? _bleImageBytesListener;
-
   DeviceProvider() {
     ServiceManager.instance().device.subscribe(this, this);
   }
@@ -67,13 +54,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     connectedDevice = device;
     pairedDevice = device;
     await getDeviceInfo();
-    
-    // Update connectedDevice with the corrected device info from getDeviceInfo()
-    if (pairedDevice != null && connectedDevice != null) {
-      connectedDevice = pairedDevice!.copyWith();
-    }
-    
-    print('setConnectedDevice: $device');
+    Logger.debug('setConnectedDevice: $device');
     notifyListeners();
   }
 
@@ -169,7 +150,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       if (_reconnectAt != null && _reconnectAt!.isAfter(DateTime.now())) {
         return;
       }
-      print("isConnected: $isConnected, isConnecting: $isConnecting, connectedDevice: $connectedDevice");
+      Logger.debug("isConnected: $isConnected, isConnecting: $isConnecting, connectedDevice: $connectedDevice");
       if ((!isConnected && connectedDevice == null)) {
         if (isConnecting) {
           return;
@@ -218,7 +199,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     // else
     var device = await _scanAndConnectDevice();
-    debugPrint('inside scanAndConnectToDevice $device in device_provider');
+    Logger.debug('inside scanAndConnectToDevice $device in device_provider');
     if (device != null) {
       var cDevice = await _getConnectedDevice();
       if (cDevice != null) {
@@ -228,7 +209,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         MixpanelManager().deviceConnected();
         setIsConnected(true);
       }
-      debugPrint('device is not null $cDevice');
+      Logger.debug('device is not null $cDevice');
     }
     updateConnectingStatus(false);
 
@@ -252,13 +233,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void dispose() {
     _bleBatteryLevelListener?.cancel();
     _reconnectionTimer?.cancel();
-    _bleImageBytesListener?.cancel(); // Cancel image listener on dispose
     ServiceManager.instance().device.unsubscribe(this);
     super.dispose();
   }
 
   void onDeviceDisconnected() async {
-    debugPrint('onDisconnected inside: $connectedDevice');
+    Logger.debug('onDisconnected inside: $connectedDevice');
     _havingNewFirmware = false;
     setConnectedDevice(null);
     setIsDeviceV2Connected();
@@ -304,7 +284,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   void _onDeviceConnected(BtDevice device) async {
-    debugPrint('_onConnected inside: $connectedDevice');
+    Logger.debug('_onConnected inside: $connectedDevice');
     _disconnectNotificationTimer?.cancel();
     NotificationService.instance.clearNotification(1);
     setConnectedDevice(device);
@@ -321,56 +301,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       _hasLowBatteryAlerted = false;
     }
     updateConnectingStatus(false);
-
-    // Check if the connected device is an Omi device before starting image listener
-    var connection = await ServiceManager.instance().device.ensureConnection(device.id);
-    if (connection is OmiDeviceConnection) {
-      _bleImageBytesListener?.cancel(); // Cancel previous listener if exists
-      _bleImageBytesListener = await (connection as OmiDeviceConnection).getBleImageBytesListener(
-        onImageReceived: (Uint8List imageData) async {
-          debugPrint('Received complete image from BLE, size: ${imageData.length}');
-          
-          // CRITICAL: Check if conversation is completed before processing any images
-          if (captureProvider?.conversationCompleted == true) {
-            debugPrint('BLOCKING device image - conversation completed');
-            return;
-          }
-          
-          // Smart throttling: allow up to 5 images during conversation creation
-          // This prevents deadlock where no images can be captured, which would
-          // prevent conversation creation from ever being triggered
-          if (captureProvider?.conversationCreating == true && 
-              (captureProvider?.capturedImages.length ?? 0) >= 5) {
-            return;
-          }
-          
-          // Create a local image object for immediate display
-          final timestamp = DateTime.now();
-          final timestampString = timestamp.millisecondsSinceEpoch.toString();
-          final localImage = {
-            'id': 'omiglass_$timestampString',
-            'data': imageData,
-            'timestamp': timestamp,
-            'uploaded': false,
-            'thumbnail_url': null,
-          };
-          
-          // Notify listeners immediately for local display
-          captureProvider?.addLocalImage(localImage);
-          
-          // Upload to cloud in background without blocking UI
-          _uploadImageToCloud(imageData, originalTimestamp: timestampString);
-        },
-      );
-    }
-
-    // Only start device recording for audio-capable devices (skip OpenGlass)
-    if (device.type != DeviceType.openglass) {
-      captureProvider?.streamDeviceRecording(device: device);
-    } else {
-      // For OpenGlass, just set up the device connection without audio streaming
-      captureProvider?.streamDeviceRecording(device: device);
-    }
+    await captureProvider?.streamDeviceRecording(device: device);
 
     await getDeviceInfo();
     SharedPreferencesUtil().deviceName = device.name;
@@ -413,10 +344,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         return hasUpdate; // Return whether there's an update
       } catch (e) {
         retryCount++;
-        debugPrint('Error checking firmware update (attempt $retryCount): $e');
+        Logger.debug('Error checking firmware update (attempt $retryCount): $e');
 
         if (retryCount == maxRetries) {
-          debugPrint('Max retries reached, giving up');
+          Logger.debug('Max retries reached, giving up');
           _havingNewFirmware = false;
           notifyListeners();
           break;
@@ -468,7 +399,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   @override
   void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state) async {
-    debugPrint("provider > device connection state changed...${deviceId}...${state}...${connectedDevice?.id}");
+    Logger.debug("provider > device connection state changed...$deviceId...$state...${connectedDevice?.id}");
     switch (state) {
       case DeviceConnectionState.connected:
         var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
@@ -482,7 +413,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
           onDeviceDisconnected();
         }
       default:
-        debugPrint("Device connection state is not supported $state");
+        Logger.debug("Device connection state is not supported $state");
     }
   }
 
@@ -498,90 +429,5 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
     _bleDisconnectDevice(connectedDevice!);
     _reconnectAt = DateTime.now().add(Duration(seconds: 30));
-  }
-
-  void _uploadImageToCloud(Uint8List imageData, {String? originalTimestamp}) async {
-    // CRITICAL: Check if conversation is completed before uploading any images
-    if (captureProvider?.conversationCompleted == true) {
-      debugPrint('BLOCKING image upload - conversation completed');
-      return;
-    }
-    
-    // Smart throttling for cloud uploads: allow uploads until 5 images are queued
-    // This prevents overwhelming the system while still allowing conversation creation
-    // to proceed with available image content
-    if (captureProvider?.conversationCreating == true && 
-        (captureProvider?.capturedImages.length ?? 0) >= 5) {
-      return;
-    }
-    
-    try {
-      debugPrint('Starting cloud upload for OpenGlass image...');
-      
-      final String uid = SharedPreferencesUtil().uid;
-      if (uid.isEmpty) {
-        debugPrint('No user ID available for image upload');
-        return;
-      }
-      
-      final dio = Dio();
-      final String baseUrl = Env.apiBaseUrl!;
-      
-      // Create filename with timestamp
-      final String filename = 'omiglass_${originalTimestamp ?? DateTime.now().millisecondsSinceEpoch}.jpg';
-      
-      // Prepare multipart form data
-      FormData formData = FormData.fromMap({
-        'files': MultipartFile.fromBytes(
-        imageData,
-          filename: filename,
-          contentType: MediaType('image', 'jpeg'),
-        ),
-      });
-      
-      final response = await dio.post(
-        '${baseUrl}omiglass/v1/images',
-        data: formData,
-        options: Options(
-          headers: {
-            'Authorization': 'Bearer ${SharedPreferencesUtil().authToken}',
-            'Content-Type': 'multipart/form-data',
-          },
-        ),
-      );
-      
-      if (response.statusCode == 200) {
-        debugPrint('Successfully uploaded OpenGlass image to cloud');
-        
-        // ELEGANT: Process the response to get descriptions immediately
-        try {
-          final List<dynamic> responseData = response.data;
-          if (responseData.isNotEmpty) {
-            final imageData = responseData.first;
-            final description = imageData['description'] ?? '';
-            final imageId = imageData['id'] ?? '';
-            final thumbnailUrl = imageData['thumbnail'] ?? '';
-            final fullUrl = imageData['url'] ?? '';
-            
-            debugPrint('✨ Received description for image $imageId: ${description.substring(0, description.length > 50 ? 50 : description.length)}...');
-            
-            // Update the capture provider with the description and URLs
-            captureProvider?.updateImageWithDescription(
-              imageId: imageId,
-              description: description,
-              thumbnailUrl: thumbnailUrl,
-              fullUrl: fullUrl,
-            );
-          }
-        } catch (e) {
-          debugPrint('Error processing upload response: $e');
-        }
-      } else {
-        debugPrint('Failed to upload OpenGlass image: ${response.statusCode}');
-      }
-      
-    } catch (e) {
-      debugPrint('Error uploading OpenGlass image to cloud: $e');
-    }
   }
 }

@@ -1,9 +1,7 @@
 import uuid
 import re
 import base64
-import os
-import tempfile
-from datetime import datetime, timezone, timedelta, time
+from datetime import datetime, timezone
 from typing import List, Optional
 from pathlib import Path
 
@@ -12,11 +10,10 @@ from fastapi.responses import StreamingResponse
 from multipart.multipart import shutil
 
 import database.chat as chat_db
-import database.conversations as conversations_db
 from database.apps import record_app_usage
 from models.app import App, UsageHistoryType
 from models.chat import ChatSession, Message, SendMessageRequest, MessageSender, ResponseMessage, MessageConversation, \
-    FileChat, MessageType
+    FileChat
 from models.conversation import Conversation
 from routers.sync import retrieve_file_paths, decode_files_to_wav
 from utils.apps import get_available_app_by_id
@@ -29,9 +26,6 @@ from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream, execute_persona_chat_stream
 
 router = APIRouter()
-
-
-
 fc = FileChatTool()
 
 
@@ -391,7 +385,7 @@ def upload_file_chat(files: List[UploadFile] = File(...), uid: str = Depends(aut
 #CLEANUP: Remove after new app goes to prod ----------------------------------------------------------
 
 @router.post('/v1/files', response_model=List[FileChat], tags=['chat'])
-def upload_file_chat_v1(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
+def upload_file_chat(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
     thumbs_name = []
     files_chat = []
     for file in files:
@@ -441,7 +435,7 @@ def upload_file_chat_v1(files: List[UploadFile] = File(...), uid: str = Depends(
 
 
 @router.post('/v1/messages/{message_id}/report', tags=['chat'], response_model=dict)
-def report_message_v1(
+def report_message(
         message_id: str, uid: str = Depends(auth.get_current_user_uid)
 ):
     message, msg_doc_id = chat_db.get_message(uid, message_id)
@@ -456,7 +450,7 @@ def report_message_v1(
 
 
 @router.delete('/v1/messages', tags=['chat'], response_model=Message)
-def clear_chat_messages_v1(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
+def clear_chat_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
     if plugin_id in ['null', '']:
         plugin_id = None
 
@@ -480,7 +474,7 @@ def clear_chat_messages_v1(plugin_id: Optional[str] = None, uid: str = Depends(a
 
 
 @router.post("/v1/voice-message/transcribe")
-async def transcribe_voice_message_v1(files: List[UploadFile] = File(...),
+async def transcribe_voice_message(files: List[UploadFile] = File(...),
                                    uid: str = Depends(auth.get_current_user_uid)):
     # Check if files are empty
     if not files or len(files) == 0:
@@ -529,132 +523,5 @@ async def transcribe_voice_message_v1(files: List[UploadFile] = File(...),
 
 
 @router.post('/v1/initial-message', tags=['chat'], response_model=Message)
-def create_initial_message_v1(plugin_id: Optional[str], uid: str = Depends(auth.get_current_user_uid)):
+def create_initial_message(plugin_id: Optional[str], uid: str = Depends(auth.get_current_user_uid)):
     return initial_message_util(uid, plugin_id)
-
-
-@router.get('/v1/messages', response_model=List[Message], tags=['chat'])
-def get_messages_v1(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
-    if plugin_id in ['null', '']:
-        plugin_id = None
-
-    chat_session = chat_db.get_chat_session(uid, app_id=plugin_id)
-    chat_session_id = chat_session['id'] if chat_session else None
-
-    messages = chat_db.get_messages(uid, limit=100, include_conversations=True, app_id=plugin_id,
-                                    chat_session_id=chat_session_id)
-    print('get_messages_v1', len(messages), plugin_id)
-    if not messages:
-        return [initial_message_util(uid, plugin_id)]
-    return messages
-
-
-@router.post('/v1/messages', tags=['chat'], response_model=ResponseMessage)
-def send_message_v1(
-        data: SendMessageRequest, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
-):
-    print('send_message_v1', data.text, plugin_id, uid)
-
-    if plugin_id in ['null', '']:
-        plugin_id = None
-
-    # get chat session
-    chat_session = chat_db.get_chat_session(uid, app_id=plugin_id)
-    chat_session = ChatSession(**chat_session) if chat_session else None
-
-    message = Message(
-        id=str(uuid.uuid4()), text=data.text, created_at=datetime.now(timezone.utc), sender='human', type='text',
-        app_id=plugin_id
-    )
-    if data.file_ids is not None:
-        new_file_ids = fc.retrieve_new_file(data.file_ids)
-        if chat_session:
-            new_file_ids = chat_session.retrieve_new_file(data.file_ids)
-            chat_session.add_file_ids(data.file_ids)
-            chat_db.add_files_to_chat_session(uid, chat_session.id, data.file_ids)
-
-        if len(new_file_ids) > 0:
-            message.files_id = new_file_ids
-            files = chat_db.get_chat_files(uid, new_file_ids)
-            files = [FileChat(**f) if f else None for f in files]
-            message.files = files
-            fc.add_files(new_file_ids)
-
-    if chat_session:
-        message.chat_session_id = chat_session.id
-        chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
-
-    chat_db.add_message(uid, message.dict())
-
-    app = get_available_app_by_id(plugin_id, uid)
-    app = App(**app) if app else None
-
-    app_id = app.id if app else None
-
-    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, app_id=plugin_id)]))
-
-    def process_message(response: str, callback_data: dict):
-        memories = callback_data.get('memories_found', [])
-        ask_for_nps = callback_data.get('ask_for_nps', False)
-
-        # cited extraction
-        cited_conversation_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
-        if len(cited_conversation_idxs) > 0:
-            response = re.sub(r'\[\d+\]', '', response)
-        memories = [memories[i - 1] for i in cited_conversation_idxs if 0 < i and i <= len(memories)]
-
-        memories_id = []
-        # check if the items in the conversations list are dict
-        if memories:
-            converted_memories = []
-            for m in memories[:5]:
-                if isinstance(m, dict):
-                    converted_memories.append(Conversation(**m))
-                else:
-                    converted_memories.append(m)
-            memories_id = [m.id for m in converted_memories]
-
-        ai_message = Message(
-            id=str(uuid.uuid4()),
-            text=response,
-            created_at=datetime.now(timezone.utc),
-            sender='ai',
-            app_id=app_id,
-            type='text',
-            memories_id=memories_id,
-        )
-        if chat_session:
-            ai_message.chat_session_id = chat_session.id
-            chat_db.add_message_to_chat_session(uid, chat_session.id, ai_message.id)
-
-        chat_db.add_message(uid, ai_message.dict())
-        ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
-        if app_id:
-            record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
-
-        return ai_message, ask_for_nps
-
-    async def generate_stream():
-        callback_data = {}
-        async for chunk in execute_graph_chat_stream(uid, messages, app, cited=True, callback_data=callback_data,
-                                                     chat_session=chat_session):
-            if chunk:
-                msg = chunk.replace("\n", "__CRLF__")
-                yield f'{msg}\n\n'
-            else:
-                response = callback_data.get('answer')
-                if response:
-                    ai_message, ask_for_nps = process_message(response, callback_data)
-                    ai_message_dict = ai_message.dict()
-                    response_message = ResponseMessage(**ai_message_dict)
-                    response_message.ask_for_nps = ask_for_nps
-                    data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
-                    yield f"done: {data}\n\n"
-
-    return StreamingResponse(
-        generate_stream(),
-        media_type="text/event-stream"
-    )
-
-
-

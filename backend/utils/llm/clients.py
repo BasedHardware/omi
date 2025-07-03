@@ -7,6 +7,7 @@ import tiktoken
 
 from models.conversation import Structured
 
+
 llm_mini = ChatOpenAI(model='gpt-4o-mini')
 llm_mini_stream = ChatOpenAI(model='gpt-4o-mini', streaming=True)
 llm_large = ChatOpenAI(model='o1-preview')

@@ -203,7 +203,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       // ForegroundUtil.requestPermissions();
       if (!PlatformService.isDesktop) {
         await ForegroundUtil.initializeForegroundService();
-        ForegroundUtil.startForegroundTask();
+        await ForegroundUtil.startForegroundTask();
       }
       if (mounted) {
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
@@ -351,6 +351,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   if (mounted) {
                     if (ctx.read<ConversationProvider>().conversations.isEmpty) {
                       await ctx.read<ConversationProvider>().getInitialConversations();
+                    } else {
+                      // Force refresh when internet connection is restored
+                      await ctx.read<ConversationProvider>().forceRefreshConversations();
                     }
                     if (ctx.read<MessageProvider>().messages.isEmpty) {
                       await ctx.read<MessageProvider>().refreshMessages();
@@ -652,7 +655,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 child: IconButton(
                   padding: const EdgeInsets.fromLTRB(2.0, 2.0, 0, 2.0),
                   icon: SvgPicture.asset(
-                    Assets.images.icSettingPersona.path,
+                    Assets.images.icSettingPersona,
                     width: 36,
                     height: 36,
                   ),

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/foundation.dart';
@@ -14,6 +13,7 @@ import 'package:omi/services/devices/errors.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:image/image.dart' as img;
 
 class OmiDeviceConnection extends DeviceConnection {
   BluetoothService? _batteryService;
@@ -461,8 +461,8 @@ class OmiDeviceConnection extends DeviceConnection {
       return;
     }
 
-    // Capture photo once every 10s
-    await imageCaptureControlCharacteristic.write([0x0A]);
+    // Capture photo once every 5s
+    await imageCaptureControlCharacteristic.write([0x05]);
 
     print('cameraStartPhotoController');
   }
@@ -486,6 +486,25 @@ class OmiDeviceConnection extends DeviceConnection {
   }
 
   @override
+  Future performCameraTakePhoto() async {
+    if (_omiService == null) {
+      logServiceNotFoundError('Omi', deviceId);
+      return;
+    }
+
+    var imageCaptureControlCharacteristic = getCharacteristic(_omiService!, imageCaptureControlCharacteristicUuid);
+    if (imageCaptureControlCharacteristic == null) {
+      logCharacteristicNotFoundError('Image capture control', deviceId);
+      return;
+    }
+
+    // -1 tells the firmware to take a single photo
+    await imageCaptureControlCharacteristic.write([-1]);
+
+    print('cameraTakePhoto');
+  }
+
+  @override
   Future<bool> performHasPhotoStreamingCharacteristic() async {
     if (_omiService == null) {
       logServiceNotFoundError('Omi', deviceId);
@@ -496,83 +515,124 @@ class OmiDeviceConnection extends DeviceConnection {
   }
 
   Future<StreamSubscription?> _getBleImageBytesListener({
-    required void Function(Uint8List) onImageReceived,
+    required void Function(List<int>) onImageBytesReceived,
   }) async {
     if (_omiService == null) {
       logServiceNotFoundError('Omi', deviceId);
       return null;
     }
 
-    var imageDataStreamCharacteristic = getCharacteristic(_omiService!, imageDataStreamCharacteristicUuid);
-    if (imageDataStreamCharacteristic == null) {
+    var imageStreamCharacteristic = getCharacteristic(_omiService!, imageDataStreamCharacteristicUuid);
+    if (imageStreamCharacteristic == null) {
       logCharacteristicNotFoundError('Image data stream', deviceId);
       return null;
     }
 
     try {
-      // Ensure notifications are enabled for the characteristic
-      final device = bleDevice;
-      if (device.isConnected) {
-         if (Platform.isAndroid && device.mtuNow < 512) {
-          await device.requestMtu(512); // Try to increase MTU for better throughput
-        }
-        if (device.isConnected) {
-          try {
-             await imageDataStreamCharacteristic.setNotifyValue(true); // Enable notifications
-          } on PlatformException catch (e) {
-            Logger.error('Error setting notify value for image data stream $e');
-          }
-        } else {
-           Logger.handle(Exception('Device disconnected before setting notify value'), StackTrace.current,
-              message: 'Device is disconnected. Please reconnect and try again');
-        }
-      } else {
-        Logger.handle(Exception('Device not connected for image listener'), StackTrace.current,
-              message: 'Device is not connected. Cannot set up image listener.');
-        return null;
-      }
-
+      await imageStreamCharacteristic.setNotifyValue(true); // device could be disconnected here.
     } catch (e, stackTrace) {
       logSubscribeError('Image data stream', deviceId, e, stackTrace);
       return null;
     }
 
-    // Use ImageBytesUtil to process chunks and reassemble the image
-    ImageBytesUtil imageBytesUtil = ImageBytesUtil();
-    StreamSubscription? listener;
-
-    listener = imageDataStreamCharacteristic.lastValueStream.listen((value) {
-      if (value.isEmpty) return;
-
-      // Process each incoming chunk using ImageBytesUtil
-      Uint8List? completedImage = imageBytesUtil.processChunk(value);
-
-      if (completedImage != null && completedImage.isNotEmpty) {
-        onImageReceived(completedImage);
-      }
+    debugPrint('Subscribed to imageBytes stream from Omi Device');
+    var listener = imageStreamCharacteristic.lastValueStream.listen((value) {
+      if (value.isNotEmpty) onImageBytesReceived(value);
     });
 
     final device = bleDevice;
     device.cancelWhenDisconnected(listener);
 
-    return listener;
-  }
+    // This will cause a crash in OpenGlass devices
+    // due to a race with discoverServices() that triggers
+    // a bug in the device firmware.
+    // if (Platform.isAndroid) await device.requestMtu(512);
 
-  // Public method for external access to image streaming
-  Future<StreamSubscription?> getBleImageBytesListener({
-    required void Function(Uint8List) onImageReceived,
-  }) async {
-    return await _getBleImageBytesListener(onImageReceived: onImageReceived);
+    return listener;
   }
 
   @override
   Future<StreamSubscription?> performGetImageListener({
     required void Function(Uint8List base64JpgData) onImageReceived,
   }) async {
-    if (!await isConnected()) {
+    if (!await hasPhotoStreamingCharacteristic()) {
       return null;
     }
-    return await _getBleImageBytesListener(onImageReceived: onImageReceived);
+    print("OpenGlassDevice getImageListener called");
+
+    var buffer = BytesBuilder();
+    var nextExpectedFrame = 0;
+    var isTransferring = false;
+
+    var bleBytesStream = await _getBleImageBytesListener(
+      onImageBytesReceived: (List<int> value) async {
+        if (value.length < 2) return;
+
+        Uint8List chunk = Uint8List.fromList(value);
+        int frameIndex = chunk[0] | (chunk[1] << 8);
+
+        // End of image marker 0xFFFF
+        if (frameIndex == 0xFFFF) {
+          if (isTransferring) {
+            final imageBytes = buffer.toBytes();
+            if (imageBytes.isNotEmpty) {
+              debugPrint('Completed image bytes length: ${imageBytes.length}');
+              try {
+                onImageReceived(imageBytes);
+              } catch (e) {
+                debugPrint('Error processing image: $e');
+              }
+            }
+          }
+          // Reset for next image
+          buffer.clear();
+          isTransferring = false;
+          nextExpectedFrame = 0;
+          return;
+        }
+
+        // If we get frame 0, it's the start of a new image. Reset everything.
+        if (frameIndex == 0) {
+          buffer.clear();
+          isTransferring = true;
+          nextExpectedFrame = 0;
+        }
+
+        // If we are not in a transfer state, ignore the packet unless it's frame 0.
+        if (!isTransferring) {
+          debugPrint("Ignoring packet with frame $frameIndex, waiting for frame 0 to start transfer.");
+          return;
+        }
+
+        // Check if the frame is the one we expect.
+        if (frameIndex == nextExpectedFrame) {
+          if (chunk.length > 2) {
+            buffer.add(chunk.sublist(2));
+          }
+          nextExpectedFrame++;
+        } else {
+          // Out of order frame. The image is now corrupt.
+          // We should discard everything and wait for the next frame 0.
+          debugPrint('Frame out of order. Expected $nextExpectedFrame, got $frameIndex. Discarding image.');
+          buffer.clear();
+          isTransferring = false;
+          nextExpectedFrame = 0;
+        }
+
+        // Safety break for oversized buffer
+        if (buffer.length > 200 * 1024) {
+          debugPrint("Buffer size exceeded 200KB without a complete image. Resetting.");
+          buffer.clear();
+          isTransferring = false;
+          nextExpectedFrame = 0;
+        }
+      },
+    );
+    bleBytesStream?.onDone(() {
+      debugPrint('Image listener done');
+      cameraStopPhotoController();
+    });
+    return bleBytesStream;
   }
 
   @override

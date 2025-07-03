@@ -377,35 +377,6 @@ def get_chats_to_migrate(uid: str, target_level: str) -> List[dict]:
     return to_migrate
 
 
-def migrate_chat_level(uid: str, message_doc_id: str, target_level: str):
-    """
-    Migrates a single chat message to the target protection level.
-    """
-    doc_ref = db.collection('users').document(uid).collection('messages').document(message_doc_id)
-    doc_snapshot = doc_ref.get()
-    if not doc_snapshot.exists:
-        raise ValueError("Message not found")
-
-    message_data = doc_snapshot.to_dict()
-    current_level = message_data.get('data_protection_level', 'standard')
-
-    if current_level == target_level:
-        return
-
-    plain_data = _prepare_message_for_read(message_data, uid)
-    plain_text = plain_data.get('text')
-    migrated_text = plain_text
-    if target_level == 'enhanced':
-        if isinstance(plain_text, str):
-            migrated_text = encryption.encrypt(plain_text, uid)
-
-    update_data = {
-        'data_protection_level': target_level,
-        'text': migrated_text
-    }
-    doc_ref.update(update_data)
-
-
 def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level: str):
     """
     Migrates a batch of chat messages to the target protection level.

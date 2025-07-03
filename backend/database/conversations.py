@@ -1,14 +1,12 @@
-import asyncio
 import copy
 import json
 import uuid
 import zlib
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import List, Tuple, Optional, Dict, Any
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
-from google.cloud.firestore_v1.async_client import AsyncClient
 
 import utils.other.hume as hume
 from database import users as users_db
@@ -16,7 +14,7 @@ from models.conversation import ConversationPhoto, PostProcessingStatus, PostPro
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
 from ._client import db
-from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
+from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 
 conversations_collection = 'conversations'
 
@@ -28,19 +26,32 @@ conversations_collection = 'conversations'
 def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
     data = copy.deepcopy(conversation_data)
 
-    if 'transcript_segments' in data and isinstance(data['transcript_segments'], str):
+    if 'transcript_segments' not in data:
+        return data
+
+    if isinstance(data['transcript_segments'], str):
         try:
             decrypted_payload = encryption.decrypt(data['transcript_segments'], uid)
             if data.get('transcript_segments_compressed'):
-                # New format: encrypted(compressed(json))
                 compressed_bytes = bytes.fromhex(decrypted_payload)
                 decompressed_json = zlib.decompress(compressed_bytes).decode('utf-8')
                 data['transcript_segments'] = json.loads(decompressed_json)
+            # backward compatibility, will be removed soon
             else:
-                # Old format: encrypted(json)
                 data['transcript_segments'] = json.loads(decrypted_payload)
-        except (json.JSONDecodeError, TypeError, zlib.error, ValueError):
-            pass
+        except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
+            print(e, uid)
+            data['transcript_segments'] = []
+    # backward compatibility, will be removed soon
+    elif isinstance(data['transcript_segments'], bytes):
+        try:
+            compressed_bytes = data['transcript_segments']
+            if data.get('transcript_segments_compressed'):
+                decompressed_json = zlib.decompress(compressed_bytes).decode('utf-8')
+                data['transcript_segments'] = json.loads(decompressed_json)
+        except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
+            print(e, uid)
+            data['transcript_segments'] = []
 
     return data
 
@@ -76,10 +87,43 @@ def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], 
             try:
                 decompressed_json = zlib.decompress(data['transcript_segments']).decode('utf-8')
                 data['transcript_segments'] = json.loads(decompressed_json)
-            except (json.JSONDecodeError, TypeError, zlib.error):
+            except (json.JSONDecodeError, TypeError, zlib.error) as e:
+                print(e)
                 pass
 
     return data
+
+
+def _prepare_photo_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
+    data = copy.deepcopy(data)
+    data['data_protection_level'] = level
+    if level == 'enhanced' and 'base64' in data and isinstance(data['base64'], str):
+        data['base64'] = encryption.encrypt(data['base64'], uid)
+    return data
+
+
+def _prepare_photo_for_read(photo_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
+    if not photo_data:
+        return None
+    data = copy.deepcopy(photo_data)
+    level = data.get('data_protection_level')
+    if level == 'enhanced' and 'base64' in data and isinstance(data['base64'], str):
+        try:
+            data['base64'] = encryption.decrypt(data['base64'], uid)
+        except Exception:
+            # If decryption fails, it might be already decrypted or not encrypted.
+            # We can log this, but for now, we'll just pass.
+            pass
+    return data
+
+
+@prepare_for_read(decrypt_func=_prepare_photo_for_read)
+def get_conversation_photos(uid: str, conversation_id: str):
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    photos_ref = conversation_ref.collection('photos')
+    photos = [doc.to_dict() for doc in photos_ref.stream()]
+    return photos
 
 
 # *****************************
@@ -98,8 +142,8 @@ def upsert_conversation(uid: str, conversation_data: dict):
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
     conversation_ref.set(conversation_data)
 
-
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@with_photos(get_conversation_photos)
 def get_conversation(uid, conversation_id):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
@@ -108,6 +152,7 @@ def get_conversation(uid, conversation_id):
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@with_photos(get_conversation_photos)
 def get_conversations(uid: str, limit: int = 100, offset: int = 0, include_discarded: bool = False,
                       statuses: List[str] = [], start_date: Optional[datetime] = None,
                       end_date: Optional[datetime] = None, categories: Optional[List[str]] = None):
@@ -167,6 +212,7 @@ def delete_conversation(uid, conversation_id):
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@with_photos(get_conversation_photos)
 def filter_conversations_by_date(uid, start_date, end_date):
     user_ref = db.collection('users').document(uid)
     query = (
@@ -181,6 +227,7 @@ def filter_conversations_by_date(uid, start_date, end_date):
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@with_photos(get_conversation_photos)
 def get_conversations_by_id(uid, conversation_ids):
     user_ref = db.collection('users').document(uid)
     conversations_ref = user_ref.collection(conversations_collection)
@@ -225,50 +272,17 @@ def get_conversations_to_migrate(uid: str, target_level: str) -> List[dict]:
     return to_migrate
 
 
-def migrate_conversation_level(uid: str, conversation_id: str, target_level: str):
-    """
-    Migrates a single conversation to the target protection level.
-    """
-    doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
-    doc_snapshot = doc_ref.get()
-    if not doc_snapshot.exists:
-        raise ValueError("Conversation not found")
-
-    conversation_data = doc_snapshot.to_dict()
-    current_level = conversation_data.get('data_protection_level', 'standard')
-
-    if current_level == target_level:
-        return  # Nothing to do
-
-    # Decrypt/decompress the data to get a clean slate.
-    plain_data = _prepare_conversation_for_read(conversation_data, uid)
-
-    # Re-prepare the segments for writing with the new level.
-    update_payload = {'transcript_segments': plain_data.get('transcript_segments')}
-    prepared_payload = _prepare_conversation_for_write(update_payload, uid, target_level)
-
-    # Update the document with the migrated data and the new protection level.
-    update_data = {
-        'data_protection_level': target_level,
-    }
-    if 'transcript_segments' in prepared_payload:
-        update_data['transcript_segments'] = prepared_payload['transcript_segments']
-        update_data['transcript_segments_compressed'] = prepared_payload.get('transcript_segments_compressed', False)
-
-    if not update_data.get('transcript_segments_compressed'):
-        update_data['transcript_segments_compressed'] = firestore.DELETE_FIELD
-
-    doc_ref.update(update_data)
-
-
 def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], target_level: str):
     """
-    Migrates a batch of conversations to the target protection level.
+    Migrates a batch of conversations to the target protection level, committing in batches of 450.
     """
     batch = db.batch()
+    batch_count = 0
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     doc_refs = [conversations_ref.document(conv_id) for conv_id in conversation_ids]
-    doc_snapshots = db.get_all(doc_refs)
+    doc_snapshots = db.get_all(doc_refs, field_paths=[
+        'data_protection_level', 'transcript_segments', 'transcript_segments_compressed'
+    ])
 
     for doc_snapshot in doc_snapshots:
         if not doc_snapshot.exists:
@@ -300,8 +314,43 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             update_data['transcript_segments_compressed'] = firestore.DELETE_FIELD
 
         batch.update(doc_snapshot.reference, update_data)
+        batch_count += 1
+        if batch_count >= 100:
+            batch.commit()
+            batch = db.batch()
+            batch_count = 0
 
-    batch.commit()
+        # Now migrate photos for this conversation in the same batch
+        photos_ref = doc_snapshot.reference.collection('photos')
+        photos_stream = photos_ref.select(['data_protection_level', 'base64']).stream()
+        for photo_doc in photos_stream:
+            photo_data = photo_doc.to_dict()
+            current_photo_level = photo_data.get('data_protection_level', 'standard')
+            if current_photo_level == target_level:
+                continue
+
+            # Decrypt first to get a clean state
+            plain_photo_data = _prepare_photo_for_read(photo_data, uid)
+
+            # Prepare the specific fields for update
+            photo_update_payload = {
+                'data_protection_level': target_level
+            }
+            if target_level == 'enhanced':
+                photo_update_payload['base64'] = encryption.encrypt(plain_photo_data['base64'], uid)
+            else:  # Moving from enhanced to standard
+                photo_update_payload['base64'] = plain_photo_data['base64']
+
+            # Add photo update to the batch
+            batch.update(photo_doc.reference, photo_update_payload)
+            batch_count += 1
+            if batch_count >= 100:
+                batch.commit()
+                batch = db.batch()
+                batch_count = 0
+
+    if batch_count > 0:
+        batch.commit()
 
 
 # **************************************
@@ -309,6 +358,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 # **************************************
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@with_photos(get_conversation_photos)
 def get_in_progress_conversation(uid: str):
     user_ref = db.collection('users').document(uid)
     conversations_ref = (
@@ -321,6 +371,7 @@ def get_in_progress_conversation(uid: str):
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@with_photos(get_conversation_photos)
 def get_processing_conversations(uid: str):
     user_ref = db.collection('users').document(uid)
     conversations_ref = (
@@ -391,26 +442,17 @@ def set_conversation_visibility(uid: str, conversation_id: str, visibility: str)
     conversation_ref.update({'visibility': visibility})
 
 
-@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
-async def _get_public_conversation(db_client: AsyncClient, uid: str, conversation_id: str):
-    conversation_ref = db_client.collection('users').document(uid).collection('conversations').document(conversation_id)
-    conversation_doc = await conversation_ref.get()
-    if conversation_doc.exists:
-        conversation_data = conversation_doc.to_dict()
-        if conversation_data.get('visibility') in ['public']:
-            return conversation_data
-    return None
-
-
-async def _get_public_conversations(data: List[Tuple[str, str]]):
-    db_client = AsyncClient()
-    tasks = [_get_public_conversation(db_client, uid, conversation_id) for uid, conversation_id in data]
-    conversations = await asyncio.gather(*tasks)
-    return [conversation for conversation in conversations if conversation is not None]
-
-
-def run_get_public_conversations(data: List[Tuple[str, str]]):
-    return asyncio.run(_get_public_conversations(data))
+def get_public_conversations(data: List[Tuple[str, str]]):
+    """
+    Fetches multiple public conversations sequentially.
+    """
+    conversations = []
+    for uid, conversation_id in data:
+        # get_conversation is already decorated to return a fully populated and decrypted conversation
+        conversation_data = get_conversation(uid=uid, conversation_id=conversation_id)
+        if conversation_data and conversation_data.get('visibility') == 'public':
+            conversations.append(conversation_data)
+    return conversations
 
 
 # ****************************************
@@ -492,137 +534,25 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
 # ********** OPENGLASS **************
 # ***********************************
 
-def add_photos_to_conversation(uid: str, conversation_id: str, photos: List[ConversationPhoto]):
-    """Add photos to an existing conversation."""
-    user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    photos_ref = conversation_ref.collection('photos')
-    batch = db.batch()
-    
-    for photo in photos:
-        photo_id = str(uuid.uuid4())
-        photo_ref = photos_ref.document(photo_id)
-        data = photo.dict()
-        data['id'] = photo_id
-        data['added_at'] = datetime.now(timezone.utc)
-        batch.set(photo_ref, data)
-    
-    batch.commit()
-
-
 def store_conversation_photos(uid: str, conversation_id: str, photos: List[ConversationPhoto]):
-    """Store photos for a conversation."""
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+
+    conversation_snapshot = conversation_ref.get(field_paths=['data_protection_level'])
+    level = 'standard'
+    if conversation_snapshot.exists:
+        level = conversation_snapshot.to_dict().get('data_protection_level', 'standard')
+
     photos_ref = conversation_ref.collection('photos')
     batch = db.batch()
     for photo in photos:
-        photo_id = str(uuid.uuid4())
+        photo_id = photo.id or str(uuid.uuid4())
         photo_ref = photos_ref.document(photo_id)
         data = photo.dict()
         data['id'] = photo_id
-        data['added_at'] = datetime.now(timezone.utc)
-        batch.set(photo_ref, data)
+        prepared_data = _prepare_photo_for_write(data, uid, level)
+        batch.set(photo_ref, prepared_data)
     batch.commit()
-
-
-def get_conversation_photos(uid: str, conversation_id: str):
-    """Get photos for a conversation."""
-    try:
-        # Import inside function to avoid circular imports
-        from utils.other.storage import _get_signed_url, _get_bucket_safely, chat_files_bucket
-        
-        user_ref = db.collection('users').document(uid)
-        conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-        photos_ref = conversation_ref.collection('photos')
-        
-        photos_data = []
-        
-        # Get bucket for signed URL generation
-        bucket = _get_bucket_safely(chat_files_bucket, "conversation photos")
-        
-        for doc in photos_ref.stream():
-            photo_data = doc.to_dict()
-            photo_data['id'] = doc.id
-            
-            # Convert datetime fields to ISO strings
-            datetime_fields = ['created_at', 'added_at']
-            for field in datetime_fields:
-                if field in photo_data and photo_data[field]:
-                    field_value = photo_data[field]
-                    if hasattr(field_value, 'isoformat'):
-                        photo_data[field] = field_value.isoformat()
-                    elif isinstance(field_value, (int, float)):
-                        dt = datetime.fromtimestamp(field_value, tz=timezone.utc)
-                        photo_data[field] = dt.isoformat()
-            
-            # Generate fresh signed URLs for thumbnail_url and url if they exist and bucket is available
-            if bucket:
-                # Extract blob path from stored URL and generate fresh signed URL
-                if photo_data.get('thumbnail_url'):
-                    try:
-                        # Extract blob path from URL like: https://storage.googleapis.com/bucket/path
-                        url = photo_data['thumbnail_url']
-                        if 'storage.googleapis.com' in url and chat_files_bucket in url:
-                            # Get the blob path after the bucket name
-                            blob_path = url.split(f'/{chat_files_bucket}/')[-1].split('?')[0]
-                            blob = bucket.blob(blob_path)
-                            if blob.exists():
-                                photo_data['thumbnail_url'] = _get_signed_url(blob, 1440)  # 24 hour expiry
-                    except Exception as e:
-                        print(f"Warning: Could not generate signed URL for thumbnail: {e}")
-                
-                if photo_data.get('url'):
-                    try:
-                        # Extract blob path from URL and generate fresh signed URL
-                        url = photo_data['url']
-                        if 'storage.googleapis.com' in url and chat_files_bucket in url:
-                            blob_path = url.split(f'/{chat_files_bucket}/')[-1].split('?')[0]
-                            blob = bucket.blob(blob_path)
-                            if blob.exists():
-                                photo_data['url'] = _get_signed_url(blob, 1440)  # 24 hour expiry
-                    except Exception as e:
-                        print(f"Warning: Could not generate signed URL for full image: {e}")
-            
-            photos_data.append(photo_data)
-        
-        return photos_data
-    except Exception as e:
-        print(f"Error getting conversation photos for {conversation_id}: {e}")
-        import traceback
-        traceback.print_exc()
-        return []
-
-
-def get_recent_conversations(uid: str, limit: int = 5, source: str = None) -> List[dict]:
-    """Get recent conversations for a user, optionally filtered by source."""
-    try:
-        user_ref = db.collection('users').document(uid)
-        query = user_ref.collection(conversations_collection).order_by('created_at', direction=firestore.Query.DESCENDING)
-        
-        if source:
-            query = query.where('source', '==', source)
-        
-        query = query.limit(limit)
-        conversations = []
-        
-        for doc in query.stream():
-            conversation_data = doc.to_dict()
-            conversation_data['id'] = doc.id
-            
-            # Parse datetime fields
-            datetime_fields = ['finished_at', 'created_at', 'started_at']
-            for field in datetime_fields:
-                if field in conversation_data and conversation_data[field]:
-                    if isinstance(conversation_data[field], (int, float)):
-                        conversation_data[field] = datetime.fromtimestamp(conversation_data[field], tz=timezone.utc)
-                
-            conversations.append(conversation_data)
-        
-        return conversations
-    except Exception as e:
-        print(f"Error getting recent conversations: {e}")
-        return []
 
 
 # ********************************
@@ -630,6 +560,7 @@ def get_recent_conversations(uid: str, limit: int = 5, source: str = None) -> Li
 # ********************************
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@with_photos(get_conversation_photos)
 def get_closest_conversation_to_timestamps(
         uid: str, start_timestamp: int, end_timestamp: int
 ) -> Optional[dict]:
@@ -671,6 +602,7 @@ def get_closest_conversation_to_timestamps(
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@with_photos(get_conversation_photos)
 def get_last_completed_conversation(uid: str) -> Optional[dict]:
     query = (
         db.collection('users').document(uid).collection(conversations_collection)

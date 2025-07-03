@@ -106,7 +106,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                 ),
               ),
               centerTitle: true,
-              actions: [], // Empty actions - no settings button needed
+              actions: const [],
             ),
             body: persona == null
                 ? const Center(
@@ -284,7 +284,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    SvgPicture.asset(Assets.images.linkIcon.path),
+                                    SvgPicture.asset(Assets.images.linkIcon),
                                     const SizedBox(width: 14),
                                     Text(
                                       'Share Public Link',
@@ -384,7 +384,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                     },
                                     child: _buildSocialLink(
                                       icon: Assets.images.xLogoMini.path,
-                                      text: provider.twitterProfile?['username'] ?? '@username',
+                                      text: provider.twitterProfile['username'] ?? '@username',
                                       isConnected: provider.hasTwitterConnection,
                                       showConnect: !provider.hasTwitterConnection,
                                     ),
