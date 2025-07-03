@@ -340,7 +340,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
   "mcpServers": {
     "omi": {
       "command": "docker",
-      "args": ["run", "--rm", "-i", "-e", "OMI_API_KEY=your_api_key_here", "omi/mcp-server-omi"]
+      "args": ["run", "--rm", "-i", "-e", "OMI_API_KEY=your_api_key_here", "omiai/mcp-server"]
     }
   }
 }''';
