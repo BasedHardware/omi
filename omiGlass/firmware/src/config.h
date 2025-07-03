@@ -30,11 +30,11 @@
 #define IDLE_THRESHOLD_MS 45000         // 45 seconds to enter power save mode (was 30s)
 
 // Battery Configuration - Dual 250mAh @ 3.5V-4.1V under load (500mAh total)
-#define BATTERY_MAX_VOLTAGE 4.1f       // 4.1V fully charged (under load)
-#define BATTERY_MIN_VOLTAGE 3.5f       // 3.5V empty (under load)
-#define BATTERY_CRITICAL_VOLTAGE 3.4f  // Emergency shutdown voltage
-#define BATTERY_LOW_VOLTAGE 3.6f       // Low battery warning
-#define VOLTAGE_DIVIDER_RATIO 2.104f   // Calibrated to match multimeter readings (load-compensated)
+#define BATTERY_MAX_VOLTAGE 4.2f       // 4.2V fully charged (under load)
+#define BATTERY_MIN_VOLTAGE 3.2f       // 3.2V empty (under load)
+#define BATTERY_CRITICAL_VOLTAGE 3.3f  // Emergency shutdown voltage
+#define BATTERY_LOW_VOLTAGE 3.4f       // Low battery warning
+#define VOLTAGE_DIVIDER_RATIO 6.086f   // Calibrated to match multimeter readings (load-compensated)
 
 // Battery Monitoring - Extended intervals for power savings
 #define BATTERY_REPORT_INTERVAL_MS 90000    // 1.5 minute reporting (was 60s)

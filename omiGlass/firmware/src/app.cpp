@@ -287,14 +287,15 @@ void readBatteryLevel() {
   // Take multiple ADC readings for stability
   int adcSum = 0;
   for (int i = 0; i < 10; i++) {
-    adcSum += analogRead(BATTERY_ADC_PIN);
+    int value = analogRead(BATTERY_ADC_PIN);
+    adcSum += value;
     delay(10);
   }
   int adcValue = adcSum / 10;
   
   // ESP32-S3 ADC: 12-bit (0-4095), reference voltage ~3.3V
   float adcVoltage = (adcValue / 4095.0f) * 3.3f;
-  
+
   // Apply voltage divider ratio to get actual battery voltage
   batteryVoltage = adcVoltage * VOLTAGE_DIVIDER_RATIO;
   
@@ -303,9 +304,8 @@ void readBatteryLevel() {
   if (batteryVoltage < 2.5f) batteryVoltage = 2.5f;
   
   // Load-compensated battery calculation (accounts for voltage sag under load)
-  // Real-world Li-Po behavior: 4.1V=100%, 3.5V=0% under load
-  float loadCompensatedMax = 4.1f;  // Realistic max under load
-  float loadCompensatedMin = 3.5f;  // Realistic min under load
+  float loadCompensatedMax = BATTERY_MAX_VOLTAGE;
+  float loadCompensatedMin = BATTERY_MIN_VOLTAGE;
   
   // More accurate percentage calculation for load conditions
   if (batteryVoltage >= loadCompensatedMax) {
@@ -539,7 +539,7 @@ void setup_app() {
   // Initialize GPIO
   pinMode(POWER_BUTTON_PIN, INPUT_PULLUP);
   pinMode(STATUS_LED_PIN, OUTPUT);
-  
+
   // LED uses inverted logic: HIGH = OFF, LOW = ON
   digitalWrite(STATUS_LED_PIN, HIGH);
   
@@ -573,6 +573,10 @@ void setup_app() {
   Serial.println(" seconds.");
   
   // Initial battery reading
+  // Battery voltage divider
+  analogReadResolution(12); // optional: set 12-bit resolution
+  analogSetPinAttenuation(BATTERY_ADC_PIN, ADC_11db); // set attenuation for full 3.3V range
+  
   readBatteryLevel();
   deviceState = DEVICE_ACTIVE;
   
