@@ -73,7 +73,7 @@ class OmiTools(str, Enum):
 
 class GetMemories(BaseModel):
     api_key: Optional[str] = Field(
-        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable.",
+        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable. For more details, see https://docs.omi.me/doc/developer/MCP",
         default=None,
     )
     categories: List[MemoryCategory] = Field(
@@ -85,7 +85,7 @@ class GetMemories(BaseModel):
 
 class CreateMemory(BaseModel):
     api_key: Optional[str] = Field(
-        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable.",
+        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable. For more details, see https://docs.omi.me/doc/developer/MCP",
         default=None,
     )
     content: str = Field(description="The content of the memory.")
@@ -96,7 +96,7 @@ class CreateMemory(BaseModel):
 
 class DeleteMemory(BaseModel):
     api_key: Optional[str] = Field(
-        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable.",
+        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable. For more details, see https://docs.omi.me/doc/developer/MCP",
         default=None,
     )
     memory_id: str = Field(description="The ID of the memory to delete.")
@@ -104,7 +104,7 @@ class DeleteMemory(BaseModel):
 
 class EditMemory(BaseModel):
     api_key: Optional[str] = Field(
-        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable.",
+        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable. For more details, see https://docs.omi.me/doc/developer/MCP",
         default=None,
     )
     memory_id: str = Field(description="The ID of the memory to edit.")
@@ -113,7 +113,7 @@ class EditMemory(BaseModel):
 
 class GetConversations(BaseModel):
     api_key: Optional[str] = Field(
-        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable.",
+        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable. For more details, see https://docs.omi.me/doc/developer/MCP",
         default=None,
     )
     start_date: Optional[str] = Field(
@@ -131,7 +131,7 @@ class GetConversations(BaseModel):
 
 class GetConversationById(BaseModel):
     api_key: Optional[str] = Field(
-        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable.",
+        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable. For more details, see https://docs.omi.me/doc/developer/MCP",
         default=None,
     )
     conversation_id: str = Field(description="The ID of the conversation to retrieve.")
