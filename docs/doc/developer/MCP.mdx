@@ -11,14 +11,6 @@ import { AccordionGroup, Accordion } from 'mintlify-components';
 
 To use the Omi MCP server, you need an API key. You can generate one in the Omi app under `Settings > Developer > MCP`. The API key can be provided with each tool call. If not provided, the server will use the `OMI_API_KEY` environment variable as a fallback.
 
-### Custom Backend URL
-
-If you are self-hosting the Omi backend, you can specify the API endpoint by setting the `OMI_API_BASE_URL` environment variable.
-
-```bash
-export OMI_API_BASE_URL="https://your-backend-url.com"
-```
-
 ### Usage with Claude Desktop
 
 Add this to your `claude_desktop_config.json`:
@@ -93,6 +85,16 @@ npx @modelcontextprotocol/inspector uv run mcp-server-omi
 
 Running `tail -n 20 -f ~/Library/Logs/Claude/mcp-server-omi.log` will show the logs from the server and may
 help you debug any issues.
+
+## Advanced
+
+### Custom Backend URL
+
+If you are self-hosting the Omi backend, you can specify the API endpoint by setting the `OMI_API_BASE_URL` environment variable.
+
+```bash
+export OMI_API_BASE_URL="https://your-backend-url.com"
+```
 
 ## License
 
