@@ -16,7 +16,7 @@
 **Releasing**
 Run `sh release.sh` this will upgrade the version in `__about__.py`, publish to pypi, build and deploy the `Dockerfile` as well.
 
-(Dockerfile might be on Joan's account, switch to Omi organization)
+(Dockerfile is on omiai/mcp-server)
 
 
 **Next Steps**
