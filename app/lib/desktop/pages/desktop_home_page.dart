@@ -400,15 +400,15 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                             padding: const EdgeInsets.all(12),
                             child: Container(
                               decoration: BoxDecoration(
-                                color: ResponsiveHelper.backgroundSecondary.withOpacity(0.4),
+                                color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.4),
                                 borderRadius: BorderRadius.circular(16),
                                 border: Border.all(
-                                  color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                                  color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                                   width: 1,
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.05),
+                                    color: Colors.black.withValues(alpha: 0.05),  
                                     blurRadius: 20,
                                     offset: const Offset(0, 4),
                                   ),
@@ -464,7 +464,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
             child: Container(
               width: responsive.sidebarWidth(baseWidth: 280),
               decoration: BoxDecoration(
-                color: ResponsiveHelper.backgroundSecondary.withOpacity(0.85),
+                color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.85),
                 borderRadius: const BorderRadius.only(
                   topRight: Radius.circular(16),
                   bottomRight: Radius.circular(16),
@@ -922,10 +922,10 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+              color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: ResponsiveHelper.backgroundQuaternary.withOpacity(0.3),
+                color: ResponsiveHelper.backgroundQuaternary.withValues(alpha: 0.3),
                 width: 1,
               ),
             ),
@@ -936,10 +936,10 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
+                    color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(
-                      color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
+                      color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
                       width: 1.5,
                     ),
                   ),
@@ -1022,12 +1022,12 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
         profileCardPosition.dx + profileCardWidth, // Right edge aligned with profile card
         profileCardPosition.dy - gap, // Bottom edge positioned gap pixels above profile card top
       ),
-      color: ResponsiveHelper.backgroundSecondary.withOpacity(0.95),
+      color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.95),
       elevation: 12,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+          color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
           width: 1,
         ),
       ),
@@ -1052,7 +1052,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
           child: Container(
             height: 1,
             margin: const EdgeInsets.symmetric(horizontal: 16),
-            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+            color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
           ),
         ),
 
@@ -1070,7 +1070,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
           child: Container(
             height: 1,
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+            color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
           ),
         ),
 
@@ -1097,10 +1097,10 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
+              color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(24),
               border: Border.all(
-                color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
+                color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
                 width: 2,
               ),
             ),

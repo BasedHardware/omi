@@ -173,15 +173,15 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
     return Container(
       margin: const EdgeInsets.only(left: 20, right: 20, bottom: 16),
       decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundSecondary.withOpacity(0.8),
+        color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.8),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+          color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
           width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -206,7 +206,7 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
                     // Conversation icon
                     OmiIconBadge(
                       icon: FontAwesomeIcons.message,
-                      bgColor: ResponsiveHelper.purplePrimary.withOpacity(0.2),
+                      bgColor: ResponsiveHelper.purplePrimary.withValues(alpha: 0.2),
                       iconColor: ResponsiveHelper.purplePrimary,
                       radius: 8,
                     ),
@@ -256,7 +256,7 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
           Container(
             height: 1,
             margin: const EdgeInsets.symmetric(horizontal: 16),
-            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+            color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
           ),
 
           // Action items list
@@ -286,10 +286,10 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+        color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isEditing ? ResponsiveHelper.purplePrimary.withOpacity(0.5) : ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+          color: isEditing ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.5) : ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
           width: 1,
         ),
       ),
