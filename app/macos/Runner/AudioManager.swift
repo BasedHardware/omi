@@ -202,8 +202,6 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             options: [.userInitiated, .idleSystemSleepDisabled],
             reason: "Recording system audio and microphone"
         )
-        
-        print("DEBUG: Started sleep prevention activity for system audio recording")
     }
     
     private func stopSleepPrevention() {
@@ -230,16 +228,10 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
                     duckingConfig.enableAdvancedDucking = false
                     duckingConfig.duckingLevel = .min
                     self.micNode.voiceProcessingOtherAudioDuckingConfiguration = duckingConfig
-                    print("DEBUG: Configured voice processing ducking to minimum level to preserve system audio volume.")
-                } else {
-                    print("INFO: Voice processing ducking configuration requires macOS 14.0+. System audio may be ducked on older OS versions.")
                 }
-                print("DEBUG: Successfully enabled voice processing on microphone input node. This may help reduce echo.")
             } catch {
                 print("ERROR: Could not enable voice processing on microphone input node: \(error.localizedDescription). Echo might persist.")
             }
-        } else {
-            print("INFO: Voice processing on AVAudioInputNode requires macOS 10.15+. Echo might persist on older OS versions.")
         }
         
         engineProcessingFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32,
@@ -305,11 +297,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
                     } else if dataSize == 0 && outputPCMBuffer.frameLength > 0 {
                         print("WARNING: Final converter output dataSize is 0 but frameLength > 0. Format: \(finalOutputFormat)")
                     }
-                } else {
-                    print("WARNING: Unexpected audio format in mixer tap: \(finalOutputFormat)")
                 }
-            } else {
-                print("WARNING: Mixer tap converter produced no data - Status: \(status)")
             }
         }
         
@@ -350,7 +338,6 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         if !audioEngine.isRunning {
             do {
                 try audioEngine.start()
-                print("DEBUG: AVAudioEngine started with simplified pipeline.")
             } catch {
                 print("ERROR: Failed to start AVAudioEngine: \(error.localizedDescription)")
                 throw AudioManagerError.engineStartError("Failed to start audio engine: \(error.localizedDescription)")
@@ -362,8 +349,6 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             guard let self = self else { return }
             self.safelyStartPlayerNode()
         }
-        
-        print("DEBUG: Audio engine startup sequence initiated.")
     }
     
     private func recordSCStream(filter: SCContentFilter) async {
@@ -441,7 +426,6 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             }
             
             scStreamPlayerNode.play()
-            print("DEBUG: SCStream player node started safely")
         } catch {
             print("ERROR: Failed to start player node safely: \(error.localizedDescription)")
             if isFlutterEngineActive {
@@ -472,9 +456,6 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
                 scStreamConverter = AVAudioConverter(from: scStreamSourceFormat!, to: self.engineProcessingFormat)
                 scStreamConverter?.sampleRateConverterAlgorithm = AVSampleRateConverterAlgorithm_Mastering
                 scStreamConverter?.sampleRateConverterQuality = .max
-                print("DEBUG: Created SCStream->Mixer converter from \(scStreamSourceFormat!) to \(self.engineProcessingFormat!)")
-            } else {
-                print("DEBUG: SCStream format matches engine format - no conversion needed")
             }
         }
         
