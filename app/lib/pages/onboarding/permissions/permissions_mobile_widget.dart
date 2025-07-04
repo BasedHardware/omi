@@ -98,9 +98,9 @@ class _PermissionsMobileWidgetState extends State<PermissionsMobileWidget> {
                               () => Navigator.of(context).pop(),
                               () => Navigator.of(context).pop(),
                               'Background Location Access Denied',
-                              'Please go to device settings and set location permission to "Always Allow"',
+                              'You can enable background location in the settings later if you change your mind',
                               singleButton: true,
-                              okButtonText: 'Continue',
+                              okButtonText: 'close',
                             );
                           },
                         );
