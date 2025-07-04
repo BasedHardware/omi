@@ -26,6 +26,9 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     private var stream: SCStream?
     private var audioSettings: [String: Any]!
     
+    // Activity management to prevent system sleep
+    private var preventSleepActivity: NSObjectProtocol?
+    
     // Flutter communication
     private weak var screenCaptureChannel: FlutterMethodChannel?
     private var audioFormatSentToFlutter: Bool = false
@@ -52,11 +55,15 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     }
     
     func startCapture() async throws {
+        // Start sleep prevention first
+        startSleepPrevention()
+        
         // Get shareable content
         let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
         self.availableContent = content
         
         guard !content.displays.isEmpty else {
+            stopSleepPrevention() // Clean up if we fail
             throw AudioManagerError.audioFormatError("No displays available for screen capture. Found \(content.displays.count) displays.")
         }
         
@@ -75,12 +82,14 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
                                                interleaved: true)
         
         guard let strongOutputAudioFormat = self.outputAudioFormat else {
+            stopSleepPrevention() // Clean up if we fail
             throw AudioManagerError.audioFormatError("Could not create final output audio format for Flutter")
         }
         
         // Setup final converter: engineProcessingFormat -> outputAudioFormat (for Flutter)
         self.audioConverter = AVAudioConverter(from: self.engineProcessingFormat, to: strongOutputAudioFormat)
         guard self.audioConverter != nil else {
+            stopSleepPrevention() // Clean up if we fail
             throw AudioManagerError.converterSetupError("Could not create main audio converter to Flutter format")
         }
         
@@ -129,6 +138,9 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         }
         scStreamPlayerNode.stop()
         
+        // Stop sleep prevention
+        stopSleepPrevention()
+        
         // Reset converters and formats
         self.audioConverter = nil
         self.scStreamSourceFormat = nil
@@ -175,6 +187,30 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         
         guard !content.displays.isEmpty else {
             throw AudioManagerError.audioFormatError("No displays available after refresh")
+        }
+    }
+    
+    // MARK: - Sleep Prevention Methods
+    
+    private func startSleepPrevention() {
+        guard preventSleepActivity == nil else {
+            print("DEBUG: Sleep prevention already active")
+            return
+        }
+        
+        preventSleepActivity = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiated, .idleSystemSleepDisabled],
+            reason: "Recording system audio and microphone"
+        )
+        
+        print("DEBUG: Started sleep prevention activity for system audio recording")
+    }
+    
+    private func stopSleepPrevention() {
+        if let activity = preventSleepActivity {
+            ProcessInfo.processInfo.endActivity(activity)
+            preventSleepActivity = nil
+            print("DEBUG: Stopped sleep prevention activity")
         }
     }
     
@@ -477,6 +513,10 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     
     func stream(_ stream: SCStream, didStopWithError error: Error) {
         print("SCStream stopped with error: \(error.localizedDescription)")
+        
+        // Clean up sleep prevention since recording stopped
+        stopSleepPrevention()
+        
         if audioEngine.isRunning && isFlutterEngineActive {
             self.screenCaptureChannel?.invokeMethod("captureError", arguments: "SCStream stopped: \(error.localizedDescription)")
         }
