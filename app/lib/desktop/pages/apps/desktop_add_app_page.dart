@@ -192,10 +192,10 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundSecondary.withOpacity(0.8),
+        color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.8),
         border: Border(
           bottom: BorderSide(
-            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+            color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
             width: 1,
           ),
         ),
@@ -217,7 +217,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
               child: Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+                  color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
@@ -264,7 +264,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                   'Build and submit your custom Omi app',
                   style: TextStyle(
                     fontSize: 12,
-                    color: ResponsiveHelper.textSecondary.withOpacity(0.5),
+                    color: ResponsiveHelper.textSecondary.withValues(alpha: 0.5),
                   ),
                 ),
               ],
@@ -284,15 +284,15 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
       padding: const EdgeInsets.all(20),
       child: Container(
         decoration: BoxDecoration(
-          color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
+          color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.6),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+            color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
             width: 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 20,
               offset: const Offset(0, 8),
             ),
@@ -414,15 +414,15 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
       child: Container(
         padding: const EdgeInsets.all(40),
         decoration: BoxDecoration(
-          color: ResponsiveHelper.backgroundSecondary.withOpacity(0.8),
+          color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.8),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: Colors.white.withOpacity(0.1),
+            color: Colors.white.withValues(alpha: 0.1),
             width: 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),
@@ -487,10 +487,10 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+        color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+          color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
           width: 1,
         ),
       ),
@@ -500,14 +500,14 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+              color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(12),
                 topRight: Radius.circular(12),
               ),
               border: Border(
                 bottom: BorderSide(
-                  color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                  color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                   width: 1,
                 ),
               ),
@@ -552,10 +552,10 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
+            color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
+              color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
               width: 1,
             ),
           ),
@@ -623,10 +623,10 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                   height: height,
                   margin: const EdgeInsets.only(right: 8),
                   decoration: BoxDecoration(
-                    color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+                    color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                      color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                       width: 1,
                     ),
                   ),
@@ -674,7 +674,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                          color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                           width: 1,
                         ),
                         image: DecorationImage(
@@ -716,7 +716,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                     child: Container(
                       padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.6),
+                        color: Colors.black.withValues(alpha: 0.6),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.close, size: 16, color: Colors.white),
@@ -826,14 +826,14 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+        color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
         borderRadius: const BorderRadius.only(
           bottomLeft: Radius.circular(16),
           bottomRight: Radius.circular(16),
         ),
         border: Border(
           top: BorderSide(
-            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+            color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
             width: 1,
           ),
         ),
@@ -854,7 +854,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                     boxShadow: provider.isValid
                         ? [
                             BoxShadow(
-                              color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
+                              color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
                               blurRadius: 8,
                               offset: const Offset(0, 4),
                             ),
