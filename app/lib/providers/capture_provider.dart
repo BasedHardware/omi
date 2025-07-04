@@ -1,8 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
-
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
@@ -33,7 +30,7 @@ import 'package:omi/utils/platform/platform_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class CaptureProvider extends ChangeNotifier
-    with MessageNotifierMixin
+    with MessageNotifierMixin, WidgetsBindingObserver
     implements ITransctipSegmentSocketServiceListener {
   ConversationProvider? conversationProvider;
   MessageProvider? messageProvider;
@@ -63,6 +60,45 @@ class CaptureProvider extends ChangeNotifier
     _internetStatusListener = PureCore().internetConnection.onStatusChange.listen((InternetStatus status) {
       onInternetSatusChanged(status);
     });
+    
+    // Add app lifecycle listener to detect sleep/wake cycles
+    if (PlatformService.isDesktop) {
+      _initializeAppLifecycleListener();
+    }
+  }
+  
+  void _initializeAppLifecycleListener() {
+    // Add this instance as a lifecycle observer
+    WidgetsBinding.instance.addObserver(this);
+  }
+  
+
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      _handleAppResumed();
+    }
+  }
+  
+  void _handleAppResumed() async {
+    if (recordingState == RecordingState.systemAudioRecord) {
+      
+      try {
+        // Check if native recording is still active
+        bool nativeRecording = await _screenCaptureChannel.invokeMethod('isRecording') ?? false;
+        
+        if (nativeRecording && recordingState != RecordingState.systemAudioRecord) {
+          // Will be handled by existing logic in streamSystemAudioRecording error handling
+        } else if (!nativeRecording && recordingState == RecordingState.systemAudioRecord) {
+          updateRecordingState(RecordingState.stop);
+          await _socket?.stop(reason: 'native recording stopped during sleep');
+        }
+      } catch (e) {
+        debugPrint('Could not check state during app resume: $e');
+      }
+    }
   }
 
   void updateProviderInstances(ConversationProvider? cp, MessageProvider? p) {
@@ -172,7 +208,7 @@ class CaptureProvider extends ChangeNotifier
 
     _socket = await ServiceManager.instance()
         .socket
-        .conversation(codec: codec, sampleRate: sampleRate!, language: language, force: force);
+        .conversation(codec: codec, sampleRate: sampleRate, language: language, force: force);
     if (_socket == null) {
       _startKeepAliveServices();
       debugPrint("Can not create new conversation socket");
@@ -279,9 +315,9 @@ class CaptureProvider extends ChangeNotifier
       }
 
       // send ws
-      if (_socket?.state == SocketServiceState.connected) {
-        final trimmedValue = value.sublist(3);
-        _socket?.send(trimmedValue);
+          if (_socket?.state == SocketServiceState.connected) {
+      final trimmedValue = value.sublist(3);
+      _socket?.send(trimmedValue);
 
         // synced
         if (_isWalSupported) {
@@ -467,6 +503,12 @@ class CaptureProvider extends ChangeNotifier
     _socket?.unsubscribe(this);
     _keepAliveTimer?.cancel();
     _internetStatusListener?.cancel();
+    
+    // Remove lifecycle observer
+    if (PlatformService.isDesktop) {
+      WidgetsBinding.instance.removeObserver(this);
+    }
+    
     super.dispose();
   }
 
@@ -527,10 +569,6 @@ class CaptureProvider extends ChangeNotifier
 
     updateRecordingState(RecordingState.initialising);
 
-    // WORKAROUND FOR MACOS SONOMA BUG: Try recording first without checking permissions
-    // This works around the bug where permissions show as undetermined even when granted
-    debugPrint('Attempting to start system audio recording directly (macOS bug workaround)');
-
     try {
       await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
 
@@ -560,6 +598,39 @@ class CaptureProvider extends ChangeNotifier
         debugPrint('System audio failed to start, error: $error');
         // Only now do we check and request permissions
         _handleSystemAudioPermissionError(error);
+      }, onSystemWillSleep: (wasRecording) {
+        //TODO: what should we do here?
+        debugPrint('System will sleep - was recording: $wasRecording');
+      }, onSystemDidWake: (nativeIsRecording) async {
+        debugPrint('System woke up - Native recording: $nativeIsRecording, Flutter state: $recordingState');
+        
+        if (nativeIsRecording && recordingState != RecordingState.systemAudioRecord) {
+          debugPrint('AUTO-FIXING WAKE DESYNC: Native recording but Flutter lost track, updating state...');
+          updateRecordingState(RecordingState.systemAudioRecord);
+          
+          // Ensure socket is connected for the ongoing recording
+          if (_socket?.state != SocketServiceState.connected) {
+            debugPrint('Reconnecting socket after wake...');
+            await _initiateWebsocket(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
+          }
+          
+          notifyListeners();
+        }
+      }, onScreenDidLock: (wasRecording) {
+        //TODO: what should we do here?
+        debugPrint('Screen locked - was recording: $wasRecording');
+      }, onScreenDidUnlock: () {
+        //TODO: what should we do here?
+        debugPrint('Screen unlocked');
+      }, onDisplaySetupInvalid: (reason) {
+        debugPrint('Display setup invalid: $reason');
+        if (recordingState == RecordingState.systemAudioRecord) {
+          updateRecordingState(RecordingState.stop);
+          AppSnackbar.showSnackbarError(
+            'Recording stopped: $reason. You may need to reconnect external displays or restart recording.'
+          );
+          notifyListeners();
+        }
       });
 
       await Future.delayed(const Duration(milliseconds: 500));
@@ -581,14 +652,67 @@ class CaptureProvider extends ChangeNotifier
   Future<void> _handleSystemAudioPermissionError(String error) async {
     debugPrint('System audio failed with error: $error');
 
+    // Check if this is a state desync issue (recording active but permissions seem denied)
+    if (error.contains('SCREEN_PERMISSION_REQUIRED') && error.contains('denied')) {
+      try {
+        bool nativeRecording = await _screenCaptureChannel.invokeMethod('isRecording') ?? false;
+        debugPrint('Permission error but native recording state: $nativeRecording');
+        
+        if (nativeRecording) {
+          debugPrint('FIXING SLEEP/WAKE DESYNC: Native recording active despite permission error, resyncing state...');
+          
+          updateRecordingState(RecordingState.systemAudioRecord);
+          
+          await ServiceManager.instance().systemAudio.start(
+            onFormatReceived: (Map<String, dynamic> format) async {
+            }, 
+            onByteReceived: (bytes) {
+              if (_socket?.state == SocketServiceState.connected) {
+                _socket?.send(bytes);
+              }
+            }, 
+            onRecording: () {
+              updateRecordingState(RecordingState.systemAudioRecord);
+              debugPrint('System audio state resynced after sleep/wake');
+            }, 
+            onStop: () {
+              if (_isPaused) {
+                updateRecordingState(RecordingState.pause);
+              } else {
+                updateRecordingState(RecordingState.stop);
+              }
+              _socket?.stop(reason: 'system audio stream ended from native');
+            }, 
+            onError: (error) {
+              debugPrint('System audio error during resync: $error');
+              updateRecordingState(RecordingState.stop);
+            },
+            onSystemDidWake: (nativeIsRecording) async {
+              debugPrint('Resync wake callback - Native recording: $nativeIsRecording');
+            }
+          );
+          return;
+        }
+      } catch (e) {
+        debugPrint('Could not check native recording state during error handling: $e');
+      }
+    }
+
+    // Handle normal permission errors
     if (error.contains('MIC_PERMISSION_REQUIRED') || error.contains('microphone')) {
       AppSnackbar.showSnackbarError(
           'Microphone permission is required. Please grant permission in System Preferences > Privacy & Security > Microphone.');
     } else if (error.contains('SCREEN_PERMISSION_REQUIRED') || error.contains('screen')) {
       AppSnackbar.showSnackbarError(
           'Screen recording permission is required. Please grant permission in System Preferences > Privacy & Security > Screen Recording.');
-    } else {
-      // Generic permission error - try the full permission check
+            } else if (error.contains('Already recording')) {
+          debugPrint('Already recording error - attempting to sync state...');
+          return;
+        } else if (error.contains('Failed to find any displays or windows to capture')) {
+          debugPrint('Display detection error - checking for external display disconnect...');
+          AppSnackbar.showSnackbarError(
+              'No displays found for screen recording. This can happen when external displays are disconnected. Please try reconnecting displays or restart the app.');
+        } else {
       await _checkAndRequestPermissions();
     }
 
@@ -622,9 +746,6 @@ class CaptureProvider extends ChangeNotifier
       debugPrint('Screen capture permission status: $screenStatus');
 
       if (screenStatus != 'granted') {
-        // Try once more to start recording before requesting permission
-        // This is the key workaround for the macOS bug
-        debugPrint('Screen permission not granted, but trying recording once more due to macOS bug');
 
         try {
           bool secondAttemptWorked = false;
@@ -640,7 +761,6 @@ class CaptureProvider extends ChangeNotifier
           }, onRecording: () {
             secondAttemptWorked = true;
             updateRecordingState(RecordingState.systemAudioRecord);
-            debugPrint('Second attempt succeeded - macOS permission bug confirmed');
           }, onStop: () {
             if (_isPaused) {
               updateRecordingState(RecordingState.pause);
@@ -670,14 +790,20 @@ class CaptureProvider extends ChangeNotifier
           return;
         }
 
-        // Try one final time after permission request
         await streamSystemAudioRecording();
       }
-    } catch (e) {
-      debugPrint('Error in permission checking: $e');
-      notifyError('Permission error: $e');
-      updateRecordingState(RecordingState.stop);
-    }
+            } catch (e) {  
+          debugPrint('Error in permission checking: $e');
+          
+          // Check if this is a state desync error
+          if (e.toString().contains('Already recording')) {
+            debugPrint('Already recording error during permission check - attempting to sync state...');
+            await _handleSystemAudioPermissionError(e.toString());
+          } else {
+            notifyError('Permission error: $e');
+            updateRecordingState(RecordingState.stop);
+          }
+        }
   }
 
   Future<void> stopSystemAudioRecording() async {
@@ -731,7 +857,9 @@ class CaptureProvider extends ChangeNotifier
         return;
       }
       if (recordingState == RecordingState.systemAudioRecord && PlatformService.isDesktop) {
-        debugPrint("[Provider] System audio was recording, but socket disconnected. Consider manual restart.");
+        debugPrint("System audio socket disconnected, reconnecting...");
+        await _initiateWebsocket(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
+        return;
       }
     });
   }
@@ -740,7 +868,18 @@ class CaptureProvider extends ChangeNotifier
   void onError(Object err) {
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
-    debugPrint('err: $err');
+    debugPrint('Socket error: $err');
+    
+    // Check for display-related errors
+    if (err.toString().contains('Failed to find any displays or windows to capture')) {
+      debugPrint('Display detection error in socket - likely external display disconnect');
+      if (recordingState == RecordingState.systemAudioRecord) {
+        AppSnackbar.showSnackbarError(
+            'Display detection failed during recording. This often happens when external displays are disconnected. Recording will stop.');
+        updateRecordingState(RecordingState.stop);
+      }
+    }
+    
     notifyListeners();
     _startKeepAliveServices();
   }
@@ -748,6 +887,7 @@ class CaptureProvider extends ChangeNotifier
   @override
   void onConnected() {
     _transcriptServiceReady = true;
+    debugPrint('Socket connected');
     notifyListeners();
   }
 

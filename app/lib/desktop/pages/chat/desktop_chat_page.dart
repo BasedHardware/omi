@@ -1514,7 +1514,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                         onTap: () {
                           Navigator.pop(context);
                           final homeProvider = context.read<HomeProvider>();
-                          homeProvider.setIndex(4); // Navigate to apps page
+                          homeProvider.setIndex(4);
+                          homeProvider.onSelectedIndexChanged?.call(4);
                         },
                         borderRadius: BorderRadius.circular(12),
                         child: Container(

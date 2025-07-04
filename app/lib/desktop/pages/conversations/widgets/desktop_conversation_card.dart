@@ -301,8 +301,21 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
             ? ResponsiveHelper.textTertiary 
             : ResponsiveHelper.purplePrimary,
         backgroundColor: _isSharing 
-            ? ResponsiveHelper.backgroundTertiary.withOpacity(0.3)
-            : ResponsiveHelper.purplePrimary.withOpacity(0.1),
+            ? ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3)
+            : ResponsiveHelper.purplePrimary.withValues(alpha: 0.1),
+        enabled: !_isSharing,
+      ),
+      OmiContextMenuItem(
+        id: 'copy_link',
+        title: _isSharing ? 'Generating link...' : 'Copy link',
+        subtitle: _isSharing ? '' : 'Copy shareable link',
+        icon: _isSharing ? Icons.hourglass_empty : Icons.link_outlined,
+        iconColor: _isSharing 
+            ? ResponsiveHelper.textTertiary 
+            : ResponsiveHelper.purplePrimary,
+        backgroundColor: _isSharing 
+            ? ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3)
+            : ResponsiveHelper.purplePrimary.withValues(alpha: 0.1),
         enabled: !_isSharing,
       ),
       OmiContextMenuItem(
@@ -311,7 +324,7 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
         subtitle: 'Copy to clipboard',
         icon: Icons.copy_outlined,
         iconColor: ResponsiveHelper.infoColor,
-        backgroundColor: ResponsiveHelper.infoColor.withOpacity(0.1),
+        backgroundColor: ResponsiveHelper.infoColor.withValues(alpha: 0.1),
       ),
       OmiContextMenuItem(
         id: 'edit',
@@ -319,7 +332,7 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
         subtitle: 'Change title',
         icon: Icons.edit_outlined,
         iconColor: ResponsiveHelper.warningColor,
-        backgroundColor: ResponsiveHelper.warningColor.withOpacity(0.1),
+        backgroundColor: ResponsiveHelper.warningColor.withValues(alpha: 0.1),
       ),
       OmiContextMenuItem(
         id: 'delete',
@@ -327,7 +340,7 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
         subtitle: 'Cannot be undone',
         icon: Icons.delete_outline_rounded,
         iconColor: ResponsiveHelper.errorColor,
-        backgroundColor: ResponsiveHelper.errorColor.withOpacity(0.1),
+        backgroundColor: ResponsiveHelper.errorColor.withValues(alpha: 0.1),
       ),
     ];
 
@@ -347,6 +360,9 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
     switch (action) {
       case 'share':
         if (!_isSharing) _shareConversation();
+        break;
+      case 'copy_link':
+        if (!_isSharing) _copyConversationLink();
         break;
       case 'copy':
         _copyConversation();
@@ -376,6 +392,57 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
       await Share.share(content);
     } catch (e) {
       _showSnackBar('Failed to generate share link');
+    } finally {
+      setState(() => _isSharing = false);
+    }
+  }
+
+  Future<void> _copyConversationLink() async {
+    if (_isSharing) return;
+    setState(() => _isSharing = true);
+    
+    try {
+      bool shared = await setConversationVisibility(widget.conversation.id);
+      if (!shared) {
+        _showSnackBar('Conversation URL could not be generated.');
+        setState(() => _isSharing = false);
+        return;
+      }
+      
+      String content = 'https://h.omi.me/conversations/${widget.conversation.id}';
+      await Clipboard.setData(ClipboardData(text: content));
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(
+                Icons.check_circle_outline_rounded,
+                color: ResponsiveHelper.successColor,
+                size: 20,
+              ),
+              SizedBox(width: 12),
+              Text(
+                'Conversation link copied to clipboard',
+                style: TextStyle(
+                  color: ResponsiveHelper.textPrimary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: ResponsiveHelper.backgroundTertiary,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      _showSnackBar('Failed to generate conversation link');
     } finally {
       setState(() => _isSharing = false);
     }
