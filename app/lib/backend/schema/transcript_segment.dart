@@ -118,6 +118,30 @@ class TranscriptSegment {
     return updateSegments.where((segment) => updateSegmentMap.containsKey(segment.id)).toList();
   }
 
+  static List<TranscriptSegment> handleDiarizationCorrection({
+    required List<TranscriptSegment> currentSegments,
+    required List<dynamic> updatedSegmentsData,
+    required List<dynamic> removedSegmentIdsData,
+  }) {
+    // Create a modifiable copy
+    List<TranscriptSegment> newSegments = List.from(currentSegments);
+
+    // Remove segments
+    List<String> removedIds = removedSegmentIdsData.map((e) => e.toString()).toList();
+    newSegments.removeWhere((segment) => removedIds.contains(segment.id));
+
+    // Update segments
+    List<TranscriptSegment> updatedSegments = TranscriptSegment.fromJsonList(updatedSegmentsData);
+    for (var updatedSegment in updatedSegments) {
+      int index = newSegments.indexWhere((segment) => segment.id == updatedSegment.id);
+      if (index != -1) {
+        newSegments[index] = updatedSegment;
+      }
+    }
+
+    return newSegments;
+  }
+
   static combineSegments(
     List<TranscriptSegment> segments,
     List<TranscriptSegment> newSegments, {

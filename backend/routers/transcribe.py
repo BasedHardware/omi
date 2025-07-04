@@ -20,7 +20,7 @@ from database.redis_db import get_cached_user_geolocation
 from models.conversation import Conversation, TranscriptSegment, ConversationStatus, Structured, Geolocation, \
     ConversationPhoto, ConversationSource
 from models.message_event import ConversationEvent, MessageEvent, MessageServiceStatusEvent, LastConversationEvent, \
-    TranslationEvent, PhotoProcessingEvent, PhotoDescribedEvent
+    TranslationEvent, PhotoProcessingEvent, PhotoDescribedEvent, DiarizationCorrectionEvent
 from models.transcript_segment import Translation
 from utils.apps import is_audio_bytes_app_enabled
 from utils.conversations.location import get_google_maps_location
@@ -275,9 +275,17 @@ async def _listen(
         if existing := retrieve_in_progress_conversation(uid):
             conversation = Conversation(**existing)
             starts, ends = (0, 0)
+            diarization_updates = None
             if segments:
                 conversation.transcript_segments, (starts, ends) = TranscriptSegment.combine_segments(
                     conversation.transcript_segments, segments)
+                updated, removed_ids = TranscriptSegment.correct_diarization_errors(
+                    conversation.transcript_segments)
+                if updated or removed_ids:
+                    diarization_updates = {
+                        "updated_segments": [s.dict() for s in updated],
+                        "removed_segment_ids": removed_ids
+                    }
                 conversations_db.update_conversation_segments(uid, conversation.id,
                                                               [segment.dict() for segment in
                                                                conversation.transcript_segments])
@@ -286,11 +294,11 @@ async def _listen(
 
             conversations_db.update_conversation_finished_at(uid, conversation.id, finished_at)
             redis_db.set_in_progress_conversation_id(uid, conversation.id)
-            return conversation, (starts, ends)
+            return conversation, (starts, ends), diarization_updates
 
         # new conversation
         if not segments and not photos:
-            return None, (0, 0)
+            return None, (0, 0), None
 
         if segments:
             started_at = datetime.now(timezone.utc) - timedelta(seconds=segments[0].end - segments[0].start)
@@ -313,7 +321,7 @@ async def _listen(
         print('_get_in_progress_conversation new', conversation, uid)
         conversations_db.upsert_conversation(uid, conversation_data=conversation.dict())
         redis_db.set_in_progress_conversation_id(uid, conversation.id)
-        return conversation, (0, len(segments))
+        return conversation, (0, len(segments)), None
 
     async def create_conversation_on_segment_received_task(finished_at: datetime):
         nonlocal conversation_creation_task
@@ -678,7 +686,7 @@ async def _listen(
             result = _upsert_in_progress_conversation(transcript_segments, photos_to_process, finished_at)
             if not result or not result[0]:
                 continue
-            conversation, (starts, ends) = result
+            conversation, (starts, ends), diarization_updates = result
             current_conversation_id = conversation.id
 
             if transcript_segments:
@@ -693,6 +701,9 @@ async def _listen(
 
                 if translation_enabled:
                     await translate(conversation.transcript_segments[starts:ends], conversation.id)
+
+            if diarization_updates:
+                await _asend_message_event(DiarizationCorrectionEvent(**diarization_updates))
 
     image_chunks = {}  # A temporary in-memory cache for image chunks
 

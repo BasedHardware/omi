@@ -97,52 +97,60 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final data = widget.segments[segmentIdx];
     final Person? person = data.personId != null ? _getPersonById(data.personId) : null;
 
+    final bool isSameSpeakerAsPrevious =
+        segmentIdx > 0 && widget.segments[segmentIdx - 1].speakerId == data.speakerId;
+
     return Padding(
       padding:
           EdgeInsetsDirectional.fromSTEB(widget.horizontalMargin ? 16 : 0, 0.0, widget.horizontalMargin ? 16 : 0, 0.0),
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          GestureDetector(
-            onTap: () {
-              widget.editSegment?.call(segmentIdx, data.speakerId);
-              MixpanelManager().assignSheetOpened();
-            },
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.start,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Image.asset(
-                  data.isUser
-                      ? Assets.images.speaker0Icon.path
-                      : person != null
-                          ? speakerImagePath[person.colorIdx!]
-                          : Assets.images.speaker1Icon.path,
-                  width: 26,
-                  height: 26,
+          if (!isSameSpeakerAsPrevious)
+            GestureDetector(
+              onTap: () {
+                widget.editSegment?.call(segmentIdx, data.speakerId);
+                MixpanelManager().assignSheetOpened();
+              },
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 12.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Image.asset(
+                      data.isUser
+                          ? Assets.images.speaker0Icon.path
+                          : person != null
+                              ? speakerImagePath[person.colorIdx!]
+                              : Assets.images.speaker1Icon.path,
+                      width: 26,
+                      height: 26,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      data.isUser
+                          ? SharedPreferencesUtil().givenName.isNotEmpty
+                              ? SharedPreferencesUtil().givenName
+                              : 'You'
+                          : data.personId != null
+                              ? person?.name ?? 'Deleted Person'
+                              : 'Speaker ${data.speakerId}',
+                      style: const TextStyle(color: Colors.white, fontSize: 18),
+                    ),
+                    if (widget.canDisplaySeconds) ...[
+                      const SizedBox(width: 12),
+                      Text(
+                        data.getTimestampString(),
+                        style: const TextStyle(color: Colors.grey, fontSize: 14),
+                      ),
+                    ],
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Text(
-                  data.isUser
-                      ? SharedPreferencesUtil().givenName.isNotEmpty
-                          ? SharedPreferencesUtil().givenName
-                          : 'You'
-                      : data.personId != null
-                          ? person?.name ?? 'Deleted Person'
-                          : 'Speaker ${data.speakerId}',
-                  style: const TextStyle(color: Colors.white, fontSize: 18),
-                ),
-                if (widget.canDisplaySeconds) ...[
-                  const SizedBox(width: 12),
-                  Text(
-                    data.getTimestampString(),
-                    style: const TextStyle(color: Colors.grey, fontSize: 14),
-                  ),
-                ],
-              ],
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
+          if (isSameSpeakerAsPrevious) const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerLeft,
             child: SelectionArea(

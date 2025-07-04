@@ -140,3 +140,15 @@ class PhotoDescribedEvent(MessageEvent):
         j["type"] = self.event_type
         del j["event_type"]
         return j
+
+
+class DiarizationCorrectionEvent(MessageEvent):
+    event_type: str = "diarization_correction"
+    updated_segments: List[Any] = []
+    removed_segment_ids: List[str] = []
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        del j["event_type"]
+        return j

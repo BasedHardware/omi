@@ -1,6 +1,7 @@
 from datetime import timedelta
-from typing import Optional, List
+from typing import Optional, List, Tuple
 import uuid
+import re
 from pydantic import BaseModel, Field
 
 
@@ -51,9 +52,73 @@ class TranscriptSegment(BaseModel):
         return True
 
     @staticmethod
+    def correct_diarization_errors(segments: List['TranscriptSegment']) -> Tuple[List['TranscriptSegment'], List[str]]:
+        if len(segments) < 2:
+            return [], []
+
+        seg_a = segments[-2]
+        seg_b = segments[-1]
+
+        if seg_a.speaker == seg_b.speaker:
+            return [], []
+
+        # Heuristic to fix diarization errors between different speakers
+        def _split_text(text: str) -> List[str]:
+            if not text:
+                return []
+            # Split by punctuation, keeping the delimiter with the preceding part.
+            parts = re.split(r'([.?!])', text)
+            if len(parts) <= 1:
+                return [text.strip()] if text.strip() else []
+            result = [(parts[i] + (parts[i + 1] if i + 1 < len(parts) else '')).strip() for i in
+                      range(0, len(parts), 2)]
+            return [s for s in result if s]
+
+        sub_segments_a = _split_text(seg_a.text)
+        dangling_fragment = ""
+        if sub_segments_a and not sub_segments_a[-1].endswith(('.', '?', '!')):
+            dangling_fragment = sub_segments_a[-1]
+        elif not sub_segments_a and seg_a.text:
+            dangling_fragment = seg_a.text
+
+        sub_segments_b = _split_text(seg_b.text)
+        continuation_fragment = ""
+        if sub_segments_b and sub_segments_b[0] and sub_segments_b[0][0].islower():
+            continuation_fragment = sub_segments_b[0]
+        elif not sub_segments_b and seg_b.text and seg_b.text[0].islower():
+            continuation_fragment = seg_b.text
+
+        updated_segments = []
+        removed_segment_ids = []
+        if dangling_fragment and continuation_fragment:
+            if len(seg_a.text) < len(seg_b.text):
+                # Move dangling_fragment from A to B
+                original_a_id = seg_a.id
+                seg_b.text = dangling_fragment + " " + seg_b.text
+                seg_a.text = seg_a.text[:-len(dangling_fragment)].strip()
+                updated_segments.append(seg_b)
+                if not seg_a.text:
+                    segments.pop(-2)
+                    removed_segment_ids.append(original_a_id)
+                else:
+                    updated_segments.append(seg_a)
+            else:
+                # Move continuation_fragment from B to A
+                original_b_id = seg_b.id
+                seg_a.text = seg_a.text + " " + continuation_fragment
+                seg_b.text = seg_b.text[len(continuation_fragment):].strip()
+                updated_segments.append(seg_a)
+                if not seg_b.text:
+                    segments.pop(-1)
+                    removed_segment_ids.append(original_b_id)
+                else:
+                    updated_segments.append(seg_b)
+        return updated_segments, removed_segment_ids
+
+    @staticmethod
     def combine_segments(segments: [], new_segments: [], delta_seconds: int = 0):
         if not new_segments or len(new_segments) == 0:
-            return segments
+            return segments, (len(segments), len(segments))
 
         joined_similar_segments = []
         for new_segment in new_segments:
@@ -73,14 +138,14 @@ class TranscriptSegment(BaseModel):
         starts = len(segments)
         ends = 0
 
-        if (segments and
+        if (segments and joined_similar_segments and
                 (segments[-1].speaker == joined_similar_segments[0].speaker or
                  (segments[-1].is_user and joined_similar_segments[0].is_user)) and
                 (joined_similar_segments[0].start - segments[-1].end < 30)):
             segments[-1].text += f' {joined_similar_segments[0].text}'
             segments[-1].end = joined_similar_segments[0].end
             joined_similar_segments.pop(0)
-            starts = len(segments)-1
+            starts = len(segments) - 1
 
         segments.extend(joined_similar_segments)
         ends = len(segments)
@@ -89,13 +154,13 @@ class TranscriptSegment(BaseModel):
         for i, segment in enumerate(segments):
             segments[i].text = (
                 segments[i].text.strip()
-                .replace('  ', '')
+                .replace('  ', ' ')
                 .replace(' ,', ',')
                 .replace(' .', '.')
                 .replace(' ?', '?')
             )
 
-        return segments, (starts,ends)
+        return segments, (starts, ends)
 
 
 class ImprovedTranscriptSegment(BaseModel):
