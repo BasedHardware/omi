@@ -569,10 +569,6 @@ class CaptureProvider extends ChangeNotifier
 
     updateRecordingState(RecordingState.initialising);
 
-    // WORKAROUND FOR MACOS SONOMA BUG: Try recording first without checking permissions
-    // This works around the bug where permissions show as undetermined even when granted
-    debugPrint('Attempting to start system audio recording directly (macOS bug workaround)');
-
     try {
       await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
 
