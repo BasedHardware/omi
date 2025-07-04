@@ -170,9 +170,22 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                   ),
                 )
               else
-                // Case 2 & 3: Has conversations or is recording -> show list view
-                CustomScrollView(
-                  slivers: [
+                // Case 2 & 3: Has conversations or is recording -> show list view with pull to refresh
+                RefreshIndicator(
+                  onRefresh: () async {
+                    if (convoProvider.previousQuery.isNotEmpty) {
+                      // If searching, refresh search results
+                      await convoProvider.searchConversations(convoProvider.previousQuery);
+                    } else {
+                      // Otherwise refresh all conversations
+                      await convoProvider.forceRefreshConversations();
+                    }
+                  },
+                  color: ResponsiveHelper.purplePrimary,
+                  backgroundColor: ResponsiveHelper.backgroundSecondary,
+                  child: CustomScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    slivers: [
                     const SliverToBoxAdapter(child: SizedBox(height: 20)),
 
                     // Header section (only show if there are conversations in system)
@@ -309,8 +322,9 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                         ),
                       ),
 
-                    const SliverToBoxAdapter(child: SizedBox(height: 80)),
-                  ],
+                      const SliverToBoxAdapter(child: SizedBox(height: 80)),
+                    ],
+                  ),
                 ),
 
               // Expanded recording overlay (only shows over main content area)
