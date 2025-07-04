@@ -1,2 +1,1 @@
-#include "main.cpp"
-  
+#include "src/app.h"
