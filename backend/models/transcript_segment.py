@@ -80,7 +80,7 @@ class TranscriptSegment(BaseModel):
                     # Time alignment
                     s.start = start
                     s.end = start + c_rate * len(text)
-                    start = start + s.end
+                    start = s.end
                     refined_segments.append(s)
             else:
                 refined_segments.append(segment)
@@ -103,8 +103,12 @@ class TranscriptSegment(BaseModel):
 
             return a, b
 
-        # join
-        joined_similar_segments = []
+        # Updates range [starts, ends)
+        starts = len(segments)
+        ends = 0
+
+        # Join
+        joined_similar_segments = [segments[-1].copy(deep=True)] if segments else []
         for new_segment in new_segments:
             if delta_seconds > 0:
                 new_segment.start += delta_seconds
@@ -116,18 +120,11 @@ class TranscriptSegment(BaseModel):
             if b:
                 joined_similar_segments.append(b)
 
-        # updates range [starts, ends)
-        starts = len(segments)
-        ends = 0
-
-        if segments and joined_similar_segments:
-            a, b = _merge(segments[-1], joined_similar_segments[0])
-            if a:
-                segments[-1] = a
-            # merged
-            if not b:
-                joined_similar_segments.pop(0)
+        if segments and segments[-1].id == joined_similar_segments[0].id:
+            # having updates
+            if segments[-1].text != joined_similar_segments[0].text:
                 starts = len(segments) - 1
+            segments.pop(-1)
 
         segments.extend(joined_similar_segments)
         ends = len(segments)
