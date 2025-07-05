@@ -1,6 +1,7 @@
 from datetime import timedelta
-from typing import Optional, List
+from typing import Optional, List, Tuple
 import uuid
+import re
 from pydantic import BaseModel, Field
 
 
@@ -51,36 +52,82 @@ class TranscriptSegment(BaseModel):
         return True
 
     @staticmethod
-    def combine_segments(segments: [], new_segments: [], delta_seconds: int = 0):
+    def combine_segments(segments: [], new_segments: List['TranscriptSegment'], delta_seconds: int = 0):
         if not new_segments or len(new_segments) == 0:
-            return segments
+            return segments, (len(segments), len(segments))
 
+        # By the first punctuation on text
+        def _split(text: str) -> []:
+            i = -1
+            for m in ['.', '!', '?']:
+                i = text.find(m)
+                break
+            if i == -1:
+                return [text]
+
+            return [text[:i+1], text[i+1:].strip()]
+
+        # Refined new segments
+        refined_segments = []
+        for segment in new_segments:
+            if segment.text and segment.text[0].islower() and re.search('[.?!]', segment.text):
+                start = segment.start
+                c_rate = (segment.end - segment.start)/len(segment.text)
+                for text in _split(segment.text):
+                    s = segment.copy(deep=True)
+                    s.text = text
+
+                    # Time alignment
+                    s.start = start
+                    s.end = start + c_rate * len(text)
+                    start = start + s.end
+                    refined_segments.append(s)
+            else:
+                refined_segments.append(segment)
+
+        new_segments = refined_segments
+
+        # Combined
+        def _merge(a, b: TranscriptSegment):
+            if not a or not b:
+                return a, b
+            if ((a.speaker == b.speaker or (a.is_user and b.is_user)) and (b.start - b.end < 30)):
+                a.text += f' {b.text}'
+                a.end = b.end
+                return a, None
+
+            if not a.text[-1] in [".", "?", "!"] and b.text[0].islower():
+                a.text += f' {b.text}'
+                a.end = b.end
+                return a, None
+
+            return a, b
+
+        # join
         joined_similar_segments = []
         for new_segment in new_segments:
             if delta_seconds > 0:
                 new_segment.start += delta_seconds
                 new_segment.end += delta_seconds
 
-            if (joined_similar_segments and
-                    (joined_similar_segments[-1].speaker == new_segment.speaker or
-                     (joined_similar_segments[-1].is_user and new_segment.is_user))):
-                joined_similar_segments[-1].text += f' {new_segment.text}'
-                joined_similar_segments[-1].end = new_segment.end
-            else:
-                joined_similar_segments.append(new_segment)
+            a, b = _merge(joined_similar_segments[-1] if joined_similar_segments else None, new_segment)
+            if a:
+                joined_similar_segments[-1] = a
+            if b:
+                joined_similar_segments.append(b)
 
         # updates range [starts, ends)
         starts = len(segments)
         ends = 0
 
-        if (segments and
-                (segments[-1].speaker == joined_similar_segments[0].speaker or
-                 (segments[-1].is_user and joined_similar_segments[0].is_user)) and
-                (joined_similar_segments[0].start - segments[-1].end < 30)):
-            segments[-1].text += f' {joined_similar_segments[0].text}'
-            segments[-1].end = joined_similar_segments[0].end
-            joined_similar_segments.pop(0)
-            starts = len(segments)-1
+        if segments and joined_similar_segments:
+            a, b = _merge(segments[-1], joined_similar_segments[0])
+            if a:
+                segments[-1] = a
+            # merged
+            if not b:
+                joined_similar_segments.pop(0)
+                starts = len(segments) - 1
 
         segments.extend(joined_similar_segments)
         ends = len(segments)
@@ -89,13 +136,13 @@ class TranscriptSegment(BaseModel):
         for i, segment in enumerate(segments):
             segments[i].text = (
                 segments[i].text.strip()
-                .replace('  ', '')
+                .replace('  ', ' ')
                 .replace(' ,', ',')
                 .replace(' .', '.')
                 .replace(' ?', '?')
             )
 
-        return segments, (starts,ends)
+        return segments, (starts, ends)
 
 
 class ImprovedTranscriptSegment(BaseModel):
