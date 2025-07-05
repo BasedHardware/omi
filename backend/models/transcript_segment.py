@@ -65,7 +65,11 @@ class TranscriptSegment(BaseModel):
             if i == -1:
                 return [text]
 
-            return [text[:i+1], text[i+1:].strip()]
+            parts = [text[:i+1]]
+            remaining = text[i+1:].strip()
+            if remaining:
+                parts.append(remaining)
+            return parts
 
         # Refined new segments
         refined_segments = []
@@ -74,6 +78,8 @@ class TranscriptSegment(BaseModel):
                 start = segment.start
                 c_rate = (segment.end - segment.start)/len(segment.text)
                 for text in _split(segment.text):
+                    if not text:
+                        continue
                     s = segment.copy(deep=True)
                     s.text = text
 
@@ -96,7 +102,7 @@ class TranscriptSegment(BaseModel):
                 a.end = b.end
                 return a, None
 
-            if not a.text[-1] in [".", "?", "!"] and b.text[0].islower():
+            if a.text and b.text and not a.text[-1] in [".", "?", "!"] and b.text[0].islower():
                 a.text += f' {b.text}'
                 a.end = b.end
                 return a, None
