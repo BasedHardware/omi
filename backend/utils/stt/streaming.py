@@ -227,7 +227,7 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
         options = LiveOptions(
             punctuate=True,
             no_delay=True,
-            endpointing=100,
+            endpointing=300,
             language=language,
             interim_results=False,
             smart_format=True,
