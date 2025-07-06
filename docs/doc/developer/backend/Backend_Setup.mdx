@@ -130,6 +130,7 @@ Before you start, make sure you have the following:
         - **Redis Credentials:**  Host, port, username, and password from your [Upstash Redis Console](https://console.upstash.com/)
         - **Modal API Key:**  Obtained from your [Modal Dashboard](https://modal.com/settings#tokens)
         - **ADMIN_KEY:** Set to a temporary value (e.g., `123`) for local development
+        - **ENCRYPTION_SECRET:** The `.env.template` provides a default key suitable for local development (e.g., `omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv`). For production, you must generate a new secure key.
         - **HOSTED_PUSHER_API_URL:** Endpoint of your hosted pusher service (if you are using it, see step 3)
         - **Typesense Credentials:** Host, port, and API key from your [Typesense Cloud Dashboard](https://cloud.typesense.org/clusters)
         - **NO_SOCKET_TIMEOUT: (Optional)** Set to `True` to disable the socket timeout for the backend server (socket will stay connected for as long as the app is open)
@@ -232,6 +233,7 @@ Here's a detailed explanation of each environment variable you need to define in
 - **`DEEPGRAM_API_KEY`:** Your [Deepgram API key](https://console.deepgram.com/api-keys), used for real-time and pre-recorded audio transcription
 - **`ADMIN_KEY`:** A temporary key used for authentication during local development (replace with a more secure method in production)
 - **`OPENAI_API_KEY`:** Your [OpenAI API key](https://platform.openai.com/settings/organization/api-keys), used for accessing OpenAI's language models for chat, memory processing, and more
+- **`ENCRYPTION_SECRET`:** A secret key used to encrypt sensitive user data, such as conversations, memories, and chat messages. The key must be at least 32 bytes long. The `.env.template` file includes a default key (e.g., `omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv`) which is sufficient for local development. **For a production environment, it is crucial to replace this with your own securely generated random string.**
 - **`GITHUB_TOKEN`:** Your [GitHub personal access token](https://github.com/settings/tokens), used to access GitHub's API for retrieving the latest firmware version
 - **`WORKFLOW_API_KEY`:** Your custom API key for securing communication with external workflows or integrations
 - **`HOSTED_PUSHER_API_URL`:** URL of your omi-pusher service if you're using one. Example: http://omi-push:8081
