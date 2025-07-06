@@ -811,71 +811,78 @@ workflows:
         script: | 
           set -x
     
-          # Command to find the path to your generated app, may be different
+          # Find the built app
           APP_NAME=$(find $(pwd) -name "*.app")  
           cd $(dirname "$APP_NAME")
     
-          # Find the application certificate for signing the app bundle
+          # Get certificate names
           APP_CERT_NAME=$(keychain list-certificates \
             | jq -r '.[]
-            | select(.common_name | test("3rd Party Mac Developer Application|Mac.*App.*Distribution"))
+            | select(.common_name | test("3rd Party Mac Developer Application"))
             | .common_name' \
             | head -1)
           
-          # Find the installer certificate for signing the package
           INSTALLER_CERT_NAME=$(keychain list-certificates \
             | jq -r '.[]
-            | select(.common_name | test("3rd Party Mac Developer Installer|Mac.*Installer.*Distribution"))
+            | select(.common_name | test("3rd Party Mac Developer Installer"))
             | .common_name' \
             | head -1)
           
-          echo "Found app certificate: '$APP_CERT_NAME'"
-          echo "Found installer certificate: '$INSTALLER_CERT_NAME'"
+          echo "Using certificates: '$APP_CERT_NAME' / '$INSTALLER_CERT_NAME'"
           
-          if [ -z "$APP_CERT_NAME" ]; then
-            echo "No application certificate found. Available certificates:"
+          if [ -z "$APP_CERT_NAME" ] || [ -z "$INSTALLER_CERT_NAME" ]; then
+            echo "Missing certificates. Available certificates:"
             keychain list-certificates | jq -r '.[].common_name'
             exit 1
           fi
           
-          if [ -z "$INSTALLER_CERT_NAME" ]; then
-            echo "No installer certificate found. Available certificates:"
-            keychain list-certificates | jq -r '.[].common_name'
+          # Find the provisioning profile that was saved
+          PROFILE_PATH=$(find "$HOME/Library/MobileDevice/Provisioning Profiles" -name "*.mobileprovision" | head -1)
+          
+          if [ -z "$PROFILE_PATH" ]; then
+            echo "No provisioning profile found!"
             exit 1
           fi
           
-          # Use the existing entitlements file that matches the build flavor
-          # We're in build/macos/Build/Products/Release-prod, need to get back to app root
+          echo "Using provisioning profile: $PROFILE_PATH"
+          
+          # Embed the provisioning profile in the app bundle
+          cp "$PROFILE_PATH" "$APP_NAME/Contents/embedded.provisionprofile"
+          
+          # Use the existing entitlements file
           ENTITLEMENTS_FILE="$(pwd)/../../../../../macos/Runner/RunnerRelease-prod.entitlements"
           
-          echo "Using existing entitlements file: $ENTITLEMENTS_FILE"
+          echo "Using entitlements file: $ENTITLEMENTS_FILE"
           
           if [ ! -f "$ENTITLEMENTS_FILE" ]; then
-            echo "Entitlements file not found at: $ENTITLEMENTS_FILE"
-            echo "Current directory: $(pwd)"
-            ls -la ../../../../../macos/Runner/ || echo "Runner directory not found"
+            echo "Entitlements file not found!"
             exit 1
           fi
           
+          # Debug: Show entitlements and profile contents
+          echo "=== Entitlements ==="
           cat "$ENTITLEMENTS_FILE"
           
-          # Sign the app bundle with the same entitlements Flutter used
-          echo "Signing app bundle with: $APP_CERT_NAME"
-          codesign --force --sign "$APP_CERT_NAME" --entitlements "$ENTITLEMENTS_FILE" --options runtime --strict "$APP_NAME"
+          echo "=== Profile entitlements ==="
+          security cms -D -i "$PROFILE_PATH" | plutil -extract Entitlements xml1 -o - -
           
-          # Verify the app signature and show entitlements
+          # Sign the app bundle with embedded profile
+          echo "Signing app bundle..."
+          codesign --force --sign "$APP_CERT_NAME" \
+            --entitlements "$ENTITLEMENTS_FILE" \
+            --options runtime \
+            --deep \
+            "$APP_NAME"
+          
+          # Verify signature
           codesign --verify --deep --strict "$APP_NAME"
-          echo "=== App entitlements ==="
+          echo "=== Final app entitlements ==="
           codesign -d --entitlements - "$APP_NAME"
           
-          # Create unsigned package
+          # Create and sign package
           PACKAGE_NAME=$(basename "$APP_NAME" .app).pkg
           xcrun productbuild --component "$APP_NAME" /Applications/ unsigned.pkg
-
-          # Sign the package
-          echo "Signing installer package with: $INSTALLER_CERT_NAME"
-          xcrun productsign --sign "$INSTALLER_CERT_NAME" unsigned.pkg "$PACKAGE_NAME" 
-    
+          xcrun productsign --sign "$INSTALLER_CERT_NAME" unsigned.pkg "$PACKAGE_NAME"
           rm -f unsigned.pkg
           
 
