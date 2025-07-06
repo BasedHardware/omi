@@ -3,7 +3,6 @@ import AVFoundation
 import CoreBluetooth
 import CoreLocation
 import UserNotifications
-import ScreenCaptureKit
 
 // MARK: - Permission Manager
 class PermissionManager: NSObject, CBCentralManagerDelegate, CLLocationManagerDelegate {
@@ -37,7 +36,7 @@ class PermissionManager: NSObject, CBCentralManagerDelegate, CLLocationManagerDe
             @unknown default:
                 return "unknown"
             }
-        } else if #available(macOS 10.14, *) {
+        } else {
             // Fallback on earlier versions
             switch AVCaptureDevice.authorizationStatus(for: .audio) {
             case .authorized:
@@ -51,9 +50,6 @@ class PermissionManager: NSObject, CBCentralManagerDelegate, CLLocationManagerDe
             @unknown default:
                 return "unknown"
             }
-        } else {
-            // For macOS versions prior to 10.14, there was no explicit microphone permission.
-            return "granted"
         }
     }
     
@@ -66,7 +62,7 @@ class PermissionManager: NSObject, CBCentralManagerDelegate, CLLocationManagerDe
             let granted = await AVAudioApplication.requestRecordPermission()
             print("Microphone permission request result: \(granted)")
             return granted
-        } else if #available(macOS 10.14, *) {
+        } else {
             // Fallback on earlier versions
             guard AVCaptureDevice.authorizationStatus(for: .audio) != .authorized else {
                 return true
@@ -77,144 +73,106 @@ class PermissionManager: NSObject, CBCentralManagerDelegate, CLLocationManagerDe
                     continuation.resume(returning: granted)
                 }
             }
-        } else {
-            // For macOS versions prior to 10.14, there was no explicit microphone permission.
-            return true
         }
     }
     
     // MARK: - Screen Capture Permission
     
     func checkScreenCapturePermission() async -> String {
-        // First try the most reliable method - actually attempt to get content
-        do {
-            let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
-            if !content.displays.isEmpty {
-                return "granted"
-            } else {
-                return "denied"
-            }
-        } catch {
-            print("Error checking shareable content: \(error)")
-            if case SCStreamError.userDeclined = error {
-                return "denied"
-            }
-            // For any other error, it's likely undetermined
+        if CGPreflightScreenCaptureAccess() {
+            return "granted"
+        } else {
+            // We can't distinguish "denied" from "undetermined" with this API.
+            // Returning "undetermined" allows the app to request permission.
             return "undetermined"
         }
     }
     
     func requestScreenCapturePermission() async -> Bool {
-        // First check if we can actually use the permission without triggering dialogs
-        do {
-            let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
-            if !content.displays.isEmpty {
-                print("Screen capture permission is actually working despite status")
-                return true
-            }
-        } catch {
-            print("Initial screen capture test failed: \(error)")
+        if CGPreflightScreenCaptureAccess() {
+            return true
         }
         
-        // Only if the above fails, try the official request method
-        if #available(macOS 11.0, *) {
-            // Check TCC database first to avoid unnecessary prompts
-            let hasAccess = CGPreflightScreenCaptureAccess()
-            if hasAccess {
-                print("TCC database shows screen capture access is granted")
-                return true
-            }
-            
-            print("Requesting screen capture permission via CGRequestScreenCaptureAccess")
-            let granted = CGRequestScreenCaptureAccess()
-            if granted {
-                return true
-            }
-        }
+        // This will prompt the user for permission if it has not yet been determined.
+        // An app restart is required for changes to take effect.
+        CGRequestScreenCaptureAccess()
         
-        // As a last resort, open system preferences
-        print("Opening System Preferences as last resort for screen capture permission")
+        // We open System Preferences to guide the user to the correct settings pane,
+        // as they will need to manually enable the permission and restart the app.
         await MainActor.run {
             NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
         }
+        
+        // We cannot confirm permission was granted without a restart.
+        // Returning false is safer, and the UI should guide the user.
         return false
     }
     
     // MARK: - Bluetooth Permission
     
     func checkBluetoothPermission() -> String {
-        if #available(macOS 10.15, *) {
-            switch CBCentralManager.authorization {
-            case .allowedAlways:
-                return "granted"
-            case .denied:
-                return "denied"
-            case .restricted:
-                return "restricted"
-            case .notDetermined:
-                return "undetermined"
-            @unknown default:
-                return "unknown"
-            }
-        } else {
-            // For older macOS versions, assume granted if Bluetooth is available
+        switch CBCentralManager.authorization {
+        case .allowedAlways:
             return "granted"
+        case .denied:
+            return "denied"
+        case .restricted:
+            return "restricted"
+        case .notDetermined:
+            return "undetermined"
+        @unknown default:
+            return "unknown"
         }
     }
     
     func requestBluetoothPermission() async -> Bool {
-        if #available(macOS 10.15, *) {
-            guard CBCentralManager.authorization != .allowedAlways else {
-                return true
-            }
-            
-            // If explicitly denied or restricted, can't request again
-            if CBCentralManager.authorization == .denied || CBCentralManager.authorization == .restricted {
-                print("Bluetooth permission is \(CBCentralManager.authorization.rawValue), cannot request again")
-                return false
-            }
-            
-            // Check if Bluetooth service is available first
-            let tempManager = CBCentralManager()
-            if tempManager.state == .poweredOff {
-                print("Bluetooth is powered off. User needs to enable Bluetooth in System Settings.")
-                await MainActor.run {
-                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.bluetooth")!)
-                }
-                return false
-            } else if tempManager.state == .unsupported {
-                print("Bluetooth is not supported on this device.")
-                return false
-            }
-            
-            return await withCheckedContinuation { continuation in
-                // Set up timeout to prevent continuation leak
-                Task {
-                    try? await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds timeout for Bluetooth
-                    if bluetoothPermissionCompletion != nil {
-                        print("Bluetooth permission request timed out")
-                        bluetoothPermissionCompletion?(false)
-                    }
-                }
-                
-                bluetoothPermissionCompletion = { granted in
-                    continuation.resume(returning: granted)
-                    self.bluetoothPermissionCompletion = nil // Clear to prevent multiple calls
-                }
-                
-                // Initialize CBCentralManager to trigger permission request
-                if bluetoothManager == nil {
-                    print("Initializing Bluetooth central manager...")
-                    bluetoothManager = CBCentralManager(delegate: self, queue: nil)
-                } else {
-                    // If manager already exists, check current state
-                    print("Bluetooth manager exists, checking current state...")
-                    centralManagerDidUpdateState(bluetoothManager!)
-                }
-            }
-        } else {
-            print("Bluetooth permission handling not available on macOS < 10.15, assuming granted")
+        guard CBCentralManager.authorization != .allowedAlways else {
             return true
+        }
+        
+        // If explicitly denied or restricted, can't request again
+        if CBCentralManager.authorization == .denied || CBCentralManager.authorization == .restricted {
+            print("Bluetooth permission is \(CBCentralManager.authorization.rawValue), cannot request again")
+            return false
+        }
+        
+        // Check if Bluetooth service is available first
+        let tempManager = CBCentralManager()
+        if tempManager.state == .poweredOff {
+            print("Bluetooth is powered off. User needs to enable Bluetooth in System Settings.")
+            await MainActor.run {
+                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.bluetooth")!)
+            }
+            return false
+        } else if tempManager.state == .unsupported {
+            print("Bluetooth is not supported on this device.")
+            return false
+        }
+        
+        return await withCheckedContinuation { continuation in
+            // Set up timeout to prevent continuation leak
+            Task {
+                try? await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds timeout for Bluetooth
+                if bluetoothPermissionCompletion != nil {
+                    print("Bluetooth permission request timed out")
+                    bluetoothPermissionCompletion?(false)
+                }
+            }
+            
+            bluetoothPermissionCompletion = { granted in
+                continuation.resume(returning: granted)
+                self.bluetoothPermissionCompletion = nil // Clear to prevent multiple calls
+            }
+            
+            // Initialize CBCentralManager to trigger permission request
+            if bluetoothManager == nil {
+                print("Initializing Bluetooth central manager...")
+                bluetoothManager = CBCentralManager(delegate: self, queue: nil)
+            } else {
+                // If manager already exists, check current state
+                print("Bluetooth manager exists, checking current state...")
+                centralManagerDidUpdateState(bluetoothManager!)
+            }
         }
     }
     
@@ -375,27 +333,21 @@ class PermissionManager: NSObject, CBCentralManagerDelegate, CLLocationManagerDe
             return
         }
         
-        if #available(macOS 10.15, *) {
-            let granted: Bool
-            switch CBCentralManager.authorization {
-            case .allowedAlways:
-                granted = true
-            case .denied, .restricted:
-                granted = false
-            case .notDetermined:
-                granted = (central.state == .poweredOn)
-            @unknown default:
-                granted = false
-            }
-            
-            print("Bluetooth permission resolved: granted=\(granted)")
-            bluetoothPermissionCompletion?(granted)
-            bluetoothPermissionCompletion = nil
-        } else {
-            let granted = (central.state == .poweredOn)
-            bluetoothPermissionCompletion?(granted)
-            bluetoothPermissionCompletion = nil
+        let granted: Bool
+        switch CBCentralManager.authorization {
+        case .allowedAlways:
+            granted = true
+        case .denied, .restricted:
+            granted = false
+        case .notDetermined:
+            granted = (central.state == .poweredOn)
+        @unknown default:
+            granted = false
         }
+        
+        print("Bluetooth permission resolved: granted=\(granted)")
+        bluetoothPermissionCompletion?(granted)
+        bluetoothPermissionCompletion = nil
     }
     
     // MARK: - CLLocationManagerDelegate
