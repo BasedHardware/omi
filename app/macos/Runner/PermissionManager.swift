@@ -25,29 +25,62 @@ class PermissionManager: NSObject, CBCentralManagerDelegate, CLLocationManagerDe
     
     // MARK: - Microphone Permission
     
-    @available(macOS 14.0, *)
     func checkMicrophonePermission() -> String {
-        switch AVAudioApplication.shared.recordPermission {
-        case .granted:
+        if #available(macOS 14.0, *) {
+            switch AVAudioApplication.shared.recordPermission {
+            case .granted:
+                return "granted"
+            case .denied:
+                return "denied"
+            case .undetermined:
+                return "undetermined"
+            @unknown default:
+                return "unknown"
+            }
+        } else if #available(macOS 10.14, *) {
+            // Fallback on earlier versions
+            switch AVCaptureDevice.authorizationStatus(for: .audio) {
+            case .authorized:
+                return "granted"
+            case .denied:
+                return "denied"
+            case .notDetermined:
+                return "undetermined"
+            case .restricted:
+                return "restricted"
+            @unknown default:
+                return "unknown"
+            }
+        } else {
+            // For macOS versions prior to 10.14, there was no explicit microphone permission.
             return "granted"
-        case .denied:
-            return "denied"
-        case .undetermined:
-            return "undetermined"
-        @unknown default:
-            return "unknown"
         }
     }
     
-    @available(macOS 14.0, *)
     func requestMicrophonePermission() async -> Bool {
-        guard AVAudioApplication.shared.recordPermission != .granted else {
-            return true // Already granted
+        if #available(macOS 14.0, *) {
+            guard AVAudioApplication.shared.recordPermission != .granted else {
+                return true // Already granted
+            }
+            
+            let granted = await AVAudioApplication.requestRecordPermission()
+            print("Microphone permission request result: \(granted)")
+            return granted
+        } else if #available(macOS 10.14, *) {
+            // Fallback on earlier versions
+            guard AVCaptureDevice.authorizationStatus(for: .audio) != .authorized else {
+                return true
+            }
+            return await withCheckedContinuation { continuation in
+                AVCaptureDevice.requestAccess(for: .audio) { granted in
+                    print("Microphone permission request result: \(granted)")
+                    continuation.resume(returning: granted)
+                }
+            }
+        } else {
+            // For macOS versions prior to 10.14, there was no explicit microphone permission.
+            return true
         }
-        
-        let granted = await AVAudioApplication.requestRecordPermission()
-        print("Microphone permission request result: \(granted)")
-        return granted
     }
     
     // MARK: - Screen Capture Permission
