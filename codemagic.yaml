@@ -799,8 +799,8 @@ workflows:
           flutter config --enable-macos-desktop
           
           # Build
-          BUILD_NAME=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\1/')
-          BUILD_NUMBER=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\2/')
+          BUILD_NAME=1.0.65
+          BUILD_NUMBER=327
           flutter build macos \
             --release \
             --build-name=$BUILD_NAME \
