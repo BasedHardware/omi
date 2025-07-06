@@ -137,21 +137,13 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
             guard let self = self else { return }
             switch call.method {
             case "checkMicrophonePermission":
-                if #available(macOS 14.0, *) {
-                    let status = self.permissionManager.checkMicrophonePermission()
-                    result(status)
-                } else {
-                    result("unavailable")
-                }
+                let status = self.permissionManager.checkMicrophonePermission()
+                result(status)
                 
             case "requestMicrophonePermission":
-                if #available(macOS 14.0, *) {
-                    Task {
-                        let granted = await self.permissionManager.requestMicrophonePermission()
-                        result(granted)
-                    }
-                } else {
-                    result(false)
+                Task {
+                    let granted = await self.permissionManager.requestMicrophonePermission()
+                    result(granted)
                 }
                 
             case "checkScreenCapturePermission":
@@ -210,20 +202,18 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
             case "start":
                 Task {
                     // Check permissions before starting
-                    if #available(macOS 14.0, *) {
-                        let micStatus = self.permissionManager.checkMicrophonePermission()
-                        if micStatus != "granted" {
-                            result(FlutterError(code: "MIC_PERMISSION_REQUIRED", 
-                                              message: "Microphone permission is required. Current status: \(micStatus)", 
-                                              details: nil))
-                            return
-                        }
+                    let micStatus = self.permissionManager.checkMicrophonePermission()
+                    if micStatus != "granted" {
+                        result(FlutterError(code: "MIC_PERMISSION_REQUIRED",
+                                          message: "Microphone permission is required. Current status: \(micStatus)",
+                                          details: nil))
+                        return
                     }
-                    
+
                     let screenStatus = await self.permissionManager.checkScreenCapturePermission()
                     if screenStatus != "granted" {
-                        result(FlutterError(code: "SCREEN_PERMISSION_REQUIRED", 
-                                          message: "Screen capture permission is required. Current status: \(screenStatus)", 
+                        result(FlutterError(code: "SCREEN_PERMISSION_REQUIRED",
+                                          message: "Screen capture permission is required. Current status: \(screenStatus)",
                                           details: nil))
                         return
                     }
