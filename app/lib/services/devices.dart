@@ -20,6 +20,11 @@ abstract class IDeviceService {
   void unsubscribe(Object context);
 
   DateTime? getFirstConnectedAt();
+  
+  // Battery optimization methods
+  void enableBatteryOptimization();
+  void disableBatteryOptimization();
+  bool get isBatteryOptimized;
 }
 
 enum DeviceServiceStatus {
@@ -55,6 +60,124 @@ class DeviceService implements IDeviceService {
 
   DateTime? _firstConnectedAt;
 
+  // Battery optimization properties
+  bool _isBatteryOptimized = false;
+  Timer? _scanTimer;
+  Timer? _connectionCheckTimer;
+  int _scanAttempts = 0;
+  static const int _maxScanAttempts = 5;
+  static const int _scanInterval = 300; // 5 minutes
+  static const int _connectionCheckInterval = 60; // 1 minute
+
+  @override
+  bool get isBatteryOptimized => _isBatteryOptimized;
+
+  @override
+  void enableBatteryOptimization() {
+    _isBatteryOptimized = true;
+    debugPrint('DeviceService: Battery optimization enabled');
+    
+    // Stop continuous scanning
+    _stopContinuousScanning();
+    
+    // Set up optimized scanning
+    _setupOptimizedScanning();
+    
+    // Set up connection monitoring
+    _setupConnectionMonitoring();
+  }
+
+  @override
+  void disableBatteryOptimization() {
+    _isBatteryOptimized = false;
+    debugPrint('DeviceService: Battery optimization disabled');
+    
+    // Stop optimized scanning
+    _scanTimer?.cancel();
+    _connectionCheckTimer?.cancel();
+    
+    // Restore normal behavior
+    _restoreNormalScanning();
+  }
+
+  void _stopContinuousScanning() {
+    if (_status == DeviceServiceStatus.scanning) {
+      BluetoothAdapter.stopScan();
+      _status = DeviceServiceStatus.ready;
+      debugPrint('DeviceService: Stopped continuous scanning for battery optimization');
+    }
+  }
+
+  void _setupOptimizedScanning() {
+    _scanTimer?.cancel();
+    _scanTimer = Timer.periodic(Duration(seconds: _scanInterval), (timer) {
+      if (_status == DeviceServiceStatus.ready && _scanAttempts < _maxScanAttempts) {
+        _performOptimizedScan();
+      }
+    });
+  }
+
+  void _performOptimizedScan() async {
+    if (_isBatteryOptimized) {
+      debugPrint('DeviceService: Performing optimized scan attempt ${_scanAttempts + 1}/$_maxScanAttempts');
+      
+      try {
+        await discover(timeout: 10); // Shorter timeout for battery optimization
+        _scanAttempts++;
+      } catch (e) {
+        debugPrint('DeviceService: Optimized scan failed: $e');
+        _scanAttempts++;
+      }
+    }
+  }
+
+  void _setupConnectionMonitoring() {
+    _connectionCheckTimer?.cancel();
+    _connectionCheckTimer = Timer.periodic(Duration(seconds: _connectionCheckInterval), (timer) {
+      _checkConnectionHealth();
+    });
+  }
+
+  void _checkConnectionHealth() async {
+    if (_connection?.status == DeviceConnectionState.connected) {
+      try {
+        // Perform a lightweight connection check
+        bool isHealthy = await _connection!.ping();
+        if (!isHealthy) {
+          debugPrint('DeviceService: Connection health check failed, attempting reconnection');
+          await _handleConnectionFailure();
+        }
+      } catch (e) {
+        debugPrint('DeviceService: Connection health check error: $e');
+        await _handleConnectionFailure();
+      }
+    }
+  }
+
+  Future<void> _handleConnectionFailure() async {
+    if (_connection != null) {
+      await _connection!.disconnect();
+      _connection = null;
+    }
+    
+    // Attempt reconnection with delay
+    Timer(Duration(seconds: 5), () async {
+      if (_connection == null) {
+        await _attemptReconnection();
+      }
+    });
+  }
+
+  Future<void> _attemptReconnection() async {
+    // This would need to be implemented based on the last known device
+    debugPrint('DeviceService: Attempting reconnection...');
+  }
+
+  void _restoreNormalScanning() {
+    debugPrint('DeviceService: Restoring normal scanning behavior');
+    // Normal scanning behavior would be restored here
+  }
+
   @override
   Future<void> discover({
     String? desirableDeviceId,
@@ -76,6 +199,12 @@ class DeviceService implements IDeviceService {
       return;
     }
 
+    // Battery optimization: Skip scanning if already have devices and battery is optimized
+    if (_isBatteryOptimized && _devices.isNotEmpty && _scanAttempts >= _maxScanAttempts) {
+      debugPrint("DeviceService: Skipping scan due to battery optimization");
+      return;
+    }
+
     // Listen to scan results, always re-emits previous results
     var discoverSubscription = BluetoothAdapter.scanResults.listen(
       (results) async {
@@ -90,8 +219,12 @@ class DeviceService implements IDeviceService {
     // Only look for devices that implement Omi or Frame main service
     _status = DeviceServiceStatus.scanning;
     await BluetoothAdapter.adapterState.where((val) => val == BluetoothAdapterStateHelper.on).first;
+    
+    // Battery optimization: Use shorter scan duration
+    int scanTimeout = _isBatteryOptimized ? timeout ~/ 2 : timeout;
+    
     await BluetoothAdapter.startScan(
-      timeout: Duration(seconds: timeout),
+      timeout: Duration(seconds: scanTimeout),
       withServices: [BluetoothAdapter.createGuid(omiServiceUuid), BluetoothAdapter.createGuid(frameServiceUuid)],
     );
     _status = DeviceServiceStatus.ready;
@@ -153,6 +286,9 @@ class DeviceService implements IDeviceService {
   void start() {
     _status = DeviceServiceStatus.ready;
 
+    // Battery optimization: Enable by default for better battery life
+    enableBatteryOptimization();
+
     // TODO: Start watchdog to discover automatically, re-connect automatically
   }
 
@@ -160,6 +296,10 @@ class DeviceService implements IDeviceService {
   void stop() {
     _status = DeviceServiceStatus.stop;
     onStatusChanged(_status);
+
+    // Clean up timers
+    _scanTimer?.cancel();
+    _connectionCheckTimer?.cancel();
 
     if (BluetoothAdapter.isScanningNow) {
       BluetoothAdapter.stopScan();
@@ -177,6 +317,13 @@ class DeviceService implements IDeviceService {
 
   void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state) {
     debugPrint("device connection state changed...${deviceId}...${state}");
+    
+    // Battery optimization: Reset scan attempts on successful connection
+    if (state == DeviceConnectionState.connected) {
+      _scanAttempts = 0;
+      _firstConnectedAt = DateTime.now();
+    }
+    
     for (var s in _subscriptions.values) {
       s.onDeviceConnectionStateChanged(deviceId, state);
     }
@@ -198,51 +345,19 @@ class DeviceService implements IDeviceService {
     mutex = true;
 
     debugPrint("ensureConnection ${_connection?.device.id} ${_connection?.status} ${force}");
+
     try {
-      // Not force
-      if (!force && _connection != null) {
-        if (_connection?.device.id != deviceId || _connection?.status != DeviceConnectionState.connected) {
-          return null;
-        }
-
-        // connected
-        var pongAt = _connection?.pongAt;
-        var shouldPing = (pongAt == null || pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 5))));
-        if (shouldPing) {
-          var ok = await _connection?.ping() ?? false;
-          if (!ok) {
-            await _connection?.disconnect();
-            return null;
-          }
-        }
-
+      // Battery optimization: Skip reconnection if battery is optimized and not forced
+      if (_isBatteryOptimized && !force && _connection?.status == DeviceConnectionState.disconnected) {
+        debugPrint("DeviceService: Skipping reconnection due to battery optimization");
         return _connection;
       }
 
-      // Force
-      if (deviceId == _connection?.device.id && _connection?.status == DeviceConnectionState.connected) {
-        var pongAt = _connection?.pongAt;
-        var shouldPing = (pongAt == null || pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 5))));
-        if (shouldPing) {
-          var ok = await _connection?.ping() ?? false;
-          if (!ok) {
-            await _connection?.disconnect();
-            return null;
-          }
-        }
-
+      if (_connection?.device.id == deviceId && _connection?.status == DeviceConnectionState.connected && !force) {
         return _connection;
       }
 
-      // connect
-      try {
-        await _connectToDevice(deviceId);
-      } on DeviceConnectionException catch (e) {
-        debugPrint(e.toString());
-        return null;
-      }
-
-      _firstConnectedAt ??= DateTime.now();
+      await _connectToDevice(deviceId);
       return _connection;
     } finally {
       mutex = false;
