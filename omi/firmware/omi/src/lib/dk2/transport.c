@@ -375,6 +375,11 @@ static uint8_t tx_buffer_2[CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE];
 static uint32_t tx_buffer_size = 0;
 static struct ring_buf ring_buf;
 
+// Add overflow detection and management
+static uint32_t ring_buffer_overflow_count = 0;
+static uint32_t total_packets_dropped = 0;
+static bool ring_buffer_overflow_detected = false;
+
 static bool write_to_tx_queue(uint8_t *data, size_t size)
 {
     // Increment the counter
@@ -382,7 +387,20 @@ static bool write_to_tx_queue(uint8_t *data, size_t size)
     
     if (size > CODEC_OUTPUT_MAX_BYTES)
     {
+        LOG_ERR("Packet size %d exceeds maximum %d", size, CODEC_OUTPUT_MAX_BYTES);
         return false;
+    }
+
+    // Check if ring buffer is getting full
+    uint32_t available_space = ring_buf_space_get(&ring_buf);
+    if (available_space < (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE) * 2)
+    {
+        if (!ring_buffer_overflow_detected) {
+            LOG_WRN("Ring buffer getting full, available space: %d bytes", available_space);
+            ring_buffer_overflow_detected = true;
+        }
+    } else {
+        ring_buffer_overflow_detected = false;
     }
 
     // Copy data (TODO: Avoid this copy)
@@ -394,6 +412,17 @@ static bool write_to_tx_queue(uint8_t *data, size_t size)
     int written = ring_buf_put(&ring_buf, tx_buffer_2, (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)); // It always fits completely or not at all
     if (written != CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)
     {
+        ring_buffer_overflow_count++;
+        total_packets_dropped++;
+        LOG_ERR("Ring buffer overflow! Dropped packet %d, total dropped: %d", ring_buffer_overflow_count, total_packets_dropped);
+        
+        // Try to clear some space by dropping oldest packets
+        if (ring_buf_size_get(&ring_buf) > (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE) * 4) {
+            uint8_t temp_buffer[CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE];
+            ring_buf_get(&ring_buf, temp_buffer, CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE);
+            LOG_WRN("Dropped oldest packet to make space");
+        }
+        
         return false;
     }
     else

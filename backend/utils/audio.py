@@ -1,8 +1,10 @@
 import wave
+import logging
 
 from pydub import AudioSegment
 from pyogg import OpusDecoder
 
+logger = logging.getLogger(__name__)
 
 def merge_wav_files(dest_file_path: str, source_files: [str], silent_seconds: [int]):
     if len(source_files) == 0 or not dest_file_path:
@@ -38,14 +40,32 @@ def create_wav_from_bytes(
         for frame in frames:
             encoded_packets.append(memoryview(bytearray(frame)))
 
-        for encoded_packet in encoded_packets:
-            decoded_pcm = opus_decoder.decode(encoded_packet)
-
-            # Save the decoded PCM as a new wav file
-            wave_write.writeframes(decoded_pcm)
+        corrupted_frames = 0
+        total_frames = len(encoded_packets)
+        
+        for i, encoded_packet in enumerate(encoded_packets):
+            try:
+                decoded_pcm = opus_decoder.decode(encoded_packet)
+                # Save the decoded PCM as a new wav file
+                wave_write.writeframes(decoded_pcm)
+            except Exception as e:
+                corrupted_frames += 1
+                logger.warning(f"Failed to decode Opus frame {i}/{total_frames}: {e}")
+                
+                # Try to recover by inserting silence
+                try:
+                    # Create silence frame (zeros) for the expected frame size
+                    silence_frame = b'\x00' * (frame_rate * channels * sample_width // 50)  # 20ms of silence
+                    wave_write.writeframes(silence_frame)
+                except Exception as recovery_error:
+                    logger.error(f"Failed to insert silence frame: {recovery_error}")
+                    continue
 
         wave_write.close()
-
+        
+        if corrupted_frames > 0:
+            logger.warning(f"Decoded {total_frames - corrupted_frames}/{total_frames} frames successfully. {corrupted_frames} corrupted frames replaced with silence.")
+        
         return
 
     # pcm16
