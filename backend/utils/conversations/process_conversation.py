@@ -28,6 +28,7 @@ from utils.apps import get_available_apps, update_personas_async, sync_update_pe
 from utils.llm.conversation_processing import get_transcript_structure, \
     get_app_result, should_discard_conversation, select_best_app_for_conversation, \
     get_reprocess_transcript_structure
+from utils.calendar import calendar_service
 from utils.llm.memories import extract_memories_from_text, new_memories_extractor
 from utils.llm.external_integrations import summarize_experience_text
 from utils.llm.trends import trends_extractor
@@ -301,6 +302,8 @@ def process_conversation(
         threading.Thread(target=conversation_created_webhook, args=(uid, conversation,)).start()
         # Update persona prompts with new conversation
         threading.Thread(target=update_personas_async, args=(uid,)).start()
+        # Create calendar event from conversation
+        threading.Thread(target=_create_calendar_event_from_conversation, args=(uid, conversation)).start()
 
     # TODO: trigger external integrations here too
 
@@ -477,3 +480,24 @@ def retrieve_in_progress_conversation(uid):
     if not existing:
         existing = conversations_db.get_in_progress_conversation(uid)
     return existing
+
+
+def _create_calendar_event_from_conversation(uid: str, conversation: Conversation):
+    """Create calendar event from conversation if user has calendar integration enabled."""
+    try:
+        # Skip if conversation should be discarded
+        if conversation.discarded:
+            return
+        
+        # Convert conversation to memory format expected by calendar service
+        memory_data = {
+            'uid': uid,
+            'structured': conversation.structured.dict() if conversation.structured else {},
+            'started_at': conversation.started_at.isoformat() if conversation.started_at else None,
+            'finished_at': conversation.finished_at.isoformat() if conversation.finished_at else None,
+            'transcript': conversation.get_transcript()
+        }
+        
+        calendar_service.create_memory_event(uid, memory_data)
+    except Exception as e:
+        print(f"Error creating calendar event from conversation: {e}")
