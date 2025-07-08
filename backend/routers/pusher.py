@@ -1,6 +1,8 @@
 import struct
 import asyncio
 import json
+import time
+from collections import deque
 
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
@@ -13,6 +15,73 @@ from utils.webhooks import send_audio_bytes_developer_webhook, realtime_transcri
 
 router = APIRouter()
 
+# Audio buffer management class
+class AudioBufferManager:
+    def __init__(self, max_buffer_size: int = 1024 * 1024):  # 1MB default
+        self.max_buffer_size = max_buffer_size
+        self.buffer = bytearray()
+        self.timestamps = deque()  # Track when data was added
+        self.overflow_count = 0
+        self.last_cleanup_time = time.time()
+    
+    def add_data(self, data: bytes) -> bool:
+        """Add data to buffer, return True if successful, False if overflow"""
+        current_time = time.time()
+        
+        # Check if adding this data would cause overflow
+        if len(self.buffer) + len(data) > self.max_buffer_size:
+            self.overflow_count += 1
+            # Remove oldest data to make space
+            self._cleanup_old_data()
+            
+            # If still too full, drop the new data
+            if len(self.buffer) + len(data) > self.max_buffer_size:
+                return False
+        
+        self.buffer.extend(data)
+        self.timestamps.append(current_time)
+        return True
+    
+    def get_data(self, max_bytes: int) -> bytes:
+        """Get up to max_bytes from buffer"""
+        if len(self.buffer) == 0:
+            return b''
+        
+        data_to_return = self.buffer[:max_bytes]
+        self.buffer = self.buffer[max_bytes:]
+        
+        # Remove corresponding timestamps
+        for _ in range(len(data_to_return)):
+            if self.timestamps:
+                self.timestamps.popleft()
+        
+        return data_to_return
+    
+    def clear(self):
+        """Clear all data from buffer"""
+        self.buffer.clear()
+        self.timestamps.clear()
+    
+    def _cleanup_old_data(self):
+        """Remove data older than 5 seconds to prevent time slippage"""
+        current_time = time.time()
+        cutoff_time = current_time - 5.0  # 5 seconds
+        
+        # Remove old timestamps and corresponding data
+        while self.timestamps and self.timestamps[0] < cutoff_time:
+            self.timestamps.popleft()
+            if self.buffer:
+                self.buffer = self.buffer[1:]  # Remove one byte per timestamp
+    
+    def get_stats(self) -> dict:
+        """Get buffer statistics for debugging"""
+        return {
+            'buffer_size': len(self.buffer),
+            'max_buffer_size': self.max_buffer_size,
+            'overflow_count': self.overflow_count,
+            'oldest_timestamp': self.timestamps[0] if self.timestamps else None,
+            'newest_timestamp': self.timestamps[-1] if self.timestamps else None
+        }
 
 async def _websocket_util_trigger(
         websocket: WebSocket, uid: str, sample_rate: int = 8000,
@@ -36,13 +105,14 @@ async def _websocket_util_trigger(
     audio_bytes_trigger_delay_seconds = 5
     has_audio_apps_enabled = is_audio_bytes_app_enabled(uid)
 
+    # Initialize audio buffer managers
+    audio_buffer_manager = AudioBufferManager(max_buffer_size=sample_rate * 10)  # 10 seconds of audio
+    trigger_buffer_manager = AudioBufferManager(max_buffer_size=sample_rate * 10)
+
     # task
     async def receive_tasks():
         nonlocal websocket_active
         nonlocal websocket_close_code
-
-        audiobuffer = bytearray()
-        trigger_audiobuffer = bytearray()
 
         try:
             while websocket_active:
@@ -60,18 +130,28 @@ async def _websocket_util_trigger(
 
                 # Audio bytes
                 if header_type == 101:
-                    audiobuffer.extend(data[4:])
-                    trigger_audiobuffer.extend(data[4:])
-                    if has_audio_apps_enabled and len(
-                            trigger_audiobuffer) > sample_rate * audio_bytes_trigger_delay_seconds * 2:
-                        asyncio.run_coroutine_threadsafe(
-                            trigger_realtime_audio_bytes(uid, sample_rate, trigger_audiobuffer.copy()), loop)
-                        trigger_audiobuffer = bytearray()
-                    if audio_bytes_webhook_delay_seconds and len(
-                            audiobuffer) > sample_rate * audio_bytes_webhook_delay_seconds * 2:
-                        asyncio.run_coroutine_threadsafe(
-                            send_audio_bytes_developer_webhook(uid, sample_rate, audiobuffer.copy()), loop)
-                        audiobuffer = bytearray()
+                    audio_data = data[4:]
+                    
+                    # Add to buffers with overflow protection
+                    audio_success = audio_buffer_manager.add_data(audio_data)
+                    trigger_success = trigger_buffer_manager.add_data(audio_data)
+                    
+                    if not audio_success or not trigger_success:
+                        print(f"Audio buffer overflow detected for uid {uid}. Audio: {audio_success}, Trigger: {trigger_success}")
+                    
+                    # Process trigger buffer
+                    if has_audio_apps_enabled:
+                        trigger_data = trigger_buffer_manager.get_data(sample_rate * audio_bytes_trigger_delay_seconds * 2)
+                        if trigger_data:
+                            asyncio.run_coroutine_threadsafe(
+                                trigger_realtime_audio_bytes(uid, sample_rate, trigger_data), loop)
+                    
+                    # Process webhook buffer
+                    if audio_bytes_webhook_delay_seconds:
+                        webhook_data = audio_buffer_manager.get_data(sample_rate * audio_bytes_webhook_delay_seconds * 2)
+                        if webhook_data:
+                            asyncio.run_coroutine_threadsafe(
+                                send_audio_bytes_developer_webhook(uid, sample_rate, webhook_data), loop)
                     continue
 
         except WebSocketDisconnect:

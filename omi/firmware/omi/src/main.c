@@ -24,6 +24,8 @@ uint32_t gatt_notify_count = 0;
 uint32_t total_mic_buffer_bytes = 0;
 uint32_t broadcast_audio_count = 0;
 uint32_t write_to_tx_queue_count = 0;
+uint32_t audio_processing_errors = 0;
+uint32_t consecutive_processing_errors = 0;
 
 static void codec_handler(uint8_t *data, size_t len)
 {
@@ -31,7 +33,18 @@ static void codec_handler(uint8_t *data, size_t len)
     int err = broadcast_audio_packets(data, len);
     if (err)
     {
-        LOG_ERR("Failed to broadcast audio packets: %d", err);
+        audio_processing_errors++;
+        consecutive_processing_errors++;
+        LOG_ERR("Failed to broadcast audio packets: %d (total errors: %d, consecutive: %d)", err, audio_processing_errors, consecutive_processing_errors);
+        
+        // If we have too many consecutive errors, try to reset the audio pipeline
+        if (consecutive_processing_errors > 10) {
+            LOG_ERR("Too many consecutive audio processing errors, resetting pipeline");
+            // TODO: Implement audio pipeline reset
+            consecutive_processing_errors = 0;
+        }
+    } else {
+        consecutive_processing_errors = 0;
     }
 }
 
@@ -40,10 +53,27 @@ static void mic_handler(int16_t *buffer)
     // Track total bytes processed (each sample is 2 bytes)
     total_mic_buffer_bytes += 1;
 
+    // Validate buffer before processing
+    if (buffer == NULL) {
+        LOG_ERR("Received NULL buffer in mic_handler");
+        return;
+    }
+
     int err = codec_receive_pcm(buffer, MIC_BUFFER_SAMPLES);
     if (err)
     {
-        LOG_ERR("Failed to process PCM data: %d", err);
+        audio_processing_errors++;
+        consecutive_processing_errors++;
+        LOG_ERR("Failed to process PCM data: %d (total errors: %d, consecutive: %d)", err, audio_processing_errors, consecutive_processing_errors);
+        
+        // If we have too many consecutive errors, try to reset the audio pipeline
+        if (consecutive_processing_errors > 10) {
+            LOG_ERR("Too many consecutive PCM processing errors, resetting pipeline");
+            // TODO: Implement audio pipeline reset
+            consecutive_processing_errors = 0;
+        }
+    } else {
+        consecutive_processing_errors = 0;
     }
 }
 
@@ -239,8 +269,8 @@ int main(void)
 
     while (1) {
         // Log total mic buffer bytes processed, GATT notify count, broadcast count, and write_to_tx_queue count
-        LOG_INF("Total mic buffer bytes: %u, GATT notify count: %u, Broadcast count: %u, TX queue writes: %u",
-                total_mic_buffer_bytes, gatt_notify_count, broadcast_audio_count, write_to_tx_queue_count);
+        LOG_INF("Total mic buffer bytes: %u, GATT notify count: %u, Broadcast count: %u, TX queue writes: %u, Audio errors: %u",
+                total_mic_buffer_bytes, gatt_notify_count, broadcast_audio_count, write_to_tx_queue_count, audio_processing_errors);
 
         // Update LED state based on connection and charging status
         set_led_state();
