@@ -17,6 +17,12 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     private var scStreamSourceFormat: AVAudioFormat?
     private var systemAudioConverter: AVAudioConverter?
     
+    // Audio mixing properties
+    private let audioProcessingQueue = DispatchQueue(label: "com.friend.audiomixer", qos: .userInitiated)
+    private var micAudioQueue = [AVAudioPCMBuffer]()
+    private var systemAudioQueue = [AVAudioPCMBuffer]()
+    private var audioMixTimer: Timer?
+    
     // SCStream properties
     private var availableContent: SCShareableContent?
     private var filter: SCContentFilter?
@@ -138,37 +144,21 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             }
             
             if status == .haveData && outputPCMBuffer.frameLength > 0 {
-                if finalOutputFormat.commonFormat == .pcmFormatInt16 && finalOutputFormat.isInterleaved {
-                    let bytesPerFrame = Int(finalOutputFormat.streamDescription.pointee.mBytesPerFrame)
-                    let totalFrames = Int(outputPCMBuffer.frameLength)
-                    
-                    guard let int16DataPtr = outputPCMBuffer.int16ChannelData?[0] else { return }
-                    
-                    let desiredChunkSizeInFrames = 320
-                    
-                    var framesProcessed = 0
-                    while framesProcessed < totalFrames {
-                        let framesRemaining = totalFrames - framesProcessed
-                        let framesInThisChunk = min(desiredChunkSizeInFrames, framesRemaining)
-                        let bytesInThisChunk = framesInThisChunk * bytesPerFrame
-                        
-                        if bytesInThisChunk > 0 {
-                            let dataChunk = Data(bytes: int16DataPtr.advanced(by: framesProcessed), count: bytesInThisChunk)
-                            print("DEBUG: Mic audio frame size: \(dataChunk.count) bytes")
-                            if self.audioFormatSentToFlutter && self.isFlutterEngineActive {
-                                self.screenCaptureChannel?.invokeMethod("audioFrame", arguments: dataChunk)
-                            } else {
-                                print("WARNING: Audio data NOT sent to Flutter - Format sent: \(self.audioFormatSentToFlutter), Engine active: \(self.isFlutterEngineActive)")
-                            }
-                        }
-                        
-                        framesProcessed += framesInThisChunk
-                    }
+                print("DEBUG: Mic audio buffer captured. Adding to queue. Frame length: \(outputPCMBuffer.frameLength)")
+                self.audioProcessingQueue.async {
+                    self.micAudioQueue.append(outputPCMBuffer)
                 }
             }
         }
 
         audioEngine?.prepare()
+        
+        // Start the audio mixing timer on the main thread to ensure it fires correctly
+        DispatchQueue.main.async {
+            self.audioMixTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+                self?.processAudioQueues()
+            }
+        }
         
         // Send format details to Flutter
         let isBigEndian = (strongOutputAudioFormat.streamDescription.pointee.mFormatFlags & kAudioFormatFlagIsBigEndian) != 0
@@ -204,6 +194,14 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     
     func stopCapture() {
         _isRecording = false
+
+        // Stop the timer and clear queues
+        audioMixTimer?.invalidate()
+        audioMixTimer = nil
+        audioProcessingQueue.async {
+            self.micAudioQueue.removeAll()
+            self.systemAudioQueue.removeAll()
+        }
 
         // Stop SCStream first
         if stream != nil {
@@ -406,6 +404,132 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         }
     }
     
+    private func concatenateBuffers(buffers: [AVAudioPCMBuffer]) -> AVAudioPCMBuffer? {
+        guard !buffers.isEmpty else { return nil }
+        
+        let outputFormat = buffers.first!.format
+        let totalFrames = buffers.reduce(0) { AVAudioFrameCount($0) + $1.frameLength }
+        
+        guard let concatenatedBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: totalFrames) else {
+            print("ERROR: Failed to create concatenated buffer.")
+            return nil
+        }
+        
+        var offset: AVAudioFrameCount = 0
+        for buffer in buffers {
+            guard let sourcePtr = buffer.int16ChannelData?[0],
+                  let destPtr = concatenatedBuffer.int16ChannelData?[0] else {
+                print("ERROR: Could not get int16 channel data for concatenation.")
+                return nil
+            }
+            
+            let bytesToCopy = Int(buffer.frameLength) * Int(outputFormat.streamDescription.pointee.mBytesPerFrame)
+            let destOffsetInSamples = Int(offset) * Int(outputFormat.channelCount)
+            
+            memcpy(destPtr.advanced(by: destOffsetInSamples), sourcePtr, bytesToCopy)
+            
+            offset += buffer.frameLength
+        }
+        
+        concatenatedBuffer.frameLength = totalFrames
+        return concatenatedBuffer
+    }
+    
+    private func processAudioQueues() {
+        audioProcessingQueue.async { [weak self] in
+            guard let self = self else { return }
+            
+            // Test function: only process and send system audio as mono.
+            let systemBuffers = self.systemAudioQueue
+            self.systemAudioQueue.removeAll()
+            
+            if systemBuffers.isEmpty {
+                return // Nothing to process.
+            }
+            
+            print("DEBUG: [TEST] Processing system audio. Buffers: \(systemBuffers.count)")
+            
+            // Concatenate all buffers from system audio into a single large buffer.
+            if let systemBuffer = self.concatenateBuffers(buffers: systemBuffers) {
+                // In this test, the output format is mono, so we send the system buffer directly.
+                self.sendAudioBufferToFlutter(systemBuffer)
+            }
+        }
+    }
+    
+    private func mixAudioBuffers(micBuffer: AVAudioPCMBuffer?, systemBuffer: AVAudioPCMBuffer?) -> AVAudioPCMBuffer? {
+        let micFrames = micBuffer?.frameLength ?? 0
+        let systemFrames = systemBuffer?.frameLength ?? 0
+        let totalFrames = max(micFrames, systemFrames)
+        
+        if totalFrames == 0 { return nil }
+        
+        print("DEBUG: Merging audio into stereo. Total frames: \(totalFrames). Mic frames: \(micFrames), System frames: \(systemFrames).")
+
+        // outputFormat is stereo (2 channels)
+        guard let outputFormat = self.outputAudioFormat,
+              let stereoBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: totalFrames) else {
+            print("ERROR: Failed to create stereo buffer.")
+            return nil
+        }
+        
+        stereoBuffer.frameLength = totalFrames
+        
+        let micInt16 = micBuffer?.int16ChannelData?[0]
+        let systemInt16 = systemBuffer?.int16ChannelData?[0]
+        
+        guard let stereoInt16 = stereoBuffer.int16ChannelData?[0] else {
+            print("ERROR: Failed to get int16 channel data for stereo buffer.")
+            return nil
+        }
+        
+        // Interleave mic (L) and system (R) audio into the stereo buffer.
+        // If one source is shorter or nil, its channel is filled with silence (0).
+        for i in 0..<Int(totalFrames) {
+            let micSample = (i < micFrames) ? micInt16?[i] ?? 0 : 0
+            let systemSample = (i < systemFrames) ? systemInt16?[i] ?? 0 : 0
+            
+            stereoInt16[i * 2] = micSample       // Left channel
+            stereoInt16[i * 2 + 1] = systemSample // Right channel
+        }
+        
+        return stereoBuffer
+    }
+    
+    private func sendAudioBufferToFlutter(_ buffer: AVAudioPCMBuffer) {
+        guard let finalOutputFormat = self.outputAudioFormat,
+              finalOutputFormat.commonFormat == .pcmFormatInt16,
+              finalOutputFormat.isInterleaved else {
+            print("ERROR: Output format is not Int16 interleaved, cannot send to Flutter.")
+            return
+        }
+        
+        let bytesPerFrame = Int(finalOutputFormat.streamDescription.pointee.mBytesPerFrame)
+        let totalFrames = Int(buffer.frameLength)
+        
+        guard let int16DataPtr = buffer.int16ChannelData?[0] else { return }
+        
+        // The desired chunk size matches what the backend expects for streaming transcription.
+        let desiredChunkSizeInFrames = 16000
+        
+        var framesProcessed = 0
+        while framesProcessed < totalFrames {
+            let framesRemaining = totalFrames - framesProcessed
+            let framesInThisChunk = min(desiredChunkSizeInFrames, framesRemaining)
+            let bytesInThisChunk = framesInThisChunk * bytesPerFrame
+            
+            if bytesInThisChunk > 0 {
+                let dataChunk = Data(bytes: int16DataPtr.advanced(by: framesProcessed), count: bytesInThisChunk)
+                print("DEBUG: Sending \(dataChunk.count) bytes of mixed audio to Flutter.")
+                if self.audioFormatSentToFlutter && self.isFlutterEngineActive {
+                    self.screenCaptureChannel?.invokeMethod("audioFrame", arguments: dataChunk)
+                }
+            }
+            
+            framesProcessed += framesInThisChunk
+        }
+    }
+    
     private func updateAudioSettings(sampleRate: Double, channels: AVAudioChannelCount) {
         audioSettings = [AVSampleRateKey: sampleRate, AVNumberOfChannelsKey: channels]
     }
@@ -413,68 +537,58 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     // MARK: - SCStream Delegate Methods
     
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
-        guard sampleBuffer.isValid, type == .audio else { 
-            print("SCStream: Invalid sample buffer or non-audio type: \(type)")
-            return 
-        }
+        guard sampleBuffer.isValid, type == .audio else { return }
         
         guard let pcmBufferFromSCStream = sampleBuffer.asPCMBuffer else {
             print("ERROR: SCStream: Failed to get PCM buffer from CMSampleBuffer")
             return
         }
         
+        // Immediately create a deep copy to ensure memory stability, especially for deinterleaved formats.
+        guard let stablePcmBuffer = pcmBufferFromSCStream.deepCopy() else {
+            print("ERROR: Failed to create a stable deep copy of the system audio buffer.")
+            return
+        }
+        
+        // Lazily create the converter on the first buffer received.
         if scStreamSourceFormat == nil {
-            scStreamSourceFormat = pcmBufferFromSCStream.format
+            scStreamSourceFormat = stablePcmBuffer.format
             print("DEBUG: SCStream actual source format: \(scStreamSourceFormat!)")
             
-            // Set up converter from SCStream format to final output format if needed
-            if scStreamSourceFormat != self.outputAudioFormat {
-                systemAudioConverter = AVAudioConverter(from: scStreamSourceFormat!, to: self.outputAudioFormat!)
-                systemAudioConverter?.sampleRateConverterAlgorithm = AVSampleRateConverterAlgorithm_Mastering
-                systemAudioConverter?.sampleRateConverterQuality = .max
-            }
+            // Always create the converter. It will handle identity conversion if formats match.
+            systemAudioConverter = AVAudioConverter(from: scStreamSourceFormat!, to: self.outputAudioFormat!)
+            systemAudioConverter?.sampleRateConverterAlgorithm = AVSampleRateConverterAlgorithm_Mastering
+            systemAudioConverter?.sampleRateConverterQuality = .max
+            systemAudioConverter?.dither = true
         }
         
-        var bufferToSend: AVAudioPCMBuffer = pcmBufferFromSCStream
-        
-        // Convert format if needed using AVAudioConverter
-        if let converter = systemAudioConverter {
-            let outputFrameCapacity = AVAudioFrameCount(Double(pcmBufferFromSCStream.frameLength) * (self.outputAudioFormat!.sampleRate / scStreamSourceFormat!.sampleRate))
-            
-            guard let convertedBuffer = AVAudioPCMBuffer(pcmFormat: self.outputAudioFormat!, frameCapacity: outputFrameCapacity) else {
-                print("ERROR: Failed to create converted buffer for SCStream audio")
-                return
-            }
-            
-            var error: NSError?
-            let status = converter.convert(to: convertedBuffer, error: &error) { inNumPackets, outStatus in
-                outStatus.pointee = .haveData
-                return pcmBufferFromSCStream
-            }
-            
-            if status == .error || error != nil {
-                print("ERROR: SCStream audio conversion failed: \(error?.localizedDescription ?? "Unknown error")")
-                return
-            }
-            
-            if status == .haveData && convertedBuffer.frameLength > 0 {
-                bufferToSend = convertedBuffer
-            } else {
-                print("WARNING: SCStream converter produced no data")
-                return
-            }
+        // Always use the converter path, which now handles all cases (conversion or identity copy).
+        guard let converter = self.systemAudioConverter, let finalOutputFormat = self.outputAudioFormat else {
+            print("ERROR: System audio converter or output format not available.")
+            return
         }
         
-        if let finalOutputFormat = self.outputAudioFormat, finalOutputFormat.commonFormat == .pcmFormatInt16 && finalOutputFormat.isInterleaved {
-            let dataSize = Int(bufferToSend.frameLength) * Int(finalOutputFormat.streamDescription.pointee.mBytesPerFrame)
-            if dataSize > 0, let int16Data = bufferToSend.int16ChannelData?[0] {
-                let audioData = Data(bytes: int16Data, count: dataSize)
-                //print("DEBUG: System audio frame size: \(audioData.count) bytes")
-                //if self.audioFormatSentToFlutter && self.isFlutterEngineActive {
-                //    self.screenCaptureChannel?.invokeMethod("systemAudioFrame", arguments: audioData)
-                //}
-            } else if dataSize == 0 && bufferToSend.frameLength > 0 {
-                print("WARNING: System audio converter output dataSize is 0 but frameLength > 0. Format: \(finalOutputFormat)")
+        let outputBufferFrameCapacity = AVAudioFrameCount(Double(stablePcmBuffer.frameLength) * (finalOutputFormat.sampleRate / stablePcmBuffer.format.sampleRate))
+        guard let outputPCMBuffer = AVAudioPCMBuffer(pcmFormat: finalOutputFormat, frameCapacity: outputBufferFrameCapacity) else {
+            print("ERROR: Failed to create output PCM buffer for system audio converter.")
+            return
+        }
+        
+        var error: NSError?
+        let status = converter.convert(to: outputPCMBuffer, error: &error) { inNumPackets, outStatus in
+            outStatus.pointee = .haveData
+            return stablePcmBuffer // Use the stable, deep-copied buffer here.
+        }
+        
+        if status == .error || error != nil {
+            print("ERROR: SCStream audio conversion failed: \(error?.localizedDescription ?? "Unknown error")")
+            return
+        }
+        
+        if status == .haveData && outputPCMBuffer.frameLength > 0 {
+            print("DEBUG: System audio buffer captured (converted). Adding to queue. Frame length: \(outputPCMBuffer.frameLength)")
+            self.audioProcessingQueue.async {
+                self.systemAudioQueue.append(outputPCMBuffer)
             }
         }
     }
@@ -520,4 +634,35 @@ extension CMSampleBuffer {
             return AVAudioPCMBuffer(pcmFormat: format, bufferListNoCopy: audioBufferList.unsafePointer)
         }
     }
-} 
+}
+
+// MARK: - AVAudioPCMBuffer Extension
+extension AVAudioPCMBuffer {
+    func deepCopy() -> AVAudioPCMBuffer? {
+        guard let pcmCopy = AVAudioPCMBuffer(pcmFormat: self.format, frameCapacity: self.frameCapacity) else { return nil }
+        
+        pcmCopy.frameLength = self.frameLength
+        
+        let channelCount = Int(self.format.channelCount)
+        let frameLength = Int(self.frameLength)
+        
+        if format.commonFormat == .pcmFormatInt16 {
+            for i in 0..<channelCount {
+                if let source = self.int16ChannelData?[i], let destination = pcmCopy.int16ChannelData?[i] {
+                    destination.initialize(from: source, count: frameLength)
+                }
+            }
+        } else if format.commonFormat == .pcmFormatFloat32 {
+            for i in 0..<channelCount {
+                if let source = self.floatChannelData?[i], let destination = pcmCopy.floatChannelData?[i] {
+                    destination.initialize(from: source, count: frameLength)
+                }
+            }
+        } else {
+            print("ERROR: Deep copy not supported for this PCM format.")
+            return nil
+        }
+        
+        return pcmCopy
+    }
+}

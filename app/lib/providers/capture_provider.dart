@@ -56,6 +56,9 @@ class CaptureProvider extends ChangeNotifier
   List<MessageEvent> _transcriptionServiceStatuses = [];
   List<MessageEvent> get transcriptionServiceStatuses => _transcriptionServiceStatuses;
 
+  List<int> _systemAudioBuffer = [];
+  bool _systemAudioCaching = true;
+
   CaptureProvider() {
     _internetStatusListener = PureCore().internetConnection.onStatusChange.listen((InternetStatus status) {
       onInternetSatusChanged(status);
@@ -569,6 +572,13 @@ class CaptureProvider extends ChangeNotifier
 
     updateRecordingState(RecordingState.initialising);
 
+    _systemAudioBuffer = [];
+    _systemAudioCaching = true;
+    Future.delayed(const Duration(seconds: 3), () {
+      _systemAudioCaching = false;
+      _flushSystemAudioBuffer();
+    });
+
     try {
       await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
 
@@ -580,8 +590,9 @@ class CaptureProvider extends ChangeNotifier
         final int channels = ((format['channels'] ?? 1) as num).toInt();
         BleAudioCodec determinedCodec = BleAudioCodec.pcm16;
       }, onByteReceived: (bytes) {
-        if (_socket?.state == SocketServiceState.connected) {
-          _socket?.send(bytes);
+        _systemAudioBuffer.addAll(bytes);
+        if (!_systemAudioCaching) {
+          _flushSystemAudioBuffer();
         }
       }, onRecording: () {
         recordingStarted = true;
@@ -804,6 +815,16 @@ class CaptureProvider extends ChangeNotifier
             updateRecordingState(RecordingState.stop);
           }
         }
+  }
+
+  void _flushSystemAudioBuffer() {
+    if (_socket?.state == SocketServiceState.connected) {
+      while (_systemAudioBuffer.length >= 320) {
+        final chunk = _systemAudioBuffer.sublist(0, 320);
+        _socket?.send(chunk);
+        _systemAudioBuffer.removeRange(0, 320);
+      }
+    }
   }
 
   Future<void> stopSystemAudioRecording() async {
