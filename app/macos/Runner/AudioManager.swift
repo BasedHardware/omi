@@ -696,6 +696,12 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
                 guard let self = self else { return }
 
                 let newDeviceIDs = self.getAudioDeviceIDs()
+                if self.knownDeviceIDs.isEmpty {
+                    self.knownDeviceIDs = newDeviceIDs
+                    print("DEBUG: Initial device list populated, not treating as a change.")
+                    return
+                }
+                
                 if newDeviceIDs != self.knownDeviceIDs {
                     self.knownDeviceIDs = newDeviceIDs
                     
