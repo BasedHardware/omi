@@ -43,6 +43,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
 
     override init() {
         super.init()
+        setupDeviceListChangeObserver()
     }
     
     deinit {
@@ -70,7 +71,6 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     func startCapture() async throws {
         // Init engine
         audioEngine = AVAudioEngine()
-        setupDeviceListChangeObserver()
         
         // Set initial speaker status
         self.isCurrentlyUsingSpeakers = self.isUsingSpeakers()
@@ -217,7 +217,6 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         }
         
         audioEngine?.stop()
-        removeDeviceListChangeObserver()
 
         micNode?.removeTap(onBus: 0)
         
@@ -299,30 +298,6 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         if isFlutterEngineActive {
             self.screenCaptureChannel?.invokeMethod("microphoneDeviceChanged", arguments: nil)
             print("DEBUG: Notified Flutter of microphone device change.")
-        }
-
-        // If we were recording, we need to restart the capture session to adapt to the new device.
-        if isRecording() {
-            print("DEBUG: Device change detected while recording. Restarting capture session...")
-            
-            // Stop the current capture completely. This will also notify Flutter that the stream ended.
-            stopCapture()
-            
-            // Give a brief moment for resources to release before restarting.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                Task { [weak self] in
-                    guard let self = self else { return }
-                    do {
-                        try await self.startCapture()
-                        print("DEBUG: Capture restarted successfully after device change.")
-                    } catch {
-                        print("ERROR: Failed to restart capture after device change: \(error.localizedDescription)")
-                        if self.isFlutterEngineActive {
-                            self.screenCaptureChannel?.invokeMethod("captureError", arguments: "Failed to restart capture: \(error.localizedDescription)")
-                        }
-                    }
-                }
-            }
         }
     }
     
