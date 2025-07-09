@@ -294,10 +294,6 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         //    stopCapture()
         //}
 
-        
-
-        print(isRecording())
-
         if isFlutterEngineActive {
             self.screenCaptureChannel?.invokeMethod("microphoneDeviceChanged", arguments: nil)
             print("DEBUG: Notified Flutter of microphone device change.")
