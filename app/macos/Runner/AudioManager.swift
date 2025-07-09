@@ -22,6 +22,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     private var micAudioQueue = [AVAudioPCMBuffer]()
     private var systemAudioQueue = [AVAudioPCMBuffer]()
     private var audioMixTimer: Timer?
+    private var deviceListChangedListener: AudioObjectPropertyListenerBlock?
     
     // SCStream properties
     private var availableContent: SCShareableContent?
@@ -70,7 +71,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     func startCapture() async throws {
         // Init engine
         audioEngine = AVAudioEngine()
-        setupAudioRouteChangeObserver()
+        setupDeviceListChangeObserver()
 
         // Start sleep prevention first
         startSleepPrevention()
@@ -212,7 +213,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         }
         
         audioEngine?.stop()
-        NotificationCenter.default.removeObserver(self)
+        removeDeviceListChangeObserver()
 
         micNode?.removeTap(onBus: 0)
         
@@ -662,6 +663,52 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             self.screenCaptureChannel?.invokeMethod("captureError", arguments: "SCStream stopped: \(error.localizedDescription)")
         }
         self.stream = nil
+    }
+
+    private func setupDeviceListChangeObserver() {
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        deviceListChangedListener = { (inNumberAddresses, inAddresses) in
+            print("DEBUG: Audio device list changed.")
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                
+                // Handle device change logic
+                self.handleAudioEngineConfigurationChange()
+                
+                // Check speaker status and notify Flutter
+                let isUsingSpeakers = self.isUsingSpeakers()
+                print("DEBUG: Speaker status check on device change: \(isUsingSpeakers)")
+                self.screenCaptureChannel?.invokeMethod("speakerStatusChanged", arguments: ["isUsingSpeakers": isUsingSpeakers])
+            }
+        }
+
+        let systemObjectID = AudioObjectID(kAudioObjectSystemObject)
+        let status = AudioObjectAddPropertyListenerBlock(systemObjectID, &propertyAddress, nil, deviceListChangedListener!)
+        if status != noErr {
+            print("ERROR: Failed to add listener for audio device list changes: \(status)")
+        }
+    }
+
+    private func removeDeviceListChangeObserver() {
+        guard let listener = deviceListChangedListener else { return }
+
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        let systemObjectID = AudioObjectID(kAudioObjectSystemObject)
+        let status = AudioObjectRemovePropertyListenerBlock(systemObjectID, &propertyAddress, nil, listener)
+        if status != noErr {
+            print("ERROR: Failed to remove listener for audio device list changes: \(status)")
+        }
+        deviceListChangedListener = nil
     }
     
 }
