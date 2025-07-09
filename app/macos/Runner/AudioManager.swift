@@ -295,20 +295,35 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     @objc private func handleAudioEngineConfigurationChange() {
         print("DEBUG: Audio engine configuration changed. Possible device change.")
 
-        //// Force stop
-        //if isRecording() {
-        //    stopCapture()
-        //}
-
+        // Notify Flutter first, so it knows a change is happening.
         if isFlutterEngineActive {
             self.screenCaptureChannel?.invokeMethod("microphoneDeviceChanged", arguments: nil)
             print("DEBUG: Notified Flutter of microphone device change.")
         }
 
-        // The engine's configuration has changed. We must stop it and re-prepare it
-         // to force it to re-evaluate the new hardware's sample rate.
-         //audioEngine.stop()
-         //audioEngine.prepare()
+        // If we were recording, we need to restart the capture session to adapt to the new device.
+        if isRecording() {
+            print("DEBUG: Device change detected while recording. Restarting capture session...")
+            
+            // Stop the current capture completely. This will also notify Flutter that the stream ended.
+            stopCapture()
+            
+            // Give a brief moment for resources to release before restarting.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                Task { [weak self] in
+                    guard let self = self else { return }
+                    do {
+                        try await self.startCapture()
+                        print("DEBUG: Capture restarted successfully after device change.")
+                    } catch {
+                        print("ERROR: Failed to restart capture after device change: \(error.localizedDescription)")
+                        if self.isFlutterEngineActive {
+                            self.screenCaptureChannel?.invokeMethod("captureError", arguments: "Failed to restart capture: \(error.localizedDescription)")
+                        }
+                    }
+                }
+            }
+        }
     }
     
     private func prepSCStreamFilter() {
