@@ -518,7 +518,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         guard let int16DataPtr = buffer.int16ChannelData?[0] else { return }
         
         // The desired chunk size matches what the backend expects for streaming transcription.
-        let desiredChunkSizeInFrames = 160
+        let desiredChunkSizeInFrames = 16000
         
         var framesProcessed = 0
         while framesProcessed < totalFrames {
