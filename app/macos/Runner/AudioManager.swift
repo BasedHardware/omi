@@ -23,6 +23,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     private var systemAudioQueue = [AVAudioPCMBuffer]()
     private var audioMixTimer: Timer?
     private var deviceListChangedListener: AudioObjectPropertyListenerBlock?
+    private var isCurrentlyUsingSpeakers: Bool = false
     
     // SCStream properties
     private var availableContent: SCShareableContent?
@@ -70,6 +71,10 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         // Init engine
         audioEngine = AVAudioEngine()
         setupDeviceListChangeObserver()
+        
+        // Set initial speaker status
+        self.isCurrentlyUsingSpeakers = self.isUsingSpeakers()
+        print("DEBUG: Initial speaker status: \(self.isCurrentlyUsingSpeakers)")
 
         // Start sleep prevention first
         startSleepPrevention()
@@ -193,6 +198,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     
     func stopCapture() {
         _isRecording = false
+        self.isCurrentlyUsingSpeakers = false
 
         // Stop the timer and clear queues
         audioMixTimer?.invalidate()
@@ -497,7 +503,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             var systemBuffer = self.concatenateBuffers(buffers: systemBuffers)
             
             // If speakers are the output, nullify the system audio buffer to prevent echo.
-            if self.isUsingSpeakers() {
+            if self.isCurrentlyUsingSpeakers {
                 print("DEBUG: Speakers detected, ignoring system audio to prevent echo.")
                 systemBuffer = nil
             }
@@ -674,10 +680,10 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
                 // Handle device change logic
                 self.handleAudioEngineConfigurationChange()
                 
-                // Check speaker status and notify Flutter
-                let isUsingSpeakers = self.isUsingSpeakers()
-                print("DEBUG: Speaker status check on device change: \(isUsingSpeakers)")
-                self.screenCaptureChannel?.invokeMethod("speakerStatusChanged", arguments: ["isUsingSpeakers": isUsingSpeakers])
+                // Update speaker status and notify Flutter
+                self.isCurrentlyUsingSpeakers = self.isUsingSpeakers()
+                print("DEBUG: Speaker status updated on device change: \(self.isCurrentlyUsingSpeakers)")
+                self.screenCaptureChannel?.invokeMethod("speakerStatusChanged", arguments: ["isUsingSpeakers": self.isCurrentlyUsingSpeakers])
             }
         }
 
