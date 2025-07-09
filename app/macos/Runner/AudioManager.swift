@@ -104,15 +104,6 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         }
         
         self.micNode = audioEngine?.inputNode
-        
-        // Enable Voice Processing to use the system's Acoustic Echo Cancellation (AEC).
-        do {
-            try self.micNode?.setVoiceProcessingEnabled(true)
-            print("DEBUG: Voice processing (AEC) has been enabled on the input node.")
-        } catch {
-            print("ERROR: Could not enable voice processing on input node: \(error.localizedDescription)")
-        }
-        
         self.micNodeFormat = self.micNode!.outputFormat(forBus: 0)
         
         // Setup final converter: micNodeFormat -> outputAudioFormat (for Flutter)
@@ -466,7 +457,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             let systemBuffer = self.concatenateBuffers(buffers: systemBuffers)
             
             // Mix the two large buffers. This function now handles nil inputs.
-            if let mixedBuffer = self.mixAudioBuffers(micBuffer: micBuffer, systemBuffer: systemBuffer) {
+            if let mixedBuffer = self.mixAudioBuffers(micBuffer: micBuffer, systemBuffer: nil) {
                 self.sendAudioBufferToFlutter(mixedBuffer)
             }
         }
