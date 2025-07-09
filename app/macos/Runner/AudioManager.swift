@@ -702,7 +702,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
                     return
                 }
                 
-                if newDeviceIDs != self.knownDeviceIDs {
+                if Set(newDeviceIDs) != Set(self.knownDeviceIDs) {
                     self.knownDeviceIDs = newDeviceIDs
                     
                     // Handle device change logic
