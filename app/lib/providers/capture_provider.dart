@@ -839,8 +839,6 @@ class CaptureProvider extends ChangeNotifier
     if (!PlatformService.isDesktop) return;
     ServiceManager.instance().systemAudio.stop();
     _isPaused = true; // Set paused state
-    await _socket?.stop(reason: 'pause system audio recording from Flutter');
-    await _cleanupCurrentState();
     notifyListeners();
   }
 
