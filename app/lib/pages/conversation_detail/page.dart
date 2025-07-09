@@ -14,7 +14,9 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
+import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/expandable_text.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/photos_grid.dart';
 import 'package:omi/widgets/transcript.dart';
@@ -73,8 +75,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
       await provider.initConversation();
       if (provider.conversation.appResults.isEmpty) {
-        await Provider.of<ConversationProvider>(context, listen: false)
-            .updateSearchedConvoDetails(provider.conversation.id, provider.selectedDate, provider.conversationIdx);
+        await Provider.of<ConversationProvider>(context, listen: false).updateSearchedConvoDetails(provider.conversation.id, provider.selectedDate, provider.conversationIdx);
         provider.updateConversation(provider.conversationIdx, provider.selectedDate);
       }
     });
@@ -103,8 +104,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       child: MessageListener<ConversationDetailProvider>(
         showError: (error) {
           if (error == 'REPROCESS_FAILED') {
-            ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Error while processing conversation. Please try again later.')));
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error while processing conversation. Please try again later.')));
           }
         },
         showInfo: (info) {},
@@ -115,68 +115,140 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           appBar: AppBar(
             automaticallyImplyLeading: false,
             backgroundColor: Theme.of(context).colorScheme.primary,
-            title: Consumer<ConversationDetailProvider>(builder: (context, provider, child) {
-              return Row(
-                mainAxisSize: MainAxisSize.max,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  IconButton(
-                    onPressed: () {
-                      if (widget.isFromOnboarding) {
-                        SchedulerBinding.instance.addPostFrameCallback((_) {
-                          Navigator.pushAndRemoveUntil(context,
-                              MaterialPageRoute(builder: (context) => const HomePageWrapper()), (route) => false);
-                        });
-                      } else {
-                        Navigator.pop(context);
-                      }
-                    },
-                    icon: const Icon(Icons.arrow_back_rounded, size: 24.0),
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () {
-                        if (provider.titleController != null && provider.titleFocusNode != null) {
-                          provider.titleFocusNode!.requestFocus();
-                          // Select all text in the title field
-                          provider.titleController!.selection = TextSelection(
-                            baseOffset: 0,
-                            extentOffset: provider.titleController!.text.length,
-                          );
-                        }
-                      },
-                      child: Text(
-                        provider.structured.title,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 18),
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () async {
-                      await showModalBottomSheet(
-                        context: context,
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(16),
-                            topRight: Radius.circular(16),
-                          ),
+            leading: Container(
+              width: 36,
+              height: 36,
+              margin: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.grey.withOpacity(0.3),
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                onPressed: () {
+                  if (widget.isFromOnboarding) {
+                    SchedulerBinding.instance.addPostFrameCallback((_) {
+                      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const HomePageWrapper()), (route) => false);
+                    });
+                  } else {
+                    Navigator.pop(context);
+                  }
+                },
+                icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
+              ),
+            ),
+            actions: [
+              Consumer<ConversationDetailProvider>(builder: (context, provider, child) {
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Developer Tools button (first)
+                      Container(
+                        width: 36,
+                        height: 36,
+                        margin: const EdgeInsets.only(right: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.withOpacity(0.3),
+                          shape: BoxShape.circle,
                         ),
-                        builder: (context) {
-                          return const ShowOptionsBottomSheet();
-                        },
-                      ).whenComplete(() {
-                        provider.toggleShareOptionsInSheet(false);
-                        provider.toggleDevToolsInSheet(false);
-                      });
-                    },
-                    icon: const Icon(Icons.more_horiz),
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          onPressed: () {
+                            provider.toggleDevToolsInSheet(true);
+                            showModalBottomSheet(
+                              context: context,
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.only(
+                                  topLeft: Radius.circular(16),
+                                  topRight: Radius.circular(16),
+                                ),
+                              ),
+                              builder: (context) => const ShowOptionsBottomSheet(),
+                            ).whenComplete(() {
+                              provider.toggleShareOptionsInSheet(false);
+                              provider.toggleDevToolsInSheet(false);
+                            });
+                          },
+                          icon: const FaIcon(FontAwesomeIcons.code, size: 16.0, color: Colors.white),
+                        ),
+                      ),
+                      // Delete button (second)
+                      Container(
+                        width: 36,
+                        height: 36,
+                        margin: const EdgeInsets.only(right: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.withOpacity(0.3),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          onPressed: provider.loadingReprocessConversation
+                              ? null
+                              : () {
+                                  final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                                  if (connectivityProvider.isConnected) {
+                                    showDialog(
+                                      context: context,
+                                      builder: (c) => getDialog(
+                                        context,
+                                        () => Navigator.pop(context),
+                                        () {
+                                          context.read<ConversationProvider>().deleteConversation(provider.conversation, provider.conversationIdx);
+                                          Navigator.pop(context); // Close dialog
+                                          Navigator.pop(context, {'deleted': true}); // Close detail page
+                                        },
+                                        'Delete Conversation?',
+                                        'Are you sure you want to delete this conversation? This action cannot be undone.',
+                                        okButtonText: 'Confirm',
+                                      ),
+                                    );
+                                  } else {
+                                    showDialog(
+                                      context: context,
+                                      builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context), 'Unable to Delete Conversation', 'Please check your internet connection and try again.', singleButton: true, okButtonText: 'OK'),
+                                    );
+                                  }
+                                },
+                          icon: const FaIcon(FontAwesomeIcons.trash, size: 16.0, color: Colors.white),
+                        ),
+                      ),
+                      // Share button (third)
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.withOpacity(0.3),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          onPressed: () {
+                            provider.toggleShareOptionsInSheet(true);
+                            showModalBottomSheet(
+                              context: context,
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.only(
+                                  topLeft: Radius.circular(16),
+                                  topRight: Radius.circular(16),
+                                ),
+                              ),
+                              builder: (context) => const ShowOptionsBottomSheet(),
+                            ).whenComplete(() {
+                              provider.toggleShareOptionsInSheet(false);
+                              provider.toggleDevToolsInSheet(false);
+                            });
+                          },
+                          icon: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              );
-            }),
+                );
+              }),
+            ],
           ),
           // Removed floating action button as we now have the more button in the bottom bar
           body: Stack(
@@ -213,9 +285,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                     return ConversationBottomBar(
                       mode: ConversationBottomBarMode.detail,
                       selectedTab: selectedTab,
-                      hasSegments: conversation.transcriptSegments.isNotEmpty ||
-                          conversation.photos.isNotEmpty ||
-                          conversation.externalIntegration != null,
+                      hasSegments: conversation.transcriptSegments.isNotEmpty || conversation.photos.isNotEmpty || conversation.externalIntegration != null,
                       onTabSelected: (tab) {
                         int index;
                         switch (tab) {
@@ -362,8 +432,7 @@ class SummaryTab extends StatelessWidget {
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Selector<ConversationDetailProvider, Tuple3<bool, bool, Function(int)>>(
-        selector: (context, provider) =>
-            Tuple3(provider.conversation.discarded, provider.showRatingUI, provider.setConversationRating),
+        selector: (context, provider) => Tuple3(provider.conversation.discarded, provider.showRatingUI, provider.setConversationRating),
         builder: (context, data, child) {
           return Stack(
             children: [
@@ -517,9 +586,7 @@ class EditSegmentWidget extends StatelessWidget {
                         if (SharedPreferencesUtil().hasSpeakerProfile) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text(result
-                                  ? 'Segment assigned, and speech profile updated!'
-                                  : 'Segment assigned, but speech profile failed to update. Please try again later.'),
+                              content: Text(result ? 'Segment assigned, and speech profile updated!' : 'Segment assigned, but speech profile failed to update. Please try again later.'),
                             ),
                           );
                         }
@@ -537,17 +604,14 @@ class EditSegmentWidget extends StatelessWidget {
                         MixpanelManager().assignedSegment('User Person');
                         provider.conversation.transcriptSegments[segmentIdx].isUser = false;
                         provider.conversation.transcriptSegments[segmentIdx].personId = person.id;
-                        bool result = await assignConversationTranscriptSegment(provider.conversation.id, segmentIdx,
-                            personId: person.id);
+                        bool result = await assignConversationTranscriptSegment(provider.conversation.id, segmentIdx, personId: person.id);
                         // TODO: make this un-closable or in a way that they receive the result
                         try {
                           provider.toggleEditSegmentLoading(false);
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text(result
-                                  ? 'Segment assigned, and ${person.name}\'s speech profile updated!'
-                                  : 'Segment assigned, but speech profile failed to update. Please try again later.'),
+                              content: Text(result ? 'Segment assigned, and ${person.name}\'s speech profile updated!' : 'Segment assigned, but speech profile failed to update. Please try again later.'),
                             ),
                           );
                         } catch (e) {}
@@ -595,11 +659,7 @@ class ActionItemsTab extends StatelessWidget {
 
           return ListView(
             shrinkWrap: true,
-            children: [
-              const SizedBox(height: 24),
-              if (hasActionItems) const ActionItemsListWidget() else _buildEmptyState(context),
-              const SizedBox(height: 150)
-            ],
+            children: [const SizedBox(height: 24), if (hasActionItems) const ActionItemsListWidget() else _buildEmptyState(context), const SizedBox(height: 150)],
           );
         },
       ),

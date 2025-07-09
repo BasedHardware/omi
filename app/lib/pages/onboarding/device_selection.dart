@@ -22,7 +22,7 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
     _controller = AnimationController(
       duration: const Duration(seconds: 6),
       vsync: this,
-    )..repeat(reverse: true);
+    )..repeat();
   }
 
   @override
@@ -34,56 +34,69 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
   @override
   Widget build(BuildContext context) {
     return Material(
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Background image
-          Image.asset(
-            Assets.images.newBackground.path,
+      child: Container(
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/images/onboarding-bg-1.png'),
             fit: BoxFit.cover,
           ),
-          Scaffold(
-            backgroundColor: Colors.transparent,
-            body: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Spacer(flex: 6),
-                    Column(
-                      children: [
-                        const SizedBox(height: 10),
-                        Container(
-                          child: const Text(
-                            'omi',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 84,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.5,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
+        ),
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          body: Column(
+            children: [
+              // Background image area - takes remaining space
+              Expanded(
+                child: Container(), // Just takes up space for background image
+              ),
+
+              // Bottom drawer card - wraps content
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.fromLTRB(32, 48, 32, MediaQuery.of(context).padding.bottom + 8),
+                decoration: const BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(40),
+                    topRight: Radius.circular(40),
+                  ),
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Title and subtitle
+                      const Text(
+                        'Omi – Your AI Companion',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          height: 1.2,
+                          fontFamily: 'Manrope',
                         ),
-                        Text(
-                          'scale yourself',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.6),
-                            fontSize: 22,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          textAlign: TextAlign.center,
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Capture every moment. Get AI-powered\nsummaries. Never take notes again.',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.8),
+                          fontSize: 16,
+                          height: 1.4,
+                          fontFamily: 'Manrope',
                         ),
-                      ],
-                    ),
-                    const Spacer(flex: 5),
-                    const SizedBox(
-                      height: 30,
-                    ),
-                    Column(
-                      children: [
-                        ElevatedButton(
+                        textAlign: TextAlign.center,
+                      ),
+
+                      const SizedBox(height: 40),
+
+                      // Continue button
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: ElevatedButton(
                           onPressed: () async {
                             await Posthog().capture(
                               eventName: 'clicked_get_started',
@@ -91,49 +104,67 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                             routeToPage(context, const OnboardingWrapper());
                           },
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white.withOpacity(0.12),
-                            foregroundColor: Colors.white,
-                            minimumSize: const Size(double.infinity, 56),
+                            backgroundColor: Colors.white,
+                            foregroundColor: Colors.black,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(28),
                             ),
                           ),
-                          child: const Text(
-                            'Connect omi',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Get Started',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                  fontFamily: 'Manrope',
+                                ),
+                              ),
+                              SizedBox(width: 8),
+                              Icon(Icons.arrow_forward, size: 20),
+                            ],
                           ),
                         ),
-                        const SizedBox(
-                          height: 24,
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Privacy policy text
+                      RichText(
+                        textAlign: TextAlign.center,
+                        text: TextSpan(
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.6),
+                            fontSize: 12,
+                            fontFamily: 'Manrope',
+                          ),
+                          children: const [
+                            TextSpan(text: 'By continuing, you agree to our '),
+                            TextSpan(
+                              text: 'Privacy Policy',
+                              style: TextStyle(
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                            TextSpan(text: ' & '),
+                            TextSpan(
+                              text: 'Terms of Use',
+                              style: TextStyle(
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                            TextSpan(text: '.'),
+                          ],
                         ),
-                        // TextButton(
-                        //   onPressed: () async {
-                        //     Navigator.pushReplacement(
-                        //       context,
-                        //       MaterialPageRoute(builder: (context) => const SocialHandleScreen()),
-                        //     );
-                        //   },
-                        //   child: const Text(
-                        //     'I don\'t have omi',
-                        //     style: TextStyle(
-                        //       color: Colors.white,
-                        //       fontWeight: FontWeight.bold,
-                        //       fontSize: 16,
-                        //     ),
-                        //   ),
-                        // ),
-                      ],
-                    ),
-                    const Spacer(flex: 3),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

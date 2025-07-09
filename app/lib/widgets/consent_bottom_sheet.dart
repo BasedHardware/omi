@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:provider/provider.dart';
 
@@ -61,9 +62,9 @@ class ConsentBottomSheet extends StatelessWidget {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
-                        authMethod == 'apple' ? Icons.apple : Icons.g_mobiledata,
+                        authMethod == 'apple' ? FontAwesomeIcons.apple : FontAwesomeIcons.google,
                         color: authMethod == 'apple' ? Colors.black : Colors.white,
-                        size: 20,
+                        size: 18,
                       ),
                     ),
                     const SizedBox(width: 12),
