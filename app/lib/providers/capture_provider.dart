@@ -642,6 +642,9 @@ class CaptureProvider extends ChangeNotifier
           );
           notifyListeners();
         }
+      }, onMicrophoneDeviceChanged: () async {
+        debugPrint('Microphone device changed, pausing recording.');
+        await pauseSystemAudioRecording();
       });
 
       await Future.delayed(const Duration(milliseconds: 500));
@@ -700,6 +703,10 @@ class CaptureProvider extends ChangeNotifier
             },
             onSystemDidWake: (nativeIsRecording) async {
               debugPrint('Resync wake callback - Native recording: $nativeIsRecording');
+            },
+            onMicrophoneDeviceChanged: () async {
+              debugPrint('Microphone device changed, pausing recording.');
+              await pauseSystemAudioRecording();
             }
           );
           return;
@@ -781,6 +788,9 @@ class CaptureProvider extends ChangeNotifier
             _socket?.stop(reason: 'system audio stream ended from native');
           }, onError: (error) {
             debugPrint('Second attempt also failed: $error');
+          }, onMicrophoneDeviceChanged: () async {
+            debugPrint('Microphone device changed, pausing recording.');
+            await pauseSystemAudioRecording();
           });
 
           await Future.delayed(const Duration(milliseconds: 500));
