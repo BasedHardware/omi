@@ -385,6 +385,7 @@ abstract class ISystemAudioRecorderService {
     Function(bool wasRecording)? onScreenDidLock,
     Function()? onScreenDidUnlock,
     Function(String reason)? onDisplaySetupInvalid,
+    Function()? onMicrophoneDeviceChanged,
   });
   void stop();
   // TODO: Add status property
@@ -404,6 +405,7 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
   Function(bool wasRecording)? _onScreenDidLock;
   Function()? _onScreenDidUnlock;
   Function(String reason)? _onDisplaySetupInvalid;
+  Function()? _onMicrophoneDeviceChanged;
 
   // To keep track of recording state from Dart's perspective
   bool _isRecording = false;
@@ -461,6 +463,9 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
       case 'displaySetupInvalid':
         await _handleDisplaySetupInvalid(call.arguments);
         break;
+      case 'microphoneDeviceChanged':
+        await _handleMicrophoneDeviceChanged(call.arguments);
+        break;
       default:
         debugPrint('DesktopSystemAudioRecorderService: Unhandled method call: ${call.method}');
     }
@@ -477,6 +482,7 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
     _onScreenDidLock = null;
     _onScreenDidUnlock = null;
     _onDisplaySetupInvalid = null;
+    _onMicrophoneDeviceChanged = null;
   }
   
   // Sleep/wake event handlers
@@ -544,6 +550,12 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
     }
   }
 
+  Future<void> _handleMicrophoneDeviceChanged(dynamic arguments) async {
+    if (_onMicrophoneDeviceChanged != null) {
+      _onMicrophoneDeviceChanged!();
+    }
+  }
+
   @override
   Future<void> start({
     required Function(Uint8List bytes) onByteReceived,
@@ -556,6 +568,7 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
     Function(bool wasRecording)? onScreenDidLock,
     Function()? onScreenDidUnlock,
     Function(String reason)? onDisplaySetupInvalid,
+    Function()? onMicrophoneDeviceChanged,
   }) async {
     try {
       bool nativeIsRecording = await _channel.invokeMethod('isRecording') ?? false;
@@ -604,6 +617,7 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
     _onScreenDidLock = onScreenDidLock;
     _onScreenDidUnlock = onScreenDidUnlock;
     _onDisplaySetupInvalid = onDisplaySetupInvalid;
+    _onMicrophoneDeviceChanged = onMicrophoneDeviceChanged;
 
     try {
       await _channel.invokeMethod('start');
