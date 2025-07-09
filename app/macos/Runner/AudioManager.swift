@@ -24,6 +24,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     private var audioMixTimer: Timer?
     private var deviceListChangedListener: AudioObjectPropertyListenerBlock?
     private var isCurrentlyUsingSpeakers: Bool = false
+    private var knownDeviceIDs: [AudioDeviceID] = []
     
     // SCStream properties
     private var availableContent: SCShareableContent?
@@ -43,11 +44,9 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
 
     override init() {
         super.init()
-        setupDeviceListChangeObserver()
     }
     
     deinit {
-        removeDeviceListChangeObserver()
     }
     
     // MARK: - Public Interface
