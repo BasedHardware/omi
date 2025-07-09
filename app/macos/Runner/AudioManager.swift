@@ -104,6 +104,23 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         }
         
         self.micNode = audioEngine?.inputNode
+        
+        // Attempt to enable Acoustic Echo Cancellation (AEC) on the input node.
+        if let audioUnit = self.micNode?.audioUnit {
+            var DenoiseState: UInt32 = 0 // A value of 0 disables bypass, i.e., enables processing
+            let err = AudioUnitSetProperty(audioUnit,
+                                           kAUVoiceIOProperty_BypassVoiceProcessing,
+                                           kAudioUnitScope_Global,
+                                           0, // Input bus
+                                           &DenoiseState,
+                                           UInt32(MemoryLayout.size(ofValue: DenoiseState)))
+            if err == noErr {
+                print("DEBUG: Voice processing (AEC) has been enabled on the input node's AudioUnit.")
+            } else {
+                print("ERROR: Failed to enable voice processing property: \(err)")
+            }
+        }
+        
         self.micNodeFormat = self.micNode!.outputFormat(forBus: 0)
         
         // Setup final converter: micNodeFormat -> outputAudioFormat (for Flutter)
