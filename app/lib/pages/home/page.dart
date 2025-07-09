@@ -394,11 +394,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           ],
                         ),
                       ),
-                      Consumer<HomeProvider>(
-                        builder: (context, home, child) {
+                      Consumer2<HomeProvider, DeviceProvider>(
+                        builder: (context, home, deviceProvider, child) {
                           if (home.isChatFieldFocused || home.isConvoSearchFieldFocused || home.isAppsSearchFieldFocused || home.isMemoriesSearchFieldFocused) {
                             return const SizedBox.shrink();
                           } else {
+                            // Check if OMI device is connected
+                            bool isOmiDeviceConnected = deviceProvider.isConnected && deviceProvider.connectedDevice != null;
+
                             return Stack(
                               children: [
                                 // Bottom Navigation Bar
@@ -473,8 +476,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                             ),
                                           ),
                                         ),
-                                        // Center space for record button
-                                        const SizedBox(width: 80),
+                                        // Center space for record button - only when no OMI device is connected
+                                        if (!isOmiDeviceConnected) const SizedBox(width: 80),
                                         // Action Items tab
                                         Expanded(
                                           child: InkWell(
@@ -539,45 +542,46 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     ),
                                   ),
                                 ),
-                                // Central Record Button - Now positioned outside the navbar container
-                                Positioned(
-                                  left: MediaQuery.of(context).size.width / 2 - 40,
-                                  bottom: 40, // Position it to protrude above the taller navbar (90px height)
-                                  child: Consumer<CaptureProvider>(
-                                    builder: (context, captureProvider, child) {
-                                      bool isRecording = captureProvider.recordingState == RecordingState.record;
-                                      bool isInitializing = captureProvider.recordingState == RecordingState.initialising;
-                                      return GestureDetector(
-                                        onTap: () async {
-                                          if (isInitializing) return;
-                                          await _handleRecordButtonPress(context, captureProvider);
-                                        },
-                                        child: Container(
-                                          width: 80,
-                                          height: 80,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color: isRecording ? Colors.red : Colors.deepPurple,
-                                            border: Border.all(
-                                              color: Colors.black,
-                                              width: 5,
+                                // Central Record Button - Only show when no OMI device is connected
+                                if (!isOmiDeviceConnected)
+                                  Positioned(
+                                    left: MediaQuery.of(context).size.width / 2 - 40,
+                                    bottom: 40, // Position it to protrude above the taller navbar (90px height)
+                                    child: Consumer<CaptureProvider>(
+                                      builder: (context, captureProvider, child) {
+                                        bool isRecording = captureProvider.recordingState == RecordingState.record;
+                                        bool isInitializing = captureProvider.recordingState == RecordingState.initialising;
+                                        return GestureDetector(
+                                          onTap: () async {
+                                            if (isInitializing) return;
+                                            await _handleRecordButtonPress(context, captureProvider);
+                                          },
+                                          child: Container(
+                                            width: 80,
+                                            height: 80,
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color: isRecording ? Colors.red : Colors.deepPurple,
+                                              border: Border.all(
+                                                color: Colors.black,
+                                                width: 5,
+                                              ),
                                             ),
+                                            child: isInitializing
+                                                ? const CircularProgressIndicator(
+                                                    color: Colors.white,
+                                                    strokeWidth: 2,
+                                                  )
+                                                : Icon(
+                                                    isRecording ? FontAwesomeIcons.stop : FontAwesomeIcons.microphone,
+                                                    color: Colors.white,
+                                                    size: 24,
+                                                  ),
                                           ),
-                                          child: isInitializing
-                                              ? const CircularProgressIndicator(
-                                                  color: Colors.white,
-                                                  strokeWidth: 2,
-                                                )
-                                              : Icon(
-                                                  isRecording ? FontAwesomeIcons.stop : FontAwesomeIcons.microphone,
-                                                  color: Colors.white,
-                                                  size: 24,
-                                                ),
-                                        ),
-                                      );
-                                    },
+                                        );
+                                      },
+                                    ),
                                   ),
-                                ),
                               ],
                             );
                           }

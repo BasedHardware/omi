@@ -215,8 +215,7 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
           // Find the language name for the saved language code
           final homeProvider = Provider.of<HomeProvider>(context, listen: false);
           try {
-            selectedLanguageName =
-                homeProvider.availableLanguages.entries.firstWhere((entry) => entry.value == savedLanguage).key;
+            selectedLanguageName = homeProvider.availableLanguages.entries.firstWhere((entry) => entry.value == savedLanguage).key;
           } catch (e) {
             // If language not found in the map, just use the code
             selectedLanguageName = savedLanguage;
@@ -253,117 +252,187 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Text(
-            'Tell us your Primary Language',
-            style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-            textAlign: TextAlign.start,
-          ),
-          const SizedBox(height: 24),
-          InkWell(
-            onTap: () {
-              final homeProvider = Provider.of<HomeProvider>(context, listen: false);
-              _showLanguageSelector(context, homeProvider.availableLanguages);
-            },
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                border: GradientBoxBorder(
-                  gradient: const LinearGradient(
-                    colors: <Color>[
-                      Color.fromARGB(255, 202, 201, 201),
-                      Color.fromARGB(255, 159, 158, 158),
-                    ],
+    return Column(
+      children: [
+        // Background area with image
+        Expanded(
+          child: Stack(
+            children: [
+              Container(),
+              // Onboarding language image positioned 100px from top
+              Positioned(
+                top: 100,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Container(
+                    width: 400,
+                    height: 400,
+                    child: Image.asset(
+                      'assets/images/onboarding-language-grey.png',
+                      width: 200,
+                      height: 200,
+                      fit: BoxFit.contain,
+                    ),
                   ),
-                  width: 1,
                 ),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    selectedLanguageName ?? 'Select language',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey.shade200,
-                    ),
-                  ),
-                ],
-              ),
+            ],
+          ),
+        ),
+
+        // Bottom drawer card - wraps content
+        Container(
+          width: double.infinity,
+          padding: EdgeInsets.fromLTRB(32, 26, 32, MediaQuery.of(context).padding.bottom + 8),
+          decoration: const BoxDecoration(
+            color: Colors.black,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(40),
+              topRight: Radius.circular(40),
             ),
           ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    border: const GradientBoxBorder(
-                      gradient: LinearGradient(colors: [
-                        Color.fromARGB(127, 208, 208, 208),
-                        Color.fromARGB(127, 188, 99, 121),
-                        Color.fromARGB(127, 86, 101, 182),
-                        Color.fromARGB(127, 126, 190, 236)
-                      ]),
-                      width: 2,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 32),
+
+                // Main title
+                const Text(
+                  'What\'s your primary language?',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    height: 1.2,
+                    fontFamily: 'Manrope',
                   ),
-                  child: MaterialButton(
-                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                    onPressed: () async {
-                      if (selectedLanguage == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Please select your primary language')),
-                        );
-                      } else {
-                        FocusManager.instance.primaryFocus?.unfocus();
+                  textAlign: TextAlign.center,
+                ),
 
-                        // Update the user's primary language
-                        final homeProvider = Provider.of<HomeProvider>(context, listen: false);
-                        await homeProvider.updateUserPrimaryLanguage(selectedLanguage!);
+                const SizedBox(height: 8),
 
-                        widget.goNext();
-                      }
-                    },
+                // Subtitle
+                Text(
+                  'Set your language for sharper transcriptions\nand a personalized experience.',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.6),
+                    fontSize: 16,
+                    fontFamily: 'Manrope',
+                    height: 1.5,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+
+                const SizedBox(height: 40),
+
+                // Language selection field
+                InkWell(
+                  onTap: () {
+                    final homeProvider = Provider.of<HomeProvider>(context, listen: false);
+                    _showLanguageSelector(context, homeProvider.availableLanguages);
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey[900],
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.grey[700]!,
+                        width: 1,
+                      ),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 20,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          selectedLanguageName ?? 'Select your language',
+                          style: TextStyle(
+                            color: selectedLanguageName != null ? Colors.white : Colors.grey[500],
+                            fontSize: 18,
+                            fontFamily: 'Manrope',
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Icon(
+                          Icons.keyboard_arrow_down,
+                          color: Colors.grey[500],
+                          size: 24,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 32),
+
+                // Continue button
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton(
+                    onPressed: selectedLanguage == null
+                        ? null
+                        : () async {
+                            FocusManager.instance.primaryFocus?.unfocus();
+
+                            // Update the user's primary language
+                            final homeProvider = Provider.of<HomeProvider>(context, listen: false);
+                            await homeProvider.updateUserPrimaryLanguage(selectedLanguage!);
+
+                            widget.goNext();
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: selectedLanguage == null ? Colors.grey[800] : Colors.white,
+                      foregroundColor: selectedLanguage == null ? Colors.grey[600] : Colors.black,
+                      disabledBackgroundColor: Colors.grey[800],
+                      disabledForegroundColor: Colors.grey[600],
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                      elevation: 0,
+                    ),
                     child: const Text(
                       'Continue',
                       style: TextStyle(
-                        decoration: TextDecoration.none,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        fontFamily: 'Manrope',
                       ),
                     ),
                   ),
                 ),
-              )
-            ],
+
+                const SizedBox(height: 24),
+
+                // Need Help link
+                PlatformService.isIntercomSupported
+                    ? InkWell(
+                        onTap: () {
+                          Intercom.instance.displayMessenger();
+                        },
+                        child: Text(
+                          'Need Help?',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.6),
+                            fontSize: 14,
+                            fontFamily: 'Manrope',
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ],
+            ),
           ),
-          const SizedBox(
-            height: 12,
-          ),
-          PlatformService.isIntercomSupported
-              ? InkWell(
-                  child: Text(
-                    'Need Help?',
-                    style: TextStyle(
-                      color: Colors.grey.shade300,
-                      decoration: TextDecoration.underline,
-                    ),
-                  ),
-                  onTap: () {
-                    Intercom.instance.displayMessenger();
-                  },
-                )
-              : const SizedBox.shrink(),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

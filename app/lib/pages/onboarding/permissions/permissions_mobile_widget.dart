@@ -22,144 +22,200 @@ class _PermissionsMobileWidgetState extends State<PermissionsMobileWidget> {
   @override
   Widget build(BuildContext context) {
     return Consumer<OnboardingProvider>(builder: (context, provider, child) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Platform.isAndroid
-                ? CheckboxListTile(
-                    value: provider.hasBackgroundPermission,
-                    onChanged: (s) async {
-                      if (s != null) {
-                        if (s) {
-                          await provider.askForBackgroundPermissions();
-                        } else {
-                          provider.updateBackgroundPermission(false);
-                        }
-                      }
-                    },
-                    title: const Text(
-                      'Let Omi run in the background for better stability.',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+      return Column(
+        children: [
+          // Background area with image
+          Expanded(
+            child: Stack(
+              children: [
+                Container(),
+                // Onboarding permissions image positioned 100px from top
+                Positioned(
+                  top: 100,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Container(
+                      width: 400,
+                      height: 400,
+                      child: Image.asset(
+                        'assets/images/onboarding-permissions.png',
+                        width: 200,
+                        height: 200,
+                        fit: BoxFit.contain,
+                      ),
                     ),
-                    contentPadding: const EdgeInsets.only(left: 8),
-                    checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  )
-                : const SizedBox.shrink(),
-            CheckboxListTile(
-              value: provider.hasLocationPermission,
-              onChanged: (s) async {
-                if (s != null) {
-                  if (s) {
-                    var (serviceStatus, permissionStatus) = await provider.askForLocationPermissions();
-                    if (!serviceStatus) {
-                      showDialog(
-                        context: context,
-                        builder: (ctx) {
-                          return getDialog(
-                            context,
-                            () => Navigator.of(context).pop(),
-                            () => Navigator.of(context).pop(),
-                            'Location Service Disabled',
-                            'Location Service is Disabled. Please go to Settings > Privacy & Security > Location Services and enable it',
-                            singleButton: true,
-                          );
-                        },
-                      );
-                    } else {
-                      if (permissionStatus.isGranted) {
-                        await provider.alwaysAllowLocation();
-                        Permission.locationAlways.onDeniedCallback(() {
-                          showDialog(
-                            context: context,
-                            builder: (ctx) {
-                              return getDialog(
-                                context,
-                                () => Navigator.of(context).pop(),
-                                () => Navigator.of(context).pop(),
-                                'Background Location Access Denied',
-                                'Please go to device settings and set location permission to "Always Allow"',
-                                singleButton: true,
-                                okButtonText: 'Continue',
-                              );
-                            },
-                          );
-                        });
-                        Permission.locationAlways.onGrantedCallback(() {
-                          provider.updateLocationPermission(true);
-                        });
-                      } else {
-                        showDialog(
-                          context: context,
-                          builder: (ctx) {
-                            return getDialog(
-                              context,
-                              () => Navigator.of(context).pop(),
-                              () => Navigator.of(context).pop(),
-                              'Background Location Access Denied',
-                              'Please go to device settings and set location permission to "Always Allow"',
-                              singleButton: true,
-                              okButtonText: 'Continue',
-                            );
-                          },
-                        );
-                      }
-                    }
-                  } else {
-                    provider.updateLocationPermission(false);
-                  }
-                }
-              },
-              title: const Text(
-                'Enable background location for the full experience',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-              ),
-              contentPadding: const EdgeInsets.only(left: 8),
-              checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                ),
+              ],
             ),
-            CheckboxListTile(
-              value: provider.hasNotificationPermission,
-              onChanged: (s) async {
-                if (s != null) {
-                  if (s) {
-                    await provider.askForNotificationPermissions();
-                  } else {
-                    provider.updateNotificationPermission(false);
-                  }
-                }
-              },
-              title: const Text(
-                'Enable notifications to stay informed',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+          ),
+
+          // Bottom drawer card - wraps content
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.fromLTRB(32, 26, 32, MediaQuery.of(context).padding.bottom + 8),
+            decoration: const BoxDecoration(
+              color: Colors.black,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(40),
+                topRight: Radius.circular(40),
               ),
-              contentPadding: const EdgeInsets.only(left: 8),
-              checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             ),
-            const SizedBox(height: 16),
-            provider.isLoading
-                ? const CircularProgressIndicator(
-                    color: Colors.white,
-                  )
-                : Row(
+            child: SafeArea(
+              top: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 32),
+
+                  // Main title
+                  const Text(
+                    'Grant permissions',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      height: 1.2,
+                      fontFamily: 'Manrope',
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  // Subtitle
+                  Text(
+                    'Enable these permissions for the best\nOmi experience.',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.6),
+                      fontSize: 16,
+                      fontFamily: 'Manrope',
+                      height: 1.5,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+
+                  const SizedBox(height: 32),
+
+                  // Permissions checkboxes
+                  Column(
                     children: [
-                      Expanded(
-                        child: Container(
+                      // Background permission (Android only)
+                      if (Platform.isAndroid)
+                        _buildPermissionTile(
+                          value: provider.hasBackgroundPermission,
+                          title: 'Background activity',
+                          subtitle: 'Let Omi run in the background for better stability',
+                          onChanged: (s) async {
+                            if (s != null) {
+                              if (s) {
+                                await provider.askForBackgroundPermissions();
+                              } else {
+                                provider.updateBackgroundPermission(false);
+                              }
+                            }
+                          },
+                        ),
+
+                      // Location permission
+                      _buildPermissionTile(
+                        value: provider.hasLocationPermission,
+                        title: 'Location access',
+                        subtitle: 'Enable background location for the full experience',
+                        onChanged: (s) async {
+                          if (s != null) {
+                            if (s) {
+                              var (serviceStatus, permissionStatus) = await provider.askForLocationPermissions();
+                              if (!serviceStatus) {
+                                showDialog(
+                                  context: context,
+                                  builder: (ctx) {
+                                    return getDialog(
+                                      context,
+                                      () => Navigator.of(context).pop(),
+                                      () => Navigator.of(context).pop(),
+                                      'Location Service Disabled',
+                                      'Location Service is Disabled. Please go to Settings > Privacy & Security > Location Services and enable it',
+                                      singleButton: true,
+                                    );
+                                  },
+                                );
+                              } else {
+                                if (permissionStatus.isGranted) {
+                                  await provider.alwaysAllowLocation();
+                                  Permission.locationAlways.onDeniedCallback(() {
+                                    showDialog(
+                                      context: context,
+                                      builder: (ctx) {
+                                        return getDialog(
+                                          context,
+                                          () => Navigator.of(context).pop(),
+                                          () => Navigator.of(context).pop(),
+                                          'Background Location Access Denied',
+                                          'Please go to device settings and set location permission to "Always Allow"',
+                                          singleButton: true,
+                                          okButtonText: 'Continue',
+                                        );
+                                      },
+                                    );
+                                  });
+                                  Permission.locationAlways.onGrantedCallback(() {
+                                    provider.updateLocationPermission(true);
+                                  });
+                                } else {
+                                  showDialog(
+                                    context: context,
+                                    builder: (ctx) {
+                                      return getDialog(
+                                        context,
+                                        () => Navigator.of(context).pop(),
+                                        () => Navigator.of(context).pop(),
+                                        'Background Location Access Denied',
+                                        'Please go to device settings and set location permission to "Always Allow"',
+                                        singleButton: true,
+                                        okButtonText: 'Continue',
+                                      );
+                                    },
+                                  );
+                                }
+                              }
+                            } else {
+                              provider.updateLocationPermission(false);
+                            }
+                          }
+                        },
+                      ),
+
+                      // Notification permission
+                      _buildPermissionTile(
+                        value: provider.hasNotificationPermission,
+                        title: 'Notifications',
+                        subtitle: 'Enable notifications to stay informed',
+                        onChanged: (s) async {
+                          if (s != null) {
+                            if (s) {
+                              await provider.askForNotificationPermissions();
+                            } else {
+                              provider.updateNotificationPermission(false);
+                            }
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 32),
+
+                  // Continue button
+                  provider.isLoading
+                      ? const CircularProgressIndicator(
+                          color: Colors.white,
+                        )
+                      : SizedBox(
                           width: double.infinity,
-                          decoration: BoxDecoration(
-                            border: const GradientBoxBorder(
-                              gradient: LinearGradient(colors: [
-                                Color.fromARGB(127, 208, 208, 208),
-                                Color.fromARGB(127, 188, 99, 121),
-                                Color.fromARGB(127, 86, 101, 182),
-                                Color.fromARGB(127, 126, 190, 236)
-                              ]),
-                              width: 2,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: MaterialButton(
-                            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                          height: 56,
+                          child: ElevatedButton(
                             onPressed: () async {
                               provider.setLoading(true);
                               if (Platform.isAndroid) {
@@ -206,37 +262,116 @@ class _PermissionsMobileWidgetState extends State<PermissionsMobileWidget> {
                                 },
                               );
                             },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: Colors.black,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(28),
+                              ),
+                              elevation: 0,
+                            ),
                             child: const Text(
                               'Continue',
                               style: TextStyle(
-                                decoration: TextDecoration.none,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                fontFamily: 'Manrope',
                               ),
                             ),
                           ),
                         ),
-                      )
-                    ],
-                  ),
-            const SizedBox(
-              height: 12,
+
+                  const SizedBox(height: 24),
+
+                  // Need Help link
+                  PlatformService.isIntercomSupported
+                      ? InkWell(
+                          onTap: () {
+                            Intercom.instance.displayMessenger();
+                          },
+                          child: Text(
+                            'Need Help?',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.6),
+                              fontSize: 14,
+                              fontFamily: 'Manrope',
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ],
+              ),
             ),
-            PlatformService.isIntercomSupported
-                ? InkWell(
-                    child: Text(
-                      'Need Help?',
-                      style: TextStyle(
-                        color: Colors.grey.shade300,
-                        decoration: TextDecoration.underline,
-                      ),
-                    ),
-                    onTap: () {
-                      Intercom.instance.displayMessenger();
-                    },
-                  )
-                : const SizedBox.shrink(),
-          ],
-        ),
+          ),
+        ],
       );
     });
+  }
+
+  Widget _buildPermissionTile({
+    required bool value,
+    required String title,
+    required String subtitle,
+    required Function(bool?) onChanged,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.grey[900],
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.grey[700]!,
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'Manrope',
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.6),
+                    fontSize: 14,
+                    fontFamily: 'Manrope',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          Transform.scale(
+            scale: 1.2,
+            child: Checkbox(
+              value: value,
+              onChanged: onChanged,
+              activeColor: Colors.white,
+              checkColor: Colors.black,
+              side: BorderSide(
+                color: Colors.grey[500]!,
+                width: 2,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
