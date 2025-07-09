@@ -287,15 +287,6 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     
     // MARK: - Private Setup Methods
     
-    private func setupAudioRouteChangeObserver() {
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleAudioEngineConfigurationChange),
-            name: .AVAudioEngineConfigurationChange,
-            object: audioEngine!
-        )
-    }
-    
     @objc private func handleAudioEngineConfigurationChange() {
         print("DEBUG: Audio engine configuration changed. Possible device change.")
 
