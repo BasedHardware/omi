@@ -435,6 +435,60 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         return concatenatedBuffer
     }
     
+    private func isUsingSpeakers() -> Bool {
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        
+        var deviceID: AudioDeviceID = 0
+        var propertySize = UInt32(MemoryLayout<AudioDeviceID>.size)
+        
+        let status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &propertyAddress,
+            0,
+            nil,
+            &propertySize,
+            &deviceID
+        )
+        
+        if status != noErr {
+            print("ERROR: Could not get default output device: \(status)")
+            return false
+        }
+        
+        propertyAddress.mSelector = kAudioDevicePropertyTransportType
+        var transportType: UInt32 = 0
+        propertySize = UInt32(MemoryLayout<UInt32>.size)
+        
+        let transportStatus = AudioObjectGetPropertyData(
+            deviceID,
+            &propertyAddress,
+            0,
+            nil,
+            &propertySize,
+            &transportType
+        )
+        
+        if transportStatus != noErr {
+            print("ERROR: Could not get transport type for device \(deviceID): \(transportStatus)")
+            return false
+        }
+        
+        // Built-in speakers, DisplayPort, and HDMI are common speaker types.
+        // Other types like USB, Bluetooth, etc., are typically headphones or external interfaces.
+        switch transportType {
+        case kAudioDeviceTransportTypeBuiltIn,
+             kAudioDeviceTransportTypeDisplayPort,
+             kAudioDeviceTransportTypeHDMI:
+            return true
+        default:
+            return false
+        }
+    }
+    
     private func processAudioQueues() {
         audioProcessingQueue.async { [weak self] in
             guard let self = self else { return }
@@ -452,12 +506,18 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             
             print("DEBUG: Processing audio. Mic buffers: \(micBuffers.count), System buffers: \(systemBuffers.count)")
             
-            // Concatenate all buffers from each source. Returns nil if source array is empty.
+            // Concatenate all buffers from each source.
             let micBuffer = self.concatenateBuffers(buffers: micBuffers)
-            let systemBuffer = self.concatenateBuffers(buffers: systemBuffers)
+            var systemBuffer = self.concatenateBuffers(buffers: systemBuffers)
             
-            // Mix the two large buffers. This function now handles nil inputs.
-            if let mixedBuffer = self.mixAudioBuffers(micBuffer: micBuffer, systemBuffer: nil) {
+            // If speakers are the output, nullify the system audio buffer to prevent echo.
+            if self.isUsingSpeakers() {
+                print("DEBUG: Speakers detected, ignoring system audio to prevent echo.")
+                systemBuffer = nil
+            }
+            
+            // Mix the buffers. The mixer handles a nil systemBuffer gracefully.
+            if let mixedBuffer = self.mixAudioBuffers(micBuffer: micBuffer, systemBuffer: systemBuffer) {
                 self.sendAudioBufferToFlutter(mixedBuffer)
             }
         }
