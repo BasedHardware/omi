@@ -71,9 +71,11 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     func startCapture() async throws {
         // Init engine
         audioEngine = AVAudioEngine()
+        setupDeviceListChangeObserver()
         
         // Set initial speaker status
         self.isCurrentlyUsingSpeakers = self.isUsingSpeakers()
+        self.knownDeviceIDs = self.getAudioDeviceIDs()
         print("DEBUG: Initial speaker status: \(self.isCurrentlyUsingSpeakers)")
 
         // Start sleep prevention first
@@ -218,6 +220,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         
         audioEngine?.stop()
 
+        removeDeviceListChangeObserver()
         micNode?.removeTap(onBus: 0)
         
         // Stop sleep prevention
@@ -415,6 +418,32 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         
         concatenatedBuffer.frameLength = totalFrames
         return concatenatedBuffer
+    }
+    
+    private func getAudioDeviceIDs() -> [AudioDeviceID] {
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        var propertySize: UInt32 = 0
+        var status = AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &propertyAddress, 0, nil, &propertySize)
+        if status != noErr {
+            print("ERROR: Could not get size of device list: \(status)")
+            return []
+        }
+
+        let deviceCount = Int(propertySize) / MemoryLayout<AudioDeviceID>.size
+        var deviceIDs = [AudioDeviceID](repeating: 0, count: deviceCount)
+
+        status = AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &propertyAddress, 0, nil, &propertySize, &deviceIDs)
+        if status != noErr {
+            print("ERROR: Could not get device list: \(status)")
+            return []
+        }
+
+        return deviceIDs
     }
     
     private func isUsingSpeakers() -> Bool {
@@ -666,14 +695,19 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             print("DEBUG: Audio device list changed.")
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
-                
-                // Handle device change logic
-                self.handleAudioEngineConfigurationChange()
-                
-                // Update speaker status and notify Flutter
-                self.isCurrentlyUsingSpeakers = self.isUsingSpeakers()
-                print("DEBUG: Speaker status updated on device change: \(self.isCurrentlyUsingSpeakers)")
-                self.screenCaptureChannel?.invokeMethod("speakerStatusChanged", arguments: ["isUsingSpeakers": self.isCurrentlyUsingSpeakers])
+
+                let newDeviceIDs = self.getAudioDeviceIDs()
+                if newDeviceIDs != self.knownDeviceIDs {
+                    self.knownDeviceIDs = newDeviceIDs
+                    
+                    // Handle device change logic
+                    self.handleAudioEngineConfigurationChange()
+                    
+                    // Update speaker status and notify Flutter
+                    self.isCurrentlyUsingSpeakers = self.isUsingSpeakers()
+                    print("DEBUG: Speaker status updated on device change: \(self.isCurrentlyUsingSpeakers)")
+                    self.screenCaptureChannel?.invokeMethod("speakerStatusChanged", arguments: ["isUsingSpeakers": self.isCurrentlyUsingSpeakers])
+                }
             }
         }
 
