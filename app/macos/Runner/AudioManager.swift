@@ -439,20 +439,26 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         audioProcessingQueue.async { [weak self] in
             guard let self = self else { return }
             
-            // Test function: only process and send system audio as mono.
+            // Grab all available buffers from both queues.
+            let micBuffers = self.micAudioQueue
+            self.micAudioQueue.removeAll()
+            
             let systemBuffers = self.systemAudioQueue
             self.systemAudioQueue.removeAll()
             
-            if systemBuffers.isEmpty {
+            if micBuffers.isEmpty && systemBuffers.isEmpty {
                 return // Nothing to process.
             }
             
-            print("DEBUG: [TEST] Processing system audio. Buffers: \(systemBuffers.count)")
+            print("DEBUG: Processing audio. Mic buffers: \(micBuffers.count), System buffers: \(systemBuffers.count)")
             
-            // Concatenate all buffers from system audio into a single large buffer.
-            if let systemBuffer = self.concatenateBuffers(buffers: systemBuffers) {
-                // In this test, the output format is mono, so we send the system buffer directly.
-                self.sendAudioBufferToFlutter(systemBuffer)
+            // Concatenate all buffers from each source. Returns nil if source array is empty.
+            let micBuffer = self.concatenateBuffers(buffers: micBuffers)
+            let systemBuffer = self.concatenateBuffers(buffers: systemBuffers)
+            
+            // Mix the two large buffers. This function now handles nil inputs.
+            if let mixedBuffer = self.mixAudioBuffers(micBuffer: micBuffer, systemBuffer: systemBuffer) {
+                self.sendAudioBufferToFlutter(mixedBuffer)
             }
         }
     }
@@ -464,36 +470,38 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         
         if totalFrames == 0 { return nil }
         
-        print("DEBUG: Merging audio into stereo. Total frames: \(totalFrames). Mic frames: \(micFrames), System frames: \(systemFrames).")
+        print("DEBUG: Mixing audio into mono. Total frames: \(totalFrames). Mic frames: \(micFrames), System frames: \(systemFrames).")
 
-        // outputFormat is stereo (2 channels)
+        // outputFormat is now mono (1 channel)
         guard let outputFormat = self.outputAudioFormat,
-              let stereoBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: totalFrames) else {
-            print("ERROR: Failed to create stereo buffer.")
+              let mixedBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: totalFrames) else {
+            print("ERROR: Failed to create mixed mono buffer.")
             return nil
         }
         
-        stereoBuffer.frameLength = totalFrames
+        mixedBuffer.frameLength = totalFrames
         
         let micInt16 = micBuffer?.int16ChannelData?[0]
         let systemInt16 = systemBuffer?.int16ChannelData?[0]
         
-        guard let stereoInt16 = stereoBuffer.int16ChannelData?[0] else {
-            print("ERROR: Failed to get int16 channel data for stereo buffer.")
+        guard let mixedInt16 = mixedBuffer.int16ChannelData?[0] else {
+            print("ERROR: Failed to get int16 channel data for mixed buffer.")
             return nil
         }
         
-        // Interleave mic (L) and system (R) audio into the stereo buffer.
-        // If one source is shorter or nil, its channel is filled with silence (0).
+        // Mix samples by averaging them. If one source is shorter or nil, its contribution is 0.
         for i in 0..<Int(totalFrames) {
-            let micSample = (i < micFrames) ? micInt16?[i] ?? 0 : 0
-            let systemSample = (i < systemFrames) ? systemInt16?[i] ?? 0 : 0
+            let micSample = (i < micFrames) ? Float(micInt16?[i] ?? 0) : 0.0
+            let systemSample = (i < systemFrames) ? Float(systemInt16?[i] ?? 0) : 0.0
             
-            stereoInt16[i * 2] = micSample       // Left channel
-            stereoInt16[i * 2 + 1] = systemSample // Right channel
+            // Mix by averaging. Clamp to prevent overflow.
+            let mixedSample = (micSample + systemSample) / 2.0
+            let clampedSample = max(Float(Int16.min), min(Float(Int16.max), mixedSample))
+            
+            mixedInt16[i] = Int16(clampedSample)
         }
         
-        return stereoBuffer
+        return mixedBuffer
     }
     
     private func sendAudioBufferToFlutter(_ buffer: AVAudioPCMBuffer) {
