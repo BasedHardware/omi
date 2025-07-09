@@ -45,9 +45,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     }
     
     deinit {
-        if audioEngine != nil {
-            NotificationCenter.default.removeObserver(self)
-        }
+        removeDeviceListChangeObserver()
     }
     
     // MARK: - Public Interface
