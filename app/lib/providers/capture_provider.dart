@@ -639,12 +639,7 @@ class CaptureProvider extends ChangeNotifier
               'Recording stopped: $reason. You may need to reconnect external displays or restart recording.');
           notifyListeners();
         }
-      }, onMicrophoneDeviceChanged: () async {
-        debugPrint('Microphone device changed, pausing recording.');
-        bool nativeRecording = await _screenCaptureChannel.invokeMethod('isRecording') ?? false;
-        if (nativeRecording) {
-          await pauseSystemAudioRecording();
-        }
+      }, onMicrophoneDeviceChanged: _onMicrophoneDeviceChanged,
       }, onMicrophoneStatus: (deviceName, micLevel, systemAudioLevel) {
         final bool needsUpdate =
             microphoneName != deviceName || (microphoneLevel - micLevel).abs() > 0.001 || (this.systemAudioLevel - systemAudioLevel).abs() > 0.001;
@@ -711,13 +706,7 @@ class CaptureProvider extends ChangeNotifier
               onSystemDidWake: (nativeIsRecording) async {
                 debugPrint('Resync wake callback - Native recording: $nativeIsRecording');
               },
-              onMicrophoneDeviceChanged: () async {
-                debugPrint('Microphone device changed, pausing recording.');
-                bool nativeRecording = await _screenCaptureChannel.invokeMethod('isRecording') ?? false;
-                if (nativeRecording) {
-                  await pauseSystemAudioRecording();
-                }
-              },
+              onMicrophoneDeviceChanged: _onMicrophoneDeviceChanged,
               onMicrophoneStatus: (deviceName, micLevel, systemAudioLevel) {
                 final bool needsUpdate =
                     microphoneName != deviceName || (microphoneLevel - micLevel).abs() > 0.001 || (this.systemAudioLevel - systemAudioLevel).abs() > 0.001;
@@ -805,12 +794,7 @@ class CaptureProvider extends ChangeNotifier
             _socket?.stop(reason: 'system audio stream ended from native');
           }, onError: (error) {
             debugPrint('Second attempt also failed: $error');
-          }, onMicrophoneDeviceChanged: () async {
-            debugPrint('Microphone device changed, pausing recording.');
-            bool nativeRecording = await _screenCaptureChannel.invokeMethod('isRecording') ?? false;
-            if (nativeRecording) {
-              await pauseSystemAudioRecording();
-            }
+          }, onMicrophoneDeviceChanged: _onMicrophoneDeviceChanged,
           }, onMicrophoneStatus: (deviceName, micLevel, systemAudioLevel) {
             final bool needsUpdate =
                 microphoneName != deviceName || (microphoneLevel - micLevel).abs() > 0.001 || (this.systemAudioLevel - systemAudioLevel).abs() > 0.001;
@@ -854,6 +838,20 @@ class CaptureProvider extends ChangeNotifier
         notifyError('Permission error: $e');
         updateRecordingState(RecordingState.stop);
       }
+    }
+  }
+
+  Future<void> _onMicrophoneDeviceChanged() async {
+    debugPrint('Microphone device changed. Restarting recording in 3 seconds...');
+    AppSnackbar.showSnackbar(
+      'Microphone changed. Recording will restart automatically.',
+      duration: const Duration(seconds: 3),
+    );
+    bool nativeRecording = await _screenCaptureChannel.invokeMethod('isRecording') ?? false;
+    if (nativeRecording) {
+      await pauseSystemAudioRecording();
+      await Future.delayed(const Duration(seconds: 3));
+      await resumeSystemAudioRecording();
     }
   }
 
