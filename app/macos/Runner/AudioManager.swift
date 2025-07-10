@@ -25,6 +25,9 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     private var deviceListChangedListener: AudioObjectPropertyListenerBlock?
     private var isCurrentlyUsingSpeakers: Bool = false
     private var knownDeviceIDs: [AudioDeviceID] = []
+    private var isMicSilent: Bool = true
+    private var isSystemAudioSilent: Bool = true
+    private let silenceThreshold: Float = 0.005 // Threshold for RMS level to be considered silent
     
     // SCStream properties
     private var availableContent: SCShareableContent?
@@ -149,7 +152,9 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             }
             
             if status == .haveData && outputPCMBuffer.frameLength > 0 {
-                print("DEBUG: Mic audio buffer captured. Adding to queue. Frame length: \(outputPCMBuffer.frameLength)")
+                let rms = self.calculateRMS(buffer: outputPCMBuffer)
+                self.isMicSilent = rms < self.silenceThreshold
+                print("DEBUG: Mic audio buffer captured. RMS: \(String(format: "%.4f", rms)). Silent: \(self.isMicSilent). Adding to queue.")
                 self.audioProcessingQueue.async {
                     self.micAudioQueue.append(outputPCMBuffer)
                 }
@@ -297,10 +302,67 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     @objc private func handleAudioEngineConfigurationChange() {
         print("DEBUG: Audio engine configuration changed. Possible device change.")
 
+        if let deviceID = getDefaultInputDeviceID(), let deviceName = getDeviceName(for: deviceID) {
+            print("DEBUG: Active input device changed to: \(deviceName) (ID: \(deviceID))")
+        }
+
         // Notify Flutter first, so it knows a change is happening.
         if isFlutterEngineActive {
             self.screenCaptureChannel?.invokeMethod("microphoneDeviceChanged", arguments: nil)
             print("DEBUG: Notified Flutter of microphone device change.")
+        }
+    }
+
+    private func getDefaultInputDeviceID() -> AudioDeviceID? {
+        var deviceID: AudioDeviceID = 0
+        var propertySize = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        let status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &propertyAddress,
+            0,
+            nil,
+            &propertySize,
+            &deviceID
+        )
+
+        if status == noErr {
+            return deviceID
+        } else {
+            print("ERROR: Could not get default input device ID: \(status)")
+            return nil
+        }
+    }
+
+    private func getDeviceName(for deviceID: AudioDeviceID) -> String? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioObjectPropertyName,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        
+        var deviceName: CFString = "" as CFString
+        var propertySize = UInt32(MemoryLayout<CFString>.size)
+        
+        let status = AudioObjectGetPropertyData(
+            deviceID,
+            &address,
+            0,
+            nil,
+            &propertySize,
+            &deviceName
+        )
+        
+        if status == noErr {
+            return deviceName as String
+        } else {
+            print("ERROR: Could not get name for device \(deviceID): \(status)")
+            return nil
         }
     }
     
@@ -420,6 +482,21 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         return concatenatedBuffer
     }
     
+    private func calculateRMS(buffer: AVAudioPCMBuffer) -> Float {
+        guard let channelData = buffer.int16ChannelData?[0] else { return 0 }
+        let frameLength = Int(buffer.frameLength)
+        if frameLength == 0 { return 0 }
+
+        var sumOfSquares: Float = 0.0
+        for i in 0..<frameLength {
+            // Normalize Int16 to [-1.0, 1.0]
+            let sample = Float(channelData[i]) / Float(Int16.max)
+            sumOfSquares += sample * sample
+        }
+
+        return sqrt(sumOfSquares / Float(frameLength))
+    }
+    
     private func getAudioDeviceIDs() -> [AudioDeviceID] {
         var propertyAddress = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDevices,
@@ -522,11 +599,11 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             let micBuffer = self.concatenateBuffers(buffers: micBuffers)
             var systemBuffer = self.concatenateBuffers(buffers: systemBuffers)
             
-            ///// If speakers are the output, nullify the system audio buffer to prevent echo.
-            ///if self.isCurrentlyUsingSpeakers {
-            ///    print("DEBUG: Speakers detected, ignoring system audio to prevent echo.")
-            ///    systemBuffer = nil
-            ///}
+            // If speakers are the output AND the mic is not silent, nullify the system audio buffer to prevent echo.
+            if self.isCurrentlyUsingSpeakers && !self.isMicSilent {
+                print("DEBUG: Speakers active and mic is not silent. Ignoring system audio to prevent echo.")
+                systemBuffer = nil
+            }
             
             // Mix the buffers. The mixer handles a nil systemBuffer gracefully.
             if let mixedBuffer = self.mixAudioBuffers(micBuffer: micBuffer, systemBuffer: systemBuffer) {
@@ -666,7 +743,9 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         }
         
         if status == .haveData && outputPCMBuffer.frameLength > 0 {
-            print("DEBUG: System audio buffer captured (converted). Adding to queue. Frame length: \(outputPCMBuffer.frameLength)")
+            let rms = self.calculateRMS(buffer: outputPCMBuffer)
+            self.isSystemAudioSilent = rms < self.silenceThreshold
+            print("DEBUG: System audio buffer captured (converted). RMS: \(String(format: "%.4f", rms)). Silent: \(self.isSystemAudioSilent). Adding to queue. Frame length: \(outputPCMBuffer.frameLength)")
             self.audioProcessingQueue.async {
                 self.systemAudioQueue.append(outputPCMBuffer)
             }
