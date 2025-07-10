@@ -645,6 +645,16 @@ class CaptureProvider extends ChangeNotifier
         if (nativeRecording) {
           await pauseSystemAudioRecording();
         }
+      }, onMicrophoneStatus: (deviceName, micLevel) {
+        final bool newIsLow = (micLevel >= 0.005) && (micLevel < 0.02);
+        if (microphoneName != deviceName || isMicrophoneInputLow != newIsLow) {
+          microphoneName = deviceName;
+          microphoneLevel = micLevel;
+          isMicrophoneInputLow = newIsLow;
+          notifyListeners();
+        } else {
+          microphoneLevel = micLevel;
+        }
       });
 
       await Future.delayed(const Duration(milliseconds: 500));
