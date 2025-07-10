@@ -201,6 +201,8 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         _isRecording = false
         self.isCurrentlyUsingSpeakers = false
 
+        removeDeviceListChangeObserver()
+
         // Stop the timer and clear queues
         audioMixTimer?.invalidate()
         audioMixTimer = nil
@@ -217,9 +219,8 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             }
         }
         
-        audioEngine?.stop()
 
-        removeDeviceListChangeObserver()
+        audioEngine?.stop()
         micNode?.removeTap(onBus: 0)
         
         // Stop sleep prevention
@@ -502,7 +503,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     private func processAudioQueues() {
         audioProcessingQueue.async { [weak self] in
             guard let self = self else { return }
-            
+
             // Grab all available buffers from both queues.
             let micBuffers = self.micAudioQueue
             self.micAudioQueue.removeAll()
@@ -511,6 +512,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             self.systemAudioQueue.removeAll()
             
             if micBuffers.isEmpty && systemBuffers.isEmpty {
+            print("DEBUG: Processing audio. ALL EMPTTTYY")
                 return // Nothing to process.
             }
             
@@ -520,11 +522,11 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             let micBuffer = self.concatenateBuffers(buffers: micBuffers)
             var systemBuffer = self.concatenateBuffers(buffers: systemBuffers)
             
-            // If speakers are the output, nullify the system audio buffer to prevent echo.
-            if self.isCurrentlyUsingSpeakers {
-                print("DEBUG: Speakers detected, ignoring system audio to prevent echo.")
-                systemBuffer = nil
-            }
+            ///// If speakers are the output, nullify the system audio buffer to prevent echo.
+            ///if self.isCurrentlyUsingSpeakers {
+            ///    print("DEBUG: Speakers detected, ignoring system audio to prevent echo.")
+            ///    systemBuffer = nil
+            ///}
             
             // Mix the buffers. The mixer handles a nil systemBuffer gracefully.
             if let mixedBuffer = self.mixAudioBuffers(micBuffer: micBuffer, systemBuffer: systemBuffer) {
