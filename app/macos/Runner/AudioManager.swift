@@ -22,6 +22,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     private var micAudioQueue = [AVAudioPCMBuffer]()
     private var systemAudioQueue = [AVAudioPCMBuffer]()
     private var audioMixTimer: Timer?
+    private var deviceChangeDebounceTimer: Timer?
     private var deviceListChangedListener: AudioObjectPropertyListenerBlock?
     private var isCurrentlyUsingSpeakers: Bool = false
     private var knownDeviceIDs: [AudioDeviceID] = []
@@ -786,27 +787,33 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         )
 
         deviceListChangedListener = { (inNumberAddresses, inAddresses) in
-            print("DEBUG: Audio device list changed.")
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
+            // Invalidate any existing timer to reset the debounce period
+            self.deviceChangeDebounceTimer?.invalidate()
+            
+            // Schedule a new timer to handle the change after a short delay
+            self.deviceChangeDebounceTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { _ in
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self else { return }
 
-                let newDeviceIDs = self.getAudioDeviceIDs()
-                if self.knownDeviceIDs.isEmpty {
-                    self.knownDeviceIDs = newDeviceIDs
-                    print("DEBUG: Initial device list populated, not treating as a change.")
-                    return
-                }
-                
-                if Set(newDeviceIDs) != Set(self.knownDeviceIDs) {
-                    self.knownDeviceIDs = newDeviceIDs
+                    let newDeviceIDs = self.getAudioDeviceIDs()
+                    if self.knownDeviceIDs.isEmpty {
+                        self.knownDeviceIDs = newDeviceIDs
+                        print("DEBUG: Initial device list populated, not treating as a change.")
+                        return
+                    }
                     
-                    // Handle device change logic
-                    self.handleAudioEngineConfigurationChange()
-                    
-                    // Update speaker status and notify Flutter
-                    self.isCurrentlyUsingSpeakers = self.isUsingSpeakers()
-                    print("DEBUG: Speaker status updated on device change: \(self.isCurrentlyUsingSpeakers)")
-                    self.screenCaptureChannel?.invokeMethod("speakerStatusChanged", arguments: ["isUsingSpeakers": self.isCurrentlyUsingSpeakers])
+                    if Set(newDeviceIDs) != Set(self.knownDeviceIDs) {
+                        print("DEBUG: Audio device list changed.")
+                        self.knownDeviceIDs = newDeviceIDs
+                        
+                        // Handle device change logic
+                        self.handleAudioEngineConfigurationChange()
+                        
+                        // Update speaker status and notify Flutter
+                        self.isCurrentlyUsingSpeakers = self.isUsingSpeakers()
+                        print("DEBUG: Speaker status updated on device change: \(self.isCurrentlyUsingSpeakers)")
+                        self.screenCaptureChannel?.invokeMethod("speakerStatusChanged", arguments: ["isUsingSpeakers": self.isCurrentlyUsingSpeakers])
+                    }
                 }
             }
         }
@@ -819,6 +826,8 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     }
 
     private func removeDeviceListChangeObserver() {
+        deviceChangeDebounceTimer?.invalidate()
+        deviceChangeDebounceTimer = nil
         guard let listener = deviceListChangedListener else { return }
 
         var propertyAddress = AudioObjectPropertyAddress(
