@@ -587,247 +587,99 @@ class CaptureProvider extends ChangeNotifier
       _flushSystemAudioBuffer();
     });
 
-    try {
-      await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
+    bool permissionsGranted = await _checkAndRequestSystemAudioPermissions();
+    if (permissionsGranted) {
+      await _startSystemAudioCapture();
+    } else {
+      updateRecordingState(RecordingState.stop);
+    }
+  }
 
-      // Try to start recording immediately - if permissions are actually granted, this will work
-      bool recordingStarted = false;
+  Future<void> _startSystemAudioCapture() async {
+    await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
 
-      await ServiceManager.instance().systemAudio.start(onFormatReceived: (Map<String, dynamic> format) async {
-        final int sampleRate = ((format['sampleRate'] ?? 16000) as num).toInt();
-        final int channels = ((format['channels'] ?? 1) as num).toInt();
-        BleAudioCodec determinedCodec = BleAudioCodec.pcm16;
-      }, onByteReceived: (bytes) {
-        _processSystemAudioByteReceived(bytes);
-      }, onRecording: () {
-        recordingStarted = true;
+    await ServiceManager.instance().systemAudio.start(
+      onFormatReceived: (Map<String, dynamic> format) async {
+        // This callback is for information only, no action needed.
+      },
+      onByteReceived: _processSystemAudioByteReceived,
+      onRecording: () {
         updateRecordingState(RecordingState.systemAudioRecord);
-        debugPrint('System audio recording started successfully - permissions were actually granted');
-      }, onStop: () {
+        debugPrint('System audio recording started successfully.');
+      },
+      onStop: () {
         if (_isPaused) {
           updateRecordingState(RecordingState.pause);
         } else {
           updateRecordingState(RecordingState.stop);
         }
         _socket?.stop(reason: 'system audio stream ended from native');
-      }, onError: (error) {
-        debugPrint('System audio failed to start, error: $error');
-        // Only now do we check and request permissions
-        _handleSystemAudioPermissionError(error);
-      }, onSystemWillSleep: (wasRecording) {
-        //TODO: what should we do here?
+      },
+      onError: (error) {
+        debugPrint('System audio capture error: $error');
+        AppSnackbar.showSnackbarError('An error occurred during recording: $error');
+        updateRecordingState(RecordingState.stop);
+      },
+      onSystemWillSleep: (wasRecording) {
         debugPrint('System will sleep - was recording: $wasRecording');
-      }, onSystemDidWake: (nativeIsRecording) async {
+      },
+      onSystemDidWake: (nativeIsRecording) async {
         debugPrint('System woke up - Native recording: $nativeIsRecording, Flutter state: $recordingState');
-
-        if (nativeIsRecording && recordingState != RecordingState.systemAudioRecord) {
-          debugPrint('AUTO-FIXING WAKE DESYNC: Native recording but Flutter lost track, updating state...');
-          updateRecordingState(RecordingState.systemAudioRecord);
-
-          // Ensure socket is connected for the ongoing recording
-          if (_socket?.state != SocketServiceState.connected) {
-            debugPrint('Reconnecting socket after wake...');
-            await _initiateWebsocket(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
-          }
-
-          notifyListeners();
+        if (!nativeIsRecording && recordingState == RecordingState.systemAudioRecord) {
+          updateRecordingState(RecordingState.stop);
         }
-      }, onScreenDidLock: (wasRecording) {
-        //TODO: what should we do here?
+      },
+      onScreenDidLock: (wasRecording) {
         debugPrint('Screen locked - was recording: $wasRecording');
-      }, onScreenDidUnlock: () {
-        //TODO: what should we do here?
+      },
+      onScreenDidUnlock: () {
         debugPrint('Screen unlocked');
-      }, onDisplaySetupInvalid: (reason) {
+      },
+      onDisplaySetupInvalid: (reason) {
         debugPrint('Display setup invalid: $reason');
         if (recordingState == RecordingState.systemAudioRecord) {
           updateRecordingState(RecordingState.stop);
           AppSnackbar.showSnackbarError(
               'Recording stopped: $reason. You may need to reconnect external displays or restart recording.');
-          notifyListeners();
         }
       },
       onMicrophoneDeviceChanged: _onMicrophoneDeviceChanged,
-      onMicrophoneStatus: _onMicrophoneStatus);
-
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      if (recordingStarted) {
-        // Success! Recording started despite potentially incorrect permission status
-        return;
-      } else {
-        // If we get here, try the permission flow
-        debugPrint('Recording did not start immediately, checking permissions');
-        await _checkAndRequestPermissions();
-      }
-    } catch (e) {
-      debugPrint('Error attempting direct system audio start: $e');
-      await _checkAndRequestPermissions();
-    }
+      onMicrophoneStatus: _onMicrophoneStatus,
+    );
   }
 
-  Future<void> _handleSystemAudioPermissionError(String error) async {
-    debugPrint('System audio failed with error: $error');
+  Future<bool> _checkAndRequestSystemAudioPermissions() async {
+    // Check microphone permission first
+    String micStatus = await _screenCaptureChannel.invokeMethod('checkMicrophonePermission');
+    debugPrint('Microphone permission status: $micStatus');
 
-    // Check if this is a state desync issue (recording active but permissions seem denied)
-    if (error.contains('SCREEN_PERMISSION_REQUIRED') && error.contains('denied')) {
-      try {
-        bool nativeRecording = await _screenCaptureChannel.invokeMethod('isRecording') ?? false;
-        debugPrint('Permission error but native recording state: $nativeRecording');
-
-        if (nativeRecording) {
-          debugPrint('FIXING SLEEP/WAKE DESYNC: Native recording active despite permission error, resyncing state...');
-
-          updateRecordingState(RecordingState.systemAudioRecord);
-
-          await ServiceManager.instance().systemAudio.start(
-              onFormatReceived: (Map<String, dynamic> format) async {},
-              onByteReceived: (bytes) {
-                _processSystemAudioByteReceived(bytes);
-              },
-              onRecording: () {
-                updateRecordingState(RecordingState.systemAudioRecord);
-                debugPrint('System audio state resynced after sleep/wake');
-              },
-              onStop: () {
-                if (_isPaused) {
-                  updateRecordingState(RecordingState.pause);
-                } else {
-                  updateRecordingState(RecordingState.stop);
-                }
-                _socket?.stop(reason: 'system audio stream ended from native');
-              },
-              onError: (error) {
-                debugPrint('System audio error during resync: $error');
-                updateRecordingState(RecordingState.stop);
-              },
-              onSystemDidWake: (nativeIsRecording) async {
-                debugPrint('Resync wake callback - Native recording: $nativeIsRecording');
-              },
-              onMicrophoneDeviceChanged: _onMicrophoneDeviceChanged,
-              onMicrophoneStatus: (deviceName, micLevel, systemAudioLevel) {
-                final bool needsUpdate =
-                    microphoneName != deviceName || (microphoneLevel - micLevel).abs() > 0.001 || (this.systemAudioLevel - systemAudioLevel).abs() > 0.001;
-
-                if (needsUpdate) {
-                  microphoneName = deviceName;
-                  microphoneLevel = micLevel;
-                  this.systemAudioLevel = systemAudioLevel;
-                  notifyListeners();
-                }
-              });
-          return;
+    if (micStatus != 'granted') {
+      if (micStatus == 'undetermined' || micStatus == 'unavailable') {
+        bool micGranted = await _screenCaptureChannel.invokeMethod('requestMicrophonePermission');
+        if (!micGranted) {
+          AppSnackbar.showSnackbarError('Microphone permission is required for system audio recording.');
+          return false;
         }
-      } catch (e) {
-        debugPrint('Could not check native recording state during error handling: $e');
+      } else if (micStatus == 'denied') {
+        AppSnackbar.showSnackbarError(
+            'Microphone permission denied. Please grant permission in System Preferences > Privacy & Security > Microphone.');
+        return false;
       }
     }
 
-    // Handle normal permission errors
-    if (error.contains('MIC_PERMISSION_REQUIRED') || error.contains('microphone')) {
-      AppSnackbar.showSnackbarError(
-          'Microphone permission is required. Please grant permission in System Preferences > Privacy & Security > Microphone.');
-    } else if (error.contains('SCREEN_PERMISSION_REQUIRED') || error.contains('screen')) {
-      AppSnackbar.showSnackbarError(
-          'Screen recording permission is required. Please grant permission in System Preferences > Privacy & Security > Screen Recording.');
-    } else if (error.contains('Already recording')) {
-      debugPrint('Already recording error - attempting to sync state...');
-      return;
-    } else if (error.contains('Failed to find any displays or windows to capture')) {
-      debugPrint('Display detection error - checking for external display disconnect...');
-      AppSnackbar.showSnackbarError(
-          'No displays found for screen recording. This can happen when external displays are disconnected. Please try reconnecting displays or restart the app.');
-    } else {
-      await _checkAndRequestPermissions();
-    }
+    // Check screen capture permission
+    String screenStatus = await _screenCaptureChannel.invokeMethod('checkScreenCapturePermission');
+    debugPrint('Screen capture permission status: $screenStatus');
 
-    updateRecordingState(RecordingState.stop);
-  }
-
-  Future<void> _checkAndRequestPermissions() async {
-    try {
-      // Check microphone permission first
-      String micStatus = await _screenCaptureChannel.invokeMethod('checkMicrophonePermission');
-      debugPrint('Microphone permission status: $micStatus');
-
-      if (micStatus != 'granted') {
-        if (micStatus == 'undetermined' || micStatus == 'unavailable') {
-          bool micGranted = await _screenCaptureChannel.invokeMethod('requestMicrophonePermission');
-          if (!micGranted) {
-            AppSnackbar.showSnackbarError('Microphone permission is required for system audio recording.');
-            updateRecordingState(RecordingState.stop);
-            return;
-          }
-        } else if (micStatus == 'denied') {
-          AppSnackbar.showSnackbarError(
-              'Microphone permission denied. Please grant permission in System Preferences > Privacy & Security > Microphone.');
-          updateRecordingState(RecordingState.stop);
-          return;
-        }
-      }
-
-      // Check screen capture permission
-      String screenStatus = await _screenCaptureChannel.invokeMethod('checkScreenCapturePermission');
-      debugPrint('Screen capture permission status: $screenStatus');
-
-      if (screenStatus != 'granted') {
-        try {
-          bool secondAttemptWorked = false;
-
-          await ServiceManager.instance().systemAudio.start(onFormatReceived: (Map<String, dynamic> format) async {
-            final int sampleRate = ((format['sampleRate'] ?? 16000) as num).toInt();
-            final int channels = ((format['channels'] ?? 1) as num).toInt();
-            BleAudioCodec determinedCodec = BleAudioCodec.pcm16;
-          }, onByteReceived: (bytes) {
-            _processSystemAudioByteReceived(bytes);
-          }, onRecording: () {
-            secondAttemptWorked = true;
-            updateRecordingState(RecordingState.systemAudioRecord);
-          }, onStop: () {
-            if (_isPaused) {
-              updateRecordingState(RecordingState.pause);
-            } else {
-              updateRecordingState(RecordingState.stop);
-            }
-            _socket?.stop(reason: 'system audio stream ended from native');
-          }, onError: (error) {
-            debugPrint('Second attempt also failed: $error');
-          },
-          onMicrophoneDeviceChanged: _onMicrophoneDeviceChanged,
-          onMicrophoneStatus: _onMicrophoneStatus);
-
-          await Future.delayed(const Duration(milliseconds: 500));
-
-          if (secondAttemptWorked) {
-            return; // Success on second try!
-          }
-        } catch (e) {
-          debugPrint('Second attempt exception: $e');
-        }
-
-        // Only request permission if both attempts failed
-        bool screenGranted = await _screenCaptureChannel.invokeMethod('requestScreenCapturePermission');
-        if (!screenGranted) {
-          AppSnackbar.showSnackbarError(
-              'Screen recording permission is required. The app is already granted permission in System Preferences, but you may need to restart the app due to a macOS bug.');
-          updateRecordingState(RecordingState.stop);
-          return;
-        }
-
-        await streamSystemAudioRecording();
-      }
-    } catch (e) {
-      debugPrint('Error in permission checking: $e');
-
-      // Check if this is a state desync error
-      if (e.toString().contains('Already recording')) {
-        debugPrint('Already recording error during permission check - attempting to sync state...');
-        await _handleSystemAudioPermissionError(e.toString());
-      } else {
-        notifyError('Permission error: $e');
-        updateRecordingState(RecordingState.stop);
+    if (screenStatus != 'granted') {
+      bool screenGranted = await _screenCaptureChannel.invokeMethod('requestScreenCapturePermission');
+      if (!screenGranted) {
+        AppSnackbar.showSnackbarError(
+            'Screen recording permission is required. Please grant permission in System Preferences > Privacy & Security > Screen Recording.');
+        return false;
       }
     }
+    return true;
   }
 
   Future<void> _onMicrophoneDeviceChanged() async {
@@ -907,7 +759,7 @@ class CaptureProvider extends ChangeNotifier
   Future<void> resumeSystemAudioRecording() async {
     if (!PlatformService.isDesktop) return;
     _isPaused = false; // Clear paused state
-    await streamSystemAudioRecording(); // Restart recording
+    await streamSystemAudioRecording(); // Re-trigger the recording flow
   }
 
   @override
