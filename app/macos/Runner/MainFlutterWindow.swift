@@ -137,21 +137,13 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
             guard let self = self else { return }
             switch call.method {
             case "checkMicrophonePermission":
-                if #available(macOS 14.0, *) {
-                    let status = self.permissionManager.checkMicrophonePermission()
-                    result(status)
-                } else {
-                    result("unavailable")
-                }
+                let status = self.permissionManager.checkMicrophonePermission()
+                result(status)
                 
             case "requestMicrophonePermission":
-                if #available(macOS 14.0, *) {
-                    Task {
-                        let granted = await self.permissionManager.requestMicrophonePermission()
-                        result(granted)
-                    }
-                } else {
-                    result(false)
+                Task {
+                    let granted = await self.permissionManager.requestMicrophonePermission()
+                    result(granted)
                 }
                 
             case "checkScreenCapturePermission":
@@ -210,20 +202,18 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
             case "start":
                 Task {
                     // Check permissions before starting
-                    if #available(macOS 14.0, *) {
-                        let micStatus = self.permissionManager.checkMicrophonePermission()
-                        if micStatus != "granted" {
-                            result(FlutterError(code: "MIC_PERMISSION_REQUIRED", 
-                                              message: "Microphone permission is required. Current status: \(micStatus)", 
-                                              details: nil))
-                            return
-                        }
+                    let micStatus = self.permissionManager.checkMicrophonePermission()
+                    if micStatus != "granted" {
+                        result(FlutterError(code: "MIC_PERMISSION_REQUIRED",
+                                          message: "Microphone permission is required. Current status: \(micStatus)",
+                                          details: nil))
+                        return
                     }
-                    
+
                     let screenStatus = await self.permissionManager.checkScreenCapturePermission()
                     if screenStatus != "granted" {
-                        result(FlutterError(code: "SCREEN_PERMISSION_REQUIRED", 
-                                          message: "Screen capture permission is required. Current status: \(screenStatus)", 
+                        result(FlutterError(code: "SCREEN_PERMISSION_REQUIRED",
+                                          message: "Screen capture permission is required. Current status: \(screenStatus)",
                                           details: nil))
                         return
                     }
@@ -239,15 +229,119 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
             case "stop":
                 self.audioManager.stopCapture()
                 result(nil)
+                
+            case "isRecording":
+                let isRecording = self.audioManager.isRecording()
+                result(isRecording)
+                
+            case "validateDisplays":
+                Task {
+                    let isValid = await self.audioManager.validateDisplaySetup()
+                    result(isValid)
+                }
+                
+            case "refreshDisplays":
+                Task {
+                    do {
+                        try await self.audioManager.refreshAvailableContent()
+                        result(true)
+                    } catch {
+                        result(FlutterError(code: "DISPLAY_REFRESH_ERROR", 
+                                          message: error.localizedDescription, 
+                                          details: nil))
+                    }
+                }
+                
             default:
                 result(FlutterMethodNotImplemented)
             }
         }
+
+        // Add screen sleep/wake observers
+        setupScreenSleepWakeObservers()
+
         super.awakeFromNib()
     }
 
 
+    private func setupScreenSleepWakeObservers() {
+        // System sleep/wake notifications
+        let workspaceCenter = NSWorkspace.shared.notificationCenter
+        
+        workspaceCenter.addObserver(
+            self,
+            selector: #selector(systemWillSleep),
+            name: NSWorkspace.willSleepNotification,
+            object: nil
+        )
+        
+        workspaceCenter.addObserver(
+            self,
+            selector: #selector(systemDidWake),
+            name: NSWorkspace.didWakeNotification,
+            object: nil
+        )
+        
+        // Screen lock/unlock notifications (screensaver)
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(screenDidLock),
+            name: Notification.Name("com.apple.screenIsLocked"),
+            object: nil
+        )
+        
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(screenDidUnlock),
+            name: Notification.Name("com.apple.screenIsUnlocked"),
+            object: nil
+        )
+    }
     
+    @objc private func systemWillSleep() {
+        // Notify Flutter that system is going to sleep
+        screenCaptureChannel.invokeMethod("systemWillSleep", arguments: [
+            "wasRecording": audioManager.isRecording()
+        ])
+    }
+    
+    @objc private func systemDidWake() {
+        handleWakeUpStateCheck()
+    }
+    
+    @objc private func screenDidLock() {
+        // Notify Flutter about screen lock
+        screenCaptureChannel.invokeMethod("screenDidLock", arguments: [
+            "wasRecording": audioManager.isRecording()
+        ])
+    }
+    
+    @objc private func screenDidUnlock() {
+        handleWakeUpStateCheck()
+    }
+    
+    private func handleWakeUpStateCheck() {
+        let nativeIsRecording = audioManager.isRecording()
+        
+        // Always notify Flutter about wake up with current recording state
+        screenCaptureChannel.invokeMethod("systemDidWake", arguments: [
+            "nativeIsRecording": nativeIsRecording
+        ])
+        
+        // If native is recording, ensure display setup is still valid
+        if nativeIsRecording {
+            Task {
+                let displayValid = await audioManager.validateDisplaySetup()
+                
+                if !displayValid {
+                    screenCaptureChannel.invokeMethod("displaySetupInvalid", arguments: [
+                        "reason": "Display setup became invalid after wake up"
+                    ])
+                }
+            }
+        }
+    }
+
     // MARK: - Menu Bar Setup
     
     private func setupMenuBar() {
@@ -592,5 +686,12 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         
         // Mark Flutter engine as inactive when window is closing
         audioManager.setFlutterEngineActive(false)
+    }
+
+    deinit {
+        // Clean up observers
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+        DistributedNotificationCenter.default().removeObserver(self)
+        print("DEBUG: 🧹 Screen sleep/wake observers removed")
     }
 }

@@ -85,7 +85,7 @@ function setup_firebase_with_service_account() {
     --platforms="android,ios,macos,web" \
     --out=lib/firebase_options_dev.dart \
     --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-    --macos-bundle-id=com.friend-app-with-wearable.macos12.development \
+    --macos-bundle-id=com.friend-app-with-wearable.ios12.development \
     --android-app-id=com.friend.ios.dev \
     --android-out=android/app/src/dev/  \
     --ios-out=ios/Config/Dev/ \
@@ -100,7 +100,7 @@ function setup_firebase_with_service_account() {
     --platforms="android,ios,macos,web" \
     --out=lib/firebase_options_prod.dart \
     --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-    --macos-bundle-id=com.friend-app-with-wearable.macos12 \
+    --macos-bundle-id=com.friend-app-with-wearable.ios12 \
     --android-app-id=com.friend.ios.dev \
     --android-out=android/app/src/prod/ \
     --ios-out=ios/Config/Prod/ \
@@ -127,6 +127,22 @@ function setup_provisioning_profile() {
         --git_url "git@github.com:BasedHardware/omi-community-certs.git"
 }
 
+######################################
+# Setup provisioning profile macOS
+######################################
+function setup_provisioning_profile_macos() {
+    # Only install fastlane if it doesn't exist
+    if ! command -v fastlane &> /dev/null; then
+        echo "Installing fastlane..."
+        brew install fastlane
+    fi
+    
+    MATCH_PASSWORD=omi fastlane match development --readonly \
+        --platform macos \
+        --app_identifier com.friend-app-with-wearable.ios12.development \
+        --git_url "git@github.com:BasedHardware/omi-community-certs.git"
+}
+
 
 #################
 # Set up App .env
@@ -145,7 +161,7 @@ function setup_keystore_android() {
 # #####
 # Build
 # #####
-function build() {
+function run_build_android() {
   flutter pub get \
     && dart run build_runner build
 }
@@ -153,7 +169,7 @@ function build() {
 # #########
 # Build iOS
 # #########
-function build_ios() {
+function run_build_ios() {
   flutter pub get \
     && pushd ios && pod install --repo-update && popd \
     && dart run build_runner build
@@ -162,31 +178,35 @@ function build_ios() {
 # #########
 # Build macOS
 # #########
-function build_macos() {
+function run_build_macos() {
   flutter pub get \
     && pushd macos && pod install --repo-update && popd \
-    && dart run build_runner build
+    && dart run build_runner build \
+    && flutter build macos --debug --flavor dev \
+    && open build/macos/Build/Products/Debug-dev/Omi.app
+
+  echo "Note: To run the app on your macOS device, we need to register your Mac's device ID to our provisioning profile. Please send us your device ID on Discord (http://discord.omi.me)."
 }
 
-# #######
-# Run dev
-# #######
-function run_dev() {
-  flutter run --flavor dev
-}
 
 case "${1}" in
+  macos)
+    setup_firebase \
+      && setup_app_env \
+      && setup_provisioning_profile_macos \
+      && run_build_macos
+    ;;
   ios)
     setup_firebase \
       && setup_app_env \
       && setup_provisioning_profile \
-      && build_ios
+      && run_build_ios
     ;;
   android)
     setup_keystore_android \
       && setup_firebase \
       && setup_app_env \
-      && build
+      && run_build_android
     ;;
   macos)
     setup_firebase \

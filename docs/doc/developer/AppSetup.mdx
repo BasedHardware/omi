@@ -58,6 +58,7 @@ bash setup.sh android
 ```
 bash setup.sh macos
 ```
+Note: To run the app on your macOS device, we need to register your Mac's device ID to our provisioning profile. Please send us your device ID on [Discord](https://discord.omi.me).
 
 **If you use windows run the following commands**
 
@@ -201,7 +202,7 @@ dart pub run build_runner build
 - Similarly for dev environment
 
   ```
-  flutterfire config --out=lib/firebase_options_dev.dart --ios-bundle-id=com.friend-app-with-wearable.ios12.develop --android-app-id=com.friend.ios.dev --android-out=android/app/src/dev/  --ios-out=ios/Config/Dev/ --macos-bundle-id=com.friend-app-with-wearable.ios12.develop --macos-out=macos/Config/Prod
+  flutterfire config --out=lib/firebase_options_dev.dart --ios-bundle-id=com.friend-app-with-wearable.ios12.development --android-app-id=com.friend.ios.dev --android-out=android/app/src/dev/  --ios-out=ios/Config/Dev/ --macos-bundle-id=com.friend-app-with-wearable.ios12.development --macos-out=macos/Config/Prod
   ```
 - Generate SHA1/SHA256 Keys for your Keystore and add them to Firebase. Follow the steps mentioned in this [StackOverflow answer](https://stackoverflow.com/a/56091158) or the [Official Docs](https://support.google.com/firebase/answer/9137403?hl=en). This is required for Firebase Auth through Google OAuth to work.
 

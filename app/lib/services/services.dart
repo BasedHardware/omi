@@ -380,6 +380,13 @@ abstract class ISystemAudioRecorderService {
     Function()? onRecording,
     Function()? onStop,
     Function(String error)? onError,
+    Function(bool wasRecording)? onSystemWillSleep,
+    Function(bool nativeIsRecording)? onSystemDidWake,
+    Function(bool wasRecording)? onScreenDidLock,
+    Function()? onScreenDidUnlock,
+    Function(String reason)? onDisplaySetupInvalid,
+    Function()? onMicrophoneDeviceChanged,
+    Function(String deviceName, double micLevel, double systemAudioLevel)? onMicrophoneStatus,
   });
   void stop();
   // TODO: Add status property
@@ -392,6 +399,15 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
   Function()? _onRecording;
   Function()? _onStop;
   Function(String error)? _onError;
+  
+  // Sleep/wake event callbacks
+  Function(bool wasRecording)? _onSystemWillSleep;
+  Function(bool nativeIsRecording)? _onSystemDidWake;
+  Function(bool wasRecording)? _onScreenDidLock;
+  Function()? _onScreenDidUnlock;
+  Function(String reason)? _onDisplaySetupInvalid;
+  Function()? _onMicrophoneDeviceChanged;
+  Function(String deviceName, double micLevel, double systemAudioLevel)? _onMicrophoneStatus;
 
   // To keep track of recording state from Dart's perspective
   bool _isRecording = false;
@@ -434,8 +450,35 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
         }
         _clearCallbacks(); // Clear callbacks after error
         break;
+      case 'systemWillSleep':
+        await _handleSystemWillSleep(call.arguments);
+        break;
+      case 'systemDidWake':
+        await _handleSystemDidWake(call.arguments);
+        break;
+      case 'screenDidLock':
+        await _handleScreenDidLock(call.arguments);
+        break;
+      case 'screenDidUnlock':
+        await _handleScreenDidUnlock(call.arguments);
+        break;
+      case 'displaySetupInvalid':
+        await _handleDisplaySetupInvalid(call.arguments);
+        break;
+      case 'microphoneDeviceChanged':
+        await _handleMicrophoneDeviceChanged(call.arguments);
+        break;
+      case 'microphoneStatus':
+        if (_onMicrophoneStatus != null && call.arguments is Map) {
+          final args = Map<String, dynamic>.from(call.arguments as Map);
+          final deviceName = args['deviceName'] as String? ?? 'Unknown Device';
+          final micLevel = (args['micLevel'] as num? ?? 0.0).toDouble();
+          final systemAudioLevel = (args['systemAudioLevel'] as num? ?? 0.0).toDouble();
+          _onMicrophoneStatus!(deviceName, micLevel, systemAudioLevel);
+        }
+        break;
       default:
-        debugPrint('DesktopSystemAudioRecorderService: Unhandled method call: \${call.method}');
+        debugPrint('DesktopSystemAudioRecorderService: Unhandled method call: ${call.method}');
     }
   }
 
@@ -445,6 +488,84 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
     _onRecording = null;
     _onStop = null;
     _onError = null;
+    _onSystemWillSleep = null;
+    _onSystemDidWake = null;
+    _onScreenDidLock = null;
+    _onScreenDidUnlock = null;
+    _onDisplaySetupInvalid = null;
+    _onMicrophoneDeviceChanged = null;
+    _onMicrophoneStatus = null;
+  }
+  
+  // Sleep/wake event handlers
+  Future<void> _handleSystemWillSleep(dynamic arguments) async {
+    final args = arguments as Map<String, dynamic>?;
+    final wasRecording = args?['wasRecording'] as bool? ?? false;
+    
+    if (_onSystemWillSleep != null) {
+      _onSystemWillSleep!(wasRecording);
+    }
+  }
+  
+  Future<void> _handleSystemDidWake(dynamic arguments) async {
+    final args = arguments as Map<String, dynamic>?;
+    final nativeIsRecording = args?['nativeIsRecording'] as bool? ?? false;
+    
+    // Update internal state if there's a mismatch
+    if (nativeIsRecording && !_isRecording) {
+      _isRecording = true;
+      
+      // Notify that recording is active
+      if (_onRecording != null) {
+        _onRecording!();
+      }
+    } else if (!nativeIsRecording && _isRecording) {
+      _isRecording = false;
+      
+      if (_onStop != null) {
+        _onStop!();
+      }
+    }
+    
+    if (_onSystemDidWake != null) {
+      _onSystemDidWake!(nativeIsRecording);
+    }
+  }
+  
+  Future<void> _handleScreenDidLock(dynamic arguments) async {
+    final args = arguments as Map<String, dynamic>?;
+    final wasRecording = args?['wasRecording'] as bool? ?? false;
+    
+    if (_onScreenDidLock != null) {
+      _onScreenDidLock!(wasRecording);
+    }
+  }
+  
+  Future<void> _handleScreenDidUnlock(dynamic arguments) async {
+    if (_onScreenDidUnlock != null) {
+      _onScreenDidUnlock!();
+    }
+  }
+  
+  Future<void> _handleDisplaySetupInvalid(dynamic arguments) async {
+    final args = arguments as Map<String, dynamic>?;
+    final reason = args?['reason'] as String? ?? 'Unknown reason';
+    
+    _isRecording = false;
+    
+    if (_onDisplaySetupInvalid != null) {
+      _onDisplaySetupInvalid!(reason);
+    }
+    
+    if (_onStop != null) {
+      _onStop!();
+    }
+  }
+
+  Future<void> _handleMicrophoneDeviceChanged(dynamic arguments) async {
+    if (_onMicrophoneDeviceChanged != null) {
+      _onMicrophoneDeviceChanged!();
+    }
   }
 
   @override
@@ -454,7 +575,44 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
     Function()? onRecording,
     Function()? onStop,
     Function(String error)? onError,
+    Function(bool wasRecording)? onSystemWillSleep,
+    Function(bool nativeIsRecording)? onSystemDidWake,
+    Function(bool wasRecording)? onScreenDidLock,
+    Function()? onScreenDidUnlock,
+    Function(String reason)? onDisplaySetupInvalid,
+    Function()? onMicrophoneDeviceChanged,
+    Function(String deviceName, double micLevel, double systemAudioLevel)? onMicrophoneStatus,
   }) async {
+    try {
+      bool nativeIsRecording = await _channel.invokeMethod('isRecording') ?? false;
+      
+      if (nativeIsRecording && _isRecording) {
+        onError?.call("Already recording. Please stop the current recording first.");
+        return;
+      } else if (nativeIsRecording && !_isRecording) {
+        // Native is recording but Flutter lost track - resync the state
+        _isRecording = true;
+        
+        // Restore callbacks to reconnect with ongoing recording
+        _onByteReceived = onByteReceived;
+        _onFormatReceived = onFormatReceived;
+        _onRecording = onRecording;
+        _onStop = onStop;
+        _onError = onError;
+        
+        // Notify that recording is active
+        if (_onRecording != null) {
+          _onRecording!();
+        }
+        return;
+      } else if (!nativeIsRecording && _isRecording) {
+        // Flutter thinks it's recording but native isn't - reset Flutter state
+        _isRecording = false;
+      }
+    } catch (e) {
+      debugPrint("[SystemAudio] Could not check native recording state: $e");
+    }
+
     if (_isRecording) {
       // Potentially call onError or throw if already recording
       onError?.call("Already recording. Please stop the current recording first.");
@@ -467,24 +625,30 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
     _onRecording = onRecording;
     _onStop = onStop;
     _onError = onError;
+    _onSystemWillSleep = onSystemWillSleep;
+    _onSystemDidWake = onSystemDidWake;
+    _onScreenDidLock = onScreenDidLock;
+    _onScreenDidUnlock = onScreenDidUnlock;
+    _onDisplaySetupInvalid = onDisplaySetupInvalid;
+    _onMicrophoneDeviceChanged = onMicrophoneDeviceChanged;
+    _onMicrophoneStatus = onMicrophoneStatus;
 
     try {
       await _channel.invokeMethod('start');
-      _isRecording = true; // Assume recording starts successfully
+      _isRecording = true;
       if (_onRecording != null) {
         _onRecording!();
       }
     } catch (e) {
-      debugPrint("Error starting system audio recording: \$e");
+      debugPrint("Error starting system audio recording: $e");
       _isRecording = false;
       if (_onError != null) {
         _onError!(e.toString());
       }
       if (_onStop != null) {
-        // Ensure onStop is called if start fails immediately
         _onStop!();
       }
-      _clearCallbacks(); // Clear callbacks if start fails
+      _clearCallbacks();
     }
   }
 
@@ -494,7 +658,6 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
       // Optionally, log or call onError if trying to stop when not recording
       // _onError?.call("Not recording.");
       // return;
-      // Or silently do nothing if preferred
     }
     try {
       _channel.invokeMethod('stop');
@@ -503,7 +666,6 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
       // If the invokeMethod 'stop' itself fails, we might not get 'audioStreamEnded'.
     } catch (e) {
       debugPrint("Error stopping system audio recording: \$e");
-      // If stopping failed, force cleanup on Dart side.
       _isRecording = false;
       if (_onError != null) {
         _onError!(e.toString());

@@ -41,7 +41,7 @@ deepgram_nova2_multi_languages = ['multi', 'en', 'es']
 deepgram_nova3_multi_languages = ["multi", "en", "en-US", "en-AU", "en-GB", "en-NZ", "en-IN", "es", "es-419", "fr", "fr-CA", "de", "hi", "ru", "pt", "pt-BR", "pt-PT", "ja", "it", "nl", "nl-BE"]
 
 # Supported values: soniox-stt-rt,dg-nova-3,dg-nova-2
-stt_service_models = os.getenv('STT_SERVICE_MODELS', 'dg-nova-2').split(',')
+stt_service_models = os.getenv('STT_SERVICE_MODELS', 'dg-nova-3').split(',')
 
 def get_stt_service_for_language(language: str):
     # Picking STT service and STT language by following the order
@@ -112,6 +112,8 @@ if is_dg_self_hosted:
     print(f"Using Deepgram self-hosted at: {dg_self_hosted_url}")
 
 deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), deepgram_options)
+
+# unused fn
 deepgram_beta = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), deepgram_beta_options)
 
 async def process_audio_dg(
@@ -191,12 +193,7 @@ def connect_to_deepgram_with_backoff(on_message, on_error, language: str, sample
 
 def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, channels: int, model: str):
     try:
-        # get connection by model
-        if model == "nova-3":
-            dg_connection = deepgram_beta.listen.websocket.v("1")
-        else:
-            dg_connection = deepgram.listen.websocket.v("1")
-
+        dg_connection = deepgram.listen.websocket.v("1")
         dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
         dg_connection.on(LiveTranscriptionEvents.Error, on_error)
 
@@ -227,7 +224,7 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
         options = LiveOptions(
             punctuate=True,
             no_delay=True,
-            endpointing=100,
+            endpointing=300,
             language=language,
             interim_results=False,
             smart_format=True,
