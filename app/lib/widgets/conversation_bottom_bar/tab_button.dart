@@ -59,15 +59,10 @@ class TabButton extends StatelessWidget {
                     child: customIcon,
                   )
                 else if (icon != null)
-                  Container(
-                    width: 24,
-                    height: 24,
-                    alignment: Alignment.center,
-                    child: Icon(
-                      icon,
-                      color: isSelected ? Colors.white : Colors.grey.shade400,
-                      size: 24,
-                    ),
+                  Icon(
+                    icon,
+                    color: isSelected ? Colors.white : Colors.grey.shade400,
+                    size: 24,
                   ),
                 if (label != null) ...[
                   const SizedBox(width: 2),

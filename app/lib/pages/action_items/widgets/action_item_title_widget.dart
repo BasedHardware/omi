@@ -32,9 +32,8 @@ class ActionItemTileWidget extends StatefulWidget {
 }
 
 class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
-  // Assume SharedPreferencesUtil is available and has these methods:
-  // bool get dontAskAgainDeleteActionItem => _prefs.getBool('dont_ask_again_delete_action_item') ?? false;
-  // Future<void> setDontAskAgainDeleteActionItem(bool value) async => await _prefs.setBool('dont_ask_again_delete_action_item', value);
+  bool? _localCompletionState; // Local state for immediate visual feedback
+  bool _isAnimating = false;
 
   @override
   Widget build(BuildContext context) {
@@ -43,6 +42,9 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
       (c) => c.id == widget.conversationId,
       orElse: () => provider.searchedConversations.firstWhere((c) => c.id == widget.conversationId),
     );
+
+    // Use local state if available, otherwise use the actual state
+    final isCompleted = _localCompletionState ?? widget.actionItem.completed;
 
     BorderRadius borderRadius;
     if (widget.hasRoundedCorners) {
@@ -152,13 +154,8 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                 ) ??
                 false;
           } else if (direction == DismissDirection.startToEnd) {
-            // Complete action (swipe right) - toggle completed state
-            final newValue = !widget.actionItem.completed;
-            context.read<ConversationProvider>().updateGlobalActionItemState(
-                  conversation,
-                  widget.itemIndexInConversation,
-                  newValue,
-                );
+            // Complete action (swipe right) - use same logic as tap
+            _toggleCompletion(context, conversation);
             return false;
           }
           return false;
@@ -188,39 +185,30 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                     child: Transform.translate(
                       offset: const Offset(0, 2),
                       child: GestureDetector(
-                        onTap: () {
-                          HapticFeedback.lightImpact();
-                          final newValue = !widget.actionItem.completed;
-                          MixpanelManager().actionItemToggledCompletionOnActionItemsPage(
-                            conversationId: widget.conversationId,
-                            actionItemDescription: widget.actionItem.description,
-                            isCompleted: newValue,
-                          );
-                          context.read<ConversationProvider>().updateGlobalActionItemState(
-                                conversation,
-                                widget.itemIndexInConversation,
-                                newValue,
-                              );
-                        },
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          height: 20,
-                          width: 20,
-                          decoration: BoxDecoration(
-                            color: widget.actionItem.completed ? Colors.deepPurpleAccent : Colors.transparent,
-                            border: Border.all(
-                              color: widget.actionItem.completed ? Colors.deepPurpleAccent : Colors.grey[400]!,
-                              width: 1.5,
+                        onTap: () => _toggleCompletion(context, conversation),
+                        child: AnimatedOpacity(
+                          opacity: _isAnimating ? 0.7 : 1.0,
+                          duration: const Duration(milliseconds: 300),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            height: 20,
+                            width: 20,
+                            decoration: BoxDecoration(
+                              color: isCompleted ? Colors.green : Colors.transparent,
+                              border: Border.all(
+                                color: isCompleted ? Colors.green : Colors.grey[400]!,
+                                width: 1.5,
+                              ),
+                              borderRadius: BorderRadius.circular(5),
                             ),
-                            borderRadius: BorderRadius.circular(5),
+                            child: isCompleted
+                                ? const Icon(
+                                    Icons.check,
+                                    size: 14,
+                                    color: Colors.white,
+                                  )
+                                : null,
                           ),
-                          child: widget.actionItem.completed
-                              ? const Icon(
-                                  Icons.check,
-                                  size: 14,
-                                  color: Colors.white,
-                                )
-                              : null,
                         ),
                       ),
                     ),
@@ -239,8 +227,8 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                                 child: Text(
                                   widget.actionItem.description,
                                   style: TextStyle(
-                                    color: widget.actionItem.completed ? Colors.grey.shade500 : Colors.white,
-                                    decoration: widget.actionItem.completed ? TextDecoration.lineThrough : null,
+                                    color: isCompleted ? Colors.grey.shade500 : Colors.white,
+                                    decoration: isCompleted ? TextDecoration.lineThrough : null,
                                     decorationColor: Colors.grey.shade600,
                                     fontSize: 16,
                                     height: 1.3,
@@ -252,8 +240,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                           ),
 
                           // Optional date/time for tasks
-                          if (widget.actionItem.description.toLowerCase().contains('february') ||
-                              widget.actionItem.description.toLowerCase().contains('masterclass'))
+                          if (widget.actionItem.description.toLowerCase().contains('february') || widget.actionItem.description.toLowerCase().contains('masterclass'))
                             Padding(
                               padding: const EdgeInsets.only(top: 8.0),
                               child: Container(
@@ -293,6 +280,55 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
         ),
       ),
     );
+  }
+
+  void _toggleCompletion(BuildContext context, conversation) async {
+    // Haptic feedback
+    HapticFeedback.lightImpact();
+
+    final newValue = !widget.actionItem.completed;
+
+    // Update local state immediately for instant visual feedback
+    setState(() {
+      _localCompletionState = newValue;
+      _isAnimating = true;
+    });
+
+    try {
+      // Update global state immediately (this handles server + provider state)
+      await context.read<ConversationProvider>().updateGlobalActionItemState(
+            conversation,
+            widget.itemIndexInConversation,
+            newValue,
+          );
+
+      // Wait for 500ms before clearing local state (which will show the item in correct section)
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          // Clear local state so item shows in correct section
+          setState(() {
+            _localCompletionState = null;
+            _isAnimating = false;
+          });
+        }
+      });
+
+      // Track analytics
+      MixpanelManager().actionItemToggledCompletionOnActionItemsPage(
+        conversationId: widget.conversationId,
+        actionItemDescription: widget.actionItem.description,
+        isCompleted: newValue,
+      );
+    } catch (e) {
+      // If there's an error, revert local state
+      if (mounted) {
+        setState(() {
+          _localCompletionState = null;
+          _isAnimating = false;
+        });
+      }
+      debugPrint('Error updating action item state: $e');
+    }
   }
 
   void _showEditActionItemBottomSheet(BuildContext context, ActionItem item) {
