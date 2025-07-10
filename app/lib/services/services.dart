@@ -386,7 +386,7 @@ abstract class ISystemAudioRecorderService {
     Function()? onScreenDidUnlock,
     Function(String reason)? onDisplaySetupInvalid,
     Function()? onMicrophoneDeviceChanged,
-    Function(String deviceName, double micLevel)? onMicrophoneStatus,
+    Function(String deviceName, double micLevel, double systemAudioLevel)? onMicrophoneStatus,
   });
   void stop();
   // TODO: Add status property
@@ -407,7 +407,7 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
   Function()? _onScreenDidUnlock;
   Function(String reason)? _onDisplaySetupInvalid;
   Function()? _onMicrophoneDeviceChanged;
-  Function(String deviceName, double micLevel)? _onMicrophoneStatus;
+  Function(String deviceName, double micLevel, double systemAudioLevel)? _onMicrophoneStatus;
 
   // To keep track of recording state from Dart's perspective
   bool _isRecording = false;
@@ -473,7 +473,8 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
           final args = Map<String, dynamic>.from(call.arguments as Map);
           final deviceName = args['deviceName'] as String? ?? 'Unknown Device';
           final micLevel = (args['micLevel'] as num? ?? 0.0).toDouble();
-          _onMicrophoneStatus!(deviceName, micLevel);
+          final systemAudioLevel = (args['systemAudioLevel'] as num? ?? 0.0).toDouble();
+          _onMicrophoneStatus!(deviceName, micLevel, systemAudioLevel);
         }
         break;
       default:
@@ -580,7 +581,7 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
     Function()? onScreenDidUnlock,
     Function(String reason)? onDisplaySetupInvalid,
     Function()? onMicrophoneDeviceChanged,
-    Function(String deviceName, double micLevel)? onMicrophoneStatus,
+    Function(String deviceName, double micLevel, double systemAudioLevel)? onMicrophoneStatus,
   }) async {
     try {
       bool nativeIsRecording = await _channel.invokeMethod('isRecording') ?? false;

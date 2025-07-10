@@ -30,6 +30,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     private var currentInputDeviceID: AudioDeviceID?
     private var currentInputDeviceName: String?
     private var micRMS: Float = 0.0
+    private var systemAudioRMS: Float = 0.0
     private var isMicSilent: Bool = true
     private var isSystemAudioSilent: Bool = true
     private let silenceThreshold: Float = 0.005 // Threshold for RMS level to be considered silent
@@ -400,7 +401,8 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         
         let status: [String: Any] = [
             "deviceName": deviceName,
-            "micLevel": self.micRMS
+            "micLevel": self.micRMS,
+            "systemAudioLevel": self.systemAudioRMS
         ]
         
         if isFlutterEngineActive {
@@ -785,6 +787,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         
         if status == .haveData && outputPCMBuffer.frameLength > 0 {
             let rms = self.calculateRMS(buffer: outputPCMBuffer)
+            self.systemAudioRMS = rms
             self.isSystemAudioSilent = rms < self.silenceThreshold
             print("DEBUG: System audio buffer captured (converted). RMS: \(String(format: "%.4f", rms)). Silent: \(self.isSystemAudioSilent). Adding to queue. Frame length: \(outputPCMBuffer.frameLength)")
             self.audioProcessingQueue.async {

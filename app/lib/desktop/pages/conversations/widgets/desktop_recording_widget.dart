@@ -689,41 +689,47 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
     );
   }
 
-  Widget _buildWaveform(double level) {
+  Widget _buildWaveform(double level, Color color) {
     // Normalize level to 0-1 range, assuming a max sensible RMS of 0.15
     final double normalizedLevel = (level / 0.15).clamp(0.0, 1.0);
 
     return SizedBox(
-      width: 20,
+      width: 40,
       height: 16,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          _buildWaveformBar(normalizedLevel * 0.7, 1),
-          _buildWaveformBar(normalizedLevel, 2),
-          _buildWaveformBar(normalizedLevel * 0.7, 3),
+          _buildWaveformBar(normalizedLevel * 0.7, 1, color),
+          _buildWaveformBar(normalizedLevel, 2, color),
+          _buildWaveformBar(normalizedLevel * 0.7, 3, color),
         ],
       ),
     );
   }
 
-  Widget _buildWaveformBar(double heightFraction, int index) {
+  Widget _buildWaveformBar(double heightFraction, int index, Color color) {
     final double maxHeight = 16.0;
     return AnimatedContainer(
       duration: Duration(milliseconds: 50 + (index * 20)),
       curve: Curves.easeOut,
       height: (maxHeight * heightFraction).clamp(2.0, maxHeight),
-      width: 3,
+      width: 4,
       decoration: BoxDecoration(
-        color: ResponsiveHelper.textSecondary,
+        color: color,
         borderRadius: BorderRadius.circular(2),
       ),
     );
   }
 
-  Widget _buildFullRecordingView(bool isRecording, bool isInitializing, bool isPaused, bool hasTranscripts,
-      RecordingState recordingState, CaptureProvider captureProvider) {
+  Widget _buildFullRecordingView(
+    bool isRecording,
+    bool isInitializing,
+    bool isPaused,
+    bool hasTranscripts,
+    RecordingState recordingState,
+    CaptureProvider captureProvider,
+  ) {
     return Column(
       children: [
         // Recording header
@@ -838,7 +844,7 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
               ),
 
               const SizedBox(height: 24),
-              if (isRecording || isPaused) _buildMicrophoneStatus(captureProvider),
+              if (isRecording || isPaused) _buildAudioSourceStatus(captureProvider),
             ],
           ),
         ),
@@ -854,34 +860,51 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
     );
   }
 
-  Widget _buildMicrophoneStatus(CaptureProvider captureProvider) {
-    final deviceName = captureProvider.microphoneName;
+  Widget _buildAudioSourceStatus(CaptureProvider captureProvider) {
+    final micName = captureProvider.microphoneName;
     final micLevel = captureProvider.microphoneLevel;
+    final systemLevel = captureProvider.systemAudioLevel;
 
-    if (deviceName == null) {
+    if (micName == null) {
       return const SizedBox.shrink();
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Row(
+      child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildWaveform(micLevel),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              deviceName,
-              style: const TextStyle(
-                fontSize: 13,
-                color: ResponsiveHelper.textSecondary,
+          // Microphone Row
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.mic_rounded, size: 16, color: ResponsiveHelper.textSecondary),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(micName,
+                    style: const TextStyle(fontSize: 13, color: ResponsiveHelper.textSecondary),
+                    overflow: TextOverflow.ellipsis),
               ),
-              overflow: TextOverflow.ellipsis,
-            ),
+              const SizedBox(width: 12),
+              _buildWaveform(micLevel, ResponsiveHelper.purplePrimary),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // System Audio Row
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.volume_up_rounded, size: 16, color: ResponsiveHelper.textSecondary),
+              const SizedBox(width: 8),
+              const Text('System Audio', style: TextStyle(fontSize: 13, color: ResponsiveHelper.textSecondary)),
+              const SizedBox(width: 12),
+              _buildWaveform(systemLevel, Colors.orange.shade600),
+            ],
           ),
         ],
       ),

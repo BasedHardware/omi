@@ -55,6 +55,7 @@ class CaptureProvider extends ChangeNotifier
 
   String? microphoneName;
   double microphoneLevel = 0.0;
+  double systemAudioLevel = 0.0;
 
   List<MessageEvent> _transcriptionServiceStatuses = [];
   List<MessageEvent> get transcriptionServiceStatuses => _transcriptionServiceStatuses;
@@ -644,13 +645,14 @@ class CaptureProvider extends ChangeNotifier
         if (nativeRecording) {
           await pauseSystemAudioRecording();
         }
-      }, onMicrophoneStatus: (deviceName, micLevel) {
+      }, onMicrophoneStatus: (deviceName, micLevel, systemAudioLevel) {
         final bool needsUpdate =
-            microphoneName != deviceName || (microphoneLevel - micLevel).abs() > 0.001;
+            microphoneName != deviceName || (microphoneLevel - micLevel).abs() > 0.001 || (this.systemAudioLevel - systemAudioLevel).abs() > 0.001;
 
         if (needsUpdate) {
           microphoneName = deviceName;
           microphoneLevel = micLevel;
+          this.systemAudioLevel = systemAudioLevel;
           notifyListeners();
         }
       });
@@ -716,13 +718,14 @@ class CaptureProvider extends ChangeNotifier
                   await pauseSystemAudioRecording();
                 }
               },
-              onMicrophoneStatus: (deviceName, micLevel) {
+              onMicrophoneStatus: (deviceName, micLevel, systemAudioLevel) {
                 final bool needsUpdate =
-                    microphoneName != deviceName || (microphoneLevel - micLevel).abs() > 0.001;
+                    microphoneName != deviceName || (microphoneLevel - micLevel).abs() > 0.001 || (this.systemAudioLevel - systemAudioLevel).abs() > 0.001;
 
                 if (needsUpdate) {
                   microphoneName = deviceName;
                   microphoneLevel = micLevel;
+                  this.systemAudioLevel = systemAudioLevel;
                   notifyListeners();
                 }
               });
@@ -808,13 +811,14 @@ class CaptureProvider extends ChangeNotifier
             if (nativeRecording) {
               await pauseSystemAudioRecording();
             }
-          }, onMicrophoneStatus: (deviceName, micLevel) {
+          }, onMicrophoneStatus: (deviceName, micLevel, systemAudioLevel) {
             final bool needsUpdate =
-                microphoneName != deviceName || (microphoneLevel - micLevel).abs() > 0.001;
+                microphoneName != deviceName || (microphoneLevel - micLevel).abs() > 0.001 || (this.systemAudioLevel - systemAudioLevel).abs() > 0.001;
 
             if (needsUpdate) {
               microphoneName = deviceName;
               microphoneLevel = micLevel;
+              this.systemAudioLevel = systemAudioLevel;
               notifyListeners();
             }
           });
