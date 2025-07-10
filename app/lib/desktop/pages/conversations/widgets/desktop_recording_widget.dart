@@ -803,6 +803,9 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
                 ),
                 textAlign: TextAlign.center,
               ),
+
+              const SizedBox(height: 24),
+              if (isRecording || isPaused) _buildMicrophoneStatus(captureProvider),
             ],
           ),
         ),
@@ -815,6 +818,60 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildMicrophoneStatus(CaptureProvider captureProvider) {
+    final deviceName = captureProvider.microphoneName;
+    final isLow = captureProvider.isMicrophoneInputLow;
+
+    if (deviceName == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.mic_none_rounded,
+            size: 16,
+            color: ResponsiveHelper.textSecondary,
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              deviceName,
+              style: const TextStyle(
+                fontSize: 13,
+                color: ResponsiveHelper.textSecondary,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (isLow) ...[
+            const SizedBox(width: 12),
+            const Icon(
+              Icons.warning_amber_rounded,
+              size: 16,
+              color: Colors.orange,
+            ),
+            const SizedBox(width: 4),
+            const Text(
+              'Low input level',
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.orange,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 

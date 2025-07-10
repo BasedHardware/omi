@@ -22,11 +22,14 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     private var micAudioQueue = [AVAudioPCMBuffer]()
     private var systemAudioQueue = [AVAudioPCMBuffer]()
     private var audioMixTimer: Timer?
+    private var deviceStatusTimer: Timer?
     private var deviceChangeWorkItem: DispatchWorkItem?
     private var deviceListChangedListener: AudioObjectPropertyListenerBlock?
     private var isCurrentlyUsingSpeakers: Bool = false
     private var knownDeviceIDs: [AudioDeviceID] = []
     private var currentInputDeviceID: AudioDeviceID?
+    private var currentInputDeviceName: String?
+    private var micRMS: Float = 0.0
     private var isMicSilent: Bool = true
     private var isSystemAudioSilent: Bool = true
     private let silenceThreshold: Float = 0.005 // Threshold for RMS level to be considered silent
@@ -84,6 +87,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         print("DEBUG: Initial speaker status: \(self.isCurrentlyUsingSpeakers)")
         if let deviceID = self.currentInputDeviceID, let deviceName = getDeviceName(for: deviceID) {
             print("DEBUG: Initial input device: \(deviceName) (ID: \(deviceID))")
+            self.currentInputDeviceName = deviceName
         }
 
         // Start sleep prevention first
@@ -159,7 +163,8 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             
             if status == .haveData && outputPCMBuffer.frameLength > 0 {
                 let rms = self.calculateRMS(buffer: outputPCMBuffer)
-                self.isMicSilent = rms < self.silenceThreshold
+                self.micRMS = rms
+                self.isMicSilent = self.micRMS < self.silenceThreshold
                 print("DEBUG: Mic audio buffer captured. RMS: \(String(format: "%.4f", rms)). Silent: \(self.isMicSilent). Adding to queue.")
                 self.audioProcessingQueue.async {
                     self.micAudioQueue.append(outputPCMBuffer)
@@ -173,6 +178,9 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         DispatchQueue.main.async {
             self.audioMixTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
                 self?.processAudioQueues()
+            }
+            self.deviceStatusTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+                self?.sendMicrophoneStatus()
             }
         }
         
@@ -217,6 +225,8 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         // Stop the timer and clear queues
         audioMixTimer?.invalidate()
         audioMixTimer = nil
+        deviceStatusTimer?.invalidate()
+        deviceStatusTimer = nil
         audioProcessingQueue.async {
             self.micAudioQueue.removeAll()
             self.systemAudioQueue.removeAll()
@@ -317,6 +327,9 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             self.currentInputDeviceID = newDeviceID
             if let deviceName = getDeviceName(for: newDeviceID) {
                 print("DEBUG: Active input device changed to: \(deviceName) (ID: \(newDeviceID))")
+                self.currentInputDeviceName = deviceName
+            } else {
+                self.currentInputDeviceName = nil
             }
 
             // Notify Flutter that the device has changed.
@@ -379,6 +392,19 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         } else {
             print("ERROR: Could not get name for device \(deviceID): \(status)")
             return nil
+        }
+    }
+    
+    private func sendMicrophoneStatus() {
+        guard _isRecording, let deviceName = self.currentInputDeviceName else { return }
+        
+        let status: [String: Any] = [
+            "deviceName": deviceName,
+            "micLevel": self.micRMS
+        ]
+        
+        if isFlutterEngineActive {
+            self.screenCaptureChannel?.invokeMethod("microphoneStatus", arguments: status)
         }
     }
     

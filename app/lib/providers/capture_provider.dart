@@ -53,6 +53,10 @@ class CaptureProvider extends ChangeNotifier
 
   get internetStatus => _internetStatus;
 
+  String? microphoneName;
+  double microphoneLevel = 0.0;
+  bool isMicrophoneInputLow = false;
+
   List<MessageEvent> _transcriptionServiceStatuses = [];
   List<MessageEvent> get transcriptionServiceStatuses => _transcriptionServiceStatuses;
 
@@ -703,6 +707,17 @@ class CaptureProvider extends ChangeNotifier
                 if (nativeRecording) {
                   await pauseSystemAudioRecording();
                 }
+              },
+              onMicrophoneStatus: (deviceName, micLevel) {
+                final bool newIsLow = (micLevel >= 0.005) && (micLevel < 0.02);
+                if (microphoneName != deviceName || isMicrophoneInputLow != newIsLow) {
+                  microphoneName = deviceName;
+                  microphoneLevel = micLevel;
+                  isMicrophoneInputLow = newIsLow;
+                  notifyListeners();
+                } else {
+                  microphoneLevel = micLevel;
+                }
               });
           return;
         }
@@ -785,6 +800,16 @@ class CaptureProvider extends ChangeNotifier
             bool nativeRecording = await _screenCaptureChannel.invokeMethod('isRecording') ?? false;
             if (nativeRecording) {
               await pauseSystemAudioRecording();
+            }
+          }, onMicrophoneStatus: (deviceName, micLevel) {
+            final bool newIsLow = (micLevel >= 0.005) && (micLevel < 0.02);
+            if (microphoneName != deviceName || isMicrophoneInputLow != newIsLow) {
+              microphoneName = deviceName;
+              microphoneLevel = micLevel;
+              isMicrophoneInputLow = newIsLow;
+              notifyListeners();
+            } else {
+              microphoneLevel = micLevel;
             }
           });
 
