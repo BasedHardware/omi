@@ -177,10 +177,10 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         
         // Start the audio mixing timer on the main thread to ensure it fires correctly
         DispatchQueue.main.async {
-            self.audioMixTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+            self.audioMixTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
                 self?.processAudioQueues()
             }
-            self.deviceStatusTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            self.deviceStatusTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
                 self?.sendMicrophoneStatus()
             }
         }
@@ -397,7 +397,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     }
     
     private func sendMicrophoneStatus() {
-        guard _isRecording, let deviceName = self.currentInputDeviceName else { return }
+        guard let deviceName = self.currentInputDeviceName else { return }
         
         let status: [String: Any] = [
             "deviceName": deviceName,

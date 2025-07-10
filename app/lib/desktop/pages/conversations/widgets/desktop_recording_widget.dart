@@ -691,11 +691,11 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
 
   Widget _buildWaveform(double level, Color color) {
     // Normalize level to 0-1 range, assuming a max sensible RMS of 0.15
-    final double normalizedLevel = (level / 0.15).clamp(0.0, 1.0);
+    final double normalizedLevel = (level / 0.05).clamp(0.0, 1.0);
 
     return SizedBox(
-      width: 40,
-      height: 16,
+      width: 32,
+      height: 20,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -709,15 +709,15 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
   }
 
   Widget _buildWaveformBar(double heightFraction, int index, Color color) {
-    final double maxHeight = 16.0;
+    final double maxHeight = 20.0;
     return AnimatedContainer(
-      duration: Duration(milliseconds: 50 + (index * 20)),
-      curve: Curves.easeOut,
+      duration: Duration(milliseconds: 50 + (index * 100)),
+      curve: Curves.easeInOut,
       height: (maxHeight * heightFraction).clamp(2.0, maxHeight),
-      width: 4,
+      width: 2,
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(2),
+        borderRadius: BorderRadius.circular(1),
       ),
     );
   }
@@ -883,6 +883,8 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              _buildWaveform(micLevel, ResponsiveHelper.purplePrimary),
+              const SizedBox(width: 12),
               const Icon(Icons.mic_rounded, size: 16, color: ResponsiveHelper.textSecondary),
               const SizedBox(width: 8),
               Flexible(
@@ -890,8 +892,6 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
                     style: const TextStyle(fontSize: 13, color: ResponsiveHelper.textSecondary),
                     overflow: TextOverflow.ellipsis),
               ),
-              const SizedBox(width: 12),
-              _buildWaveform(micLevel, ResponsiveHelper.purplePrimary),
             ],
           ),
           const SizedBox(height: 12),
@@ -899,11 +899,11 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              _buildWaveform(systemLevel, Colors.orange.shade600),
+              const SizedBox(width: 12),
               const Icon(Icons.volume_up_rounded, size: 16, color: ResponsiveHelper.textSecondary),
               const SizedBox(width: 8),
               const Text('System Audio', style: TextStyle(fontSize: 13, color: ResponsiveHelper.textSecondary)),
-              const SizedBox(width: 12),
-              _buildWaveform(systemLevel, Colors.orange.shade600),
             ],
           ),
         ],
