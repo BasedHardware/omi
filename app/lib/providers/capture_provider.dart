@@ -639,18 +639,9 @@ class CaptureProvider extends ChangeNotifier
               'Recording stopped: $reason. You may need to reconnect external displays or restart recording.');
           notifyListeners();
         }
-      }, onMicrophoneDeviceChanged: _onMicrophoneDeviceChanged,
-      }, onMicrophoneStatus: (deviceName, micLevel, systemAudioLevel) {
-        final bool needsUpdate =
-            microphoneName != deviceName || (microphoneLevel - micLevel).abs() > 0.001 || (this.systemAudioLevel - systemAudioLevel).abs() > 0.001;
-
-        if (needsUpdate) {
-          microphoneName = deviceName;
-          microphoneLevel = micLevel;
-          this.systemAudioLevel = systemAudioLevel;
-          notifyListeners();
-        }
-      });
+      },
+      onMicrophoneDeviceChanged: _onMicrophoneDeviceChanged,
+      onMicrophoneStatus: _onMicrophoneStatus);
 
       await Future.delayed(const Duration(milliseconds: 500));
 
@@ -794,18 +785,9 @@ class CaptureProvider extends ChangeNotifier
             _socket?.stop(reason: 'system audio stream ended from native');
           }, onError: (error) {
             debugPrint('Second attempt also failed: $error');
-          }, onMicrophoneDeviceChanged: _onMicrophoneDeviceChanged,
-          }, onMicrophoneStatus: (deviceName, micLevel, systemAudioLevel) {
-            final bool needsUpdate =
-                microphoneName != deviceName || (microphoneLevel - micLevel).abs() > 0.001 || (this.systemAudioLevel - systemAudioLevel).abs() > 0.001;
-
-            if (needsUpdate) {
-              microphoneName = deviceName;
-              microphoneLevel = micLevel;
-              this.systemAudioLevel = systemAudioLevel;
-              notifyListeners();
-            }
-          });
+          },
+          onMicrophoneDeviceChanged: _onMicrophoneDeviceChanged,
+          onMicrophoneStatus: _onMicrophoneStatus);
 
           await Future.delayed(const Duration(milliseconds: 500));
 
@@ -852,6 +834,18 @@ class CaptureProvider extends ChangeNotifier
       await pauseSystemAudioRecording();
       await Future.delayed(const Duration(seconds: 3));
       await resumeSystemAudioRecording();
+    }
+  }
+
+  void _onMicrophoneStatus(String deviceName, double micLevel, double systemAudioLevel) {
+    final bool needsUpdate =
+        microphoneName != deviceName || (microphoneLevel - micLevel).abs() > 0.001 || (this.systemAudioLevel - systemAudioLevel).abs() > 0.001;
+
+    if (needsUpdate) {
+      microphoneName = deviceName;
+      microphoneLevel = micLevel;
+      this.systemAudioLevel = systemAudioLevel;
+      notifyListeners();
     }
   }
 
