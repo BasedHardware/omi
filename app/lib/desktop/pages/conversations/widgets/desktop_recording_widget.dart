@@ -689,6 +689,39 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
     );
   }
 
+  Widget _buildWaveform(double level) {
+    // Normalize level to 0-1 range, assuming a max sensible RMS of 0.2
+    final double normalizedLevel = (level / 0.2).clamp(0.0, 1.0);
+
+    return SizedBox(
+      width: 20,
+      height: 16,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _buildWaveformBar(normalizedLevel * 0.7, 1),
+          _buildWaveformBar(normalizedLevel, 2),
+          _buildWaveformBar(normalizedLevel * 0.7, 3),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWaveformBar(double heightFraction, int index) {
+    final double maxHeight = 16.0;
+    return AnimatedContainer(
+      duration: Duration(milliseconds: 50 + (index * 20)),
+      curve: Curves.easeOut,
+      height: (maxHeight * heightFraction).clamp(2.0, maxHeight),
+      width: 3,
+      decoration: BoxDecoration(
+        color: ResponsiveHelper.textSecondary,
+        borderRadius: BorderRadius.circular(2),
+      ),
+    );
+  }
+
   Widget _buildFullRecordingView(bool isRecording, bool isInitializing, bool isPaused, bool hasTranscripts,
       RecordingState recordingState, CaptureProvider captureProvider) {
     return Column(
@@ -823,7 +856,8 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
 
   Widget _buildMicrophoneStatus(CaptureProvider captureProvider) {
     final deviceName = captureProvider.microphoneName;
-    final isLow = captureProvider.isMicrophoneInputLow;
+    final isSilent = captureProvider.isMicrophoneSilent;
+    final micLevel = captureProvider.microphoneLevel;
 
     if (deviceName == null) {
       return const SizedBox.shrink();
@@ -838,11 +872,7 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.mic_none_rounded,
-            size: 16,
-            color: ResponsiveHelper.textSecondary,
-          ),
+          _buildWaveform(micLevel),
           const SizedBox(width: 8),
           Flexible(
             child: Text(
@@ -854,16 +884,16 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (isLow) ...[
+          if (isSilent) ...[
             const SizedBox(width: 12),
             const Icon(
-              Icons.warning_amber_rounded,
+              Icons.mic_off_rounded,
               size: 16,
               color: Colors.orange,
             ),
             const SizedBox(width: 4),
             const Text(
-              'Low input level',
+              'Microphone silent',
               style: TextStyle(
                 fontSize: 13,
                 color: Colors.orange,

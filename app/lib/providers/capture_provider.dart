@@ -55,7 +55,7 @@ class CaptureProvider extends ChangeNotifier
 
   String? microphoneName;
   double microphoneLevel = 0.0;
-  bool isMicrophoneInputLow = false;
+  bool isMicrophoneSilent = true;
 
   List<MessageEvent> _transcriptionServiceStatuses = [];
   List<MessageEvent> get transcriptionServiceStatuses => _transcriptionServiceStatuses;
@@ -645,14 +645,16 @@ class CaptureProvider extends ChangeNotifier
         if (nativeRecording) {
           await pauseSystemAudioRecording();
         }
-      }, onMicrophoneStatus: (deviceName, micLevel) {
-        final bool newIsLow = (micLevel >= 0.005) && (micLevel < 0.05);
-        if (microphoneName != deviceName || isMicrophoneInputLow != newIsLow) {
+      }, onMicrophoneStatus: (deviceName, micLevel, isSilent) {
+        final bool needsUpdate =
+            microphoneName != deviceName || isMicrophoneSilent != isSilent || (microphoneLevel - micLevel).abs() > 0.001;
+
+        if (needsUpdate) {
           microphoneName = deviceName;
-          isMicrophoneInputLow = newIsLow;
+          isMicrophoneSilent = isSilent;
+          microphoneLevel = micLevel;
           notifyListeners();
         }
-        microphoneLevel = micLevel;
       });
 
       await Future.delayed(const Duration(milliseconds: 500));
@@ -716,14 +718,16 @@ class CaptureProvider extends ChangeNotifier
                   await pauseSystemAudioRecording();
                 }
               },
-              onMicrophoneStatus: (deviceName, micLevel) {
-                final bool newIsLow = (micLevel >= 0.005) && (micLevel < 0.05);
-                if (microphoneName != deviceName || isMicrophoneInputLow != newIsLow) {
+              onMicrophoneStatus: (deviceName, micLevel, isSilent) {
+                final bool needsUpdate =
+                    microphoneName != deviceName || isMicrophoneSilent != isSilent || (microphoneLevel - micLevel).abs() > 0.001;
+
+                if (needsUpdate) {
                   microphoneName = deviceName;
-                  isMicrophoneInputLow = newIsLow;
+                  isMicrophoneSilent = isSilent;
+                  microphoneLevel = micLevel;
                   notifyListeners();
                 }
-                microphoneLevel = micLevel;
               });
           return;
         }
@@ -807,14 +811,16 @@ class CaptureProvider extends ChangeNotifier
             if (nativeRecording) {
               await pauseSystemAudioRecording();
             }
-          }, onMicrophoneStatus: (deviceName, micLevel) {
-            final bool newIsLow = (micLevel >= 0.005) && (micLevel < 0.05);
-            if (microphoneName != deviceName || isMicrophoneInputLow != newIsLow) {
+          }, onMicrophoneStatus: (deviceName, micLevel, isSilent) {
+            final bool needsUpdate =
+                microphoneName != deviceName || isMicrophoneSilent != isSilent || (microphoneLevel - micLevel).abs() > 0.001;
+
+            if (needsUpdate) {
               microphoneName = deviceName;
-              isMicrophoneInputLow = newIsLow;
+              isMicrophoneSilent = isSilent;
+              microphoneLevel = micLevel;
               notifyListeners();
             }
-            microphoneLevel = micLevel;
           });
 
           await Future.delayed(const Duration(milliseconds: 500));

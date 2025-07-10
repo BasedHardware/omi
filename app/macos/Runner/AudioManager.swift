@@ -400,7 +400,8 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         
         let status: [String: Any] = [
             "deviceName": deviceName,
-            "micLevel": self.micRMS
+            "micLevel": self.micRMS,
+            "isMicSilent": self.isMicSilent
         ]
         
         if isFlutterEngineActive {
