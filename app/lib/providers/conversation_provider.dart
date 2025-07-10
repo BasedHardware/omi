@@ -36,8 +36,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
   List<Wal> get missingWals => _missingWals;
 
-  int get missingWalsInSeconds =>
-      _missingWals.isEmpty ? 0 : _missingWals.map((val) => val.seconds).reduce((a, b) => a + b);
+  int get missingWalsInSeconds => _missingWals.isEmpty ? 0 : _missingWals.map((val) => val.seconds).reduce((a, b) => a + b);
 
   double _walsSyncedProgress = 0.0;
 
@@ -171,8 +170,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     // Debounce mechanism: only refresh if enough time has passed since last refresh
     final now = DateTime.now();
     if (_lastRefreshTime != null && now.difference(_lastRefreshTime!) < _refreshCooldown) {
-      debugPrint(
-          'Skipping conversations refresh - too soon since last refresh (${now.difference(_lastRefreshTime!).inSeconds}s ago)');
+      debugPrint('Skipping conversations refresh - too soon since last refresh (${now.difference(_lastRefreshTime!).inSeconds}s ago)');
       return;
     }
 
@@ -201,19 +199,13 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     List<ServerConversation> upsertConvos = [];
 
     // processing convos
-    upsertConvos = newConversations
-        .where((c) =>
-            c.status == ConversationStatus.processing &&
-            processingConversations.indexWhere((cc) => cc.id == c.id) == -1)
-        .toList();
+    upsertConvos = newConversations.where((c) => c.status == ConversationStatus.processing && processingConversations.indexWhere((cc) => cc.id == c.id) == -1).toList();
     if (upsertConvos.isNotEmpty) {
       processingConversations.insertAll(0, upsertConvos);
     }
 
     // completed convos
-    upsertConvos = newConversations
-        .where((c) => c.status == ConversationStatus.completed && conversations.indexWhere((cc) => cc.id == c.id) == -1)
-        .toList();
+    upsertConvos = newConversations.where((c) => c.status == ConversationStatus.completed && conversations.indexWhere((cc) => cc.id == c.id) == -1).toList();
     if (upsertConvos.isNotEmpty) {
       conversations.insertAll(0, upsertConvos);
     }
@@ -311,8 +303,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
   void updateActionItemState(String convoId, bool state, int i, DateTime date) {
     conversations.firstWhere((element) => element.id == convoId).structured.actionItems[i].completed = state;
-    groupedConversations[date]!.firstWhere((element) => element.id == convoId).structured.actionItems[i].completed =
-        state;
+    groupedConversations[date]!.firstWhere((element) => element.id == convoId).structured.actionItems[i].completed = state;
     notifyListeners();
   }
 
@@ -320,8 +311,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     if (conversations.length % 50 != 0) return;
     if (isLoadingConversations) return;
     setLoadingConversations(true);
-    var newConversations =
-        await getConversations(offset: conversations.length, includeDiscarded: showDiscardedConversations);
+    var newConversations = await getConversations(offset: conversations.length, includeDiscarded: showDiscardedConversations);
     conversations.addAll(newConversations);
     conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     _groupConversationsByDateWithoutNotify();
@@ -370,8 +360,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
       }
     } else {
       groupedConversations[memDate] = [conversation];
-      groupedConversations =
-          Map.fromEntries(groupedConversations.entries.toList()..sort((a, b) => b.key.compareTo(a.key)));
+      groupedConversations = Map.fromEntries(groupedConversations.entries.toList()..sort((a, b) => b.key.compareTo(a.key)));
       idx = 0;
     }
     return (idx, memDate);
@@ -420,9 +409,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   Map<String, DateTime> deleteTimestamps = {};
 
   void deleteConversationLocally(ServerConversation conversation, int index, DateTime date) {
-    if (lastDeletedConversationId != null &&
-        memoriesToDelete.containsKey(lastDeletedConversationId) &&
-        DateTime.now().difference(deleteTimestamps[lastDeletedConversationId]!) < const Duration(seconds: 3)) {
+    if (lastDeletedConversationId != null && memoriesToDelete.containsKey(lastDeletedConversationId) && DateTime.now().difference(deleteTimestamps[lastDeletedConversationId]!) < const Duration(seconds: 3)) {
       deleteConversationOnServer(lastDeletedConversationId!);
     }
 
@@ -544,11 +531,9 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     List<dynamic> newConversations = syncResult.newConversationIds;
     List<dynamic> updatedConversations = syncResult.updatedConversationIds;
     setIsFetchingConversations(true);
-    List<Future<ServerConversation?>> newConversationsFutures =
-        newConversations.map((item) => getConversationDetails(item)).toList();
+    List<Future<ServerConversation?>> newConversationsFutures = newConversations.map((item) => getConversationDetails(item)).toList();
 
-    List<Future<ServerConversation?>> updatedConversationsFutures =
-        updatedConversations.map((item) => getConversationDetails(item)).toList();
+    List<Future<ServerConversation?>> updatedConversationsFutures = updatedConversations.map((item) => getConversationDetails(item)).toList();
     var syncedConversations = {'new_memories': [], 'updated_memories': []};
     try {
       final newConversationsResponses = await Future.wait(newConversationsFutures);
@@ -582,16 +567,14 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     for (var conversation in syncedConversations['new_memories']!) {
       if (conversation != null && conversation.status == ConversationStatus.completed) {
         var res = getConversationDateAndIndex(conversation);
-        syncedConversationsPointers.add(SyncedConversationPointer(
-            type: SyncedConversationType.newConversation, index: res.$2, key: res.$1, conversation: conversation));
+        syncedConversationsPointers.add(SyncedConversationPointer(type: SyncedConversationType.newConversation, index: res.$2, key: res.$1, conversation: conversation));
       }
     }
     if (syncedConversations['updated_memories'] != []) {
       for (var conversation in syncedConversations['updated_memories']!) {
         if (conversation != null && conversation.status == ConversationStatus.completed) {
           var res = getConversationDateAndIndex(conversation);
-          syncedConversationsPointers.add(SyncedConversationPointer(
-              type: SyncedConversationType.newConversation, index: res.$2, key: res.$1, conversation: conversation));
+          syncedConversationsPointers.add(SyncedConversationPointer(type: SyncedConversationType.newConversation, index: res.$2, key: res.$1, conversation: conversation));
         }
       }
     }
@@ -679,8 +662,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     return result;
   }
 
-  Future<void> updateGlobalActionItemState(
-      ServerConversation conversation, int itemIndexInConversation, bool newState) async {
+  Future<void> updateGlobalActionItemState(ServerConversation conversation, int itemIndexInConversation, bool newState) async {
     final convoId = conversation.id;
     bool conversationFoundAndUpdated = false;
 
@@ -697,8 +679,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
       final groupIndex = groupedConversations[dateKey]!.indexWhere((c) => c.id == convoId);
       if (groupIndex != -1) {
         if (groupedConversations[dateKey]![groupIndex].structured.actionItems.length > itemIndexInConversation) {
-          groupedConversations[dateKey]![groupIndex].structured.actionItems[itemIndexInConversation].completed =
-              newState;
+          groupedConversations[dateKey]![groupIndex].structured.actionItems[itemIndexInConversation].completed = newState;
         }
       }
     }

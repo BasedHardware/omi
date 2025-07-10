@@ -38,10 +38,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   ServerConversation? _cachedConversation;
   ServerConversation get conversation {
-    if (conversationProvider == null ||
-        !conversationProvider!.groupedConversations.containsKey(selectedDate) ||
-        conversationProvider!.groupedConversations[selectedDate] == null ||
-        conversationProvider!.groupedConversations[selectedDate]!.length <= conversationIdx) {
+    if (conversationProvider == null || !conversationProvider!.groupedConversations.containsKey(selectedDate) || conversationProvider!.groupedConversations[selectedDate] == null || conversationProvider!.groupedConversations[selectedDate]!.length <= conversationIdx) {
       // Return cached conversation if available, otherwise create an empty one
       if (_cachedConversation == null) {
         throw StateError("No conversation available");
@@ -246,6 +243,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       conversationProvider!.updateConversation(updatedConversation);
       SharedPreferencesUtil().modifiedConversationDetails = updatedConversation;
 
+      // Update the cached conversation to ensure we have the latest data
+      _cachedConversation = updatedConversation;
+
       // Check if the summarized app is in the apps list
       AppResponse? summaryApp = getSummarizedApp();
       if (summaryApp != null && summaryApp.appId != null && appProvider != null) {
@@ -286,11 +286,23 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     if (conversation.appResults.isNotEmpty) {
       return conversation.appResults[0];
     }
+    // If no appResults but we have structured overview, create a fake AppResponse
+    if (conversation.structured.overview.isNotEmpty) {
+      return AppResponse(
+        conversation.structured.overview,
+        appId: null,
+      );
+    }
     return null;
   }
 
   void setPreferredSummarizationApp(String appId) {
     setPreferredSummarizationAppServer(appId);
+    notifyListeners();
+  }
+
+  void setCachedConversation(ServerConversation conversation) {
+    _cachedConversation = conversation;
     notifyListeners();
   }
 }

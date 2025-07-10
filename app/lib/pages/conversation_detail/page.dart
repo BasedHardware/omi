@@ -73,9 +73,19 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+      var conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
+
+      // Ensure the provider has the conversation data from the widget parameter
+      provider.setCachedConversation(widget.conversation);
+
+      // Find the proper date and index for this conversation in the grouped conversations
+      var (date, index) = conversationProvider.getConversationDateAndIndex(widget.conversation);
+      provider.conversationIdx = index >= 0 ? index : 0;
+      provider.selectedDate = date;
+
       await provider.initConversation();
       if (provider.conversation.appResults.isEmpty) {
-        await Provider.of<ConversationProvider>(context, listen: false).updateSearchedConvoDetails(provider.conversation.id, provider.selectedDate, provider.conversationIdx);
+        await conversationProvider.updateSearchedConvoDetails(provider.conversation.id, provider.selectedDate, provider.conversationIdx);
         provider.updateConversation(provider.conversationIdx, provider.selectedDate);
       }
     });
