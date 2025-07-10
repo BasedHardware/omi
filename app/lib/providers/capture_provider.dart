@@ -63,19 +63,17 @@ class CaptureProvider extends ChangeNotifier
     _internetStatusListener = PureCore().internetConnection.onStatusChange.listen((InternetStatus status) {
       onInternetSatusChanged(status);
     });
-    
+
     // Add app lifecycle listener to detect sleep/wake cycles
     if (PlatformService.isDesktop) {
       _initializeAppLifecycleListener();
     }
   }
-  
+
   void _initializeAppLifecycleListener() {
     // Add this instance as a lifecycle observer
     WidgetsBinding.instance.addObserver(this);
   }
-  
-
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -84,14 +82,13 @@ class CaptureProvider extends ChangeNotifier
       _handleAppResumed();
     }
   }
-  
+
   void _handleAppResumed() async {
     if (recordingState == RecordingState.systemAudioRecord) {
-      
       try {
         // Check if native recording is still active
         bool nativeRecording = await _screenCaptureChannel.invokeMethod('isRecording') ?? false;
-        
+
         if (nativeRecording && recordingState != RecordingState.systemAudioRecord) {
           // Will be handled by existing logic in streamSystemAudioRecording error handling
         } else if (!nativeRecording && recordingState == RecordingState.systemAudioRecord) {
@@ -318,9 +315,9 @@ class CaptureProvider extends ChangeNotifier
       }
 
       // send ws
-          if (_socket?.state == SocketServiceState.connected) {
-      final trimmedValue = value.sublist(3);
-      _socket?.send(trimmedValue);
+      if (_socket?.state == SocketServiceState.connected) {
+        final trimmedValue = value.sublist(3);
+        _socket?.send(trimmedValue);
 
         // synced
         if (_isWalSupported) {
@@ -506,12 +503,12 @@ class CaptureProvider extends ChangeNotifier
     _socket?.unsubscribe(this);
     _keepAliveTimer?.cancel();
     _internetStatusListener?.cancel();
-    
+
     // Remove lifecycle observer
     if (PlatformService.isDesktop) {
       WidgetsBinding.instance.removeObserver(this);
     }
-    
+
     super.dispose();
   }
 
@@ -590,10 +587,7 @@ class CaptureProvider extends ChangeNotifier
         final int channels = ((format['channels'] ?? 1) as num).toInt();
         BleAudioCodec determinedCodec = BleAudioCodec.pcm16;
       }, onByteReceived: (bytes) {
-        _systemAudioBuffer.addAll(bytes);
-        if (!_systemAudioCaching) {
-          _flushSystemAudioBuffer();
-        }
+        _processSystemAudioByteReceived(bytes);
       }, onRecording: () {
         recordingStarted = true;
         updateRecordingState(RecordingState.systemAudioRecord);
@@ -614,17 +608,17 @@ class CaptureProvider extends ChangeNotifier
         debugPrint('System will sleep - was recording: $wasRecording');
       }, onSystemDidWake: (nativeIsRecording) async {
         debugPrint('System woke up - Native recording: $nativeIsRecording, Flutter state: $recordingState');
-        
+
         if (nativeIsRecording && recordingState != RecordingState.systemAudioRecord) {
           debugPrint('AUTO-FIXING WAKE DESYNC: Native recording but Flutter lost track, updating state...');
           updateRecordingState(RecordingState.systemAudioRecord);
-          
+
           // Ensure socket is connected for the ongoing recording
           if (_socket?.state != SocketServiceState.connected) {
             debugPrint('Reconnecting socket after wake...');
             await _initiateWebsocket(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
           }
-          
+
           notifyListeners();
         }
       }, onScreenDidLock: (wasRecording) {
@@ -638,13 +632,15 @@ class CaptureProvider extends ChangeNotifier
         if (recordingState == RecordingState.systemAudioRecord) {
           updateRecordingState(RecordingState.stop);
           AppSnackbar.showSnackbarError(
-            'Recording stopped: $reason. You may need to reconnect external displays or restart recording.'
-          );
+              'Recording stopped: $reason. You may need to reconnect external displays or restart recording.');
           notifyListeners();
         }
       }, onMicrophoneDeviceChanged: () async {
         debugPrint('Microphone device changed, pausing recording.');
-        await pauseSystemAudioRecording();
+        bool nativeRecording = await _screenCaptureChannel.invokeMethod('isRecording') ?? false;
+        if (nativeRecording) {
+          await pauseSystemAudioRecording();
+        }
       });
 
       await Future.delayed(const Duration(milliseconds: 500));
@@ -671,44 +667,43 @@ class CaptureProvider extends ChangeNotifier
       try {
         bool nativeRecording = await _screenCaptureChannel.invokeMethod('isRecording') ?? false;
         debugPrint('Permission error but native recording state: $nativeRecording');
-        
+
         if (nativeRecording) {
           debugPrint('FIXING SLEEP/WAKE DESYNC: Native recording active despite permission error, resyncing state...');
-          
+
           updateRecordingState(RecordingState.systemAudioRecord);
-          
+
           await ServiceManager.instance().systemAudio.start(
-            onFormatReceived: (Map<String, dynamic> format) async {
-            }, 
-            onByteReceived: (bytes) {
-              if (_socket?.state == SocketServiceState.connected) {
-                _socket?.send(bytes);
-              }
-            }, 
-            onRecording: () {
-              updateRecordingState(RecordingState.systemAudioRecord);
-              debugPrint('System audio state resynced after sleep/wake');
-            }, 
-            onStop: () {
-              if (_isPaused) {
-                updateRecordingState(RecordingState.pause);
-              } else {
+              onFormatReceived: (Map<String, dynamic> format) async {},
+              onByteReceived: (bytes) {
+                _processSystemAudioByteReceived(bytes);
+              },
+              onRecording: () {
+                updateRecordingState(RecordingState.systemAudioRecord);
+                debugPrint('System audio state resynced after sleep/wake');
+              },
+              onStop: () {
+                if (_isPaused) {
+                  updateRecordingState(RecordingState.pause);
+                } else {
+                  updateRecordingState(RecordingState.stop);
+                }
+                _socket?.stop(reason: 'system audio stream ended from native');
+              },
+              onError: (error) {
+                debugPrint('System audio error during resync: $error');
                 updateRecordingState(RecordingState.stop);
-              }
-              _socket?.stop(reason: 'system audio stream ended from native');
-            }, 
-            onError: (error) {
-              debugPrint('System audio error during resync: $error');
-              updateRecordingState(RecordingState.stop);
-            },
-            onSystemDidWake: (nativeIsRecording) async {
-              debugPrint('Resync wake callback - Native recording: $nativeIsRecording');
-            },
-            onMicrophoneDeviceChanged: () async {
-              debugPrint('Microphone device changed, pausing recording.');
-              await pauseSystemAudioRecording();
-            }
-          );
+              },
+              onSystemDidWake: (nativeIsRecording) async {
+                debugPrint('Resync wake callback - Native recording: $nativeIsRecording');
+              },
+              onMicrophoneDeviceChanged: () async {
+                debugPrint('Microphone device changed, pausing recording.');
+                bool nativeRecording = await _screenCaptureChannel.invokeMethod('isRecording') ?? false;
+                if (nativeRecording) {
+                  await pauseSystemAudioRecording();
+                }
+              });
           return;
         }
       } catch (e) {
@@ -723,14 +718,14 @@ class CaptureProvider extends ChangeNotifier
     } else if (error.contains('SCREEN_PERMISSION_REQUIRED') || error.contains('screen')) {
       AppSnackbar.showSnackbarError(
           'Screen recording permission is required. Please grant permission in System Preferences > Privacy & Security > Screen Recording.');
-            } else if (error.contains('Already recording')) {
-          debugPrint('Already recording error - attempting to sync state...');
-          return;
-        } else if (error.contains('Failed to find any displays or windows to capture')) {
-          debugPrint('Display detection error - checking for external display disconnect...');
-          AppSnackbar.showSnackbarError(
-              'No displays found for screen recording. This can happen when external displays are disconnected. Please try reconnecting displays or restart the app.');
-        } else {
+    } else if (error.contains('Already recording')) {
+      debugPrint('Already recording error - attempting to sync state...');
+      return;
+    } else if (error.contains('Failed to find any displays or windows to capture')) {
+      debugPrint('Display detection error - checking for external display disconnect...');
+      AppSnackbar.showSnackbarError(
+          'No displays found for screen recording. This can happen when external displays are disconnected. Please try reconnecting displays or restart the app.');
+    } else {
       await _checkAndRequestPermissions();
     }
 
@@ -764,7 +759,6 @@ class CaptureProvider extends ChangeNotifier
       debugPrint('Screen capture permission status: $screenStatus');
 
       if (screenStatus != 'granted') {
-
         try {
           bool secondAttemptWorked = false;
 
@@ -773,9 +767,7 @@ class CaptureProvider extends ChangeNotifier
             final int channels = ((format['channels'] ?? 1) as num).toInt();
             BleAudioCodec determinedCodec = BleAudioCodec.pcm16;
           }, onByteReceived: (bytes) {
-            if (_socket?.state == SocketServiceState.connected) {
-              _socket?.send(bytes);
-            }
+            _processSystemAudioByteReceived(bytes);
           }, onRecording: () {
             secondAttemptWorked = true;
             updateRecordingState(RecordingState.systemAudioRecord);
@@ -790,7 +782,10 @@ class CaptureProvider extends ChangeNotifier
             debugPrint('Second attempt also failed: $error');
           }, onMicrophoneDeviceChanged: () async {
             debugPrint('Microphone device changed, pausing recording.');
-            await pauseSystemAudioRecording();
+            bool nativeRecording = await _screenCaptureChannel.invokeMethod('isRecording') ?? false;
+            if (nativeRecording) {
+              await pauseSystemAudioRecording();
+            }
           });
 
           await Future.delayed(const Duration(milliseconds: 500));
@@ -813,18 +808,18 @@ class CaptureProvider extends ChangeNotifier
 
         await streamSystemAudioRecording();
       }
-            } catch (e) {  
-          debugPrint('Error in permission checking: $e');
-          
-          // Check if this is a state desync error
-          if (e.toString().contains('Already recording')) {
-            debugPrint('Already recording error during permission check - attempting to sync state...');
-            await _handleSystemAudioPermissionError(e.toString());
-          } else {
-            notifyError('Permission error: $e');
-            updateRecordingState(RecordingState.stop);
-          }
-        }
+    } catch (e) {
+      debugPrint('Error in permission checking: $e');
+
+      // Check if this is a state desync error
+      if (e.toString().contains('Already recording')) {
+        debugPrint('Already recording error during permission check - attempting to sync state...');
+        await _handleSystemAudioPermissionError(e.toString());
+      } else {
+        notifyError('Permission error: $e');
+        updateRecordingState(RecordingState.stop);
+      }
+    }
   }
 
   void _flushSystemAudioBuffer() {
@@ -849,6 +844,8 @@ class CaptureProvider extends ChangeNotifier
     if (!PlatformService.isDesktop) return;
     ServiceManager.instance().systemAudio.stop();
     _isPaused = true; // Set paused state
+    await _socket?.stop(reason: 'pause system audio recording from Flutter');
+    await _cleanupCurrentState();
     notifyListeners();
   }
 
@@ -898,7 +895,7 @@ class CaptureProvider extends ChangeNotifier
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
     debugPrint('Socket error: $err');
-    
+
     // Check for display-related errors
     if (err.toString().contains('Failed to find any displays or windows to capture')) {
       debugPrint('Display detection error in socket - likely external display disconnect');
@@ -908,7 +905,7 @@ class CaptureProvider extends ChangeNotifier
         updateRecordingState(RecordingState.stop);
       }
     }
-    
+
     notifyListeners();
     _startKeepAliveServices();
   }
@@ -1204,5 +1201,12 @@ class CaptureProvider extends ChangeNotifier
       return [];
     }
     return connection.getStorageList();
+  }
+
+  void _processSystemAudioByteReceived(Uint8List bytes) {
+    _systemAudioBuffer.addAll(bytes);
+    if (!_systemAudioCaching) {
+      _flushSystemAudioBuffer();
+    }
   }
 }
