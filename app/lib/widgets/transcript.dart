@@ -44,16 +44,16 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   // ScrollController to enable proper scrolling
   final ScrollController _scrollController = ScrollController();
 
-  // Define very subtle dark purple shades for different speakers
+  // Define distinct muted colors for different speakers
   static const List<Color> _speakerColors = [
-    Color(0xFF2D1B40), // Very dark muted purple
-    Color(0xFF342041), // Dark muted purple
-    Color(0xFF3A2242), // Muted purple grey
-    Color(0xFF402444), // Subtle purple
-    Color(0xFF462645), // Soft purple
-    Color(0xFF4C2846), // Gentle purple
-    Color(0xFF522A47), // Whisper purple
-    Color(0xFF582C48), // Faint purple
+    Color(0xFF3A2E26), // Dark warm brown
+    Color(0xFF26313A), // Dark navy blue
+    Color(0xFF2E3A26), // Dark forest green
+    Color(0xFF3A2634), // Dark burgundy
+    Color(0xFF263A34), // Dark teal
+    Color(0xFF34332A), // Dark olive
+    Color(0xFF2F2A3A), // Dark plum
+    Color(0xFF3A3026), // Dark bronze
   ];
 
   Color _getSpeakerBubbleColor(bool isUser, int speakerId) {
