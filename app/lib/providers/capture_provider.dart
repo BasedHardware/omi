@@ -646,15 +646,13 @@ class CaptureProvider extends ChangeNotifier
           await pauseSystemAudioRecording();
         }
       }, onMicrophoneStatus: (deviceName, micLevel) {
-        final bool newIsLow = (micLevel >= 0.005) && (micLevel < 0.02);
+        final bool newIsLow = (micLevel >= 0.005) && (micLevel < 0.05);
         if (microphoneName != deviceName || isMicrophoneInputLow != newIsLow) {
           microphoneName = deviceName;
-          microphoneLevel = micLevel;
           isMicrophoneInputLow = newIsLow;
           notifyListeners();
-        } else {
-          microphoneLevel = micLevel;
         }
+        microphoneLevel = micLevel;
       });
 
       await Future.delayed(const Duration(milliseconds: 500));
@@ -719,15 +717,13 @@ class CaptureProvider extends ChangeNotifier
                 }
               },
               onMicrophoneStatus: (deviceName, micLevel) {
-                final bool newIsLow = (micLevel >= 0.005) && (micLevel < 0.02);
+                final bool newIsLow = (micLevel >= 0.005) && (micLevel < 0.05);
                 if (microphoneName != deviceName || isMicrophoneInputLow != newIsLow) {
                   microphoneName = deviceName;
-                  microphoneLevel = micLevel;
                   isMicrophoneInputLow = newIsLow;
                   notifyListeners();
-                } else {
-                  microphoneLevel = micLevel;
                 }
+                microphoneLevel = micLevel;
               });
           return;
         }
@@ -812,15 +808,13 @@ class CaptureProvider extends ChangeNotifier
               await pauseSystemAudioRecording();
             }
           }, onMicrophoneStatus: (deviceName, micLevel) {
-            final bool newIsLow = (micLevel >= 0.005) && (micLevel < 0.02);
+            final bool newIsLow = (micLevel >= 0.005) && (micLevel < 0.05);
             if (microphoneName != deviceName || isMicrophoneInputLow != newIsLow) {
               microphoneName = deviceName;
-              microphoneLevel = micLevel;
               isMicrophoneInputLow = newIsLow;
               notifyListeners();
-            } else {
-              microphoneLevel = micLevel;
             }
+            microphoneLevel = micLevel;
           });
 
           await Future.delayed(const Duration(milliseconds: 500));
