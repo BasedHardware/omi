@@ -60,6 +60,10 @@ class CaptureProvider extends ChangeNotifier
   bool _isAutoReconnecting = false;
   bool get isAutoReconnecting => _isAutoReconnecting;
 
+  Timer? _reconnectTimer;
+  int _reconnectCountdown = 5;
+  int get reconnectCountdown => _reconnectCountdown;
+
   List<MessageEvent> _transcriptionServiceStatuses = [];
   List<MessageEvent> get transcriptionServiceStatuses => _transcriptionServiceStatuses;
 
@@ -831,20 +835,27 @@ class CaptureProvider extends ChangeNotifier
     bool nativeRecording = await _screenCaptureChannel.invokeMethod('isRecording') ?? false;
     if (nativeRecording) {
       _isAutoReconnecting = true;
+      _reconnectCountdown = 5;
       notifyListeners();
 
       await pauseSystemAudioRecording(isAuto: true);
-      await Future.delayed(const Duration(seconds: 5));
 
-      if (!_isAutoReconnecting) {
-        debugPrint('Auto-reconnect cancelled by user action.');
-        return;
-      }
-
-      await resumeSystemAudioRecording();
-
-      _isAutoReconnecting = false;
-      notifyListeners();
+      _reconnectTimer?.cancel();
+      _reconnectTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (_reconnectCountdown > 1) {
+          _reconnectCountdown--;
+          notifyListeners();
+        } else {
+          _reconnectTimer?.cancel();
+          _reconnectTimer = null;
+          if (_isAutoReconnecting) {
+            resumeSystemAudioRecording().then((_) {
+              _isAutoReconnecting = false;
+              notifyListeners();
+            });
+          }
+        }
+      });
     }
   }
 
@@ -873,6 +884,8 @@ class CaptureProvider extends ChangeNotifier
   Future<void> stopSystemAudioRecording() async {
     if (!PlatformService.isDesktop) return;
     _isAutoReconnecting = false;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
     ServiceManager.instance().systemAudio.stop();
     _isPaused = false; // Clear paused state when stopping
     await _socket?.stop(reason: 'stop system audio recording from Flutter');
@@ -883,6 +896,8 @@ class CaptureProvider extends ChangeNotifier
     if (!PlatformService.isDesktop) return;
     if (!isAuto) {
       _isAutoReconnecting = false;
+      _reconnectTimer?.cancel();
+      _reconnectTimer = null;
     }
     ServiceManager.instance().systemAudio.stop();
     _isPaused = true; // Set paused state
