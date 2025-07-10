@@ -55,7 +55,6 @@ class CaptureProvider extends ChangeNotifier
 
   String? microphoneName;
   double microphoneLevel = 0.0;
-  bool isMicrophoneSilent = true;
 
   List<MessageEvent> _transcriptionServiceStatuses = [];
   List<MessageEvent> get transcriptionServiceStatuses => _transcriptionServiceStatuses;
@@ -645,13 +644,12 @@ class CaptureProvider extends ChangeNotifier
         if (nativeRecording) {
           await pauseSystemAudioRecording();
         }
-      }, onMicrophoneStatus: (deviceName, micLevel, isSilent) {
+      }, onMicrophoneStatus: (deviceName, micLevel) {
         final bool needsUpdate =
-            microphoneName != deviceName || isMicrophoneSilent != isSilent || (microphoneLevel - micLevel).abs() > 0.001;
+            microphoneName != deviceName || (microphoneLevel - micLevel).abs() > 0.001;
 
         if (needsUpdate) {
           microphoneName = deviceName;
-          isMicrophoneSilent = isSilent;
           microphoneLevel = micLevel;
           notifyListeners();
         }
@@ -718,13 +716,12 @@ class CaptureProvider extends ChangeNotifier
                   await pauseSystemAudioRecording();
                 }
               },
-              onMicrophoneStatus: (deviceName, micLevel, isSilent) {
+              onMicrophoneStatus: (deviceName, micLevel) {
                 final bool needsUpdate =
-                    microphoneName != deviceName || isMicrophoneSilent != isSilent || (microphoneLevel - micLevel).abs() > 0.001;
+                    microphoneName != deviceName || (microphoneLevel - micLevel).abs() > 0.001;
 
                 if (needsUpdate) {
                   microphoneName = deviceName;
-                  isMicrophoneSilent = isSilent;
                   microphoneLevel = micLevel;
                   notifyListeners();
                 }
@@ -811,13 +808,12 @@ class CaptureProvider extends ChangeNotifier
             if (nativeRecording) {
               await pauseSystemAudioRecording();
             }
-          }, onMicrophoneStatus: (deviceName, micLevel, isSilent) {
+          }, onMicrophoneStatus: (deviceName, micLevel) {
             final bool needsUpdate =
-                microphoneName != deviceName || isMicrophoneSilent != isSilent || (microphoneLevel - micLevel).abs() > 0.001;
+                microphoneName != deviceName || (microphoneLevel - micLevel).abs() > 0.001;
 
             if (needsUpdate) {
               microphoneName = deviceName;
-              isMicrophoneSilent = isSilent;
               microphoneLevel = micLevel;
               notifyListeners();
             }

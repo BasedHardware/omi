@@ -690,8 +690,8 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
   }
 
   Widget _buildWaveform(double level) {
-    // Normalize level to 0-1 range, assuming a max sensible RMS of 0.2
-    final double normalizedLevel = (level / 0.2).clamp(0.0, 1.0);
+    // Normalize level to 0-1 range, assuming a max sensible RMS of 0.15
+    final double normalizedLevel = (level / 0.15).clamp(0.0, 1.0);
 
     return SizedBox(
       width: 20,
@@ -856,7 +856,6 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
 
   Widget _buildMicrophoneStatus(CaptureProvider captureProvider) {
     final deviceName = captureProvider.microphoneName;
-    final isSilent = captureProvider.isMicrophoneSilent;
     final micLevel = captureProvider.microphoneLevel;
 
     if (deviceName == null) {
@@ -884,22 +883,6 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (isSilent) ...[
-            const SizedBox(width: 12),
-            const Icon(
-              Icons.mic_off_rounded,
-              size: 16,
-              color: Colors.orange,
-            ),
-            const SizedBox(width: 4),
-            const Text(
-              'Microphone silent',
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.orange,
-              ),
-            ),
-          ],
         ],
       ),
     );

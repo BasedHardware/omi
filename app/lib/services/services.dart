@@ -386,7 +386,7 @@ abstract class ISystemAudioRecorderService {
     Function()? onScreenDidUnlock,
     Function(String reason)? onDisplaySetupInvalid,
     Function()? onMicrophoneDeviceChanged,
-    Function(String deviceName, double micLevel, bool isMicSilent)? onMicrophoneStatus,
+    Function(String deviceName, double micLevel)? onMicrophoneStatus,
   });
   void stop();
   // TODO: Add status property
@@ -473,8 +473,7 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
           final args = Map<String, dynamic>.from(call.arguments as Map);
           final deviceName = args['deviceName'] as String? ?? 'Unknown Device';
           final micLevel = (args['micLevel'] as num? ?? 0.0).toDouble();
-          final isMicSilent = args['isMicSilent'] as bool? ?? true;
-          _onMicrophoneStatus!(deviceName, micLevel, isMicSilent);
+          _onMicrophoneStatus!(deviceName, micLevel);
         }
         break;
       default:
@@ -581,7 +580,7 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
     Function()? onScreenDidUnlock,
     Function(String reason)? onDisplaySetupInvalid,
     Function()? onMicrophoneDeviceChanged,
-    Function(String deviceName, double micLevel, bool isMicSilent)? onMicrophoneStatus,
+    Function(String deviceName, double micLevel)? onMicrophoneStatus,
   }) async {
     try {
       bool nativeIsRecording = await _channel.invokeMethod('isRecording') ?? false;
