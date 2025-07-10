@@ -30,17 +30,17 @@ class TabButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: label != null ? 120 : 80,
+      width: label != null ? 100 : 60,
       height: 40,
       decoration: BoxDecoration(
-        color: isSelected ? Colors.deepPurple.withOpacity(0.3) : Colors.transparent,
+        color: isSelected ? const Color(0xFF6B46C1) : Colors.transparent, // Lighter purple for selected state
         borderRadius: BorderRadius.circular(20),
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
-          onTap: showDropdownArrow ? onDropdownPressed : onTap,
+          onTap: onTap, // Always use onTap for tab selection
           child: Center(
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -59,16 +59,21 @@ class TabButton extends StatelessWidget {
                     child: customIcon,
                   )
                 else if (icon != null)
-                  Icon(
-                    icon,
-                    color: isSelected ? Colors.white : Colors.grey.shade400,
-                    size: 24,
+                  Container(
+                    width: 24,
+                    height: 24,
+                    alignment: Alignment.center,
+                    child: Icon(
+                      icon,
+                      color: isSelected ? Colors.white : Colors.grey.shade400,
+                      size: 24,
+                    ),
                   ),
                 if (label != null) ...[
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 2),
                   Flexible(
                     child: Container(
-                      width: 60,
+                      width: 50,
                       child: ShaderMask(
                         shaderCallback: (Rect bounds) {
                           return LinearGradient(
@@ -93,11 +98,14 @@ class TabButton extends StatelessWidget {
                   ),
                 ],
                 if (showDropdownArrow) ...[
-                  const SizedBox(width: 2),
-                  Icon(
-                    Icons.keyboard_arrow_down,
-                    color: Colors.white,
-                    size: 16,
+                  const SizedBox(width: 1),
+                  GestureDetector(
+                    onTap: onDropdownPressed, // Separate tap handler for dropdown
+                    child: Icon(
+                      Icons.keyboard_arrow_down,
+                      color: Colors.white,
+                      size: 16,
+                    ),
                   ),
                 ],
               ],

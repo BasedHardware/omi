@@ -44,6 +44,35 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   // ScrollController to enable proper scrolling
   final ScrollController _scrollController = ScrollController();
 
+  // Define very subtle dark purple shades for different speakers
+  static const List<Color> _speakerColors = [
+    Color(0xFF2D1B40), // Very dark muted purple
+    Color(0xFF342041), // Dark muted purple
+    Color(0xFF3A2242), // Muted purple grey
+    Color(0xFF402444), // Subtle purple
+    Color(0xFF462645), // Soft purple
+    Color(0xFF4C2846), // Gentle purple
+    Color(0xFF522A47), // Whisper purple
+    Color(0xFF582C48), // Faint purple
+  ];
+
+  Color _getSpeakerBubbleColor(bool isUser, int speakerId) {
+    if (isUser) {
+      return Colors.blue.shade600.withOpacity(0.8);
+    }
+    // Use speakerId to get consistent color for each speaker
+    final colorIndex = speakerId % _speakerColors.length;
+    return _speakerColors[colorIndex].withOpacity(0.8);
+  }
+
+  Color _getSpeakerAvatarColor(bool isUser, int speakerId) {
+    if (isUser) {
+      return Colors.blue.shade600.withOpacity(0.3);
+    }
+    final colorIndex = speakerId % _speakerColors.length;
+    return _speakerColors[colorIndex].withOpacity(0.3);
+  }
+
   @override
   void dispose() {
     _scrollController.dispose();
@@ -75,14 +104,14 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       itemBuilder: (context, idx) {
         // Handle header and footer items
         if (idx == 0) return SizedBox(height: widget.topMargin ? 32 : 0);
-        if (idx == widget.segments.length + 1) return SizedBox(height: widget.bottomMargin);
+        if (idx == widget.segments.length + 1) return SizedBox(height: widget.bottomMargin + 120);
 
         // Add separator before the item (except for the first one)
         if (widget.separator && idx > 1) {
           return Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const SizedBox(height: 16),
+              const SizedBox(height: 4),
               _buildSegmentItem(idx - 1),
             ],
           );
@@ -96,79 +125,164 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   Widget _buildSegmentItem(int segmentIdx) {
     final data = widget.segments[segmentIdx];
     final Person? person = data.personId != null ? _getPersonById(data.personId) : null;
+    final bool isUser = data.isUser;
+
+    final speakerName = isUser
+        ? (SharedPreferencesUtil().givenName.isNotEmpty ? SharedPreferencesUtil().givenName : 'You')
+        : data.personId != null
+            ? person?.name ?? 'Deleted Person'
+            : 'Speaker ${data.speakerId}';
 
     return Padding(
-      padding:
-          EdgeInsetsDirectional.fromSTEB(widget.horizontalMargin ? 16 : 0, 0.0, widget.horizontalMargin ? 16 : 0, 0.0),
+      padding: EdgeInsetsDirectional.fromSTEB(widget.horizontalMargin ? 16 : 0, 2.0, widget.horizontalMargin ? 16 : 0, 2.0),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          GestureDetector(
-            onTap: () {
-              widget.editSegment?.call(segmentIdx, data.speakerId);
-              MixpanelManager().assignSheetOpened();
-            },
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.start,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Image.asset(
-                  data.isUser
-                      ? Assets.images.speaker0Icon.path
-                      : person != null
-                          ? speakerImagePath[person.colorIdx!]
-                          : Assets.images.speaker1Icon.path,
-                  width: 26,
-                  height: 26,
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  data.isUser
-                      ? SharedPreferencesUtil().givenName.isNotEmpty
-                          ? SharedPreferencesUtil().givenName
-                          : 'You'
-                      : data.personId != null
-                          ? person?.name ?? 'Deleted Person'
-                          : 'Speaker ${data.speakerId}',
-                  style: const TextStyle(color: Colors.white, fontSize: 18),
-                ),
-                if (widget.canDisplaySeconds) ...[
-                  const SizedBox(width: 12),
-                  Text(
-                    data.getTimestampString(),
-                    style: const TextStyle(color: Colors.grey, fontSize: 14),
+          // Row with bubble and avatars (for proper alignment)
+          Row(
+            mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              // Speaker avatar (only for others, on the left)
+              if (!isUser) ...[
+                GestureDetector(
+                  onTap: () {
+                    widget.editSegment?.call(segmentIdx, data.speakerId);
+                    MixpanelManager().assignSheetOpened();
+                  },
+                  child: CircleAvatar(
+                    radius: 16,
+                    backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId),
+                    child: Image.asset(
+                      person != null ? speakerImagePath[person.colorIdx!] : Assets.images.speaker1Icon.path,
+                      width: 20,
+                      height: 20,
+                    ),
                   ),
-                ],
+                ),
+                const SizedBox(width: 8),
               ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: SelectionArea(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _getDecodedText(data.text),
-                    style: const TextStyle(letterSpacing: 0.0, color: Colors.grey),
-                    textAlign: TextAlign.left,
-                  ),
-                  if (data.translations.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    ...data.translations.map((translation) => Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            _getDecodedText(translation.text),
-                            style: const TextStyle(letterSpacing: 0.0, color: Colors.grey),
-                            textAlign: TextAlign.left,
+
+              // Chat bubble only (no label here for alignment)
+              Flexible(
+                child: Align(
+                  alignment: isUser ? Alignment.bottomRight : Alignment.bottomLeft,
+                  child: GestureDetector(
+                    onTap: () {
+                      widget.editSegment?.call(segmentIdx, data.speakerId);
+                      MixpanelManager().assignSheetOpened();
+                    },
+                    child: Container(
+                      constraints: BoxConstraints(
+                        maxWidth: MediaQuery.of(context).size.width * 0.7,
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: _getSpeakerBubbleColor(isUser, data.speakerId),
+                        borderRadius: BorderRadius.only(
+                          topLeft: const Radius.circular(16),
+                          topRight: const Radius.circular(16),
+                          bottomLeft: Radius.circular(isUser ? 16 : 4),
+                          bottomRight: Radius.circular(isUser ? 4 : 16),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 3,
+                            offset: const Offset(0, 1),
                           ),
-                        )),
-                    const SizedBox(height: 4),
-                    _buildTranslationNotice(),
-                  ],
-                ],
+                        ],
+                      ),
+                      child: SelectionArea(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _getDecodedText(data.text),
+                              style: TextStyle(
+                                letterSpacing: 0.0,
+                                color: isUser ? Colors.white : Colors.grey.shade200,
+                                fontSize: 15,
+                                height: 1.3,
+                              ),
+                              textAlign: TextAlign.left,
+                            ),
+                            if (data.translations.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              ...data.translations.map((translation) => Padding(
+                                    padding: const EdgeInsets.only(top: 4),
+                                    child: Text(
+                                      _getDecodedText(translation.text),
+                                      style: TextStyle(
+                                        letterSpacing: 0.0,
+                                        color: isUser ? Colors.white.withOpacity(0.8) : Colors.grey.shade300.withOpacity(0.8),
+                                        fontSize: 14,
+                                        fontStyle: FontStyle.italic,
+                                        height: 1.3,
+                                      ),
+                                      textAlign: TextAlign.left,
+                                    ),
+                                  )),
+                              const SizedBox(height: 4),
+                              _buildTranslationNotice(),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ),
+
+              // User avatar (only for user, on the right)
+              if (isUser) ...[
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () {
+                    widget.editSegment?.call(segmentIdx, data.speakerId);
+                    MixpanelManager().assignSheetOpened();
+                  },
+                  child: CircleAvatar(
+                    radius: 16,
+                    backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId),
+                    child: Image.asset(
+                      Assets.images.speaker0Icon.path,
+                      width: 20,
+                      height: 20,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+
+          // Speaker name below the entire row (for all speakers)
+          Padding(
+            padding: EdgeInsets.only(
+              top: 4,
+              left: isUser ? 0 : 40, // 32 (avatar + gap) + 8 (extra padding) for non-users
+              right: isUser ? 40 : 0, // 32 (avatar + gap) + 8 (extra padding) for users
+            ),
+            child: Row(
+              mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+              children: [
+                Text(
+                  speakerName,
+                  style: const TextStyle(
+                    color: Colors.grey,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+                // Commented out timestamp - can be restored later if needed
+                // if (widget.canDisplaySeconds) ...[
+                //   const SizedBox(width: 8),
+                //   Text(
+                //     data.getTimestampString(),
+                //     style: const TextStyle(color: Colors.grey, fontSize: 9),
+                //   ),
+                // ],
+              ],
             ),
           ),
         ],
@@ -259,11 +373,8 @@ class LiteTranscriptWidget extends StatelessWidget {
   }
 }
 
-String getLastTranscript(List<TranscriptSegment> transcriptSegments,
-    {int? maxCount, bool generate = false, bool includeTimestamps = true}) {
-  var transcript = TranscriptSegment.segmentsAsString(
-      transcriptSegments.sublist(transcriptSegments.length >= 50 ? transcriptSegments.length - 50 : 0),
-      includeTimestamps: includeTimestamps);
+String getLastTranscript(List<TranscriptSegment> transcriptSegments, {int? maxCount, bool generate = false, bool includeTimestamps = true}) {
+  var transcript = TranscriptSegment.segmentsAsString(transcriptSegments.sublist(transcriptSegments.length >= 50 ? transcriptSegments.length - 50 : 0), includeTimestamps: includeTimestamps);
   if (maxCount != null) transcript = transcript.substring(max(transcript.length - maxCount, 0));
   return tryDecodingText(transcript);
 }

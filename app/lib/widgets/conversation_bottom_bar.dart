@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
@@ -49,10 +50,10 @@ class ConversationBottomBar extends StatelessWidget {
       borderRadius: BorderRadius.circular(28),
       child: Container(
         height: 56,
-        width: mode == ConversationBottomBarMode.recording ? 180 : 360,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        width: mode == ConversationBottomBarMode.recording ? 180 : null,
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
         decoration: BoxDecoration(
-          color: Colors.grey.shade900,
+          color: const Color(0xFF1A0B2E), // Very deep purple
           borderRadius: BorderRadius.circular(28),
           boxShadow: [
             BoxShadow(
@@ -64,16 +65,21 @@ class ConversationBottomBar extends StatelessWidget {
           ],
         ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // Transcript tab
             _buildTranscriptTab(),
+
+            // Add minimal spacing between tabs
+            const SizedBox(width: 4),
 
             // Stop button or Summary/Action Items tabs
             ...switch (mode) {
               ConversationBottomBarMode.recording => [_buildStopButton()],
               ConversationBottomBarMode.detail => [
                   _buildSummaryTab(context),
+                  const SizedBox(width: 4),
                   _buildActionItemsTab(),
                 ],
               _ => [_buildSummaryTab(context)],
@@ -86,7 +92,7 @@ class ConversationBottomBar extends StatelessWidget {
 
   Widget _buildTranscriptTab() {
     return TabButton(
-      icon: Icons.forum_outlined,
+      icon: FontAwesomeIcons.solidComments,
       isSelected: selectedTab == ConversationTab.transcript,
       onTap: () => onTabSelected(ConversationTab.transcript),
     );
@@ -127,9 +133,7 @@ class ConversationBottomBar extends StatelessWidget {
     return Consumer<ConversationDetailProvider>(
       builder: (context, provider, _) {
         final summarizedApp = provider.getSummarizedApp();
-        final app = summarizedApp != null
-            ? provider.appsList.firstWhereOrNull((element) => element.id == summarizedApp.appId)
-            : null;
+        final app = summarizedApp != null ? provider.appsList.firstWhereOrNull((element) => element.id == summarizedApp.appId) : null;
 
         return _buildSummaryTabContent(context, provider, app);
       },
@@ -152,12 +156,10 @@ class ConversationBottomBar extends StatelessWidget {
               : null,
           isSelected: selectedTab == ConversationTab.summary,
           onTap: () => onTabSelected(ConversationTab.summary),
-          label: isReprocessing ? (reprocessingApp?.name ?? "Auto") : (app?.name ?? "Summary"),
-          appImage: isReprocessing
-              ? (reprocessingApp != null ? reprocessingApp.getImageUrl() : Assets.images.herologo.path)
-              : (app != null ? app.getImageUrl() : null),
+          label: null, // Remove the label to show only icon + dropdown
+          appImage: isReprocessing ? (reprocessingApp != null ? reprocessingApp.getImageUrl() : Assets.images.herologo.path) : (app != null ? app.getImageUrl() : null),
           isLocalAsset: isReprocessing && reprocessingApp == null,
-          showDropdownArrow: selectedTab == ConversationTab.summary,
+          showDropdownArrow: true, // Always show dropdown arrow
           isLoading: isReprocessing,
           onDropdownPressed: () {
             showModalBottomSheet(
@@ -174,7 +176,7 @@ class ConversationBottomBar extends StatelessWidget {
 
   Widget _buildActionItemsTab() {
     return TabButton(
-      icon: Icons.check_circle_outline,
+      icon: FontAwesomeIcons.listCheck,
       isSelected: selectedTab == ConversationTab.actionItems,
       onTap: () => onTabSelected(ConversationTab.actionItems),
     );

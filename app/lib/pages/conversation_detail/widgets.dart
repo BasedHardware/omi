@@ -118,7 +118,7 @@ class GetSummaryWidgets extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 24),
+            const SizedBox(height: 8),
             conversation.discarded
                 ? Text(
                     'Discarded Conversation',
