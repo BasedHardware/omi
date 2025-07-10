@@ -57,6 +57,9 @@ class CaptureProvider extends ChangeNotifier
   double microphoneLevel = 0.0;
   double systemAudioLevel = 0.0;
 
+  bool _isAutoReconnecting = false;
+  bool get isAutoReconnecting => _isAutoReconnecting;
+
   List<MessageEvent> _transcriptionServiceStatuses = [];
   List<MessageEvent> get transcriptionServiceStatuses => _transcriptionServiceStatuses;
 
@@ -825,16 +828,23 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> _onMicrophoneDeviceChanged() async {
     debugPrint('Microphone device changed. Restarting recording in 5 seconds...');
-    AppSnackbar.showSnackbar(
-      'Microphone changed. Recording will restart automatically.',
-      duration: const Duration(seconds: 5),
-    );
     bool nativeRecording = await _screenCaptureChannel.invokeMethod('isRecording') ?? false;
     if (nativeRecording) {
-      await pauseSystemAudioRecording();
+      _isAutoReconnecting = true;
+      notifyListeners();
+
+      await pauseSystemAudioRecording(isAuto: true);
       await Future.delayed(const Duration(seconds: 5));
-      AppSnackbar.showSnackbar('Resuming recording...');
+
+      if (!_isAutoReconnecting) {
+        debugPrint('Auto-reconnect cancelled by user action.');
+        return;
+      }
+
       await resumeSystemAudioRecording();
+
+      _isAutoReconnecting = false;
+      notifyListeners();
     }
   }
 
@@ -862,14 +872,18 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> stopSystemAudioRecording() async {
     if (!PlatformService.isDesktop) return;
+    _isAutoReconnecting = false;
     ServiceManager.instance().systemAudio.stop();
     _isPaused = false; // Clear paused state when stopping
     await _socket?.stop(reason: 'stop system audio recording from Flutter');
     await _cleanupCurrentState();
   }
 
-  Future<void> pauseSystemAudioRecording() async {
+  Future<void> pauseSystemAudioRecording({bool isAuto = false}) async {
     if (!PlatformService.isDesktop) return;
+    if (!isAuto) {
+      _isAutoReconnecting = false;
+    }
     ServiceManager.instance().systemAudio.stop();
     _isPaused = true; // Set paused state
     await _socket?.stop(reason: 'pause system audio recording from Flutter');

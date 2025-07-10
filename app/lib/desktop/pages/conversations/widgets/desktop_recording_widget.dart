@@ -33,6 +33,34 @@ class DesktopRecordingWidget extends StatefulWidget {
 
 class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
   bool _isHovered = false;
+  Timer? _reconnectCountdownTimer;
+  int _reconnectCountdown = 5;
+
+  @override
+  void dispose() {
+    _reconnectCountdownTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startReconnectCountdown() {
+    _reconnectCountdownTimer?.cancel();
+    setState(() {
+      _reconnectCountdown = 5;
+    });
+    _reconnectCountdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_reconnectCountdown > 1) {
+        setState(() {
+          _reconnectCountdown--;
+        });
+      } else {
+        timer.cancel();
+      }
+    });
+  }
 
   Future<void> _toggleRecording(BuildContext context, CaptureProvider provider) async {
     var recordingState = provider.recordingState;
@@ -397,7 +425,6 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
 
   @override
   Widget build(BuildContext context) {
-
     return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(
       builder: (context, captureProvider, deviceProvider, connectivityProvider, child) {
         final recordingState = captureProvider.recordingState;
@@ -405,6 +432,14 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
         final isInitializing = recordingState == RecordingState.initialising;
         final isPaused = captureProvider.isPaused;
         final hasTranscripts = captureProvider.segments.isNotEmpty;
+
+        // Manage countdown timer based on provider state
+        if (captureProvider.isAutoReconnecting && (_reconnectCountdownTimer == null || !_reconnectCountdownTimer!.isActive)) {
+          _startReconnectCountdown();
+        } else if (!captureProvider.isAutoReconnecting && _reconnectCountdownTimer != null) {
+          _reconnectCountdownTimer?.cancel();
+          _reconnectCountdownTimer = null;
+        }
 
         return Container(
           width: double.infinity,
@@ -441,10 +476,15 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
                   ]
                 : null,
           ),
-          child: widget.showTranscript
-              ? _buildFullRecordingView(
-                  isRecording, isInitializing, isPaused, hasTranscripts, recordingState, captureProvider)
-              : _buildCompactRecordingView(isInitializing, recordingState, captureProvider),
+          child: Stack(
+            children: [
+              widget.showTranscript
+                  ? _buildFullRecordingView(
+                      isRecording, isInitializing, isPaused, hasTranscripts, recordingState, captureProvider)
+                  : _buildCompactRecordingView(isInitializing, recordingState, captureProvider),
+              if (captureProvider.isAutoReconnecting) _buildAutoReconnectingOverlay(),
+            ],
+          ),
         );
       },
     );
@@ -685,6 +725,26 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildAutoReconnectingOverlay() {
+    return Container(
+      color: Colors.black.withOpacity(0.7),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(color: Colors.white),
+            const SizedBox(height: 20),
+            Text(
+              'Microphone changed. Resuming in $_reconnectCountdown...',
+              style: const TextStyle(color: Colors.white, fontSize: 18),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }
