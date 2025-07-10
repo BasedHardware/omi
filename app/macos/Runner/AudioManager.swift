@@ -5,6 +5,19 @@ import AVFoundation
 
 // MARK: - Audio Manager
 class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
+
+    private enum Constants {
+        static let audioProcessingQueueLabel = "com.friend.audiomixer"
+        static let silenceThreshold: Float = 0.005
+        static let flutterOutputSampleRate = 16000.0
+        static let flutterOutputChannels: AVAudioChannelCount = 1
+        static let micTapBufferSize: AVAudioFrameCount = 1024
+        static let audioMixTimerInterval: TimeInterval = 1.0
+        static let deviceStatusTimerInterval: TimeInterval = 0.2
+        static let deviceChangeDebounce: TimeInterval = 0.5
+        static let scStreamFrameRate: CMTimeScale = 600
+        static let desiredChunkSizeInFrames = 16000
+    }
     
     // MARK: - Audio Properties
     private var audioEngine: AVAudioEngine?
@@ -18,7 +31,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     private var systemAudioConverter: AVAudioConverter?
     
     // Audio mixing properties
-    private let audioProcessingQueue = DispatchQueue(label: "com.friend.audiomixer", qos: .userInitiated)
+    private let audioProcessingQueue = DispatchQueue(label: Constants.audioProcessingQueueLabel, qos: .userInitiated)
     private var micAudioQueue = [AVAudioPCMBuffer]()
     private var systemAudioQueue = [AVAudioPCMBuffer]()
     private var audioMixTimer: Timer?
@@ -33,7 +46,6 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     private var systemAudioRMS: Float = 0.0
     private var isMicSilent: Bool = true
     private var isSystemAudioSilent: Bool = true
-    private let silenceThreshold: Float = 0.005 // Threshold for RMS level to be considered silent
     
     // SCStream properties
     private var availableContent: SCShareableContent?
@@ -56,6 +68,9 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     }
     
     deinit {
+        // Ensure all resources are released if the manager is deallocated.
+        stopCapture()
+        print("DEBUG: AudioManager deinitialized.")
     }
     
     // MARK: - Public Interface
@@ -77,191 +92,76 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     }
     
     func startCapture() async throws {
-        // Init engine
-        audioEngine = AVAudioEngine()
-        setupDeviceListChangeObserver()
-        
-        // Set initial speaker status
-        self.isCurrentlyUsingSpeakers = self.isUsingSpeakers()
-        self.knownDeviceIDs = self.getAudioDeviceIDs()
-        self.currentInputDeviceID = self.getDefaultInputDeviceID()
-        print("DEBUG: Initial speaker status: \(self.isCurrentlyUsingSpeakers)")
-        if let deviceID = self.currentInputDeviceID, let deviceName = getDeviceName(for: deviceID) {
-            print("DEBUG: Initial input device: \(deviceName) (ID: \(deviceID))")
-            self.currentInputDeviceName = deviceName
-        }
-
-        // Start sleep prevention first
+        // Start sleep prevention first, and ensure it's stopped on any failure path.
         startSleepPrevention()
         
-        // Get shareable content
-        let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
-        self.availableContent = content
-        
-        guard !content.displays.isEmpty else {
-            stopSleepPrevention() // Clean up if we fail
-            throw AudioManagerError.audioFormatError("No displays available for screen capture. Found \(content.displays.count) displays.")
-        }
-        
-        let primaryDisplay = content.displays.first!
-        print("DEBUG: Using primary display: \(primaryDisplay.displayID), Frame: \(primaryDisplay.frame)")
-        
-        // Setup audio formats for Flutter output
-        let flutterOutputSampleRate = 16000.0
-        let flutterOutputChannels: AVAudioChannelCount = 1
-        updateAudioSettings(sampleRate: flutterOutputSampleRate, channels: flutterOutputChannels)
-        
-        print("DEBUG: Flutter output format will be SR: \(flutterOutputSampleRate), CH: \(flutterOutputChannels)")
-        self.outputAudioFormat = AVAudioFormat(commonFormat: .pcmFormatInt16,
-                                               sampleRate: flutterOutputSampleRate,
-                                               channels: flutterOutputChannels,
-                                               interleaved: true)
-        
-        guard let strongOutputAudioFormat = self.outputAudioFormat else {
-            stopSleepPrevention() // Clean up if we fail
-            throw AudioManagerError.audioFormatError("Could not create final output audio format for Flutter")
-        }
-        
-        self.micNode = audioEngine?.inputNode
-        self.micNodeFormat = self.micNode!.outputFormat(forBus: 0)
-        
-        // Setup final converter: micNodeFormat -> outputAudioFormat (for Flutter)
-        self.micAudioConverter = AVAudioConverter(from: self.micNodeFormat!, to: strongOutputAudioFormat)
-        guard self.micAudioConverter != nil else {
-            stopSleepPrevention() // Clean up if we fail
-            throw AudioManagerError.converterSetupError("Could not create main audio converter to Flutter format")
-        }
-        
-        self.micAudioConverter?.sampleRateConverterAlgorithm = AVSampleRateConverterAlgorithm_Mastering
-        self.micAudioConverter?.sampleRateConverterQuality = .max
-        self.micAudioConverter?.dither = true
-        print("DEBUG: Final micAudioConverter configured with mastering algorithm and dithering")
-        
-        print("DEBUG: Mic native format: \(self.micNodeFormat!))")
-        
-        // Mic tap is at micNodeFormat
-        micNode!.installTap(onBus: 0, bufferSize: 1024, format: self.micNodeFormat!) { [weak self] (buffer, time) in
-            guard let self = self, let finalConverter = self.micAudioConverter, let finalOutputFormat = self.outputAudioFormat else {
-                return
-            }
-            
-            let outputBufferFrameCapacity = AVAudioFrameCount(Double(buffer.frameLength) * (finalOutputFormat.sampleRate / buffer.format.sampleRate))
-            guard let outputPCMBuffer = AVAudioPCMBuffer(pcmFormat: finalOutputFormat, frameCapacity: outputBufferFrameCapacity) else {
-                print("ERROR: Failed to create output PCM buffer for final converter.")
-                return
-            }
-            
-            var error: NSError?
-            let status = finalConverter.convert(to: outputPCMBuffer, error: &error) { inNumPackets, outStatus in
-                outStatus.pointee = .haveData
-                return buffer
-            }
-            
-            if status == .error || error != nil {
-                print("ERROR: Final audio conversion error from mic tap: \(error?.localizedDescription ?? "Unknown error")")
-                return
-            }
-            
-            if status == .haveData && outputPCMBuffer.frameLength > 0 {
-                let rms = self.calculateRMS(buffer: outputPCMBuffer)
-                self.micRMS = rms
-                self.isMicSilent = self.micRMS < self.silenceThreshold
-                print("DEBUG: Mic audio buffer captured. RMS: \(String(format: "%.4f", rms)). Silent: \(self.isMicSilent). Adding to queue.")
-                self.audioProcessingQueue.async {
-                    self.micAudioQueue.append(outputPCMBuffer)
-                }
-            }
-        }
-
-        audioEngine?.prepare()
-        
-        // Start the audio mixing timer on the main thread to ensure it fires correctly
-        DispatchQueue.main.async {
-            self.audioMixTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-                self?.processAudioQueues()
-            }
-            self.deviceStatusTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
-                self?.sendMicrophoneStatus()
-            }
-        }
-        
-        // Send format details to Flutter
-        let isBigEndian = (strongOutputAudioFormat.streamDescription.pointee.mFormatFlags & kAudioFormatFlagIsBigEndian) != 0
-        let formatDetails: [String: Any] = [
-            "sampleRate": strongOutputAudioFormat.sampleRate,
-            "channels": strongOutputAudioFormat.channelCount,
-            "bitsPerChannel": strongOutputAudioFormat.streamDescription.pointee.mBitsPerChannel,
-            "isFloat": (strongOutputAudioFormat.commonFormat == .pcmFormatFloat32 || strongOutputAudioFormat.commonFormat == .pcmFormatFloat64),
-            "isBigEndian": isBigEndian,
-            "isInterleaved": strongOutputAudioFormat.isInterleaved
-        ]
-        if isFlutterEngineActive {
-            self.screenCaptureChannel?.invokeMethod("audioFormat", arguments: formatDetails)
-            self.audioFormatSentToFlutter = true
-        } else {
-            print("DEBUG: Skipping audioFormat message - Flutter engine inactive")
-        }
-        
-        // Setup SCStream filter
-        prepSCStreamFilter()
-
-
-        // Start audio engine and capture
         do {
+            try setupAudioSession()
+            try configureAudioFormatsAndConverter()
+            installMicTap()
+            try await setupScreenCapture()
+            startMonitoringTimers()
+            try await startAudioEngineAndSCStream()
             _isRecording = true
-            try startAudioEngineAndCapture()
-            try await recordSCStream(filter: self.filter!)
         } catch {
-            print("ERROR: Failed to start capturing: \(error.localizedDescription)")
-            _isRecording = false
+            print("ERROR: Capture setup failed: \(error.localizedDescription)")
+            stopCapture() // Ensure cleanup on failure
+            throw error // Re-throw to inform the caller
         }
     }
     
     func stopCapture() {
+        guard _isRecording else {
+            // If not recording, there's nothing to stop. This prevents redundant cleanup.
+            return
+        }
+        
         _isRecording = false
         self.isCurrentlyUsingSpeakers = false
 
-        removeDeviceListChangeObserver()
-
-        // Stop the timer and clear queues
+        // Stop timers and listeners first to prevent new events.
         audioMixTimer?.invalidate()
         audioMixTimer = nil
         deviceStatusTimer?.invalidate()
         deviceStatusTimer = nil
-        audioProcessingQueue.async {
-            self.micAudioQueue.removeAll()
-            self.systemAudioQueue.removeAll()
-        }
+        removeDeviceListChangeObserver()
 
-        // Stop SCStream first
-        if stream != nil {
+        // Stop the hardware and streams.
+        if let scStream = stream {
             Task {
-                try? await stream?.stopCapture()
+                try? await scStream.stopCapture()
                 self.stream = nil
             }
         }
         
-
-        audioEngine?.stop()
-        micNode?.removeTap(onBus: 0)
+        if let engine = audioEngine, engine.isRunning {
+            engine.stop()
+            micNode?.removeTap(onBus: 0)
+        }
         
-        // Stop sleep prevention
-        stopSleepPrevention()
+        // Clean up resources.
+        audioProcessingQueue.async {
+            self.micAudioQueue.removeAll()
+            self.systemAudioQueue.removeAll()
+        }
         
-        // Reset converters and formats
         self.micAudioConverter = nil
-        self.scStreamSourceFormat = nil
         self.systemAudioConverter = nil
-        self.micNode = nil
+        self.outputAudioFormat = nil
         self.micNodeFormat = nil
+        self.scStreamSourceFormat = nil
+        self.micNode = nil
         self.audioEngine = nil
         
-        // Notify Flutter
+        // Stop system-level activities.
+        stopSleepPrevention()
+        
+        // Notify Flutter about the stream ending.
         if audioFormatSentToFlutter && isFlutterEngineActive {
             self.screenCaptureChannel?.invokeMethod("audioStreamEnded", arguments: nil)
-            print("Recording stopped (engine & SCStream), Flutter notified.")
+            print("DEBUG: Recording stopped, Flutter notified.")
         } else {
-            print("Recording stopped (engine & SCStream), but Flutter was not active or not fully initialized for audio.")
+            print("DEBUG: Recording stopped, but Flutter was not active or not fully initialized for audio.")
         }
         audioFormatSentToFlutter = false
     }
@@ -314,7 +214,142 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         }
     }
     
-    // MARK: - Private Setup Methods
+    // MARK: - Capture Setup Helpers
+    
+    private func setupAudioSession() throws {
+        audioEngine = AVAudioEngine()
+        setupDeviceListChangeObserver()
+        
+        self.isCurrentlyUsingSpeakers = self.isUsingSpeakers()
+        self.knownDeviceIDs = self.getAudioDeviceIDs()
+        self.currentInputDeviceID = self.getDefaultInputDeviceID()
+        
+        print("DEBUG: Initial speaker status: \(self.isCurrentlyUsingSpeakers)")
+        if let deviceID = self.currentInputDeviceID, let deviceName = getDeviceName(for: deviceID) {
+            print("DEBUG: Initial input device: \(deviceName) (ID: \(deviceID))")
+            self.currentInputDeviceName = deviceName
+        }
+    }
+    
+    private func configureAudioFormatsAndConverter() throws {
+        updateAudioSettings(sampleRate: Constants.flutterOutputSampleRate, channels: Constants.flutterOutputChannels)
+        
+        self.outputAudioFormat = AVAudioFormat(commonFormat: .pcmFormatInt16,
+                                               sampleRate: Constants.flutterOutputSampleRate,
+                                               channels: Constants.flutterOutputChannels,
+                                               interleaved: true)
+        
+        guard let outputFormat = self.outputAudioFormat else {
+            throw AudioManagerError.audioFormatError("Could not create final output audio format for Flutter")
+        }
+        
+        self.micNode = audioEngine?.inputNode
+        self.micNodeFormat = self.micNode!.outputFormat(forBus: 0)
+        
+        self.micAudioConverter = AVAudioConverter(from: self.micNodeFormat!, to: outputFormat)
+        guard self.micAudioConverter != nil else {
+            throw AudioManagerError.converterSetupError("Could not create main audio converter to Flutter format")
+        }
+        
+        self.micAudioConverter?.sampleRateConverterAlgorithm = AVSampleRateConverterAlgorithm_Mastering
+        self.micAudioConverter?.sampleRateConverterQuality = .max
+        self.micAudioConverter?.dither = true
+        
+        print("DEBUG: Mic native format: \(self.micNodeFormat!))")
+        print("DEBUG: Flutter output format will be SR: \(Constants.flutterOutputSampleRate), CH: \(Constants.flutterOutputChannels)")
+    }
+    
+    private func installMicTap() {
+        micNode!.installTap(onBus: 0, bufferSize: Constants.micTapBufferSize, format: self.micNodeFormat!) { [weak self] (buffer, time) in
+            guard let self = self, let finalConverter = self.micAudioConverter, let finalOutputFormat = self.outputAudioFormat else {
+                return
+            }
+            
+            let outputBufferFrameCapacity = AVAudioFrameCount(Double(buffer.frameLength) * (finalOutputFormat.sampleRate / buffer.format.sampleRate))
+            guard let outputPCMBuffer = AVAudioPCMBuffer(pcmFormat: finalOutputFormat, frameCapacity: outputBufferFrameCapacity) else {
+                print("ERROR: Failed to create output PCM buffer for final converter.")
+                return
+            }
+            
+            var error: NSError?
+            let status = finalConverter.convert(to: outputPCMBuffer, error: &error) { inNumPackets, outStatus in
+                outStatus.pointee = .haveData
+                return buffer
+            }
+            
+            if status == .error || error != nil {
+                print("ERROR: Final audio conversion error from mic tap: \(error?.localizedDescription ?? "Unknown error")")
+                return
+            }
+            
+            if status == .haveData && outputPCMBuffer.frameLength > 0 {
+                let rms = self.calculateRMS(buffer: outputPCMBuffer)
+                self.micRMS = rms
+                self.isMicSilent = self.micRMS < Constants.silenceThreshold
+                // print("DEBUG: Mic audio buffer captured. RMS: \(String(format: "%.4f", rms)). Silent: \(self.isMicSilent). Adding to queue.")
+                self.audioProcessingQueue.async {
+                    self.micAudioQueue.append(outputPCMBuffer)
+                }
+            }
+        }
+        audioEngine?.prepare()
+    }
+    
+    private func setupScreenCapture() async throws {
+        let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
+        self.availableContent = content
+        
+        guard !content.displays.isEmpty else {
+            throw AudioManagerError.audioFormatError("No displays available for screen capture. Found \(content.displays.count) displays.")
+        }
+        
+        prepSCStreamFilter()
+    }
+    
+    private func startMonitoringTimers() {
+        DispatchQueue.main.async {
+            self.audioMixTimer = Timer.scheduledTimer(withTimeInterval: Constants.audioMixTimerInterval, repeats: true) { [weak self] _ in
+                self?.processAudioQueues()
+            }
+            self.deviceStatusTimer = Timer.scheduledTimer(withTimeInterval: Constants.deviceStatusTimerInterval, repeats: true) { [weak self] _ in
+                self?.sendMicrophoneStatus()
+            }
+        }
+    }
+    
+    private func startAudioEngineAndSCStream() async throws {
+        guard let strongOutputAudioFormat = self.outputAudioFormat else {
+            throw AudioManagerError.audioFormatError("Output audio format not configured.")
+        }
+        
+        // Send format details to Flutter before starting capture.
+        let isBigEndian = (strongOutputAudioFormat.streamDescription.pointee.mFormatFlags & kAudioFormatFlagIsBigEndian) != 0
+        let formatDetails: [String: Any] = [
+            "sampleRate": strongOutputAudioFormat.sampleRate,
+            "channels": strongOutputAudioFormat.channelCount,
+            "bitsPerChannel": strongOutputAudioFormat.streamDescription.pointee.mBitsPerChannel,
+            "isFloat": (strongOutputAudioFormat.commonFormat == .pcmFormatFloat32 || strongOutputAudioFormat.commonFormat == .pcmFormatFloat64),
+            "isBigEndian": isBigEndian,
+            "isInterleaved": strongOutputAudioFormat.isInterleaved
+        ]
+        if isFlutterEngineActive {
+            self.screenCaptureChannel?.invokeMethod("audioFormat", arguments: formatDetails)
+            self.audioFormatSentToFlutter = true
+        } else {
+            print("DEBUG: Skipping audioFormat message - Flutter engine inactive")
+        }
+        
+        // Start the engine and stream.
+        do {
+            try audioEngine?.start()
+            try await recordSCStream(filter: self.filter!)
+        } catch {
+            print("ERROR: Failed to start capturing: \(error.localizedDescription)")
+            throw error
+        }
+    }
+    
+    // MARK: - Private Helper Methods
     
     @objc private func handleAudioEngineConfigurationChange() {
         print("DEBUG: Audio engine configuration changed. Checking for active device change.")
@@ -448,51 +483,22 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         
     }
     
-    private func recordSCStream(filter: SCContentFilter) async {
+    private func recordSCStream(filter: SCContentFilter) async throws {
         let conf = SCStreamConfiguration()
         conf.width = 2
         conf.height = 2
-        conf.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(600))
+        conf.minimumFrameInterval = CMTime(value: 1, timescale: Constants.scStreamFrameRate)
         conf.showsCursor = false
         conf.capturesAudio = true
         
         stream = SCStream(filter: filter, configuration: conf, delegate: self)
         
         guard let stream = stream else {
-            print("ERROR: Failed to create SCStream instance")
-            if isFlutterEngineActive {
-                self.screenCaptureChannel?.invokeMethod("captureError", arguments: "Failed to create SCStream instance")
-            }
-            return
+            throw AudioManagerError.engineStartError("Failed to create SCStream instance")
         }
         
-        do {
-            try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: .global(qos: .userInitiated))
-            
-            try await stream.startCapture()
-        } catch {
-            print("ERROR: SCStream capture failed: \(error.localizedDescription)")
-            print("ERROR: Error details: \(error)")
-            
-            if error.localizedDescription.contains("displays") || error.localizedDescription.contains("windows") {
-                
-                // Try to refresh available content and retry once
-                do {
-                    let refreshedContent = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
-                    
-                    if !refreshedContent.displays.isEmpty {
-                        self.availableContent = refreshedContent
-                    }
-                } catch {
-                    print("ERROR: Failed to refresh content: \(error.localizedDescription)")
-                }
-            }
-            
-            if isFlutterEngineActive {
-                self.screenCaptureChannel?.invokeMethod("captureError", arguments: "SCStream: \(error.localizedDescription)")
-            }
-            DispatchQueue.main.async { self.stopCapture() }
-        }
+        try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: .global(qos: .userInitiated))
+        try await stream.startCapture()
     }
     
     private func concatenateBuffers(buffers: [AVAudioPCMBuffer]) -> AVAudioPCMBuffer? {
@@ -710,7 +716,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         guard let int16DataPtr = buffer.int16ChannelData?[0] else { return }
         
         // The desired chunk size matches what the backend expects for streaming transcription.
-        let desiredChunkSizeInFrames = 16000
+        let desiredChunkSizeInFrames = Constants.desiredChunkSizeInFrames
         
         var framesProcessed = 0
         while framesProcessed < totalFrames {
@@ -788,8 +794,8 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         if status == .haveData && outputPCMBuffer.frameLength > 0 {
             let rms = self.calculateRMS(buffer: outputPCMBuffer)
             self.systemAudioRMS = rms
-            self.isSystemAudioSilent = rms < self.silenceThreshold
-            print("DEBUG: System audio buffer captured (converted). RMS: \(String(format: "%.4f", rms)). Silent: \(self.isSystemAudioSilent). Adding to queue. Frame length: \(outputPCMBuffer.frameLength)")
+            self.isSystemAudioSilent = rms < Constants.silenceThreshold
+            // print("DEBUG: System audio buffer captured (converted). RMS: \(String(format: "%.4f", rms)). Silent: \(self.isSystemAudioSilent). Adding to queue. Frame length: \(outputPCMBuffer.frameLength)")
             self.audioProcessingQueue.async {
                 self.systemAudioQueue.append(outputPCMBuffer)
             }
@@ -845,7 +851,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             }
             
             self.deviceChangeWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
+            DispatchQueue.main.asyncAfter(deadline: .now() + Constants.deviceChangeDebounce, execute: workItem)
         }
 
         let systemObjectID = AudioObjectID(kAudioObjectSystemObject)
