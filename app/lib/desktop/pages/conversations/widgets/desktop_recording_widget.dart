@@ -816,46 +816,14 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
               const SizedBox(height: 32),
 
               // Status text
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Text(
-                    _getStatusText(recordingState, isPaused, captureProvider),
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w600,
-                      color: isRecording ? ResponsiveHelper.textPrimary : ResponsiveHelper.textSecondary,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  if (isRecording || isPaused) ...[
-                    const SizedBox(width: 10),
-                    Opacity(
-                      opacity: 0.5,
-                      child: Text(
-                        '·',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w600,
-                          color: ResponsiveHelper.textSecondary,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Flexible(
-                      child: Text(
-                        captureProvider.microphoneName ?? 'Default Microphone',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w500,
-                          color: ResponsiveHelper.textSecondary,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ],
+              Text(
+                _getStatusText(recordingState, isPaused, captureProvider),
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w600,
+                  color: isRecording ? ResponsiveHelper.textPrimary : ResponsiveHelper.textSecondary,
+                  letterSpacing: -0.5,
+                ),
               ),
 
               const SizedBox(height: 8),
@@ -900,17 +868,20 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         // Microphone
-        Row(
-          children: [
-            const Icon(Icons.mic_rounded, size: 16, color: ResponsiveHelper.textSecondary),
-            const SizedBox(width: 8),
-            const Text(
-              'Mic',
-              style: TextStyle(fontSize: 13, color: ResponsiveHelper.textSecondary),
-            ),
-            const SizedBox(width: 8),
-            _buildAudioLevelBar(micLevel, ResponsiveHelper.purplePrimary),
-          ],
+        Tooltip(
+          message: micName ?? 'Default Microphone',
+          child: Row(
+            children: [
+              const Icon(Icons.mic_rounded, size: 16, color: ResponsiveHelper.textSecondary),
+              const SizedBox(width: 8),
+              const Text(
+                'Mic',
+                style: TextStyle(fontSize: 13, color: ResponsiveHelper.textSecondary),
+              ),
+              const SizedBox(width: 8),
+              _buildAudioLevelBar(micLevel, ResponsiveHelper.purplePrimary),
+            ],
+          ),
         ),
         const SizedBox(width: 24),
         // System Audio
