@@ -407,7 +407,7 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
   Function()? _onScreenDidUnlock;
   Function(String reason)? _onDisplaySetupInvalid;
   Function()? _onMicrophoneDeviceChanged;
-  Function(String deviceName, double micLevel, bool isMicSilent)? _onMicrophoneStatus;
+  Function(String deviceName, double micLevel)? _onMicrophoneStatus;
 
   // To keep track of recording state from Dart's perspective
   bool _isRecording = false;
