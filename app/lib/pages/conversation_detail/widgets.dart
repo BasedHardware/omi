@@ -29,6 +29,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:tuple/tuple.dart';
 
 import 'maps_util.dart';
+import 'share.dart';
 
 class GetSummaryWidgets extends StatelessWidget {
   const GetSummaryWidgets({super.key});
@@ -974,166 +975,310 @@ class _GetShareOptionsState extends State<GetShareOptions> {
   }
 }
 
-class GetSheetMainOptions extends StatelessWidget {
-  const GetSheetMainOptions({
-    super.key,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<ConversationDetailProvider>(builder: (context, provider, child) {
-      return Column(
-        children: [
-          Card(
-            shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-            child: Column(
-              children: [
-                ListTile(
-                  title: const Text('Share'),
-                  leading: const Icon(Icons.share),
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 20),
-                  onTap: () {
-                    provider.toggleShareOptionsInSheet(!provider.displayShareOptionsInSheet);
-                  },
-                )
-              ],
-            ),
-          ),
-          const SizedBox(height: 4),
-          const SizedBox(height: 4),
-          Card(
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.all(Radius.circular(8)),
-            ),
-            child: Column(
-              children: [
-                //ListTile(
-                //  title: Text(provider.conversation.discarded ? 'Summarize' : 'Re-summarize'),
-                //  leading: provider.loadingReprocessConversation
-                //      ? const SizedBox(
-                //          width: 24,
-                //          height: 24,
-                //          child: CircularProgressIndicator(
-                //            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                //          ),
-                //        )
-                //      : const Icon(Icons.refresh),
-                //  onTap: provider.loadingReprocessConversation
-                //      ? null
-                //      : () async {
-                //          final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-                //          if (connectivityProvider.isConnected) {
-                //            await provider.reprocessConversation();
-                //            if (context.mounted) {
-                //              Navigator.pop(context);
-                //            }
-                //          } else {
-                //            showDialog(
-                //              builder: (c) => getDialog(
-                //                context,
-                //                () => Navigator.pop(context),
-                //                () => Navigator.pop(context),
-                //                'Unable to Re-summarize Conversation',
-                //                'Please check your internet connection and try again.',
-                //                singleButton: true,
-                //                okButtonText: 'OK',
-                //              ),
-                //              context: context,
-                //            );
-                //          }
-                //        },
-                //),
-                ListTile(
-                  title: const Text('Delete'),
-                  leading: const Icon(
-                    Icons.delete,
-                  ),
-                  onTap: provider.loadingReprocessConversation
-                      ? null
-                      : () {
-                          final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-                          if (connectivityProvider.isConnected) {
-                            showDialog(
-                              context: context,
-                              builder: (c) => getDialog(
-                                context,
-                                () => Navigator.pop(context),
-                                () {
-                                  context.read<ConversationProvider>().deleteConversation(provider.conversation, provider.conversationIdx);
-                                  Navigator.pop(context, true);
-                                  Navigator.pop(context, true);
-                                  Navigator.pop(context, {'deleted': true});
-                                },
-                                'Delete Conversation?',
-                                'Are you sure you want to delete this conversation? This action cannot be undone.',
-                                okButtonText: 'Confirm',
-                              ),
-                            );
-                          } else {
-                            showDialog(
-                              builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context), 'Unable to Delete Conversation', 'Please check your internet connection and try again.', singleButton: true, okButtonText: 'OK'),
-                              context: context,
-                            );
-                          }
-                        },
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 4),
-          Card(
-            shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-            child: Column(
-              children: [
-                ListTile(
-                  onTap: () {
-                    provider.toggleDevToolsInSheet(!provider.displayDevToolsInSheet);
-                  },
-                  title: const Text('Developer Tools'),
-                  leading: const Icon(
-                    Icons.developer_mode,
-                    color: Colors.white,
-                  ),
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 20),
-                )
-              ],
-            ),
-          )
-        ],
-      );
-    });
-  }
-}
-
 class ShowOptionsBottomSheet extends StatelessWidget {
   const ShowOptionsBottomSheet({super.key});
+
+  Widget _buildSettingsItem({
+    required String title,
+    required Widget icon,
+    required VoidCallback onTap,
+    bool showChevron = true,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: icon,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ),
+              if (showChevron)
+                const Icon(
+                  Icons.chevron_right,
+                  color: Color(0xFF3C3C43),
+                  size: 20,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionContainer({required List<Widget> children}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: children,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.9,
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      decoration: const BoxDecoration(
+        color: Color(0xFF000000),
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(16),
+          topRight: Radius.circular(16),
+        ),
+      ),
       child: Consumer<ConversationDetailProvider>(builder: (context, provider, child) {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const GetSheetTitle(),
-            (provider.displayDevToolsInSheet
-                ? GetDevToolsOptions(
-                    conversation: provider.conversation,
-                  )
-                : provider.displayShareOptionsInSheet
-                    ? GetShareOptions(
-                        conversation: provider.conversation,
-                      )
-                    : const GetSheetMainOptions()),
-            const SizedBox(height: 40),
+            // Handle bar
+            Container(
+              margin: const EdgeInsets.only(top: 8),
+              height: 4,
+              width: 36,
+              decoration: BoxDecoration(
+                color: const Color(0xFF3C3C43),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            // Header
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              child: Center(
+                child: Text(
+                  provider.displayDevToolsInSheet
+                      ? 'Developer Tools'
+                      : provider.displayShareOptionsInSheet
+                          ? 'Share Options'
+                          : 'Options',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Content
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 0),
+                child: _buildContent(context, provider),
+              ),
+            ),
           ],
         );
       }),
     );
+  }
+
+  Widget _buildContent(BuildContext context, ConversationDetailProvider provider) {
+    if (provider.displayDevToolsInSheet) {
+      return _buildDevToolsContent(context, provider);
+    } else if (provider.displayShareOptionsInSheet) {
+      return _buildShareContent(context, provider);
+    } else {
+      return _buildMainOptions(context, provider);
+    }
+  }
+
+  Widget _buildMainOptions(BuildContext context, ConversationDetailProvider provider) {
+    return Column(
+      children: [
+        _buildSectionContainer(
+          children: [
+            _buildSettingsItem(
+              title: 'Share',
+              icon: const Icon(Icons.share, color: Color(0xFF8E8E93), size: 20),
+              onTap: () {
+                provider.toggleShareOptionsInSheet(true);
+              },
+            ),
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            _buildSettingsItem(
+              title: 'Developer Tools',
+              icon: const Icon(Icons.developer_mode, color: Color(0xFF8E8E93), size: 20),
+              onTap: () {
+                provider.toggleDevToolsInSheet(true);
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 32),
+      ],
+    );
+  }
+
+  Widget _buildShareContent(BuildContext context, ConversationDetailProvider provider) {
+    return Column(
+      children: [
+        _buildSectionContainer(
+          children: [
+            _buildSettingsItem(
+              title: 'Copy Transcript',
+              icon: const Icon(Icons.copy, color: Color(0xFF8E8E93), size: 20),
+              onTap: () => _copyContent(context, provider.conversation.getTranscript(generate: true)),
+              showChevron: false,
+            ),
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            _buildSettingsItem(
+              title: 'Copy Summary',
+              icon: const Icon(Icons.summarize, color: Color(0xFF8E8E93), size: 20),
+              onTap: () => _copyContent(context, provider.conversation.structured.toString()),
+              showChevron: false,
+            ),
+          ],
+        ),
+        const SizedBox(height: 32),
+        _buildSectionContainer(
+          children: [
+            _buildSettingsItem(
+              title: 'Export Transcript',
+              icon: const Icon(Icons.description, color: Color(0xFF8E8E93), size: 20),
+              onTap: () {
+                Navigator.pop(context);
+                showShareBottomSheet(context, provider.conversation, (fn) {});
+              },
+            ),
+            if (!provider.conversation.discarded) ...[
+              const Divider(height: 1, color: Color(0xFF3C3C43)),
+              _buildSettingsItem(
+                title: 'Export Summary',
+                icon: const Icon(Icons.file_download, color: Color(0xFF8E8E93), size: 20),
+                onTap: () {
+                  Navigator.pop(context);
+                  showShareBottomSheet(context, provider.conversation, (fn) {});
+                },
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 52),
+      ],
+    );
+  }
+
+  Widget _buildDevToolsContent(BuildContext context, ConversationDetailProvider provider) {
+    return Column(
+      children: [
+        _buildSectionContainer(
+          children: [
+            _buildSettingsItem(
+              title: 'Copy Raw Transcript',
+              icon: const Icon(Icons.code, color: Color(0xFF8E8E93), size: 20),
+              onTap: () => _copyContent(context, provider.conversation.getTranscript()),
+              showChevron: false,
+            ),
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            _buildSettingsItem(
+              title: 'Copy Conversation Raw',
+              icon: const Icon(Icons.data_object, color: Color(0xFF8E8E93), size: 20),
+              onTap: () => _copyContent(context, provider.conversation.toJson().toString()),
+              showChevron: false,
+            ),
+          ],
+        ),
+        const SizedBox(height: 32),
+        _buildSectionContainer(
+          children: [
+            _buildSettingsItem(
+              title: 'Trigger Conversation Integration',
+              icon: const Icon(Icons.send_to_mobile_outlined, color: Color(0xFF8E8E93), size: 20),
+              onTap: () => _triggerWebhookIntegration(context, provider.conversation),
+              showChevron: false,
+            ),
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            _buildSettingsItem(
+              title: 'Test Conversation Prompt',
+              icon: const Icon(Icons.chat, color: Color(0xFF8E8E93), size: 20),
+              onTap: () {
+                Navigator.pop(context);
+                routeToPage(context, TestPromptsPage(conversation: provider.conversation));
+              },
+            ),
+          ],
+        ),
+        if (!provider.conversation.discarded) ...[
+          const SizedBox(height: 32),
+          _buildSectionContainer(
+            children: [
+              _buildSettingsItem(
+                title: provider.loadingReprocessConversation ? 'Reprocessing...' : 'Reprocess Conversation',
+                icon: provider.loadingReprocessConversation ? _getLoadingIndicator() : const Icon(Icons.refresh, color: Color(0xFF8E8E93), size: 20),
+                onTap: provider.loadingReprocessConversation
+                    ? () {}
+                    : () async {
+                        await provider.reprocessConversation();
+                        Navigator.pop(context);
+                      },
+                showChevron: false,
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 52),
+      ],
+    );
+  }
+
+  void _triggerWebhookIntegration(BuildContext context, ServerConversation conversation) {
+    if (SharedPreferencesUtil().webhookOnConversationCreated.isEmpty) {
+      showDialog(
+        context: context,
+        builder: (c) => getDialog(
+          context,
+          () {
+            Navigator.pop(context);
+          },
+          () {
+            Navigator.pop(context);
+            Navigator.pop(context); // Close the bottom sheet
+            routeToPage(context, const DeveloperSettingsPage());
+          },
+          'Webhook URL not set',
+          'Please set the webhook URL in developer settings to use this feature.',
+          okButtonText: 'Settings',
+        ),
+      );
+      return;
+    }
+
+    webhookOnConversationCreatedCall(conversation, returnRawBody: true).then((response) {
+      showDialog(
+        context: context,
+        builder: (c) => getDialog(
+          context,
+          () => Navigator.pop(context),
+          () => Navigator.pop(context),
+          'Result:',
+          response,
+          okButtonText: 'Ok',
+          singleButton: true,
+        ),
+      );
+    });
   }
 }
