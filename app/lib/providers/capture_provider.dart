@@ -833,6 +833,7 @@ class CaptureProvider extends ChangeNotifier
     if (nativeRecording) {
       await pauseSystemAudioRecording();
       await Future.delayed(const Duration(seconds: 5));
+      AppSnackbar.showSnackbar('Resuming recording...');
       await resumeSystemAudioRecording();
     }
   }
