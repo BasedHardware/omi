@@ -25,6 +25,7 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     private var deviceListChangedListener: AudioObjectPropertyListenerBlock?
     private var isCurrentlyUsingSpeakers: Bool = false
     private var knownDeviceIDs: [AudioDeviceID] = []
+    private var currentInputDeviceID: AudioDeviceID?
     private var isMicSilent: Bool = true
     private var isSystemAudioSilent: Bool = true
     private let silenceThreshold: Float = 0.005 // Threshold for RMS level to be considered silent
@@ -78,7 +79,11 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         // Set initial speaker status
         self.isCurrentlyUsingSpeakers = self.isUsingSpeakers()
         self.knownDeviceIDs = self.getAudioDeviceIDs()
+        self.currentInputDeviceID = self.getDefaultInputDeviceID()
         print("DEBUG: Initial speaker status: \(self.isCurrentlyUsingSpeakers)")
+        if let deviceID = self.currentInputDeviceID, let deviceName = getDeviceName(for: deviceID) {
+            print("DEBUG: Initial input device: \(deviceName) (ID: \(deviceID))")
+        }
 
         // Start sleep prevention first
         startSleepPrevention()
@@ -300,16 +305,26 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     // MARK: - Private Setup Methods
     
     @objc private func handleAudioEngineConfigurationChange() {
-        print("DEBUG: Audio engine configuration changed. Possible device change.")
+        print("DEBUG: Audio engine configuration changed. Checking for active device change.")
 
-        if let deviceID = getDefaultInputDeviceID(), let deviceName = getDeviceName(for: deviceID) {
-            print("DEBUG: Active input device changed to: \(deviceName) (ID: \(deviceID))")
+        guard let newDeviceID = getDefaultInputDeviceID() else {
+            print("ERROR: Could not get new default input device ID during configuration change.")
+            return
         }
 
-        // Notify Flutter first, so it knows a change is happening.
-        if isFlutterEngineActive {
-            self.screenCaptureChannel?.invokeMethod("microphoneDeviceChanged", arguments: nil)
-            print("DEBUG: Notified Flutter of microphone device change.")
+        if newDeviceID != self.currentInputDeviceID {
+            self.currentInputDeviceID = newDeviceID
+            if let deviceName = getDeviceName(for: newDeviceID) {
+                print("DEBUG: Active input device changed to: \(deviceName) (ID: \(newDeviceID))")
+            }
+
+            // Notify Flutter that the device has changed.
+            if isFlutterEngineActive {
+                self.screenCaptureChannel?.invokeMethod("microphoneDeviceChanged", arguments: nil)
+                print("DEBUG: Notified Flutter of microphone device change.")
+            }
+        } else {
+            print("DEBUG: Default input device remains the same. No notification sent.")
         }
     }
 
