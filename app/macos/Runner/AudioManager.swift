@@ -589,7 +589,6 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             self.systemAudioQueue.removeAll()
             
             if micBuffers.isEmpty && systemBuffers.isEmpty {
-            print("DEBUG: Processing audio. ALL EMPTTTYY")
                 return // Nothing to process.
             }
             
