@@ -824,15 +824,15 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> _onMicrophoneDeviceChanged() async {
-    debugPrint('Microphone device changed. Restarting recording in 3 seconds...');
+    debugPrint('Microphone device changed. Restarting recording in 5 seconds...');
     AppSnackbar.showSnackbar(
       'Microphone changed. Recording will restart automatically.',
-      duration: const Duration(seconds: 3),
+      duration: const Duration(seconds: 5),
     );
     bool nativeRecording = await _screenCaptureChannel.invokeMethod('isRecording') ?? false;
     if (nativeRecording) {
       await pauseSystemAudioRecording();
-      await Future.delayed(const Duration(seconds: 3));
+      await Future.delayed(const Duration(seconds: 5));
       await resumeSystemAudioRecording();
     }
   }
