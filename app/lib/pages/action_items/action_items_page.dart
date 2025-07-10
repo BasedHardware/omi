@@ -59,12 +59,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     super.build(context);
     return Consumer<ConversationProvider>(
       builder: (context, convoProvider, child) {
-        final Map<ServerConversation, List<ActionItem>> itemsByConversation =
-            convoProvider.conversationsWithActiveActionItems;
+        final Map<ServerConversation, List<ActionItem>> itemsByConversation = convoProvider.conversationsWithActiveActionItems;
 
         // Sort conversations by date (most recent first)
-        final sortedEntries = itemsByConversation.entries.toList()
-          ..sort((a, b) => b.key.createdAt.compareTo(a.key.createdAt));
+        final sortedEntries = itemsByConversation.entries.toList()..sort((a, b) => b.key.createdAt.compareTo(a.key.createdAt));
 
         // Get flattened list for non-grouped view
         final flattenedItems = _getFlattenedActionItems(itemsByConversation);
@@ -130,13 +128,33 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              'To-Do\'s (${flattenedItems.where((item) => !item.actionItem.completed).length})',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 24,
-                                fontWeight: FontWeight.w600,
-                              ),
+                            Row(
+                              children: [
+                                const Text(
+                                  'To-Do\'s',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[800],
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    '${flattenedItems.where((item) => !item.actionItem.completed).length}',
+                                    style: const TextStyle(
+                                      color: Colors.grey,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                             const Row(
                               children: [
@@ -195,8 +213,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   ),
                 ),
 
-              if (sortedEntries.isNotEmpty)
-                _showGroupedView ? _buildGroupedView(sortedEntries) : _buildFlatView(flattenedItems),
+              if (sortedEntries.isNotEmpty) _showGroupedView ? _buildGroupedView(sortedEntries) : _buildFlatView(flattenedItems),
 
               if (sortedEntries.isNotEmpty)
                 SliverToBoxAdapter(
