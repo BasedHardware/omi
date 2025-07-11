@@ -300,7 +300,17 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
             child: OmiSearchInput(
               controller: _searchController,
               hint: 'Search memories...',
-              onChanged: (value) => provider.setSearchQuery(value),
+              onChanged: (value) {
+                provider.setSearchQuery(value);
+                if (value.isNotEmpty) {
+                  MixpanelManager().memorySearched(value, provider.filteredMemories.length);
+                }
+              },
+              onClear: () {
+                _searchController.clear();
+                provider.setSearchQuery('');
+                MixpanelManager().memorySearchCleared(provider.memories.length);
+              },
             ),
           ),
 
