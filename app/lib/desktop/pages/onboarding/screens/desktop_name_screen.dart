@@ -3,6 +3,7 @@ import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/ui/atoms/omi_text_input.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 
 class DesktopNameScreen extends StatefulWidget {
   final VoidCallback onNext;
@@ -105,6 +106,7 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
       _errorMessage = '';
     });
 
+    MixpanelManager().onboardingStepCompleted('Name');
     widget.onNext();
   }
 
