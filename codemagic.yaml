@@ -663,3 +663,250 @@ workflows:
         notify:
           success: true
           failure: false
+
+  macos-prod-testflight:
+    name: Release macOS to TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 120
+    integrations:
+      app_store_connect: codemagic_v3
+    environment:
+      groups:
+        - app_env
+        - firebase
+        - appstore_credentials
+      vars:
+        APP_ID: 6502156163
+        BUNDLE_ID: "com.friend-app-with-wearable.ios12"
+      flutter: 3.32.4
+      xcode: 16.4
+      cocoapods: 1.16.2
+    cache:
+      cache_paths:
+        - $HOME/.pub-cache
+        - $HOME/.gradle/caches
+        - $HOME/Library/Caches/CocoaPods
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: "v*-ios-cm"
+          include: true
+        - pattern: "v*-mobile-cm"
+          include: true
+    working_directory: app
+    scripts:
+      - name: Installing Opus
+        script: |
+          brew install opus
+          brew install opus-tools
+
+      - name: Set up Firebase
+        script: |
+          dart pub global activate flutterfire_cli
+
+          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
+          flutterfire config \
+            --platforms="macos" \
+            --out=lib/firebase_options_prod.dart \
+            --macos-bundle-id=com.friend-app-with-wearable.ios12 \
+            --macos-out=macos/Config/Prod/ \
+            --service-account="./firebase_key.json" \
+            --project="based-hardware" \
+            --macos-target="Runner" \
+            --yes
+
+          # DEV, should remove after adding conditional import in main.dart
+          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
+          flutterfire config \
+            --platforms="macos" \
+            --out=lib/firebase_options_dev.dart \
+            --macos-bundle-id=com.friend-app-with-wearable.ios12.development \
+            --macos-out=macos/Config/Dev/ \
+            --service-account="./firebase_dev_key.json" \
+            --project="based-hardware-dev" \
+            --macos-target="Runner" \
+            --yes
+
+      - name: Set up macOS GoogleService-Info.plist from environment
+        script: |
+          echo "$GOOGLE_INFO_PLIST_KEY" > "$(pwd)/macos/GoogleService-Info.plist"
+
+      - name: Set up App .env
+        script: |
+          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
+          echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
+          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
+          echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
+          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
+          echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
+          echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
+          echo INTERCOM_MACOS_API_KEY=$INTERCOM_MACOS_API_KEY >> .env
+          echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
+          echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
+          echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+
+      - name: Run build runner
+        script: |
+          dart run build_runner build --delete-conflicting-outputs
+
+      - name: Install CocoaPods dependencies
+        script: |
+          cd macos && pod install --repo-update
+
+      - name: Set up keychain to be used for code signing using Codemagic CLI 'keychain' command
+        script: keychain initialize
+
+      - name: Set up provisioning profiles from environment variables
+        script: | 
+          PROFILES_HOME="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILES_HOME"
+          PROFILE_PATH="$(mktemp "$PROFILES_HOME"/$(uuidgen).mobileprovision)"
+          echo ${CM_PROVISIONING_PROFILE} | base64 --decode > "$PROFILE_PATH"
+          echo "Saved provisioning profile $PROFILE_PATH"
+
+      - name: Set up signing certificate
+        script: | 
+          echo $CM_CERTIFICATE | base64 --decode > /tmp/certificate.p12
+          if [ -z ${CM_CERTIFICATE_PASSWORD+x} ]; then
+              # when using a certificate that is not password-protected
+              keychain add-certificates --certificate /tmp/certificate.p12
+          else
+              # when using a password-protected certificate
+              keychain add-certificates --certificate /tmp/certificate.p12 --certificate-password $CM_CERTIFICATE_PASSWORD
+          fi
+
+          echo $CM_INSTALLER_CERTIFICATE | base64 --decode > /tmp/installer_certificate.p12
+          if [ -z ${CM_INSTALLER_CERTIFICATE_PASSWORD+x} ]; then
+              # when using a certificate that is not password-protected
+              keychain add-certificates --certificate /tmp/installer_certificate.p12
+          else
+              # when using a password-protected certificate
+              keychain add-certificates --certificate /tmp/installer_certificate.p12 --certificate-password $CM_INSTALLER_CERTIFICATE_PASSWORD
+          fi
+
+      - name: Set up code signing settings on Xcode project
+        script: xcode-project use-profiles
+
+      - name: Flutter build macOS
+        script: |
+          # Enable macOS desktop support
+          flutter config --enable-macos-desktop
+          
+          # Build
+          BUILD_NAME=1.0.66
+          BUILD_NUMBER=327
+          flutter build macos \
+            --release \
+            --build-name=$BUILD_NAME \
+            --build-number=$BUILD_NUMBER \
+            --flavor prod
+
+      - name: Package application
+        script: | 
+          set -x
+    
+          # Find the built app
+          APP_NAME=$(find $(pwd) -name "*.app")  
+          cd $(dirname "$APP_NAME")
+    
+          # Get certificate names
+          APP_CERT_NAME=$(keychain list-certificates \
+            | jq -r '.[]
+            | select(.common_name | test("3rd Party Mac Developer Application"))
+            | .common_name' \
+            | head -1)
+          
+          INSTALLER_CERT_NAME=$(keychain list-certificates \
+            | jq -r '.[]
+            | select(.common_name | test("3rd Party Mac Developer Installer"))
+            | .common_name' \
+            | head -1)
+          
+          echo "Using certificates: '$APP_CERT_NAME' / '$INSTALLER_CERT_NAME'"
+          
+          if [ -z "$APP_CERT_NAME" ] || [ -z "$INSTALLER_CERT_NAME" ]; then
+            echo "Missing certificates. Available certificates:"
+            keychain list-certificates | jq -r '.[].common_name'
+            exit 1
+          fi
+          
+          # Find the provisioning profile that was saved
+          PROFILE_PATH=$(find "$HOME/Library/MobileDevice/Provisioning Profiles" -name "*.mobileprovision" | head -1)
+          
+          if [ -z "$PROFILE_PATH" ]; then
+            echo "No provisioning profile found!"
+            exit 1
+          fi
+          
+          echo "Using provisioning profile: $PROFILE_PATH"
+          
+          # Embed the provisioning profile in the app bundle
+          cp "$PROFILE_PATH" "$APP_NAME/Contents/embedded.provisionprofile"
+          
+          # Use the existing entitlements file
+          ENTITLEMENTS_FILE="$(pwd)/../../../../../macos/Runner/RunnerRelease-prod.entitlements"
+          
+          echo "Using entitlements file: $ENTITLEMENTS_FILE"
+          
+          if [ ! -f "$ENTITLEMENTS_FILE" ]; then
+            echo "Entitlements file not found!"
+            exit 1
+          fi
+          
+          # Debug: Show entitlements and profile contents
+          echo "=== Entitlements ==="
+          cat "$ENTITLEMENTS_FILE"
+          
+          echo "=== Profile entitlements ==="
+          security cms -D -i "$PROFILE_PATH" | plutil -extract Entitlements xml1 -o - -
+          
+          # Sign the app bundle with embedded profile
+          echo "Signing app bundle..."
+          codesign --force --sign "$APP_CERT_NAME" \
+            --entitlements "$ENTITLEMENTS_FILE" \
+            --options runtime \
+            --deep \
+            "$APP_NAME"
+          
+          # Verify signature
+          codesign --verify --deep --strict "$APP_NAME"
+          echo "=== Final app entitlements ==="
+          codesign -d --entitlements - "$APP_NAME"
+          
+          # Create and sign package
+          PACKAGE_NAME=$(basename "$APP_NAME" .app).pkg
+          xcrun productbuild --component "$APP_NAME" /Applications/ unsigned.pkg
+          xcrun productsign --sign "$INSTALLER_CERT_NAME" unsigned.pkg "$PACKAGE_NAME"
+          rm -f unsigned.pkg
+          
+
+    artifacts:
+      - build/macos/**/*.pkg
+      - build/macos/Build/Products/Release-prod/*.app
+      - /tmp/xcodebuild_logs/*.log
+      - flutter_drive.log
+    publishing:
+      email:
+        recipients:
+          - ngocthinhdp@gmail.com
+          - joan@basedhardware.com
+          - nik@basedhardware.com
+          - mohsin.lp710@gmail.com
+        notify:
+          success: false
+          failure: false
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+
+        submit_to_testflight: true
+        beta_groups:
+          - Internal
+        submit_to_app_store: false
