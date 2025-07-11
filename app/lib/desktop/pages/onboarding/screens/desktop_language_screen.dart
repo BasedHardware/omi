@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 
 class DesktopLanguageScreen extends StatefulWidget {
   final VoidCallback onNext;
@@ -168,6 +169,7 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
     final homeProvider = Provider.of<HomeProvider>(context, listen: false);
     await homeProvider.updateUserPrimaryLanguage(selectedLanguage!);
 
+    MixpanelManager().onboardingStepCompleted('Primary Language');
     widget.onNext();
   }
 

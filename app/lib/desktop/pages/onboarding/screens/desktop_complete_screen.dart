@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 
 class DesktopCompleteScreen extends StatefulWidget {
   final VoidCallback onComplete;
@@ -149,7 +150,10 @@ class _DesktopCompleteScreenState extends State<DesktopCompleteScreen> with Tick
                         child: OmiButton(
                           label: 'Start Using Omi',
                           icon: Icons.arrow_forward_rounded,
-                          onPressed: widget.onComplete,
+                          onPressed: () {
+                            MixpanelManager().onboardingCompleted();
+                            widget.onComplete();
+                          },
                         ),
                       ),
 

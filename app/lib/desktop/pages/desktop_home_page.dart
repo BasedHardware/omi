@@ -1184,6 +1184,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
   void _handleProfileMenuSelection(String value) {
     switch (value) {
       case 'profile':
+        MixpanelManager().pageOpened('Settings');
         routeToPage(context, const DesktopProfilePage());
         break;
       case 'device':
