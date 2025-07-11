@@ -52,7 +52,7 @@ dependencies:
   mixpanel_analytics:
     git:
       url: https://github.com/mdmohsin7/mixpanel_analytics.git
-      ref: upgrade
+      ref: master
 
   # Utils
   collection: ^1.19.1
