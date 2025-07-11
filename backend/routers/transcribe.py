@@ -5,6 +5,7 @@ import struct
 import json
 from datetime import datetime, timezone, timedelta, time
 from enum import Enum
+from typing import Dict, Tuple, List
 
 import opuslib
 import webrtcvad
@@ -33,7 +34,7 @@ from utils.stt.streaming import process_audio_soniox, process_audio_dg, process_
     send_initial_file_path
 from utils.webhooks import get_audio_bytes_webhook_seconds
 from utils.pusher import connect_to_trigger_pusher
-from utils.translation import translate_text, detect_language
+from utils.translation import TranslationService
 from utils.translation_cache import TranscriptSegmentLanguageCache
 
 from utils.other import endpoints as auth
@@ -549,56 +550,33 @@ async def _listen(
     current_conversation_id = None
     translation_enabled = including_combined_segments and stt_language == 'multi'
     language_cache = TranscriptSegmentLanguageCache()
+    translation_service = TranslationService()
 
     async def translate(segments: List[TranscriptSegment], conversation_id: str):
         try:
             translated_segments = []
             for segment in segments:
                 segment_text = segment.text.strip()
-                if not segment_text or len(segment_text) <= 0:
+                if not segment_text:
                     continue
-                # Check cache for language detection result
-                is_previously_target_language, diff_text = language_cache.get_language_result(segment.id, segment_text,
-                                                                                              language)
-                if (is_previously_target_language is None or is_previously_target_language is True) \
-                        and diff_text:
-                    try:
-                        detected_lang = detect_language(diff_text)
-                        is_target_language = detected_lang is not None and detected_lang == language
 
-                        # Update cache with the detection result
-                        language_cache.update_cache(segment.id, segment_text, is_target_language)
+                # Language Detection
+                if language_cache.is_in_target_language(segment.id, segment_text, language):
+                    continue
 
-                        # Skip translation if it's the target language
-                        if is_target_language:
-                            continue
-                    except Exception as e:
-                        print(f"Language detection error: {e}")
-                        # Skip translation if couldn't detect the language
-                        continue
+                # Translation
+                translated_text = translation_service.translate_text_by_sentence(language, segment_text)
 
-                # Translate the text to the target language
-                translated_text = translate_text(language, segment.text)
-
-                # Skip, del cache to detect language again
-                if translated_text == segment.text:
+                if translated_text == segment_text:
+                    # If translation is same as original, it's likely in the target language.
+                    # Delete from cache to allow re-evaluation if more text is added.
                     language_cache.delete_cache(segment.id)
                     continue
 
-                # Create a Translation object
-                translation = Translation(
-                    lang=language,
-                    text=translated_text,
-                )
+                # Create/Update Translation object
+                translation = Translation(lang=language, text=translated_text)
+                existing_translation_index = next((i for i, t in enumerate(segment.translations) if t.lang == language), None)
 
-                # Check if a translation for this language already exists
-                existing_translation_index = None
-                for i, trans in enumerate(segment.translations):
-                    if trans.lang == language:
-                        existing_translation_index = i
-                        break
-
-                # Replace existing translation or add a new one
                 if existing_translation_index is not None:
                     segment.translations[existing_translation_index] = translation
                 else:
@@ -606,32 +584,24 @@ async def _listen(
 
                 translated_segments.append(segment)
 
-            # Update the conversation in the database to persist translations
-            if len(translated_segments) > 0:
-                conversation = conversations_db.get_conversation(uid, conversation_id)
-                if conversation:
-                    should_updates = False
-                    for segment in translated_segments:
-                        for i, existing_segment in enumerate(conversation['transcript_segments']):
-                            if existing_segment['id'] == segment.id:
-                                conversation['transcript_segments'][i]['translations'] = segment.dict()['translations']
-                                should_updates = True
-                                break
+            if not translated_segments:
+                return
 
-                    # Update the database
-                    if should_updates:
-                        conversations_db.update_conversation_segments(
-                            uid,
-                            conversation_id,
-                            conversation['transcript_segments']
-                        )
+            # Persist and notify
+            conversation = conversations_db.get_conversation(uid, conversation_id)
+            if conversation:
+                should_update = False
+                for segment in translated_segments:
+                    for i, existing_segment in enumerate(conversation['transcript_segments']):
+                        if existing_segment['id'] == segment.id:
+                            conversation['transcript_segments'][i]['translations'] = segment.dict()['translations']
+                            should_update = True
+                            break
+                if should_update:
+                    conversations_db.update_conversation_segments(uid, conversation_id, conversation['transcript_segments'])
 
-            # Send a translation event to the client with the translated segments
-            if websocket_active and len(translated_segments) > 0:
-                translation_event = TranslationEvent(
-                    segments=[segment.dict() for segment in translated_segments]
-                )
-                _send_message_event(translation_event)
+            if websocket_active:
+                _send_message_event(TranslationEvent(segments=[s.dict() for s in translated_segments]))
 
         except Exception as e:
             print(f"Translation error: {e}", uid)
