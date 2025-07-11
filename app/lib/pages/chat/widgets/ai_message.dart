@@ -131,8 +131,7 @@ Widget buildMessageWidget(
         setMessageNps: sendMessageNps,
         date: message.createdAt);
   } else if (message.type == MessageType.daySummary) {
-    return DaySummaryWidget(
-        showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString, date: message.createdAt);
+    return DaySummaryWidget(showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString, date: message.createdAt);
   } else if (displayOptions) {
     return InitialMessageWidget(
       showTypingIndicator: showTypingIndicator,
@@ -185,8 +184,7 @@ class InitialMessageWidget extends StatelessWidget {
   final String messageText;
   final Function(String) sendMessage;
 
-  const InitialMessageWidget(
-      {super.key, required this.showTypingIndicator, required this.messageText, required this.sendMessage});
+  const InitialMessageWidget({super.key, required this.showTypingIndicator, required this.messageText, required this.sendMessage});
 
   @override
   Widget build(BuildContext context) {
@@ -266,10 +264,7 @@ class DaySummaryWidget extends StatelessWidget {
     } else {
       // Split by period followed by space
       List<String> listOfMessages = message.split('. ');
-      return listOfMessages
-          .map((msg) => msg.endsWith('.') ? msg.substring(0, msg.length - 1) : msg)
-          .where((msg) => msg.trim().isNotEmpty)
-          .toList();
+      return listOfMessages.map((msg) => msg.endsWith('.') ? msg.substring(0, msg.length - 1) : msg).where((msg) => msg.trim().isNotEmpty).toList();
     }
   }
 
@@ -289,7 +284,7 @@ class DaySummaryWidget extends StatelessWidget {
           leading: Text(
             '${index + 1}.',
             style: TextStyle(
-              fontSize: 14,
+              fontSize: 15,
               fontWeight: FontWeight.bold,
               color: Colors.grey.shade500,
             ),
@@ -297,7 +292,7 @@ class DaySummaryWidget extends StatelessWidget {
           title: AutoSizeText(
             sentences[index],
             style: const TextStyle(
-              fontSize: 15.0,
+              fontSize: 16.0,
               fontWeight: FontWeight.w500,
               height: 1.35,
               color: Colors.white,
@@ -332,12 +327,7 @@ class NormalMessageWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var previousThinkingText = message.thinkings.length > 1
-        ? message.thinkings
-            .sublist(message.thinkings.length - 2 >= 0 ? message.thinkings.length - 2 : 0)
-            .first
-            .decodeString
-        : null;
+    var previousThinkingText = message.thinkings.length > 1 ? message.thinkings.sublist(message.thinkings.length - 2 >= 0 ? message.thinkings.length - 2 : 0).first.decodeString : null;
     var thinkingText = message.thinkings.isNotEmpty ? message.thinkings.last.decodeString : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -361,7 +351,7 @@ class NormalMessageWidget extends StatelessWidget {
                                         maxLines: 1,
                                         softWrap: false,
                                         previousThinkingText,
-                                        style: const TextStyle(color: Colors.white60, fontSize: 14),
+                                        style: const TextStyle(color: Colors.white60, fontSize: 15),
                                       )
                                     : const SizedBox.shrink(),
                                 Shimmer.fromColors(
@@ -372,7 +362,7 @@ class NormalMessageWidget extends StatelessWidget {
                                     maxLines: 1,
                                     softWrap: false,
                                     thinkingText,
-                                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                                    style: const TextStyle(color: Colors.white, fontSize: 15),
                                   ),
                                 )
                               ],
@@ -385,18 +375,18 @@ class NormalMessageWidget extends StatelessWidget {
                   ],
                 ))
             : const SizedBox.shrink(),
-        !(showTypingIndicator && messageText.isEmpty)
-            ? Container(
-                margin: const EdgeInsets.only(bottom: 4.0),
-                child: Text(
-                  formatChatTimestamp(createdAt),
-                  style: TextStyle(
-                    color: Colors.grey.shade500,
-                    fontSize: 12,
-                  ),
-                ),
-              )
-            : const SizedBox.shrink(),
+        // !(showTypingIndicator && messageText.isEmpty)
+        //     ? Container(
+        //         margin: const EdgeInsets.only(bottom: 4.0),
+        //         child: Text(
+        //           formatChatTimestamp(createdAt),
+        //           style: TextStyle(
+        //             color: Colors.grey.shade500,
+        //             fontSize: 12,
+        //           ),
+        //         ),
+        //       )
+        //     : const SizedBox.shrink(),
         messageText.isEmpty ? const SizedBox.shrink() : getMarkdownWidget(context, messageText),
         _getNpsWidget(context, message, setMessageNps),
       ],
@@ -442,16 +432,16 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 4.0),
-          child: Text(
-            formatChatTimestamp(widget.date),
-            style: TextStyle(
-              color: Colors.grey.shade500,
-              fontSize: 12,
-            ),
-          ),
-        ),
+        // Padding(
+        //   padding: const EdgeInsets.only(bottom: 4.0),
+        //   child: Text(
+        //     formatChatTimestamp(widget.date),
+        //     style: TextStyle(
+        //       color: Colors.grey.shade500,
+        //       fontSize: 12,
+        //     ),
+        //   ),
+        // ),
         widget.showTypingIndicator
             ? const Row(
                 mainAxisSize: MainAxisSize.min,

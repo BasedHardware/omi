@@ -27,11 +27,8 @@ class ConversationCaptureWidget extends StatefulWidget {
 class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   @override
   Widget build(BuildContext context) {
-    return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(
-        builder: (context, provider, deviceProvider, connectivityProvider, child) {
-      var topConvoId = (provider.conversationProvider?.conversations ?? []).isNotEmpty
-          ? provider.conversationProvider!.conversations.first.id
-          : null;
+    return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(builder: (context, provider, deviceProvider, connectivityProvider, child) {
+      var topConvoId = (provider.conversationProvider?.conversations ?? []).isNotEmpty ? provider.conversationProvider!.conversations.first.id : null;
 
       var header = _getConversationHeader(context);
       if (header == null) {
@@ -133,9 +130,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     bool isHavingDesireDevice = SharedPreferencesUtil().btDevice.id.isNotEmpty;
     bool isHavingRecordingDevice = captureProvider.havingRecordingDevice;
 
-    bool isUsingPhoneMic = captureProvider.recordingState == RecordingState.record ||
-        captureProvider.recordingState == RecordingState.initialising ||
-        captureProvider.recordingState == RecordingState.pause;
+    bool isUsingPhoneMic = captureProvider.recordingState == RecordingState.record || captureProvider.recordingState == RecordingState.initialising || captureProvider.recordingState == RecordingState.pause;
 
     // Left
     Widget? left;
@@ -293,9 +288,7 @@ getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb,
   // as the primary interaction should be via the BT device, not system audio as a fallback to phone mic.
   // This button is primarily for when NO BT device is the target.
   final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
-  if (PlatformService.isDesktop &&
-      deviceProvider.connectedDevice != null &&
-      SharedPreferencesUtil().btDevice.id == deviceProvider.connectedDevice!.id) {
+  if (PlatformService.isDesktop && deviceProvider.connectedDevice != null && SharedPreferencesUtil().btDevice.id == deviceProvider.connectedDevice!.id) {
     return const SizedBox.shrink();
   }
 
@@ -398,8 +391,7 @@ class ProcessingConversationWidget extends StatefulWidget {
 class _ProcessingConversationWidgetState extends State<ProcessingConversationWidget> {
   @override
   Widget build(BuildContext context) {
-    return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(
-        builder: (context, provider, deviceProvider, connectivityProvider, child) {
+    return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(builder: (context, provider, deviceProvider, connectivityProvider, child) {
       return GestureDetector(
           onTap: () async {
             routeToPage(

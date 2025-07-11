@@ -179,10 +179,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
       switch (pageAlias) {
         case "memories":
-          homePageIdx = 0;
-          break;
-        case "chat":
-          homePageIdx = 1;
+          homePageIdx = 2;
           break;
         case "apps":
           homePageIdx = 3;
@@ -237,6 +234,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               await Provider.of<MessageProvider>(context, listen: false).refreshMessages();
             }
           }
+          // Navigate to chat page directly since it's no longer in the tab bar
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ChatPage(isPivotBottom: false),
+                ),
+              );
+            }
+          });
           break;
         case "settings":
           // Use context from the current widget instead of navigator key for bottom sheet
@@ -372,7 +380,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               backgroundColor: Theme.of(context).colorScheme.primary,
               appBar: homeProvider.selectedIndex == 5 ? null : _buildAppBar(context),
               body: DefaultTabController(
-                length: 5,
+                length: 4,
                 initialIndex: _controller?.initialPage ?? 0,
                 child: GestureDetector(
                   onTap: () {
@@ -388,8 +396,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           physics: const NeverScrollableScrollPhysics(),
                           children: const [
                             ConversationsPage(),
-                            ChatPage(isPivotBottom: false),
                             ActionItemsPage(),
+                            MemoriesPage(),
                             AppsPage(),
                           ],
                         ),
@@ -420,7 +428,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         Expanded(
                                           child: InkWell(
                                             onTap: () {
-                                              MixpanelManager().bottomNavigationTabClicked('Memories');
+                                              MixpanelManager().bottomNavigationTabClicked('Home');
                                               primaryFocus?.unfocus();
                                               if (home.selectedIndex == 0) {
                                                 return;
@@ -446,11 +454,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                             ),
                                           ),
                                         ),
-                                        // Chat tab
+                                        // Action Items tab
                                         Expanded(
                                           child: InkWell(
                                             onTap: () {
-                                              MixpanelManager().bottomNavigationTabClicked('Chat');
+                                              MixpanelManager().bottomNavigationTabClicked('Action Items');
                                               primaryFocus?.unfocus();
                                               if (home.selectedIndex == 1) {
                                                 return;
@@ -466,7 +474,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                   mainAxisAlignment: MainAxisAlignment.center,
                                                   children: [
                                                     Icon(
-                                                      FontAwesomeIcons.solidMessage,
+                                                      FontAwesomeIcons.listCheck,
                                                       color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
                                                       size: 24,
                                                     ),
@@ -478,11 +486,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         ),
                                         // Center space for record button - only when no OMI device is connected
                                         if (!isOmiDeviceConnected) const SizedBox(width: 80),
-                                        // Action Items tab
+                                        // Memories tab
                                         Expanded(
                                           child: InkWell(
                                             onTap: () {
-                                              MixpanelManager().bottomNavigationTabClicked('Action Items');
+                                              MixpanelManager().bottomNavigationTabClicked('Memories');
                                               primaryFocus?.unfocus();
                                               if (home.selectedIndex == 2) {
                                                 return;
@@ -498,7 +506,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                   mainAxisAlignment: MainAxisAlignment.center,
                                                   children: [
                                                     Icon(
-                                                      FontAwesomeIcons.listCheck,
+                                                      FontAwesomeIcons.brain,
                                                       color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
                                                       size: 24,
                                                     ),
@@ -508,7 +516,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                             ),
                                           ),
                                         ),
-                                        // Explore tab
+                                        // Apps tab
                                         Expanded(
                                           child: InkWell(
                                             onTap: () {
@@ -580,6 +588,66 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                           ),
                                         );
                                       },
+                                    ),
+                                  ),
+                                // Floating Chat Button - Only show on home page (index 0)
+                                if (home.selectedIndex == 0)
+                                  Positioned(
+                                    right: 20,
+                                    bottom: 110, // Position above the bottom navbar
+                                    child: GestureDetector(
+                                      onTap: () {
+                                        // Navigate to chat page
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => const ChatPage(isPivotBottom: false),
+                                          ),
+                                        );
+                                      },
+                                      child: Container(
+                                        height: 56,
+                                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black,
+                                          borderRadius: BorderRadius.circular(28),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withOpacity(0.3),
+                                              spreadRadius: 1,
+                                              blurRadius: 8,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ],
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Container(
+                                              width: 32,
+                                              height: 32,
+                                              decoration: const BoxDecoration(
+                                                color: Colors.white,
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: const Icon(
+                                                FontAwesomeIcons.solidCommentDots,
+                                                color: Colors.black,
+                                                size: 16,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            const Text(
+                                              'Chat',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
                                     ),
                                   ),
                               ],
@@ -675,10 +743,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           Consumer<HomeProvider>(
             builder: (context, provider, child) {
               if (provider.selectedIndex == 1) {
-                return ChatAppsDropdownWidget(
-                  controller: _controller!,
-                );
-              } else if (provider.selectedIndex == 2) {
                 return const Expanded(
                   child: Center(
                     child: Text(
@@ -691,11 +755,24 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     ),
                   ),
                 );
+              } else if (provider.selectedIndex == 2) {
+                return const Expanded(
+                  child: Center(
+                    child: Text(
+                      'Memories',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                );
               } else if (provider.selectedIndex == 3) {
                 return Center(
                   child: Padding(
                     padding: EdgeInsets.only(right: MediaQuery.sizeOf(context).width * 0.10),
-                    child: const Text('Explore',
+                    child: const Text('Apps',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 22,
