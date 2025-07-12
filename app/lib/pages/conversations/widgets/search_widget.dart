@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 
 class SearchWidget extends StatefulWidget {
   const SearchWidget({super.key});
@@ -22,6 +24,94 @@ class _SearchWidgetState extends State<SearchWidget> {
         showClearButton = searchController.text.isNotEmpty;
       });
     }
+  }
+
+  Future<void> _selectDate(BuildContext context) async {
+    DateTime selectedDate = DateTime.now();
+
+    await showCupertinoModalPopup<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return Container(
+          height: 300,
+          padding: const EdgeInsets.only(top: 6.0),
+          margin: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          color: CupertinoColors.systemBackground.resolveFrom(context),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              children: [
+                // Header with Cancel and Done buttons
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade900,
+                    border: Border(
+                      bottom: BorderSide(
+                        color: Colors.grey.shade800,
+                        width: 0.5,
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        onPressed: () async {
+                          Navigator.of(context).pop();
+                          if (context.mounted) {
+                            final provider = Provider.of<ConversationProvider>(context, listen: false);
+                            await provider.filterConversationsByDate(selectedDate);
+                          }
+                        },
+                        child: const Text(
+                          'Done',
+                          style: TextStyle(
+                            color: Colors.deepPurple,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Date picker
+                Expanded(
+                  child: Container(
+                    color: Colors.grey.shade900,
+                    child: CupertinoDatePicker(
+                      mode: CupertinoDatePickerMode.date,
+                      initialDateTime: DateTime.now(),
+                      minimumDate: DateTime(2020),
+                      maximumDate: DateTime.now(),
+                      onDateTimeChanged: (DateTime newDate) {
+                        selectedDate = newDate;
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -82,8 +172,39 @@ class _SearchWidgetState extends State<SearchWidget> {
           const SizedBox(
             width: 12,
           ),
+          // Calendar button
           Consumer<ConversationProvider>(
-              builder: (BuildContext context, ConversationProvider convoProvider, Widget? child) {
+            builder: (BuildContext context, ConversationProvider convoProvider, Widget? child) {
+              return Container(
+                decoration: BoxDecoration(
+                  color: convoProvider.selectedDate != null ? Colors.deepPurple : Colors.grey.shade900,
+                  borderRadius: const BorderRadius.all(Radius.circular(16)),
+                ),
+                child: IconButton(
+                  onPressed: () async {
+                    if (convoProvider.selectedDate != null) {
+                      // Clear date filter
+                      await convoProvider.clearDateFilter();
+                    } else {
+                      // Open date picker
+                      await _selectDate(context);
+                    }
+                  },
+                  icon: Icon(
+                    convoProvider.selectedDate != null ? Icons.calendar_today : Icons.calendar_month,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  tooltip: convoProvider.selectedDate != null ? 'Filtered by ${DateFormat('MMM d, yyyy').format(convoProvider.selectedDate!)} - Tap to clear' : 'Filter by date',
+                ),
+              );
+            },
+          ),
+          const SizedBox(
+            width: 12,
+          ),
+          // Filter button
+          Consumer<ConversationProvider>(builder: (BuildContext context, ConversationProvider convoProvider, Widget? child) {
             return Container(
               decoration: BoxDecoration(
                 color: Colors.grey.shade900,

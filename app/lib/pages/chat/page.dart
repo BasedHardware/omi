@@ -54,6 +54,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   bool isScrollingDown = false;
 
   bool _showVoiceRecorder = false;
+  bool _isInitialLoad = true;
 
   var prefs = SharedPreferencesUtil();
   late List<App> apps;
@@ -98,12 +99,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         provider.refreshMessages();
       }
       scrollToBottom();
-      // Auto-focus the text field when chat page opens
-      Future.delayed(const Duration(milliseconds: 300), () {
-        if (mounted && !_showVoiceRecorder) {
-          textFieldFocusNode.requestFocus();
-        }
-      });
+      // Auto-focus the text field only on initial load, not on app switches
+      if (_isInitialLoad) {
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted && !_showVoiceRecorder && _isInitialLoad) {
+            textFieldFocusNode.requestFocus();
+          }
+        });
+      }
     });
     super.initState();
   }
@@ -619,6 +622,92 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   scrollToBottom() => _moveListToBottom();
 
+  void _handleAppSelection(String? val, AppProvider provider) {
+    if (val == null || val == provider.selectedChatAppId) {
+      return;
+    }
+
+    // Unfocus the text field to prevent keyboard issues
+    textFieldFocusNode.unfocus();
+
+    // clear chat
+    if (val == 'clear_chat') {
+      _showClearChatDialog();
+      return;
+    }
+
+    // enable apps - navigate back to home and show apps page
+    if (val == 'enable') {
+      _navigateToAppsPage();
+      return;
+    }
+
+    // select app by id
+    _selectApp(val, provider);
+  }
+
+  void _showClearChatDialog() {
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return getDialog(context, () {
+          Navigator.of(context).pop();
+        }, () {
+          if (mounted) {
+            context.read<MessageProvider>().clearChat();
+            Navigator.of(context).pop();
+          }
+        }, "Clear Chat?", "Are you sure you want to clear the chat? This action cannot be undone.");
+      },
+    );
+  }
+
+  void _navigateToAppsPage() {
+    if (!mounted) return;
+
+    MixpanelManager().pageOpened('Chat Apps');
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (context) => const HomePageWrapper(navigateToRoute: '/apps'),
+      ),
+    );
+  }
+
+  void _selectApp(String appId, AppProvider appProvider) async {
+    if (!mounted) return;
+
+    // Mark that we're no longer on initial load to prevent auto-focus
+    _isInitialLoad = false;
+
+    // Store references before async operation
+    final messageProvider = mounted ? context.read<MessageProvider>() : null;
+    if (messageProvider == null) return;
+
+    // Set the selected app
+    appProvider.setSelectedChatAppId(appId);
+
+    // Add a small delay to let the keyboard animation complete
+    // This prevents the widget from being unmounted during the keyboard transition
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    // Check if widget is still mounted after delay
+    if (!mounted) return;
+
+    // Perform async operation
+    await messageProvider.refreshMessages(dropdownSelected: true);
+
+    // Check if widget is still mounted before proceeding
+    if (!mounted) return;
+
+    // Get the selected app and send initial message if needed
+    var app = appProvider.getSelectedApp();
+    if (messageProvider.messages.isEmpty) {
+      messageProvider.sendInitialAppMessage(app);
+    }
+  }
+
   PreferredSizeWidget _buildAppBar(BuildContext context, MessageProvider provider) {
     return AppBar(
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -696,46 +785,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       ),
       offset: Offset((MediaQuery.sizeOf(context).width - 250) / 2 / MediaQuery.devicePixelRatioOf(context), 50),
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
-      onSelected: (String? val) async {
-        if (val == null || val == provider.selectedChatAppId) {
-          return;
-        }
-
-        // clear chat
-        if (val == 'clear_chat') {
-          showDialog(
-            context: context,
-            builder: (ctx) {
-              return getDialog(context, () {
-                Navigator.of(context).pop();
-              }, () {
-                context.read<MessageProvider>().clearChat();
-                Navigator.of(context).pop();
-              }, "Clear Chat?", "Are you sure you want to clear the chat? This action cannot be undone.");
-            },
-          );
-          return;
-        }
-
-        // enable apps - navigate back to home and show apps page
-        if (val == 'enable') {
-          MixpanelManager().pageOpened('Chat Apps');
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) => const HomePageWrapper(navigateToRoute: '/apps'),
-            ),
-          );
-          return;
-        }
-
-        // select app by id
-        provider.setSelectedChatAppId(val);
-        await context.read<MessageProvider>().refreshMessages(dropdownSelected: true);
-        var app = provider.getSelectedApp();
-        if (context.read<MessageProvider>().messages.isEmpty) {
-          context.read<MessageProvider>().sendInitialAppMessage(app);
-        }
-      },
+      onSelected: (String? val) => _handleAppSelection(val, provider),
       itemBuilder: (BuildContext context) {
         return _getAppsDropdownItems(context, provider);
       },
@@ -943,7 +993,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       onTap: () {
                         HapticFeedback.selectionClick();
                         Navigator.pop(context);
-                        context.read<MessageProvider>().captureImage();
+                        if (mounted) {
+                          context.read<MessageProvider>().captureImage();
+                        }
                       },
                       isFirst: true,
                     ),
@@ -954,7 +1006,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       onTap: () {
                         HapticFeedback.selectionClick();
                         Navigator.pop(context);
-                        context.read<MessageProvider>().selectImage();
+                        if (mounted) {
+                          context.read<MessageProvider>().selectImage();
+                        }
                       },
                     ),
                     _buildDivider(),
@@ -964,7 +1018,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       onTap: () {
                         HapticFeedback.selectionClick();
                         Navigator.pop(context);
-                        context.read<MessageProvider>().selectFile();
+                        if (mounted) {
+                          context.read<MessageProvider>().selectFile();
+                        }
                       },
                       isLast: true,
                     ),

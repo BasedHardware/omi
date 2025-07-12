@@ -16,6 +16,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
   bool isLoadingConversations = false;
   bool showDiscardedConversations = false;
+  DateTime? selectedDate;
 
   String previousQuery = '';
   int totalSearchPages = 1;
@@ -251,8 +252,46 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
       if (!showDiscardedConversations && convo.discarded) {
         return false;
       }
+      // Apply date filter if selected
+      if (selectedDate != null) {
+        var convoDate = DateTime(convo.createdAt.year, convo.createdAt.month, convo.createdAt.day);
+        var filterDate = DateTime(selectedDate!.year, selectedDate!.month, selectedDate!.day);
+        if (convoDate != filterDate) {
+          return false;
+        }
+      }
       return true;
     }).toList();
+  }
+
+  /// Filter conversations by a specific date
+  Future<void> filterConversationsByDate(DateTime date) async {
+    selectedDate = date;
+
+    // Clear search when applying date filter
+    previousQuery = "";
+    currentSearchPage = 0;
+    totalSearchPages = 0;
+    searchedConversations = [];
+
+    // Re-apply grouping with date filter
+    groupConversationsByDate();
+    notifyListeners();
+  }
+
+  /// Clear the date filter
+  Future<void> clearDateFilter() async {
+    selectedDate = null;
+
+    // Clear search when clearing date filter
+    previousQuery = "";
+    currentSearchPage = 0;
+    totalSearchPages = 0;
+    searchedConversations = [];
+
+    // Re-apply grouping without date filter
+    groupConversationsByDate();
+    notifyListeners();
   }
 
   void _groupSearchConvosByDateWithoutNotify() {
