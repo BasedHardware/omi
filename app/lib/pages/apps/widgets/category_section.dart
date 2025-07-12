@@ -107,7 +107,7 @@ class CategorySection extends StatelessWidget {
           // Horizontal scrolling grid of apps
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.fromLTRB(20, 0, 0, 0),
               child: GridView.builder(
                 scrollDirection: Axis.horizontal,
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
