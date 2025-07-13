@@ -39,9 +39,14 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
             name: "screenCapturePlatform",
             binaryMessenger: flutterViewController.engine.binaryMessenger)
 
-        // Setup overlay channel
+        // setup overlay channel
         overlayChannel = FlutterMethodChannel(
             name: "overlayPlatform",
+            binaryMessenger: flutterViewController.engine.binaryMessenger)
+
+        // setup poc hotkey channel
+        let pocHotkeyChannel = FlutterMethodChannel(
+            name: "poc/hotkey",
             binaryMessenger: flutterViewController.engine.binaryMessenger)
 
         // Set self as delegate to detect window events
@@ -127,6 +132,26 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                 }
                 self.moveOverlay(x: x, y: y)
                 result(nil)
+                
+            default:
+                result(FlutterMethodNotImplemented)
+            }
+        }
+
+        // setup poc hotkey channel handlers
+        pocHotkeyChannel.setMethodCallHandler { [weak self] (call, result) in
+            guard let self = self else { return }
+            
+            switch call.method {
+            case "hotkeyTriggered":
+                print("DEBUG: POC hotkey method called from Flutter")
+                result("Hotkey triggered successfully")
+                
+            case "testHotkey":
+                print("DEBUG: POC hotkey test called from Flutter")
+                // trigger the hotkey functionality for testing
+                HotkeyRegistrar.shared.registerGlobalHotkey()
+                result("Hotkey test completed")
                 
             default:
                 result(FlutterMethodNotImplemented)

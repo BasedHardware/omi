@@ -35,38 +35,46 @@ class MenuBarManager: NSObject {
                 customIcon.size = NSSize(width: 18, height: 18)  // Appropriate menu bar size
                 button.image = customIcon
             } else {
-                // Fallback to system icon if custom icon fails to load
-                button.image = NSImage(systemSymbolName: "mic.circle", accessibilityDescription: "Omi")
+                // fallback to system icon if custom icon fails to load
+                button.image = NSImage(systemSymbolName: "gear", accessibilityDescription: "Omi")
                 print("WARNING: Could not load custom app_launcher_icon, using fallback")
             }
-            button.toolTip = "Omi - Always On AI"
+            button.toolTip = "Omi - Always On AI (Option + Space for popup)"
         }
         
         // Create menu
         let menu = NSMenu()
         
-        // Show/Hide Window item
-        let showHideItem = NSMenuItem(title: getWindowToggleTitle(), action: #selector(toggleWindowVisibility), keyEquivalent: "")
-        showHideItem.target = self
-        menu.addItem(showHideItem)
+        // Add menu items
+        let toggleItem = NSMenuItem(title: "Toggle Window", action: #selector(toggleWindow), keyEquivalent: "t")
+        toggleItem.target = self
+        menu.addItem(toggleItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
+        // hotkey test item (poc feature)
+        let hotkeyTestItem = NSMenuItem(title: "Test Hotkey (Option + Space)", action: #selector(testHotkey), keyEquivalent: "")
+        hotkeyTestItem.target = self
+        menu.addItem(hotkeyTestItem)
         
         menu.addItem(NSMenuItem.separator())
         
         // Status item
         let statusItem = NSMenuItem(title: "Status: Ready", action: nil, keyEquivalent: "")
         statusItem.tag = 100
+        statusItem.isEnabled = false
         menu.addItem(statusItem)
         
         menu.addItem(NSMenuItem.separator())
         
         // Quit item
-        let quitItem = NSMenuItem(title: "Quit Omi", action: #selector(quitApplication), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "Quit", action: #selector(quitApplication), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
         
         statusBarItem.menu = menu
         
-        print("INFO: Menu bar item created successfully")
+        print("INFO: Menu bar item created successfully with POC features")
     }
     
     // MARK: - Public Methods
@@ -86,8 +94,8 @@ class MenuBarManager: NSObject {
                 // For now, we'll keep the same icon but could add visual indicators
                 button.image = customIcon
             } else {
-                // Fallback to system icons with state
-                let iconName = isActive ? "mic.circle.fill" : "mic.circle"
+                // fallback to system icons with state
+                let iconName = isActive ? "gear.badge.checkmark" : "gear"
                 button.image = NSImage(systemSymbolName: iconName, accessibilityDescription: "Omi")
             }
         }
@@ -128,6 +136,20 @@ class MenuBarManager: NSObject {
     @objc private func toggleWindowVisibility() {
         print("INFO: Menu bar toggle window action triggered")
         onToggleWindow?()
+    }
+    
+    @objc private func testHotkey() {
+        print("INFO: Menu bar hotkey test triggered")
+        // trigger the hotkey functionality directly
+        HotkeyRegistrar.shared.registerGlobalHotkey()
+        
+        // show a brief status update
+        updateStatus(status: "Hotkey test - Press Option + Space", isActive: true)
+        
+        // reset status after 3 seconds
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            self.updateStatus(status: "Ready", isActive: false)
+        }
     }
     
     @objc private func quitApplication() {
