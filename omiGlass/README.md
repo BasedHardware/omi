@@ -112,7 +112,7 @@ You'll need the following components to build your own omiGlass:
 1. Open the [firmware folder](https://github.com/BasedHardware/omiglass/tree/main/firmware) and open the `.ino` file in the Arduino IDE.
 
    - If you don't have the Arduino IDE installed, download and install it from the [official website](https://www.arduino.cc/en/software).
-   - Alternatively, follow the steps in the [firmware readme](firmware/README.md) to build using `arduino-cli`
+   - Alternatively, follow the steps in the [firmware readme](firmware/readme.md) to build using `arduino-cli`
 
 2. Set up the Arduino IDE for the XIAO ESP32S3 board:
 
