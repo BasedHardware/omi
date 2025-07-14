@@ -44,6 +44,7 @@ dependencies:
   # Auth
   google_sign_in: 6.2.2
   google_sign_in_all_platforms: 1.2.0
+  flutter_web_auth_2: 5.0.0-alpha.3
 
   # Analytics and Support
   intercom_flutter: 9.3.3
