@@ -4,6 +4,7 @@ import 'package:omi/backend/auth.dart' as backend_auth;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -62,11 +63,16 @@ class AuthenticationProvider extends BaseProvider {
   Future<void> onGoogleSignIn(Function() onSignIn) async {
     if (!loading) {
       setLoadingState(true);
-      await backend_auth.signInWithGoogle();
-      if (isSignedIn()) {
-        _signIn(onSignIn);
-      } else {
-        AppSnackbar.showSnackbarError('Failed to sign in with Google, please try again.');
+      try {
+        final credential = await AuthService.instance.authenticateWithProvider('google');
+        if (credential != null && isSignedIn()) {
+          _signIn(onSignIn);
+        } else {
+          AppSnackbar.showSnackbarError('Failed to sign in with Google, please try again.');
+        }
+      } catch (e) {
+        debugPrint('OAuth Google sign in error: $e');
+        AppSnackbar.showSnackbarError('Authentication failed. Please try again.');
       }
       setLoadingState(false);
     }
@@ -75,11 +81,16 @@ class AuthenticationProvider extends BaseProvider {
   Future<void> onAppleSignIn(Function() onSignIn) async {
     if (!loading) {
       setLoadingState(true);
-      await backend_auth.signInWithApple();
-      if (isSignedIn()) {
-        _signIn(onSignIn);
-      } else {
-        AppSnackbar.showSnackbarError('Failed to sign in with Apple, please try again.');
+      try {
+        final credential = await AuthService.instance.authenticateWithProvider('apple');
+        if (credential != null && isSignedIn()) {
+          _signIn(onSignIn);
+        } else {
+          AppSnackbar.showSnackbarError('Failed to sign in with Apple, please try again.');
+        }
+      } catch (e) {
+        debugPrint('OAuth Apple sign in error: $e');
+        AppSnackbar.showSnackbarError('Authentication failed. Please try again.');
       }
       setLoadingState(false);
     }
