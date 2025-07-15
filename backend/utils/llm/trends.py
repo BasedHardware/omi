@@ -2,8 +2,15 @@ from typing import List
 from pydantic import BaseModel, Field
 
 from models.conversation import Conversation
-from models.trend import TrendEnum, ceo_options, company_options, software_product_options, hardware_product_options, \
-    ai_product_options, TrendType
+from models.trend import (
+    TrendEnum,
+    ceo_options,
+    company_options,
+    software_product_options,
+    hardware_product_options,
+    ai_product_options,
+    TrendType,
+)
 from utils.llm.clients import llm_mini
 
 
@@ -42,14 +49,24 @@ def trends_extractor(memory: Conversation) -> List[Item]:
 
     Conversation:
     {transcript}
-    '''.replace('    ', '').strip()
+    '''.replace(
+        '    ', ''
+    ).strip()
     try:
         with_parser = llm_mini.with_structured_output(ExpectedOutput)
         response: ExpectedOutput = with_parser.invoke(prompt)
         filtered = []
         for item in response.items:
-            if item.topic not in [e for e in (
-                    ceo_options + company_options + software_product_options + hardware_product_options + ai_product_options)]:
+            if item.topic not in [
+                e
+                for e in (
+                    ceo_options
+                    + company_options
+                    + software_product_options
+                    + hardware_product_options
+                    + ai_product_options
+                )
+            ]:
                 continue
             filtered.append(item)
         return filtered

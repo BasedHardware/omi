@@ -146,4 +146,4 @@ class _BasicNotificationService implements NotificationInterface {
 }
 
 /// Factory function to create the basic notification service
-NotificationInterface createNotificationService() => _BasicNotificationService._(); 
+NotificationInterface createNotificationService() => _BasicNotificationService._();

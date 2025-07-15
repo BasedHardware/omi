@@ -40,8 +40,9 @@ def should_discard_conversation(transcript: str, photos: List[ConversationPhoto]
     full_context = "\n\n".join(context_parts)
 
     custom_parser = PydanticOutputParser(pydantic_object=DiscardConversation)
-    prompt = ChatPromptTemplate.from_messages([
-        '''You will receive a transcript, a series of photo descriptions from a wearable camera, or both. Your task is to decide if this content is meaningful enough to be saved as a memory. Length is never a reason to discard.
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            '''You will receive a transcript, a series of photo descriptions from a wearable camera, or both. Your task is to decide if this content is meaningful enough to be saved as a memory. Length is never a reason to discard.
 
 Task: Decide if the content should be saved as a memory.
 
@@ -62,14 +63,19 @@ discard = <True|False>
 Content:
 {full_context}
 
-{format_instructions}'''.replace('    ', '').strip()
-    ])
+{format_instructions}'''.replace(
+                '    ', ''
+            ).strip()
+        ]
+    )
     chain = prompt | llm_mini | custom_parser
     try:
-        response: DiscardConversation = chain.invoke({
-            'full_context': full_context,
-            'format_instructions': custom_parser.get_format_instructions(),
-        })
+        response: DiscardConversation = chain.invoke(
+            {
+                'full_context': full_context,
+                'format_instructions': custom_parser.get_format_instructions(),
+            }
+        )
         return response.discard
 
     except Exception as e:
@@ -77,7 +83,9 @@ Content:
         return False
 
 
-def get_transcript_structure(transcript: str, started_at: datetime, language_code: str, tz: str, photos: List[ConversationPhoto] = None) -> Structured:
+def get_transcript_structure(
+    transcript: str, started_at: datetime, language_code: str, tz: str, photos: List[ConversationPhoto] = None
+) -> Structured:
     context_parts = []
     if transcript and transcript.strip():
         context_parts.append(f"Transcript: ```{transcript.strip()}```")
@@ -147,28 +155,38 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
     Content:
     {full_context}
 
-    {format_instructions}'''.replace('    ', '').strip()
+    {format_instructions}'''.replace(
+        '    ', ''
+    ).strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
     chain = prompt | llm_medium_experiment | parser  # parser is imported from .clients
 
-    response = chain.invoke({
-        'full_context': full_context,
-        'format_instructions': parser.get_format_instructions(),
-        'language_code': language_code,
-        'started_at': started_at.isoformat(),
-        'tz': tz,
-    })
+    response = chain.invoke(
+        {
+            'full_context': full_context,
+            'format_instructions': parser.get_format_instructions(),
+            'language_code': language_code,
+            'started_at': started_at.isoformat(),
+            'tz': tz,
+        }
+    )
 
-    for event in (response.events or []):
+    for event in response.events or []:
         if event.duration > 180:
             event.duration = 180
         event.created = False
     return response
 
 
-def get_reprocess_transcript_structure(transcript: str, started_at: datetime, language_code: str, tz: str,
-                                       title: str, photos: List[ConversationPhoto] = None) -> Structured:
+def get_reprocess_transcript_structure(
+    transcript: str,
+    started_at: datetime,
+    language_code: str,
+    tz: str,
+    title: str,
+    photos: List[ConversationPhoto] = None,
+) -> Structured:
     context_parts = []
     if transcript and transcript.strip():
         context_parts.append(f"Transcript: ```{transcript.strip()}```")
@@ -182,7 +200,7 @@ def get_reprocess_transcript_structure(transcript: str, started_at: datetime, la
         return Structured()
 
     full_context = "\n\n".join(context_parts)
-    
+
     prompt_text = '''You are an expert content analyzer. Your task is to analyze the provided content (which could be a transcript, a series of photo descriptions from a wearable camera, or both) and provide structure and clarity.
     The content language is {language_code}. Use the same language {language_code} for your response.
 
@@ -237,21 +255,25 @@ def get_reprocess_transcript_structure(transcript: str, started_at: datetime, la
     Content:
     {full_context}
 
-    {format_instructions}'''.replace('    ', '').strip()
+    {format_instructions}'''.replace(
+        '    ', ''
+    ).strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
     chain = prompt | llm_medium_experiment | parser  # parser is imported from .clients
 
-    response = chain.invoke({
-        'full_context': full_context,
-        'title': title,
-        'format_instructions': parser.get_format_instructions(),
-        'language_code': language_code,
-        'started_at': started_at.isoformat(),
-        'tz': tz,
-    })
+    response = chain.invoke(
+        {
+            'full_context': full_context,
+            'title': title,
+            'format_instructions': parser.get_format_instructions(),
+            'language_code': language_code,
+            'started_at': started_at.isoformat(),
+            'tz': tz,
+        }
+    )
 
-    for event in (response.events or []):
+    for event in response.events or []:
         if event.duration > 180:
             event.duration = 180
         event.created = False
@@ -292,7 +314,8 @@ def get_app_result(transcript: str, photos: List[ConversationPhoto], app: App, l
 
 class BestAppSelection(BaseModel):
     app_id: str = Field(
-        description='The ID of the best app for processing this conversation, or an empty string if none are suitable.')
+        description='The ID of the best app for processing this conversation, or an empty string if none are suitable.'
+    )
 
 
 def select_best_app_for_conversation(conversation: Conversation, apps: List[App]) -> Optional[App]:

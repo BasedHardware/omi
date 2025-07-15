@@ -68,7 +68,8 @@ class OmiButton extends AdaptiveWidget {
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       )
-                    : LinearGradient(colors: [ResponsiveHelper.backgroundTertiary, ResponsiveHelper.backgroundTertiary]),
+                    : LinearGradient(
+                        colors: [ResponsiveHelper.backgroundTertiary, ResponsiveHelper.backgroundTertiary]),
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: enabled
                     ? [
@@ -116,7 +117,8 @@ class OmiButton extends AdaptiveWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (icon != null) ...[
-                    Icon(icon, size: 12, color: enabled ? ResponsiveHelper.textSecondary : ResponsiveHelper.textQuaternary),
+                    Icon(icon,
+                        size: 12, color: enabled ? ResponsiveHelper.textSecondary : ResponsiveHelper.textQuaternary),
                     const SizedBox(width: 6),
                   ],
                   Text(
@@ -134,4 +136,4 @@ class OmiButton extends AdaptiveWidget {
         );
     }
   }
-} 
+}

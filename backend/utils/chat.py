@@ -108,6 +108,7 @@ def process_voice_message_segment(path: str, uid: str):
 
     return [message.dict(), ai_message_resp]
 
+
 async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGenerator[str, None]:
     url = get_syncing_file_temporal_signed_url(path)
 

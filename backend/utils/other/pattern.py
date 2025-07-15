@@ -7,4 +7,3 @@ def singleton(cls):
         return instances[cls]
 
     return get_instance
-

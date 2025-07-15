@@ -14,7 +14,6 @@ import 'package:omi/ui/atoms/omi_checkbox.dart';
 import 'package:omi/ui/atoms/omi_icon_badge.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
 
-
 class DesktopActionGroup extends StatefulWidget {
   final ServerConversation conversation;
   final List<ActionItem> actionItems;
@@ -33,26 +32,26 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
   final Map<int, bool> _editingStates = {};
   final Map<int, TextEditingController> _textControllers = {};
   final Map<int, FocusNode> _focusNodes = {};
-  
+
   @override
   void initState() {
     super.initState();
     _initializeControllers();
   }
-  
+
   @override
   void dispose() {
     _disposeControllers();
     super.dispose();
   }
-  
+
   void _initializeControllers() {
     for (int i = 0; i < widget.actionItems.length; i++) {
       final itemIndex = widget.conversation.structured.actionItems.indexOf(widget.actionItems[i]);
       _editingStates[itemIndex] = false;
       _textControllers[itemIndex] = TextEditingController();
       _focusNodes[itemIndex] = FocusNode();
-      
+
       // Listen for focus changes to save when user clicks outside
       _focusNodes[itemIndex]!.addListener(() {
         if (!_focusNodes[itemIndex]!.hasFocus && _editingStates[itemIndex] == true) {
@@ -61,7 +60,7 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
       });
     }
   }
-  
+
   void _disposeControllers() {
     for (final controller in _textControllers.values) {
       controller.dispose();
@@ -70,9 +69,10 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
       focusNode.dispose();
     }
   }
-  
+
   void _startEditing(int itemIndex) {
-    final item = widget.actionItems.firstWhere((item) => widget.conversation.structured.actionItems.indexOf(item) == itemIndex);
+    final item =
+        widget.actionItems.firstWhere((item) => widget.conversation.structured.actionItems.indexOf(item) == itemIndex);
     setState(() {
       _editingStates[itemIndex] = true;
       _textControllers[itemIndex]!.text = item.description;
@@ -80,26 +80,25 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNodes[itemIndex]!.requestFocus();
-      _textControllers[itemIndex]!.selection = TextSelection(
-        baseOffset: 0, 
-        extentOffset: _textControllers[itemIndex]!.text.length
-      );
+      _textControllers[itemIndex]!.selection =
+          TextSelection(baseOffset: 0, extentOffset: _textControllers[itemIndex]!.text.length);
     });
   }
-  
+
   void _cancelEditing(int itemIndex) {
     setState(() {
       _editingStates[itemIndex] = false;
     });
   }
-  
+
   void _saveChanges(int itemIndex) async {
     if (_editingStates[itemIndex] != true) return;
-    
-    final item = widget.actionItems.firstWhere((item) => widget.conversation.structured.actionItems.indexOf(item) == itemIndex);
+
+    final item =
+        widget.actionItems.firstWhere((item) => widget.conversation.structured.actionItems.indexOf(item) == itemIndex);
     final newText = _textControllers[itemIndex]!.text.trim();
     final originalText = item.description;
-    
+
     if (newText.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -112,13 +111,14 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
       );
       return;
     }
-    
+
     if (newText == originalText) {
       _cancelEditing(itemIndex);
       return;
     }
 
-    updateActionItemDescription(widget.conversation.id, originalText, newText, itemIndex).catchError((e) => debugPrint('$e'));
+    updateActionItemDescription(widget.conversation.id, originalText, newText, itemIndex)
+        .catchError((e) => debugPrint('$e'));
 
     final convoProvider = Provider.of<ConversationProvider>(context, listen: false);
     convoProvider.updateActionItemDescriptionInConversation(widget.conversation.id, itemIndex, newText);
@@ -128,7 +128,7 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
     });
     _showSavedMessage();
   }
-  
+
   void _showSavedMessage() {
     final overlay = Overlay.of(context);
     late OverlayEntry entry;
@@ -219,7 +219,9 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            widget.conversation.structured.title.isNotEmpty ? widget.conversation.structured.title : 'Untitled Conversation',
+                            widget.conversation.structured.title.isNotEmpty
+                                ? widget.conversation.structured.title
+                                : 'Untitled Conversation',
                             style: const TextStyle(
                               color: ResponsiveHelper.textPrimary,
                               fontSize: 16,
@@ -289,7 +291,9 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
         color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isEditing ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.5) : ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
+          color: isEditing
+              ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.5)
+              : ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
           width: 1,
         ),
       ),
@@ -326,8 +330,10 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
                     child: TextField(
                       controller: _textControllers[itemIndex],
                       focusNode: _focusNodes[itemIndex],
-                      style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 14, height: 1.3, fontWeight: FontWeight.w500),
-                      decoration: const InputDecoration(border: InputBorder.none, contentPadding: EdgeInsets.zero, isDense: true),
+                      style: const TextStyle(
+                          color: ResponsiveHelper.textPrimary, fontSize: 14, height: 1.3, fontWeight: FontWeight.w500),
+                      decoration: const InputDecoration(
+                          border: InputBorder.none, contentPadding: EdgeInsets.zero, isDense: true),
                       maxLines: null,
                       onChanged: (_) => setState(() {}),
                     ),
@@ -353,10 +359,16 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
           // Quick action button
           if (isEditing)
             OmiIconButton(
-              icon: (_textControllers[itemIndex]?.text.trim() != item.description) ? FontAwesomeIcons.check : FontAwesomeIcons.xmark,
-              onPressed: (_textControllers[itemIndex]?.text.trim() != item.description) ? () => _saveChanges(itemIndex) : () => _cancelEditing(itemIndex),
+              icon: (_textControllers[itemIndex]?.text.trim() != item.description)
+                  ? FontAwesomeIcons.check
+                  : FontAwesomeIcons.xmark,
+              onPressed: (_textControllers[itemIndex]?.text.trim() != item.description)
+                  ? () => _saveChanges(itemIndex)
+                  : () => _cancelEditing(itemIndex),
               style: OmiIconButtonStyle.outline,
-              color: (_textControllers[itemIndex]?.text.trim() != item.description) ? Colors.green.shade600 : ResponsiveHelper.textSecondary,
+              color: (_textControllers[itemIndex]?.text.trim() != item.description)
+                  ? Colors.green.shade600
+                  : ResponsiveHelper.textSecondary,
               size: 24,
             )
           else

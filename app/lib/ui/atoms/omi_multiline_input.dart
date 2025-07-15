@@ -55,4 +55,4 @@ class OmiMultilineInput extends AdaptiveWidget {
       ),
     );
   }
-} 
+}

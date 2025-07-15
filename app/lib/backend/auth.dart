@@ -134,10 +134,10 @@ Future<UserCredential?> signInWithApple() async {
 
     debugPrint('signInWithApple Name: ${SharedPreferencesUtil().fullName}');
     debugPrint('signInWithApple Email: ${SharedPreferencesUtil().email}');
-    
+
     // Bring app to front after successful authentication
     await _bringAppToFront();
-    
+
     return userCred;
   } on FirebaseAuthException catch (e) {
     debugPrint('FirebaseAuthException: ${e.code} - ${e.message}');
@@ -311,16 +311,16 @@ Future<UserCredential?> _processGoogleSignInResult(UserCredential result) async 
 
   debugPrint('signInWithGoogle Email: ${SharedPreferencesUtil().email}');
   debugPrint('signInWithGoogle Name: ${SharedPreferencesUtil().givenName}');
-  
-  // Bring app to front after successful authentication
-    _bringAppToFront();
 
-  
+  // Bring app to front after successful authentication
+  _bringAppToFront();
+
   return result;
 }
 
 /// Process the Google Sign In result for all platforms and update user preferences
-Future<UserCredential?> _processGoogleSignInResultAllPlatforms(UserCredential result, all_platforms_google_sign_in.GoogleSignInCredentials credentials) async {
+Future<UserCredential?> _processGoogleSignInResultAllPlatforms(
+    UserCredential result, all_platforms_google_sign_in.GoogleSignInCredentials credentials) async {
   // For all platforms, we might need to fetch user info separately if not available in Firebase result
   var givenName = result.additionalUserInfo?.profile?['given_name'] ?? '';
   var familyName = result.additionalUserInfo?.profile?['family_name'] ?? '';
@@ -345,10 +345,10 @@ Future<UserCredential?> _processGoogleSignInResultAllPlatforms(UserCredential re
 
   debugPrint('signInWithGoogle (All Platforms) Email: ${SharedPreferencesUtil().email}');
   debugPrint('signInWithGoogle (All Platforms) Name: ${SharedPreferencesUtil().givenName}');
-  
+
   // Bring app to front after successful authentication
   await _bringAppToFront();
-  
+
   return result;
 }
 

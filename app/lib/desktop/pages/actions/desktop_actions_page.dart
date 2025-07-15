@@ -17,7 +17,8 @@ class DesktopActionsPage extends StatefulWidget {
   State<DesktopActionsPage> createState() => DesktopActionsPageState();
 }
 
-class DesktopActionsPageState extends State<DesktopActionsPage> with AutomaticKeepAliveClientMixin, TickerProviderStateMixin {
+class DesktopActionsPageState extends State<DesktopActionsPage>
+    with AutomaticKeepAliveClientMixin, TickerProviderStateMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -114,10 +115,12 @@ class DesktopActionsPageState extends State<DesktopActionsPage> with AutomaticKe
     super.build(context);
     return Consumer<ConversationProvider>(
       builder: (context, convoProvider, _) {
-        final Map<ServerConversation, List<ActionItem>> itemsByConversation = convoProvider.conversationsWithActiveActionItems;
+        final Map<ServerConversation, List<ActionItem>> itemsByConversation =
+            convoProvider.conversationsWithActiveActionItems;
 
         // Sort conversations by date (most recent first)
-        final sortedEntries = itemsByConversation.entries.toList()..sort((a, b) => b.key.createdAt.compareTo(a.key.createdAt));
+        final sortedEntries = itemsByConversation.entries.toList()
+          ..sort((a, b) => b.key.createdAt.compareTo(a.key.createdAt));
 
         // Get flattened list for non-grouped view
         final flattenedItems = _getFlattenedActionItems(itemsByConversation);
@@ -139,7 +142,6 @@ class DesktopActionsPageState extends State<DesktopActionsPage> with AutomaticKe
             child: Stack(
               children: [
                 _buildAnimatedBackground(),
-
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.02),
@@ -148,7 +150,6 @@ class DesktopActionsPageState extends State<DesktopActionsPage> with AutomaticKe
                   child: Column(
                     children: [
                       _buildHeader(flattenedItems),
-
                       Expanded(
                         child: _animationsInitialized
                             ? FadeTransition(
@@ -263,7 +264,9 @@ class DesktopActionsPageState extends State<DesktopActionsPage> with AutomaticKe
                 height: 44,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: _showGroupedView ? ResponsiveHelper.purplePrimary.withOpacity(0.15) : ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+                  color: _showGroupedView
+                      ? ResponsiveHelper.purplePrimary.withOpacity(0.15)
+                      : ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
                   borderRadius: BorderRadius.circular(12),
                   border: _showGroupedView
                       ? Border.all(
@@ -301,7 +304,8 @@ class DesktopActionsPageState extends State<DesktopActionsPage> with AutomaticKe
     return CustomScrollView(
       slivers: [
         // Pending tasks section
-        if (flattenedItems.any((item) => !item.actionItem.completed)) _showGroupedView ? _buildGroupedView(sortedEntries, false) : _buildFlatView(flattenedItems, false),
+        if (flattenedItems.any((item) => !item.actionItem.completed))
+          _showGroupedView ? _buildGroupedView(sortedEntries, false) : _buildFlatView(flattenedItems, false),
 
         // Completed tasks section
         if (flattenedItems.any((item) => item.actionItem.completed)) ...[

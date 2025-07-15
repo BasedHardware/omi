@@ -1,4 +1,4 @@
-#TODO: delete this file after the PR 2342 is merged and a new app ver is live on prod
+# TODO: delete this file after the PR 2342 is merged and a new app ver is live on prod
 
 from fastapi import APIRouter
 
@@ -23,5 +23,5 @@ def get_plugin_categories():
         {'title': 'Social and Relationships', 'id': 'social-and-relationships'},
         {'title': 'News and Information', 'id': 'news-and-information'},
         {'title': 'Utilities and Tools', 'id': 'utilities-and-tools'},
-        {'title': 'Other', 'id': 'other'}
+        {'title': 'Other', 'id': 'other'},
     ]

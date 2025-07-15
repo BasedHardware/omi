@@ -10,7 +10,7 @@ r = redis.Redis(
     port=int(os.getenv('REDIS_DB_PORT')) if os.getenv('REDIS_DB_PORT') is not None else 6379,
     username='default',
     password=os.getenv('REDIS_DB_PASSWORD'),
-    health_check_interval=30
+    health_check_interval=30,
 )
 
 
@@ -55,6 +55,7 @@ def delete_generic_cache(path: str):
 # ********************* APP BY ID **********************
 # ******************************************************
 
+
 def set_app_cache_by_id(app_id: str, app: dict):
     r.set(f'apps:{app_id}', json.dumps(app, default=str), ex=60 * 10)  # 10 minutes cached
 
@@ -72,6 +73,7 @@ def delete_app_cache_by_id(app_id: str):
 # ******************************************************
 # ********************** PERSONA ***********************
 # ******************************************************
+
 
 def is_username_taken(username: str) -> bool:
     """Check if username is taken by checking if it exists in the username:uid mapping"""
@@ -239,10 +241,7 @@ def get_apps_reviews(app_ids: list) -> dict:
     reviews = r.mget(keys)
     if reviews is None:
         return {}
-    return {
-        app_id: eval(review) if review else {}
-        for app_id, review in zip(app_ids, reviews)
-    }
+    return {app_id: eval(review) if review else {} for app_id, review in zip(app_ids, reviews)}
 
 
 def set_app_installs_count(app_id: str, count: int):
@@ -272,10 +271,7 @@ def get_apps_installs_count(app_ids: list) -> dict:
     counts = r.mget(keys)
     if counts is None:
         return {}
-    return {
-        app_id: int(count) if count else 0
-        for app_id, count in zip(app_ids, counts)
-    }
+    return {app_id: int(count) if count else 0 for app_id, count in zip(app_ids, counts)}
 
 
 def set_user_has_soniox_speech_profile(uid: str):
@@ -503,6 +499,7 @@ def get_user_data_protection_level(uid: str) -> Optional[str]:
 # ******************* MCP API KEYS *********************
 # ******************************************************
 
+
 @try_catch_decorator
 def cache_mcp_api_key(hashed_key: str, user_id: str, ttl: int = 3600):
     """Caches the user_id for a given hashed MCP API key."""
@@ -525,6 +522,7 @@ def delete_cached_mcp_api_key(hashed_key: str):
 # ******************************************************
 # **************** DATA MIGRATION STATUS ***************
 # ******************************************************
+
 
 def set_migration_status(uid: str, status: str, processed: int = None, total: int = None, error: str = None):
     key = f"migration_status:{uid}"

@@ -86,9 +86,9 @@ class OmiEditDialog {
                   ),
                 ],
               ),
-              
+
               const SizedBox(height: 24),
-              
+
               // Field label
               Text(
                 fieldLabel,
@@ -99,7 +99,7 @@ class OmiEditDialog {
                 ),
               ),
               const SizedBox(height: 8),
-              
+
               // Input field using OmiMultilineInput
               OmiMultilineInput(
                 controller: controller,
@@ -107,9 +107,9 @@ class OmiEditDialog {
                 minLines: 1,
                 maxLines: maxLines,
               ),
-              
+
               const SizedBox(height: 28),
-              
+
               // Buttons
               Row(
                 children: [
@@ -140,9 +140,7 @@ class OmiEditDialog {
                       ),
                     ),
                   ),
-                  
                   const SizedBox(width: 16),
-                  
                   Expanded(
                     child: SizedBox(
                       height: 48,
@@ -183,4 +181,4 @@ class OmiEditDialog {
       ),
     );
   }
-} 
+}

@@ -13,7 +13,6 @@ import 'package:omi/ui/atoms/omi_checkbox.dart';
 import 'package:omi/ui/molecules/omi_popup_menu.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
 
-
 class DesktopActionItem extends StatefulWidget {
   final ActionItem actionItem;
   final ServerConversation conversation;
@@ -43,7 +42,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
     super.initState();
     _textController = TextEditingController();
     _focusNode = FocusNode();
-    
+
     // Listen for focus changes to save when user clicks outside
     _focusNode.addListener(() {
       if (!_focusNode.hasFocus && _isEditing) {
@@ -80,10 +79,10 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
 
   void _saveChanges() async {
     if (!_isEditing) return;
-    
+
     final newText = _textController.text.trim();
     final originalText = widget.actionItem.description;
-    
+
     if (newText.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -96,13 +95,14 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
       );
       return;
     }
-    
+
     if (newText == originalText) {
       _cancelEditing();
       return;
     }
 
-    updateActionItemDescription(widget.conversation.id, originalText, newText, widget.itemIndex).catchError((e) => debugPrint('$e'));
+    updateActionItemDescription(widget.conversation.id, originalText, newText, widget.itemIndex)
+        .catchError((e) => debugPrint('$e'));
 
     final convoProvider = Provider.of<ConversationProvider>(context, listen: false);
     convoProvider.updateActionItemDescriptionInConversation(widget.conversation.id, widget.itemIndex, newText);
@@ -156,7 +156,9 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
           color: ResponsiveHelper.backgroundSecondary.withOpacity(0.8),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: _isEditing ? ResponsiveHelper.purplePrimary.withOpacity(0.5) : ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+            color: _isEditing
+                ? ResponsiveHelper.purplePrimary.withOpacity(0.5)
+                : ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
             width: 1,
           ),
           boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
@@ -194,8 +196,13 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
                           child: TextField(
                             controller: _textController,
                             focusNode: _focusNode,
-                            style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 15, height: 1.4, fontWeight: FontWeight.w500),
-                            decoration: const InputDecoration(border: InputBorder.none, contentPadding: EdgeInsets.zero, isDense: true),
+                            style: const TextStyle(
+                                color: ResponsiveHelper.textPrimary,
+                                fontSize: 15,
+                                height: 1.4,
+                                fontWeight: FontWeight.w500),
+                            decoration: const InputDecoration(
+                                border: InputBorder.none, contentPadding: EdgeInsets.zero, isDense: true),
                             maxLines: null,
                             onChanged: (_) => setState(() {}),
                           ),
@@ -206,8 +213,11 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
                             duration: const Duration(milliseconds: 250),
                             curve: Curves.easeInOut,
                             style: TextStyle(
-                              color: widget.actionItem.completed ? ResponsiveHelper.textTertiary : ResponsiveHelper.textPrimary,
-                              decoration: widget.actionItem.completed ? TextDecoration.lineThrough : TextDecoration.none,
+                              color: widget.actionItem.completed
+                                  ? ResponsiveHelper.textTertiary
+                                  : ResponsiveHelper.textPrimary,
+                              decoration:
+                                  widget.actionItem.completed ? TextDecoration.lineThrough : TextDecoration.none,
                               decorationColor: ResponsiveHelper.textTertiary,
                               decorationThickness: 1.5,
                               fontSize: 15,
@@ -218,7 +228,17 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
                           ),
                         ),
                   const SizedBox(height: 8),
-                  Row(children: [const SizedBox(width: 6), Expanded(child: Text(widget.conversation.structured.title.isNotEmpty ? widget.conversation.structured.title : 'Untitled Conversation', style: const TextStyle(color: ResponsiveHelper.textTertiary, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis))]),
+                  Row(children: [
+                    const SizedBox(width: 6),
+                    Expanded(
+                        child: Text(
+                            widget.conversation.structured.title.isNotEmpty
+                                ? widget.conversation.structured.title
+                                : 'Untitled Conversation',
+                            style: const TextStyle(color: ResponsiveHelper.textTertiary, fontSize: 12),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis))
+                  ]),
                 ],
               ),
             ),
@@ -242,8 +262,22 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
     return OmiPopupMenuButton<String>(
       icon: FontAwesomeIcons.ellipsisVertical,
       itemBuilder: (context) => [
-        PopupMenuItem<String>(value: 'toggle', child: Row(children: [Icon(widget.actionItem.completed ? FontAwesomeIcons.xmark : FontAwesomeIcons.check, color: ResponsiveHelper.textSecondary, size: 14), const SizedBox(width: 8), Text(widget.actionItem.completed ? 'Mark Incomplete' : 'Mark Complete', style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 14))])),
-        PopupMenuItem<String>(value: 'delete', child: Row(children: [Icon(FontAwesomeIcons.trash, color: Colors.red.shade400, size: 14), const SizedBox(width: 8), Text('Delete', style: TextStyle(color: Colors.red.shade400, fontSize: 14))])),
+        PopupMenuItem<String>(
+            value: 'toggle',
+            child: Row(children: [
+              Icon(widget.actionItem.completed ? FontAwesomeIcons.xmark : FontAwesomeIcons.check,
+                  color: ResponsiveHelper.textSecondary, size: 14),
+              const SizedBox(width: 8),
+              Text(widget.actionItem.completed ? 'Mark Incomplete' : 'Mark Complete',
+                  style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 14))
+            ])),
+        PopupMenuItem<String>(
+            value: 'delete',
+            child: Row(children: [
+              Icon(FontAwesomeIcons.trash, color: Colors.red.shade400, size: 14),
+              const SizedBox(width: 8),
+              Text('Delete', style: TextStyle(color: Colors.red.shade400, fontSize: 14))
+            ])),
       ],
       onSelected: (value) => _handleMenuSelection(value, context),
     );
@@ -272,9 +306,13 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
   }
 
   void _showDeleteConfirmation(BuildContext context) {
-    OmiConfirmDialog.show(context, title: 'Delete Action Item', message: 'Are you sure you want to delete this action item?').then((confirmed) {
+    OmiConfirmDialog.show(context,
+            title: 'Delete Action Item', message: 'Are you sure you want to delete this action item?')
+        .then((confirmed) {
       if (confirmed == true) {
-        context.read<ConversationProvider>().deleteActionItemAndUpdateLocally(widget.conversation.id, widget.itemIndex, widget.actionItem);
+        context
+            .read<ConversationProvider>()
+            .deleteActionItemAndUpdateLocally(widget.conversation.id, widget.itemIndex, widget.actionItem);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Action item deleted'),
@@ -287,4 +325,4 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
       }
     });
   }
-} 
+}

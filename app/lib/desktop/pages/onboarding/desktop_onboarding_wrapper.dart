@@ -14,7 +14,6 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
 
-
 class DesktopOnboardingWrapper extends StatefulWidget {
   const DesktopOnboardingWrapper({super.key});
 

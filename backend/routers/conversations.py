@@ -39,8 +39,10 @@ def process_in_progress_conversation(uid: str = Depends(auth.get_current_user_ui
 
 @router.post('/v1/conversations/{conversation_id}/reprocess', response_model=Conversation, tags=['conversations'])
 def reprocess_conversation(
-        conversation_id: str, language_code: Optional[str] = None, app_id: Optional[str] = None,
-        uid: str = Depends(auth.get_current_user_uid)
+    conversation_id: str,
+    language_code: Optional[str] = None,
+    app_id: Optional[str] = None,
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     """
     Whenever a user wants to reprocess a conversation, or wants to force process a discarded one
@@ -60,14 +62,24 @@ def reprocess_conversation(
 
 
 @router.get('/v1/conversations', response_model=List[Conversation], tags=['conversations'])
-def get_conversations(limit: int = 100, offset: int = 0, statuses: Optional[str] = "processing,completed", include_discarded: bool = True,
-                      uid: str = Depends(auth.get_current_user_uid)):
+def get_conversations(
+    limit: int = 100,
+    offset: int = 0,
+    statuses: Optional[str] = "processing,completed",
+    include_discarded: bool = True,
+    uid: str = Depends(auth.get_current_user_uid),
+):
     print('get_conversations', uid, limit, offset, statuses)
     # force convos statuses to processing, completed on the empty filter
     if len(statuses) == 0:
         statuses = "processing,completed"
-    return conversations_db.get_conversations(uid, limit, offset, include_discarded=include_discarded,
-                                              statuses=statuses.split(",") if len(statuses) > 0 else [])
+    return conversations_db.get_conversations(
+        uid,
+        limit,
+        offset,
+        include_discarded=include_discarded,
+        statuses=statuses.split(",") if len(statuses) > 0 else [],
+    )
 
 
 @router.get("/v1/conversations/{conversation_id}", response_model=Conversation, tags=['conversations'])
@@ -83,16 +95,18 @@ def patch_conversation_title(conversation_id: str, title: str, uid: str = Depend
     return {'status': 'Ok'}
 
 
-@router.get("/v1/conversations/{conversation_id}/photos", response_model=List[ConversationPhoto],
-            tags=['conversations'])
+@router.get(
+    "/v1/conversations/{conversation_id}/photos", response_model=List[ConversationPhoto], tags=['conversations']
+)
 def get_conversation_photos(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_conversation_by_id(uid, conversation_id)
     return conversations_db.get_conversation_photos(uid, conversation_id)
 
 
 @router.get(
-    "/v1/conversations/{conversation_id}/transcripts", response_model=Dict[str, List[TranscriptSegment]],
-    tags=['conversations']
+    "/v1/conversations/{conversation_id}/transcripts",
+    response_model=Dict[str, List[TranscriptSegment]],
+    tags=['conversations'],
 )
 def get_conversation_transcripts_by_models(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_conversation_by_id(uid, conversation_id)
@@ -115,7 +129,7 @@ def conversation_has_audio_recording(conversation_id: str, uid: str = Depends(au
 
 @router.patch("/v1/conversations/{conversation_id}/events", response_model=dict, tags=['conversations'])
 def set_conversation_events_state(
-        conversation_id: str, data: SetConversationEventsStateRequest, uid: str = Depends(auth.get_current_user_uid)
+    conversation_id: str, data: SetConversationEventsStateRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
     conversation = _get_conversation_by_id(uid, conversation_id)
     conversation = Conversation(**conversation)
@@ -130,8 +144,9 @@ def set_conversation_events_state(
 
 
 @router.patch("/v1/conversations/{conversation_id}/action-items", response_model=dict, tags=['conversations'])
-def set_action_item_status(data: SetConversationActionItemsStateRequest, conversation_id: str,
-                           uid=Depends(auth.get_current_user_uid)):
+def set_action_item_status(
+    data: SetConversationActionItemsStateRequest, conversation_id: str, uid=Depends(auth.get_current_user_uid)
+):
     conversation = _get_conversation_by_id(uid, conversation_id)
     conversation = Conversation(**conversation)
     action_items = conversation.structured.action_items
@@ -140,15 +155,17 @@ def set_action_item_status(data: SetConversationActionItemsStateRequest, convers
             continue
         action_items[action_item_idx].completed = data.values[i]
 
-    conversations_db.update_conversation_action_items(uid, conversation_id,
-                                                      [action_item.dict() for action_item in action_items])
+    conversations_db.update_conversation_action_items(
+        uid, conversation_id, [action_item.dict() for action_item in action_items]
+    )
     return {"status": "Ok"}
 
 
-@router.patch("/v1/conversations/{conversation_id}/action-items/{action_item_idx}", response_model=dict, tags=['conversations'])
+@router.patch(
+    "/v1/conversations/{conversation_id}/action-items/{action_item_idx}", response_model=dict, tags=['conversations']
+)
 def update_action_item_description(
-        conversation_id: str, data: UpdateActionItemDescriptionRequest,
-        uid=Depends(auth.get_current_user_uid)
+    conversation_id: str, data: UpdateActionItemDescriptionRequest, uid=Depends(auth.get_current_user_uid)
 ):
     conversation = _get_conversation_by_id(uid, conversation_id)
     conversation = Conversation(**conversation)
@@ -164,8 +181,9 @@ def update_action_item_description(
     if not found_item:
         raise HTTPException(status_code=404, detail=f"Action item with description '{data.old_description}' not found")
 
-    conversations_db.update_conversation_action_items(uid, conversation_id,
-                                                      [action_item.dict() for action_item in action_items])
+    conversations_db.update_conversation_action_items(
+        uid, conversation_id, [action_item.dict() for action_item in action_items]
+    )
     return {"status": "Ok"}
 
 
@@ -175,16 +193,24 @@ def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=
     conversation = Conversation(**conversation)
     action_items = conversation.structured.action_items
     updated_action_items = [item for item in action_items if not (item.description == data.description)]
-    conversations_db.update_conversation_action_items(uid, conversation_id,
-                                                      [action_item.dict() for action_item in updated_action_items])
+    conversations_db.update_conversation_action_items(
+        uid, conversation_id, [action_item.dict() for action_item in updated_action_items]
+    )
     return {"status": "Ok"}
 
 
-@router.patch('/v1/conversations/{conversation_id}/segments/{segment_idx}/assign', response_model=Conversation,
-              tags=['conversations'])
+@router.patch(
+    '/v1/conversations/{conversation_id}/segments/{segment_idx}/assign',
+    response_model=Conversation,
+    tags=['conversations'],
+)
 def set_assignee_conversation_segment(
-        conversation_id: str, segment_idx: int, assign_type: str, value: Optional[str] = None,
-        use_for_speech_training: bool = True, uid: str = Depends(auth.get_current_user_uid)
+    conversation_id: str,
+    segment_idx: int,
+    assign_type: str,
+    value: Optional[str] = None,
+    use_for_speech_training: bool = True,
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     """
     Another complex endpoint.
@@ -204,8 +230,15 @@ def set_assignee_conversation_segment(
 
     :return: The updated conversation.
     """
-    print('set_assignee_conversation_segment', conversation_id, segment_idx, assign_type, value,
-          use_for_speech_training, uid)
+    print(
+        'set_assignee_conversation_segment',
+        conversation_id,
+        segment_idx,
+        assign_type,
+        value,
+        use_for_speech_training,
+        uid,
+    )
     conversation = _get_conversation_by_id(uid, conversation_id)
     conversation = Conversation(**conversation)
 
@@ -224,8 +257,9 @@ def set_assignee_conversation_segment(
         print(assign_type)
         raise HTTPException(status_code=400, detail="Invalid assign type")
 
-    conversations_db.update_conversation_segments(uid, conversation_id,
-                                                  [segment.dict() for segment in conversation.transcript_segments])
+    conversations_db.update_conversation_segments(
+        uid, conversation_id, [segment.dict() for segment in conversation.transcript_segments]
+    )
     # thinh's note: disabled for now
     # segment_words = len(conversation.transcript_segments[segment_idx].text.split(' '))
     # # TODO: can do this async
@@ -240,11 +274,18 @@ def set_assignee_conversation_segment(
     return conversation
 
 
-@router.patch('/v1/conversations/{conversation_id}/assign-speaker/{speaker_id}', response_model=Conversation,
-              tags=['conversations'])
+@router.patch(
+    '/v1/conversations/{conversation_id}/assign-speaker/{speaker_id}',
+    response_model=Conversation,
+    tags=['conversations'],
+)
 def set_assignee_conversation_segment(
-        conversation_id: str, speaker_id: int, assign_type: str, value: Optional[str] = None,
-        use_for_speech_training: bool = True, uid: str = Depends(auth.get_current_user_uid)
+    conversation_id: str,
+    speaker_id: int,
+    assign_type: str,
+    value: Optional[str] = None,
+    use_for_speech_training: bool = True,
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     """
     Another complex endpoint.
@@ -264,8 +305,15 @@ def set_assignee_conversation_segment(
 
     :return: The updated conversation.
     """
-    print('set_assignee_conversation_segment', conversation_id, speaker_id, assign_type, value, use_for_speech_training,
-          uid)
+    print(
+        'set_assignee_conversation_segment',
+        conversation_id,
+        speaker_id,
+        assign_type,
+        value,
+        use_for_speech_training,
+        uid,
+    )
     conversation = _get_conversation_by_id(uid, conversation_id)
     conversation = Conversation(**conversation)
 
@@ -289,8 +337,9 @@ def set_assignee_conversation_segment(
         print(assign_type)
         raise HTTPException(status_code=400, detail="Invalid assign type")
 
-    conversations_db.update_conversation_segments(uid, conversation_id,
-                                                  [segment.dict() for segment in conversation.transcript_segments])
+    conversations_db.update_conversation_segments(
+        uid, conversation_id, [segment.dict() for segment in conversation.transcript_segments]
+    )
     # This will be used when we setup recording for conversations, not used for now
     # get the segment with the most words with the speaker_id
     # segment_idx = 0
@@ -317,9 +366,10 @@ def set_assignee_conversation_segment(
 # *********** SHARING conversations ***********
 # *********************************************
 
+
 @router.patch('/v1/conversations/{conversation_id}/visibility', tags=['conversations'])
 def set_conversation_visibility(
-        conversation_id: str, value: ConversationVisibility, uid: str = Depends(auth.get_current_user_uid)
+    conversation_id: str, value: ConversationVisibility, uid: str = Depends(auth.get_current_user_uid)
 ):
     print('update_conversation_visibility', conversation_id, value, uid)
     _get_conversation_by_id(uid, conversation_id)
@@ -361,7 +411,7 @@ def get_public_conversations(offset: int = 0, limit: int = 1000):
     data = [[uid, conversation_id] for conversation_id, uid in conversation_uids.items() if uid]
     # TODO: sort in some way to have proper pagination
 
-    conversations = conversations_db.get_public_conversations(data[offset:offset + limit])
+    conversations = conversations_db.get_public_conversations(data[offset : offset + limit])
     for conversation in conversations:
         conversation['geolocation'] = None
     return conversations
@@ -379,11 +429,15 @@ def search_conversations_endpoint(search_request: SearchRequest, uid: str = Depe
     if search_request.end_date:
         end_timestamp = int(datetime.fromisoformat(search_request.end_date).timestamp())
 
-    return search_conversations(query=search_request.query, page=search_request.page,
-                                per_page=search_request.per_page, uid=uid,
-                                include_discarded=search_request.include_discarded,
-                                start_date=start_timestamp,
-                                end_date=end_timestamp)
+    return search_conversations(
+        query=search_request.query,
+        page=search_request.page,
+        per_page=search_request.per_page,
+        uid=uid,
+        include_discarded=search_request.include_discarded,
+        start_date=start_timestamp,
+        end_date=end_timestamp,
+    )
 
 
 @router.post("/v1/conversations/{conversation_id}/test-prompt", response_model=dict, tags=['conversations'])

@@ -94,7 +94,9 @@ class ActionItem(BaseModel):
     def actions_to_string(action_items: List['ActionItem']) -> str:
         if not action_items:
             return 'None'
-        return '\n'.join([f"- {item.description} ({'completed' if item.completed else 'pending'})" for item in action_items])
+        return '\n'.join(
+            [f"- {item.description} ({'completed' if item.completed else 'pending'})" for item in action_items]
+        )
 
 
 class Event(BaseModel):
@@ -114,7 +116,12 @@ class Event(BaseModel):
         if not events:
             return 'None'
         # Format the datetime for better readability in the prompt
-        return '\n'.join([f"- {event.title} (Starts: {event.start.strftime('%Y-%m-%d %H:%M:%S %Z')}, Duration: {event.duration} mins)" for event in events])
+        return '\n'.join(
+            [
+                f"- {event.title} (Starts: {event.start.strftime('%Y-%m-%d %H:%M:%S %Z')}, Duration: {event.duration} mins)"
+                for event in events
+            ]
+        )
 
 
 class Structured(BaseModel):
@@ -142,8 +149,10 @@ class Structured(BaseModel):
             return CategoryEnum.other
 
     def __str__(self):
-        result = (f"{str(self.title).capitalize()} ({str(self.category.value).capitalize()})\n"
-                  f"{str(self.overview).capitalize()}\n")
+        result = (
+            f"{str(self.title).capitalize()} ({str(self.category.value).capitalize()})\n"
+            f"{str(self.overview).capitalize()}\n"
+        )
 
         if self.action_items:
             result += f"Action Items:\n{ActionItem.actions_to_string(self.action_items)}\n"
@@ -243,16 +252,20 @@ class Conversation(BaseModel):
         self.processing_memory_id = self.processing_conversation_id
 
     @staticmethod
-    def conversations_to_string(conversations: List['Conversation'], use_transcript: bool = False, include_timestamps: bool = False) -> str:
+    def conversations_to_string(
+        conversations: List['Conversation'], use_transcript: bool = False, include_timestamps: bool = False
+    ) -> str:
         result = []
         for i, conversation in enumerate(conversations):
             if isinstance(conversation, dict):
                 conversation = Conversation(**conversation)
             formatted_date = conversation.created_at.astimezone(timezone.utc).strftime("%d %b %Y at %H:%M") + " UTC"
-            conversation_str = (f"Conversation #{i + 1}\n"
-                                f"{formatted_date} ({str(conversation.structured.category.value).capitalize()})\n"
-                                f"{str(conversation.structured.title).capitalize()}\n"
-                                f"{str(conversation.structured.overview).capitalize()}\n")
+            conversation_str = (
+                f"Conversation #{i + 1}\n"
+                f"{formatted_date} ({str(conversation.structured.category.value).capitalize()})\n"
+                f"{str(conversation.structured.title).capitalize()}\n"
+                f"{str(conversation.structured.overview).capitalize()}\n"
+            )
 
             if conversation.structured.action_items:
                 conversation_str += "Action Items:\n"
@@ -269,7 +282,9 @@ class Conversation(BaseModel):
                 conversation_str += f"{conversation.apps_results[0].content}"
 
             if use_transcript:
-                conversation_str += (f"\nTranscript:\n{conversation.get_transcript(include_timestamps=include_timestamps)}\n")
+                conversation_str += (
+                    f"\nTranscript:\n{conversation.get_transcript(include_timestamps=include_timestamps)}\n"
+                )
                 # photos
                 photo_descriptions = conversation.get_photos_descriptions(include_timestamps=include_timestamps)
                 if photo_descriptions != 'None':
@@ -297,8 +312,12 @@ class Conversation(BaseModel):
             conversation_dict['external_data']['finished_at'] = conversation_dict['finished_at'].isoformat()
 
         conversation_dict['created_at'] = conversation_dict['created_at'].isoformat()
-        conversation_dict['started_at'] = conversation_dict['started_at'].isoformat() if conversation_dict['started_at'] else None
-        conversation_dict['finished_at'] = conversation_dict['finished_at'].isoformat() if conversation_dict['finished_at'] else None
+        conversation_dict['started_at'] = (
+            conversation_dict['started_at'].isoformat() if conversation_dict['started_at'] else None
+        )
+        conversation_dict['finished_at'] = (
+            conversation_dict['finished_at'].isoformat() if conversation_dict['finished_at'] else None
+        )
 
         return conversation_dict
 
@@ -380,7 +399,7 @@ class SearchRequest(BaseModel):
     per_page: Optional[int] = 10
     include_discarded: Optional[bool] = True
     start_date: Optional[str] = None  # ISO format datetime string
-    end_date: Optional[str] = None    # ISO format datetime string
+    end_date: Optional[str] = None  # ISO format datetime string
 
 
 class TestPromptRequest(BaseModel):

@@ -55,7 +55,7 @@ async def get_users_in_timezones(timezones: list[str], filter: str):
     users_ref = db.collection('users')
 
     # 'Where in' query only supports 30 or fewer items in list to we split in chunks
-    timezone_chunks = [timezones[i:i + 30] for i in range(0, len(timezones), 30)]
+    timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
 
     async def query_chunk(chunk):
         def sync_query():

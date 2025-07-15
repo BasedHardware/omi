@@ -231,8 +231,9 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
         ),
         boxShadow: [
           BoxShadow(
-            color:
-                isRecordingOrPaused ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.03),
+            color: isRecordingOrPaused
+                ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.06)
+                : Colors.black.withValues(alpha: 0.03),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -245,8 +246,9 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
             _controlButton(
               icon: isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
               color: isPaused ? ResponsiveHelper.purplePrimary : Colors.orange,
-              onPressed:
-                  isInitializing || captureProvider.isAutoReconnecting ? null : () => _toggleRecording(context, captureProvider),
+              onPressed: isInitializing || captureProvider.isAutoReconnecting
+                  ? null
+                  : () => _toggleRecording(context, captureProvider),
             ),
             if (hasTranscripts) ...[
               const SizedBox(width: 12),
@@ -261,8 +263,9 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
               icon: Icons.mic_rounded,
               color: ResponsiveHelper.purplePrimary,
               size: 48,
-              onPressed:
-                  isInitializing || captureProvider.isAutoReconnecting ? null : () => _toggleRecording(context, captureProvider),
+              onPressed: isInitializing || captureProvider.isAutoReconnecting
+                  ? null
+                  : () => _toggleRecording(context, captureProvider),
             ),
           ],
 
@@ -672,7 +675,6 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
     }
   }
 
-
   Widget _buildTranslationNotice() {
     return const Opacity(
       opacity: 0.5,
@@ -697,7 +699,6 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
       ),
     );
   }
-
 
   Widget _buildAudioLevelBar(double level, Color color) {
     final double normalizedLevel = (level / 0.05).clamp(0.0, 1.0);
@@ -787,8 +788,9 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
                       icon: isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
                       color: isPaused ? ResponsiveHelper.purplePrimary : Colors.orange,
                       size: 48,
-                      onPressed:
-                          isInitializing || captureProvider.isAutoReconnecting ? null : () => _toggleRecording(context, captureProvider),
+                      onPressed: isInitializing || captureProvider.isAutoReconnecting
+                          ? null
+                          : () => _toggleRecording(context, captureProvider),
                     ),
 
                   if ((isRecording || isPaused) && hasTranscripts) ...[
@@ -797,7 +799,8 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
                       icon: Icons.stop_rounded,
                       color: Colors.red,
                       size: 48,
-                      onPressed: captureProvider.isAutoReconnecting ? null : () => _stopRecording(context, captureProvider),
+                      onPressed:
+                          captureProvider.isAutoReconnecting ? null : () => _stopRecording(context, captureProvider),
                     ),
                   ],
 
@@ -807,8 +810,9 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
                       icon: Icons.mic_rounded,
                       color: ResponsiveHelper.purplePrimary,
                       size: 48,
-                      onPressed:
-                          isInitializing || captureProvider.isAutoReconnecting ? null : () => _toggleRecording(context, captureProvider),
+                      onPressed: isInitializing || captureProvider.isAutoReconnecting
+                          ? null
+                          : () => _toggleRecording(context, captureProvider),
                     ),
                 ],
               ),

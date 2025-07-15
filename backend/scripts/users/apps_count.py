@@ -20,10 +20,13 @@ from database.apps import record_app_usage
 
 # noinspection PyUnresolvedReferences
 import numpy as np
+
 # noinspection PyUnresolvedReferences
 import plotly.graph_objects as go
+
 # noinspection PyUnresolvedReferences
 import umap
+
 # noinspection PyUnresolvedReferences
 from plotly.subplots import make_subplots
 
@@ -48,10 +51,18 @@ def execute():
 
     threads = []
     for uid in uids:
-        threads.append(threading.Thread(target=single, args=(uid, data,)))
+        threads.append(
+            threading.Thread(
+                target=single,
+                args=(
+                    uid,
+                    data,
+                ),
+            )
+        )
 
     count = 20
-    chunks = [threads[i:i + count] for i in range(0, len(threads), count)]
+    chunks = [threads[i : i + count] for i in range(0, len(threads), count)]
     for i, chunk in enumerate(chunks):
         [thread.start() for thread in chunk]
         [thread.join() for thread in chunk]
@@ -74,8 +85,11 @@ def count_memory_prompt_plugins_trigger():
                 print('memory', memory['id'], 'triggered', len(triggered), 'plugins')
             for trigger in triggered:
                 record_app_usage(
-                    uid, trigger['plugin_id'], UsageHistoryType.memory_created_prompt, memory_id=memory['id'],
-                    timestamp=created_at
+                    uid,
+                    trigger['plugin_id'],
+                    UsageHistoryType.memory_created_prompt,
+                    memory_id=memory['id'],
+                    timestamp=created_at,
                 )
 
         messages = chat_db.get_messages(uid, limit=1000)
@@ -83,8 +97,11 @@ def count_memory_prompt_plugins_trigger():
         for message in messages:
             if pid := message.get('plugin_id'):
                 record_app_usage(
-                    uid, pid, UsageHistoryType.chat_message_sent, message_id=message['id'],
-                    timestamp=message['created_at']
+                    uid,
+                    pid,
+                    UsageHistoryType.chat_message_sent,
+                    message_id=message['id'],
+                    timestamp=message['created_at'],
                 )
 
     threads = []
@@ -92,7 +109,7 @@ def count_memory_prompt_plugins_trigger():
         threads.append(threading.Thread(target=single, args=(uid,)))
 
     count = 20
-    chunks = [threads[i:i + count] for i in range(0, len(threads), count)]
+    chunks = [threads[i : i + count] for i in range(0, len(threads), count)]
     for i, chunk in enumerate(chunks):
         [thread.start() for thread in chunk]
         [thread.join() for thread in chunk]

@@ -172,9 +172,15 @@ from utils.other.storage import get_profile_audio_if_exists
 #
 #
 
+
 def set_json_speech_profiles(result):
-    data = (result.stdout.decode('utf-8').replace('Listing speakers and audios.\n  ', '')
-            .replace('\n', '').replace('\'', '"').strip())
+    data = (
+        result.stdout.decode('utf-8')
+        .replace('Listing speakers and audios.\n  ', '')
+        .replace('\n', '')
+        .replace('\'', '"')
+        .strip()
+    )
     parsed_json = {}
     for part in data.split('}'):
         if not part.strip():
@@ -206,10 +212,18 @@ def _train_user_speech_profile(uid: str):
     try:
         result = subprocess.run(
             [
-                'python', '-m', 'soniox.manage_speakers', '--add_audio', '--speaker_name', uid, '--audio_name',
-                'joined_output', '--audio_fn', output_path
+                'python',
+                '-m',
+                'soniox.manage_speakers',
+                '--add_audio',
+                '--speaker_name',
+                uid,
+                '--audio_name',
+                'joined_output',
+                '--audio_fn',
+                output_path,
             ],
-            capture_output=True
+            capture_output=True,
         )
         completed = result.returncode == 0
         print('_train_user_speech_profile:', completed)
@@ -241,6 +255,7 @@ def _remove_user_speech_profile(uid: str):
     except Exception as e:
         print(f'_remove_user_speech_profile failed: {e}')
         return False
+
 
 @timeit
 def create_user_speech_profile(uid: str):

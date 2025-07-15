@@ -399,7 +399,7 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
   Function()? _onRecording;
   Function()? _onStop;
   Function(String error)? _onError;
-  
+
   // Sleep/wake event callbacks
   Function(bool wasRecording)? _onSystemWillSleep;
   Function(bool nativeIsRecording)? _onSystemDidWake;
@@ -496,67 +496,67 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
     _onMicrophoneDeviceChanged = null;
     _onMicrophoneStatus = null;
   }
-  
+
   // Sleep/wake event handlers
   Future<void> _handleSystemWillSleep(dynamic arguments) async {
     final args = arguments as Map<String, dynamic>?;
     final wasRecording = args?['wasRecording'] as bool? ?? false;
-    
+
     if (_onSystemWillSleep != null) {
       _onSystemWillSleep!(wasRecording);
     }
   }
-  
+
   Future<void> _handleSystemDidWake(dynamic arguments) async {
     final args = arguments as Map<String, dynamic>?;
     final nativeIsRecording = args?['nativeIsRecording'] as bool? ?? false;
-    
+
     // Update internal state if there's a mismatch
     if (nativeIsRecording && !_isRecording) {
       _isRecording = true;
-      
+
       // Notify that recording is active
       if (_onRecording != null) {
         _onRecording!();
       }
     } else if (!nativeIsRecording && _isRecording) {
       _isRecording = false;
-      
+
       if (_onStop != null) {
         _onStop!();
       }
     }
-    
+
     if (_onSystemDidWake != null) {
       _onSystemDidWake!(nativeIsRecording);
     }
   }
-  
+
   Future<void> _handleScreenDidLock(dynamic arguments) async {
     final args = arguments as Map<String, dynamic>?;
     final wasRecording = args?['wasRecording'] as bool? ?? false;
-    
+
     if (_onScreenDidLock != null) {
       _onScreenDidLock!(wasRecording);
     }
   }
-  
+
   Future<void> _handleScreenDidUnlock(dynamic arguments) async {
     if (_onScreenDidUnlock != null) {
       _onScreenDidUnlock!();
     }
   }
-  
+
   Future<void> _handleDisplaySetupInvalid(dynamic arguments) async {
     final args = arguments as Map<String, dynamic>?;
     final reason = args?['reason'] as String? ?? 'Unknown reason';
-    
+
     _isRecording = false;
-    
+
     if (_onDisplaySetupInvalid != null) {
       _onDisplaySetupInvalid!(reason);
     }
-    
+
     if (_onStop != null) {
       _onStop!();
     }
@@ -585,21 +585,21 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
   }) async {
     try {
       bool nativeIsRecording = await _channel.invokeMethod('isRecording') ?? false;
-      
+
       if (nativeIsRecording && _isRecording) {
         onError?.call("Already recording. Please stop the current recording first.");
         return;
       } else if (nativeIsRecording && !_isRecording) {
         // Native is recording but Flutter lost track - resync the state
         _isRecording = true;
-        
+
         // Restore callbacks to reconnect with ongoing recording
         _onByteReceived = onByteReceived;
         _onFormatReceived = onFormatReceived;
         _onRecording = onRecording;
         _onStop = onStop;
         _onError = onError;
-        
+
         // Notify that recording is active
         if (_onRecording != null) {
           _onRecording!();

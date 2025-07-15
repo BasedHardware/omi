@@ -56,4 +56,4 @@ class OmiSection extends AdaptiveWidget {
       ),
     );
   }
-} 
+}

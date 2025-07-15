@@ -17,7 +17,7 @@ class NotificationMessage(BaseModel):
 
     @staticmethod
     def get_message_as_dict(
-            message: 'NotificationMessage',
+        message: 'NotificationMessage',
     ) -> dict:
 
         message_dict = message.dict()

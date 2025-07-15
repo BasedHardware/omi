@@ -50,7 +50,9 @@ class Memory {
       manuallyAdded: json['manually_added'] ?? false,
       edited: json['edited'] ?? false,
       deleted: json['deleted'] ?? false,
-      visibility: json['visibility'] != null ? (MemoryVisibility.values.asNameMap()[json['visibility']] ?? MemoryVisibility.public) : MemoryVisibility.public,
+      visibility: json['visibility'] != null
+          ? (MemoryVisibility.values.asNameMap()[json['visibility']] ?? MemoryVisibility.public)
+          : MemoryVisibility.public,
     );
   }
 
