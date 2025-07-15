@@ -4,7 +4,6 @@ import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/device_selection.dart';
 import 'package:omi/pages/persona/persona_profile.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/backend/auth.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:provider/provider.dart';
 

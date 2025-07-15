@@ -32,6 +32,7 @@ async def auth_authorize(
 ):
     """
     User authentication authorization endpoint for the main Omi app
+    Supports both initial sign-in and account linking flows
     """
     if provider not in ['google', 'apple']:
         raise HTTPException(status_code=400, detail="Unsupported provider")
@@ -45,8 +46,8 @@ async def auth_authorize(
         'flow_type': 'user_auth'  # Distinguish from app oauth
     }
     
-    # Store in Redis with 10-minute expiration
-    set_auth_session(session_id, session_data, 600)
+    # Store in Redis with 5-minute expiration
+    set_auth_session(session_id, session_data, 300)
     
     # Redirect to provider OAuth
     if provider == 'google':
@@ -126,6 +127,7 @@ async def auth_token(
 ):
     """
     Exchange auth code for OAuth credentials
+    Used for both initial sign-in and account linking flows
     """
     if grant_type != 'authorization_code':
         raise HTTPException(status_code=400, detail="Unsupported grant type")

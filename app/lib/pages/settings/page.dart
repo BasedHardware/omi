@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
@@ -8,6 +7,7 @@ import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/profile.dart';
 import 'package:omi/pages/settings/widgets.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
@@ -151,7 +151,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 }, () async {
                   await SharedPreferencesUtil().clearUserPreferences();
                   Provider.of<PersonaProvider>(context, listen: false).setRouting(PersonaProfileRouting.no_device);
-                  await signOut();
+                  await AuthService.instance.signOut();
                   Navigator.of(context).pop();
                   routeToPage(context, const DeciderWidget(), replace: true);
                 }, "Sign Out?", "Are you sure you want to sign out?");
@@ -204,7 +204,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 SharedPreferencesUtil().hasOmiDevice = null;
                 SharedPreferencesUtil().verifiedPersonaId = null;
                 Provider.of<PersonaProvider>(context, listen: false).setRouting(PersonaProfileRouting.no_device);
-                await signOut();
+                await AuthService.instance.signOut();
                 Navigator.of(context).pop();
                 routeToPage(context, const DeciderWidget(), replace: true);
               }, "Sign Out?", "Are you sure you want to sign out?");

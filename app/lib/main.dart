@@ -8,7 +8,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:omi/backend/auth.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/dev_env.dart';
 import 'package:omi/env/env.dart';
@@ -40,6 +39,7 @@ import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
@@ -78,7 +78,7 @@ Future<bool> _init() async {
   // TODO: thinh, move to app start
   await ServiceManager.instance().start();
 
-  bool isAuth = (await getIdToken()) != null;
+  bool isAuth = (await AuthService.instance.getIdToken()) != null;
   if (isAuth) PlatformManager.instance.mixpanel.identify();
   if (PlatformService.isMobile) initOpus(await opus_flutter.load());
 
