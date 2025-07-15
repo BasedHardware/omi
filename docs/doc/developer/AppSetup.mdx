@@ -218,4 +218,11 @@ If you're facing auth issues running the app, enable Google/Apple sign-in in Fir
 
 To ensure code consistency, we use `dart format` with a line length of 120 characters.
 
+To automatically format your code on commit, install the pre-commit hook:
+
+```bash
+# From the root of the repository
+ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
+```
+
 Having troubles? [Join Discord and search your issue in help channel](https://discord.gg/omi)
