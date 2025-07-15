@@ -18,10 +18,7 @@ abstract class ISocketService {
   });
 
   Future<TranscriptSegmentSocketService?> speechProfile(
-      {required BleAudioCodec codec,
-      required int sampleRate,
-      required String language,
-      bool force = false});
+      {required BleAudioCodec codec, required int sampleRate, required String language, bool force = false});
 }
 
 abstract interface class ISocketServiceSubsciption {}
@@ -66,10 +63,8 @@ class SocketServicePool extends ISocketService {
         return _socket;
       }
 
-      debugPrint(
-          "🔗 Creating new socket - force: $force, state: ${_socket?.state}");
-      debugPrint(
-          "📡 STT Settings - Type: $sttServerType, Wyoming IP: $wyomingServerIp");
+      debugPrint("🔗 Creating new socket - force: $force, state: ${_socket?.state}");
+      debugPrint("📡 STT Settings - Type: $sttServerType, Wyoming IP: $wyomingServerIp");
 
       // Stop existing socket
       await _socket?.stop();
@@ -127,10 +122,7 @@ class SocketServicePool extends ISocketService {
 
   @override
   Future<TranscriptSegmentSocketService?> speechProfile(
-      {required BleAudioCodec codec,
-      required int sampleRate,
-      required String language,
-      bool force = false}) async {
+      {required BleAudioCodec codec, required int sampleRate, required String language, bool force = false}) async {
     debugPrint("socket speech profile > $codec $sampleRate $force");
 
     // Speech profile also uses STT settings

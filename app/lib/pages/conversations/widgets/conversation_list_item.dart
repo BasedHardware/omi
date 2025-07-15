@@ -84,7 +84,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
           }
         },
         child: Padding(
-          padding: EdgeInsets.only(top: 12, left: widget.isFromOnboarding ? 0 : 16, right: widget.isFromOnboarding ? 0 : 16),
+          padding:
+              EdgeInsets.only(top: 12, left: widget.isFromOnboarding ? 0 : 16, right: widget.isFromOnboarding ? 0 : 16),
           child: Container(
             width: double.maxFinite,
             decoration: BoxDecoration(
@@ -114,7 +115,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
                             builder: (context, setState) {
                               return ConfirmationDialog(
                                 title: "Delete Conversation?",
-                                description: "Are you sure you want to delete this conversation? This action cannot be undone.",
+                                description:
+                                    "Are you sure you want to delete this conversation? This action cannot be undone.",
                                 checkboxValue: !showDeleteConfirmation,
                                 checkboxText: "Don't ask me again",
                                 onCheckboxChanged: (value) {
@@ -133,7 +135,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
                         });
                   } else {
                     return showDialog(
-                      builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context), 'Unable to Delete Conversation', 'Please check your internet connection and try again.', singleButton: true, okButtonText: 'OK'),
+                      builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context),
+                          'Unable to Delete Conversation', 'Please check your internet connection and try again.',
+                          singleButton: true, okButtonText: 'OK'),
                       context: context,
                     );
                   }
@@ -163,13 +167,19 @@ class _ConversationListItemState extends State<ConversationListItem> {
                           ? const SizedBox.shrink()
                           : Text(
                               structured.overview.decodeString,
-                              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium!
+                                  .copyWith(color: Colors.grey.shade300, height: 1.3),
                               maxLines: 2,
                             ),
                       widget.conversation.discarded
                           ? Text(
                               widget.conversation.getTranscript(maxCount: 100),
-                              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium!
+                                  .copyWith(color: Colors.grey.shade300, height: 1.3),
                             )
                           : const SizedBox(height: 8),
                     ],
@@ -200,7 +210,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
                     widget.conversation.structured.getEmoji(),
                     style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500),
                   ),
-                if (widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded) const SizedBox(width: 8),
+                if (widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded)
+                  const SizedBox(width: 8),
                 if (widget.conversation.structured.category.isNotEmpty)
                   Flexible(
                     child: Container(
@@ -211,7 +222,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       child: Text(
                         widget.conversation.getTag(),
-                        style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: widget.conversation.getTagTextColor()),
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium!
+                            .copyWith(color: widget.conversation.getTagTextColor()),
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                       ),
@@ -283,7 +297,8 @@ class ConversationNewStatusIndicator extends StatefulWidget {
   State<ConversationNewStatusIndicator> createState() => _ConversationNewStatusIndicatorState();
 }
 
-class _ConversationNewStatusIndicatorState extends State<ConversationNewStatusIndicator> with SingleTickerProviderStateMixin {
+class _ConversationNewStatusIndicatorState extends State<ConversationNewStatusIndicator>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _opacityAnim;
 

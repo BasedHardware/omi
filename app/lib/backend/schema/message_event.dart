@@ -28,8 +28,7 @@ enum MessageEventType {
       "new_memory_create_failed": "new_conversation_create_failed",
       "new_processing_memory_created": "new_processing_conversation_created",
       "memory_processing_started": "conversation_processing_started",
-      "processing_memory_status_changed":
-          "processing_conversation_status_changed",
+      "processing_memory_status_changed": "processing_conversation_status_changed",
       "memory_backward_synced": "conversation_backward_synced",
       "last_memory": "last_conversation",
     };
@@ -75,12 +74,8 @@ class ServerMessageEvent {
       // json['processing_memory_id'],
       json['memory'] != null
           ? ServerConversation.fromJson(json['memory'])
-          : (json['conversation'] != null
-              ? ServerConversation.fromJson(json['conversation'])
-              : null),
-      ((json['messages'] ?? []) as List<dynamic>)
-          .map((message) => ServerMessage.fromJson(message))
-          .toList(),
+          : (json['conversation'] != null ? ServerConversation.fromJson(json['conversation']) : null),
+      ((json['messages'] ?? []) as List<dynamic>).map((message) => ServerMessage.fromJson(message)).toList(),
       // json['processing_memory_status'] != null
       //     ? ServerProcessingMemoryStatus.valuesFromString(json['processing_memory_status'])
       //     : null,
@@ -90,9 +85,7 @@ class ServerMessageEvent {
       json['status_text'],
       json['memory_id'] ?? json['conversation_id'],
       json['segments'] != null
-          ? (json['segments'] as List<dynamic>)
-              .map((segment) => TranscriptSegment.fromJson(segment))
-              .toList()
+          ? (json['segments'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList()
           : null,
     );
   }

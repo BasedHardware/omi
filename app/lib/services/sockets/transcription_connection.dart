@@ -22,8 +22,7 @@ abstract interface class ITransctipSegmentSocketServiceListener {
   void onClosed();
 }
 
-class SpeechProfileTranscriptSegmentSocketService
-    extends TranscriptSegmentSocketService {
+class SpeechProfileTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
   SpeechProfileTranscriptSegmentSocketService.create(
     super.sampleRate,
     super.codec,
@@ -37,8 +36,7 @@ class SpeechProfileTranscriptSegmentSocketService
         );
 }
 
-class ConversationTranscriptSegmentSocketService
-    extends TranscriptSegmentSocketService {
+class ConversationTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
   ConversationTranscriptSegmentSocketService.create(
     super.sampleRate,
     super.codec,
@@ -61,9 +59,8 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   late PureSocket _socket;
   final Map<Object, ITransctipSegmentSocketServiceListener> _listeners = {};
 
-  SocketServiceState get state => _socket.status == PureSocketStatus.connected
-      ? SocketServiceState.connected
-      : SocketServiceState.disconnected;
+  SocketServiceState get state =>
+      _socket.status == PureSocketStatus.connected ? SocketServiceState.connected : SocketServiceState.disconnected;
 
   int sampleRate;
   BleAudioCodec codec;
@@ -108,16 +105,12 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       debugPrint('[TranscriptionService] Converted HTTP to WS: $wsUrl');
     } else {
       // Handle URLs without protocol
-      if (backendUrl.contains('localhost') ||
-          backendUrl.startsWith('10.') ||
-          backendUrl.startsWith('192.168.')) {
+      if (backendUrl.contains('localhost') || backendUrl.startsWith('10.') || backendUrl.startsWith('192.168.')) {
         wsUrl = 'ws://$backendUrl';
-        debugPrint(
-            '[TranscriptionService] Added WS protocol for local network: $wsUrl');
+        debugPrint('[TranscriptionService] Added WS protocol for local network: $wsUrl');
       } else {
         wsUrl = 'wss://$backendUrl';
-        debugPrint(
-            '[TranscriptionService] Added WSS protocol for remote network: $wsUrl');
+        debugPrint('[TranscriptionService] Added WSS protocol for remote network: $wsUrl');
       }
     }
 
@@ -131,12 +124,9 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
         '?uid=$uid&language=$language&sample_rate=$sampleRate&codec=$codec&include_speech_profile=$includeSpeechProfile';
 
     // Add Wyoming server IP if using Wyoming STT
-    if (sttServerType == 'wyoming' &&
-        wyomingServerIp != null &&
-        wyomingServerIp!.isNotEmpty) {
+    if (sttServerType == 'wyoming' && wyomingServerIp != null && wyomingServerIp!.isNotEmpty) {
       params += '&wyoming_server_ip=$wyomingServerIp';
-      debugPrint(
-          '[TranscriptionService] Adding Wyoming server IP: $wyomingServerIp');
+      debugPrint('[TranscriptionService] Adding Wyoming server IP: $wyomingServerIp');
     }
 
     final finalUrl = '$wsUrl/v4/listen$params';
@@ -159,14 +149,12 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     // Fall back to environment default
     final defaultUrl = Env.apiBaseUrl;
     if (defaultUrl != null && defaultUrl.isNotEmpty) {
-      debugPrint(
-          '[TranscriptionService] Using default backend URL: $defaultUrl');
+      debugPrint('[TranscriptionService] Using default backend URL: $defaultUrl');
       return defaultUrl;
     }
 
     // Last resort fallback
-    debugPrint(
-        '[TranscriptionService] No backend URL configured, using localhost');
+    debugPrint('[TranscriptionService] No backend URL configured, using localhost');
     return 'http://localhost:8000';
   }
 
@@ -179,8 +167,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       wsUrl = backendUrl.replaceFirst('https://', 'wss://');
     } else if (backendUrl.startsWith('http://')) {
       wsUrl = backendUrl.replaceFirst('http://', 'ws://');
-    } else if (backendUrl.startsWith('ws://') ||
-        backendUrl.startsWith('wss://')) {
+    } else if (backendUrl.startsWith('ws://') || backendUrl.startsWith('wss://')) {
       // Already a WebSocket URL
       wsUrl = backendUrl;
     } else {
@@ -196,8 +183,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     return '${wsUrl}/v4/listen$params';
   }
 
-  void subscribe(
-      Object context, ITransctipSegmentSocketServiceListener listener) {
+  void subscribe(Object context, ITransctipSegmentSocketServiceListener listener) {
     _listeners.remove(context.hashCode);
     _listeners.putIfAbsent(context.hashCode, () => listener);
   }
@@ -211,8 +197,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     if (!ok) {
       debugPrint("[TranscriptionService] Failed to connect to websocket");
     } else {
-      debugPrint(
-          "[TranscriptionService] Successfully connected to transcription service");
+      debugPrint("[TranscriptionService] Successfully connected to transcription service");
     }
   }
 
@@ -256,8 +241,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       debugPrint('[TranscriptionService] JSON decode error: ${e.toString()}');
     }
     if (jsonEvent == null) {
-      debugPrint(
-          "[TranscriptionService] Failed to decode message event JSON: $event");
+      debugPrint("[TranscriptionService] Failed to decode message event JSON: $event");
       return;
     }
 
@@ -267,11 +251,9 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       if (segments.isEmpty) {
         return;
       }
-      debugPrint(
-          '[TranscriptionService] Received ${segments.length} transcript segments');
+      debugPrint('[TranscriptionService] Received ${segments.length} transcript segments');
       _listeners.forEach((k, v) {
-        v.onSegmentReceived(
-            segments.map((e) => TranscriptSegment.fromJson(e)).toList());
+        v.onSegmentReceived(segments.map((e) => TranscriptSegment.fromJson(e)).toList());
       });
       return;
     }
@@ -279,16 +261,14 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     // Message event - check for both "type" and "event_type"
     if (jsonEvent.containsKey("type") || jsonEvent.containsKey("event_type")) {
       var event = ServerMessageEvent.fromJson(jsonEvent);
-      debugPrint(
-          '[TranscriptionService] Received message event: ${event.type}');
+      debugPrint('[TranscriptionService] Received message event: ${event.type}');
       _listeners.forEach((k, v) {
         v.onMessageEventReceived(event);
       });
       return;
     }
 
-    debugPrint(
-        '[TranscriptionService] Unknown message format: ${event.toString()}');
+    debugPrint('[TranscriptionService] Unknown message format: ${event.toString()}');
   }
 
   @override
@@ -300,8 +280,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     NotificationService.instance.createNotification(
       notificationId: 3,
       title: 'Internet Connection Lost',
-      body:
-          'Your device is offline. Transcription is paused until connection is restored.',
+      body: 'Your device is offline. Transcription is paused until connection is restored.',
     );
   }
 

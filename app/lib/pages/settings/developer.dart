@@ -25,8 +25,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await Provider.of<DeveloperModeProvider>(context, listen: false)
-          .initialize();
+      await Provider.of<DeveloperModeProvider>(context, listen: false).initialize();
     });
     super.initState();
   }
@@ -45,17 +44,12 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                 title: const Text('Developer Settings'),
                 actions: [
                   TextButton(
-                    onPressed: provider.savingSettingsLoading
-                        ? null
-                        : provider.saveSettings,
+                    onPressed: provider.savingSettingsLoading ? null : provider.saveSettings,
                     child: const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 4.0),
                       child: Text(
                         'Save',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w500,
-                            fontSize: 16),
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                       ),
                     ),
                   )
@@ -82,8 +76,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Export Conversations'),
-                    subtitle: const Text(
-                        'Export all your conversations to a JSON file.'),
+                    subtitle: const Text('Export all your conversations to a JSON file.'),
                     trailing: provider.loadingExportMemories
                         ? const SizedBox(
                             height: 16,
@@ -98,35 +91,28 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                         ? null
                         : () async {
                             if (provider.loadingExportMemories) return;
-                            setState(
-                                () => provider.loadingExportMemories = true);
+                            setState(() => provider.loadingExportMemories = true);
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text(
-                                    'Conversations Export Started. This may take a few seconds, please wait.'),
+                                content:
+                                    Text('Conversations Export Started. This may take a few seconds, please wait.'),
                                 duration: Duration(seconds: 3),
                               ),
                             );
                             List<ServerConversation> memories =
-                                await getConversations(
-                                    limit: 10000, offset: 0); // 10k for now
-                            String json = const JsonEncoder.withIndent("     ")
-                                .convert(memories);
-                            final directory =
-                                await getApplicationDocumentsDirectory();
-                            final file =
-                                File('${directory.path}/conversations.json');
+                                await getConversations(limit: 10000, offset: 0); // 10k for now
+                            String json = const JsonEncoder.withIndent("     ").convert(memories);
+                            final directory = await getApplicationDocumentsDirectory();
+                            final file = File('${directory.path}/conversations.json');
                             await file.writeAsString(json);
 
-                            final result = await Share.shareXFiles(
-                                [XFile(file.path)],
-                                text: 'Exported Conversations from Omi');
+                            final result =
+                                await Share.shareXFiles([XFile(file.path)], text: 'Exported Conversations from Omi');
                             if (result.status == ShareResultStatus.success) {
                               debugPrint('Thank you for sharing the picture!');
                             }
                             MixpanelManager().exportMemories();
-                            setState(
-                                () => provider.loadingExportMemories = false);
+                            setState(() => provider.loadingExportMemories = false);
                           },
                   ),
                   const SizedBox(height: 16),
@@ -138,16 +124,12 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                     children: [
                       const Text(
                         'Webhooks',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w500),
+                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
                       ),
                       Spacer(),
                       GestureDetector(
                         onTap: () {
-                          launchUrl(Uri.parse(
-                              'https://docs.omi.me/docs/developer/apps/Introduction'));
+                          launchUrl(Uri.parse('https://docs.omi.me/docs/developer/apps/Introduction'));
                           MixpanelManager().pageOpened('Advanced Mode Docs');
                         },
                         child: const Padding(
@@ -170,8 +152,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   ToggleSectionWidget(
                     isSectionEnabled: provider.conversationEventsToggled,
                     sectionTitle: 'Conversation Events',
-                    sectionDescription:
-                        'Triggers when a new conversation is created.',
+                    sectionDescription: 'Triggers when a new conversation is created.',
                     options: [
                       TextField(
                         controller: provider.webhookOnConversationCreated,
@@ -184,14 +165,12 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                       ),
                       const SizedBox(height: 16),
                     ],
-                    onSectionEnabledChanged:
-                        provider.onConversationEventsToggled,
+                    onSectionEnabledChanged: provider.onConversationEventsToggled,
                   ),
                   ToggleSectionWidget(
                       isSectionEnabled: provider.transcriptsToggled,
                       sectionTitle: 'Real-time Transcript',
-                      sectionDescription:
-                          'Triggers when a new transcript is received.',
+                      sectionDescription: 'Triggers when a new transcript is received.',
                       options: [
                         TextField(
                           controller: provider.webhookOnTranscriptReceived,
@@ -208,8 +187,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   ToggleSectionWidget(
                       isSectionEnabled: provider.audioBytesToggled,
                       sectionTitle: 'Realtime Audio Bytes',
-                      sectionDescription:
-                          'Triggers when audio bytes are received.',
+                      sectionDescription: 'Triggers when audio bytes are received.',
                       options: [
                         TextField(
                           controller: provider.webhookAudioBytes,
@@ -227,8 +205,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           enabled: true,
                           enableSuggestions: false,
                           keyboardType: TextInputType.number,
-                          decoration:
-                              _getTextFieldDecoration('Every x seconds'),
+                          decoration: _getTextFieldDecoration('Every x seconds'),
                           style: const TextStyle(color: Colors.white),
                         ),
                         const SizedBox(height: 16),
@@ -237,8 +214,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   ToggleSectionWidget(
                     isSectionEnabled: provider.daySummaryToggled,
                     sectionTitle: 'Day Summary',
-                    sectionDescription:
-                        'Triggers when day summary is generated.',
+                    sectionDescription: 'Triggers when day summary is generated.',
                     options: [
                       TextField(
                         controller: provider.webhookDaySummary,
@@ -260,10 +236,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   // Experimental section
                   const Text(
                     'Experimental',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w500),
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -301,10 +274,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   // Pilot Features section
                   const Text(
                     'Pilot Features',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w500),
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -328,20 +298,14 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   // Backend API Settings - moved to bottom
                   const Text(
                     'Backend API Settings',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w500),
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 8.0),
 
                   // STT Server Settings
                   const Text(
                     'Speech-to-Text Server Settings',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500),
+                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 8.0),
                   Text(
@@ -358,16 +322,12 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           children: [
                             const Text(
                               'STT Server Type',
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500),
+                              style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
                             ),
                             const SizedBox(height: 4.0),
                             Container(
                               height: 40,
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 12),
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
                               decoration: BoxDecoration(
                                 color: Colors.grey.shade800,
                                 borderRadius: BorderRadius.circular(8.0),
@@ -378,15 +338,12 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                   value: provider.sttServerType,
                                   isExpanded: true,
                                   dropdownColor: Colors.grey.shade800,
-                                  style: const TextStyle(
-                                      color: Colors.white, fontSize: 14),
-                                  icon: const Icon(Icons.arrow_drop_down,
-                                      color: Colors.white),
+                                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                                  icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
                                   items: const [
                                     DropdownMenuItem(
                                       value: 'traditional',
-                                      child: Text(
-                                          'Traditional (Deepgram/Soniox/etc)'),
+                                      child: Text('Traditional (Deepgram/Soniox/etc)'),
                                     ),
                                     DropdownMenuItem(
                                       value: 'wyoming',
@@ -417,40 +374,29 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             children: [
                               const Text(
                                 'Wyoming Server IP Address',
-                                style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500),
+                                style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
                               ),
                               const SizedBox(height: 4.0),
                               SizedBox(
                                 height: 40,
                                 child: TextField(
-                                  controller:
-                                      provider.wyomingServerIpController,
-                                  style: const TextStyle(
-                                      color: Colors.white, fontSize: 14),
+                                  controller: provider.wyomingServerIpController,
+                                  style: const TextStyle(color: Colors.white, fontSize: 14),
                                   decoration: InputDecoration(
                                     hintText: '192.168.1.2:10300',
-                                    hintStyle: TextStyle(
-                                        color: Colors.grey.shade400,
-                                        fontSize: 12),
-                                    contentPadding: const EdgeInsets.symmetric(
-                                        horizontal: 12, vertical: 8),
+                                    hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(8.0),
-                                      borderSide: BorderSide(
-                                          color: Colors.grey.shade600),
+                                      borderSide: BorderSide(color: Colors.grey.shade600),
                                     ),
                                     enabledBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(8.0),
-                                      borderSide: BorderSide(
-                                          color: Colors.grey.shade600),
+                                      borderSide: BorderSide(color: Colors.grey.shade600),
                                     ),
                                     focusedBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(8.0),
-                                      borderSide: const BorderSide(
-                                          color: Colors.blueAccent, width: 1.0),
+                                      borderSide: const BorderSide(color: Colors.blueAccent, width: 1.0),
                                     ),
                                     filled: true,
                                     fillColor: Colors.grey.shade800,
@@ -472,15 +418,10 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 onPressed: provider.serverOperationLoading
                                     ? null
                                     : () async {
-                                        if (provider
-                                            .wyomingServerIpController.text
-                                            .trim()
-                                            .isEmpty) {
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(
+                                        if (provider.wyomingServerIpController.text.trim().isEmpty) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
                                             const SnackBar(
-                                              content: Text(
-                                                  'Please enter Wyoming server IP'),
+                                              content: Text('Please enter Wyoming server IP'),
                                               duration: Duration(seconds: 2),
                                               backgroundColor: Colors.red,
                                             ),
@@ -488,28 +429,22 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                           return;
                                         }
 
-                                        final success = await provider
-                                            .testWyomingConnection(
-                                          provider
-                                              .wyomingServerIpController.text,
+                                        final success = await provider.testWyomingConnection(
+                                          provider.wyomingServerIpController.text,
                                         );
 
                                         if (success) {
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(
+                                          ScaffoldMessenger.of(context).showSnackBar(
                                             const SnackBar(
-                                              content: Text(
-                                                  'Wyoming connection successful!'),
+                                              content: Text('Wyoming connection successful!'),
                                               duration: Duration(seconds: 2),
                                               backgroundColor: Colors.green,
                                             ),
                                           );
                                         } else {
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(
+                                          ScaffoldMessenger.of(context).showSnackBar(
                                             const SnackBar(
-                                              content: Text(
-                                                  'Failed to connect to Wyoming server'),
+                                              content: Text('Failed to connect to Wyoming server'),
                                               duration: Duration(seconds: 2),
                                               backgroundColor: Colors.red,
                                             ),
@@ -518,8 +453,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                       },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.blue,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 12),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
                                   minimumSize: const Size(60, 40),
                                 ),
                                 child: provider.serverOperationLoading
@@ -533,8 +467,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                       )
                                     : const Text(
                                         'Test',
-                                        style: TextStyle(
-                                            color: Colors.white, fontSize: 12),
+                                        style: TextStyle(color: Colors.white, fontSize: 12),
                                       ),
                               ),
                             ),
@@ -557,16 +490,12 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           children: [
                             const Text(
                               'Current Active Server',
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500),
+                              style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
                             ),
                             const SizedBox(height: 4.0),
                             Container(
                               width: double.infinity,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 8),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                               decoration: BoxDecoration(
                                 color: Colors.grey.shade800,
                                 borderRadius: BorderRadius.circular(8.0),
@@ -575,9 +504,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                               child: Text(
                                 provider.getCurrentActiveUrl(),
                                 style: TextStyle(
-                                    color: provider.currentCustomApiUrl.isEmpty
-                                        ? Colors.blue
-                                        : Colors.green,
+                                    color: provider.currentCustomApiUrl.isEmpty ? Colors.blue : Colors.green,
                                     fontSize: 13,
                                     fontWeight: FontWeight.bold),
                                 overflow: TextOverflow.ellipsis,
@@ -590,8 +517,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const SizedBox(
-                              height: 18), // Align with the server display
+                          const SizedBox(height: 18), // Align with the server display
                           SizedBox(
                             height: 36,
                             child: ElevatedButton(
@@ -600,11 +526,9 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                   : () async {
                                       await provider.resetToOriginalUrl();
                                       // Show a quick success message
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
+                                      ScaffoldMessenger.of(context).showSnackBar(
                                         const SnackBar(
-                                          content:
-                                              Text('Reset to default server'),
+                                          content: Text('Reset to default server'),
                                           duration: Duration(seconds: 2),
                                           backgroundColor: Colors.blue,
                                         ),
@@ -614,8 +538,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                     },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.blue,
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 12),
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
                               ),
                               child: provider.serverOperationLoading
                                   ? const SizedBox(
@@ -628,8 +551,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                     )
                                   : const Text(
                                       'Reset',
-                                      style: TextStyle(
-                                          color: Colors.white, fontSize: 12),
+                                      style: TextStyle(color: Colors.white, fontSize: 12),
                                     ),
                             ),
                           ),
@@ -648,39 +570,29 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           children: [
                             const Text(
                               'Custom Backend URL',
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500),
+                              style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
                             ),
                             const SizedBox(height: 4.0),
                             SizedBox(
                               height: 36,
                               child: TextField(
                                 controller: provider.customApiUrlController,
-                                style: const TextStyle(
-                                    color: Colors.white, fontSize: 13),
+                                style: const TextStyle(color: Colors.white, fontSize: 13),
                                 decoration: InputDecoration(
                                   hintText: 'https://your-backend.com/',
-                                  hintStyle: TextStyle(
-                                      color: Colors.grey.shade400,
-                                      fontSize: 12),
-                                  contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 8),
+                                  hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(8.0),
-                                    borderSide:
-                                        const BorderSide(color: Colors.white),
+                                    borderSide: const BorderSide(color: Colors.white),
                                   ),
                                   enabledBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(8.0),
-                                    borderSide:
-                                        const BorderSide(color: Colors.white),
+                                    borderSide: const BorderSide(color: Colors.white),
                                   ),
                                   focusedBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(8.0),
-                                    borderSide: const BorderSide(
-                                        color: Colors.blueAccent, width: 1.0),
+                                    borderSide: const BorderSide(color: Colors.blueAccent, width: 1.0),
                                   ),
                                 ),
                                 keyboardType: TextInputType.url,
@@ -700,11 +612,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                               onPressed: provider.serverOperationLoading
                                   ? null
                                   : () async {
-                                      if (provider.customApiUrlController.text
-                                          .trim()
-                                          .isEmpty) {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
+                                      if (provider.customApiUrlController.text.trim().isEmpty) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
                                           const SnackBar(
                                             content: Text('Please enter a URL'),
                                             duration: Duration(seconds: 2),
@@ -714,32 +623,26 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                         return;
                                       }
 
-                                      final success =
-                                          await provider.addNewCustomApiUrl(
+                                      final success = await provider.addNewCustomApiUrl(
                                         provider.customApiUrlController.text,
                                       );
 
                                       if (success) {
                                         // Show success message
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
+                                        ScaffoldMessenger.of(context).showSnackBar(
                                           const SnackBar(
                                             content: Text('New server added'),
                                             duration: Duration(seconds: 2),
                                             backgroundColor: Colors.green,
                                           ),
                                         );
-                                        await provider.selectCustomApiUrl(
-                                            provider
-                                                .customApiUrlController.text);
+                                        await provider.selectCustomApiUrl(provider.customApiUrlController.text);
                                         setState(() {});
                                       } else {
                                         // Show error message
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
+                                        ScaffoldMessenger.of(context).showSnackBar(
                                           const SnackBar(
-                                            content: Text(
-                                                'Invalid URL or already exists'),
+                                            content: Text('Invalid URL or already exists'),
                                             duration: Duration(seconds: 2),
                                             backgroundColor: Colors.red,
                                           ),
@@ -748,8 +651,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                     },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.green,
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 12),
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
                                 minimumSize: const Size(70, 36),
                               ),
                               child: provider.serverOperationLoading
@@ -763,8 +665,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                     )
                                   : const Text(
                                       'Add',
-                                      style: TextStyle(
-                                          color: Colors.white, fontSize: 12),
+                                      style: TextStyle(color: Colors.white, fontSize: 12),
                                     ),
                             ),
                           ),
@@ -778,10 +679,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   if (provider.customApiUrls.isNotEmpty) ...[
                     const Text(
                       'Saved Servers',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500),
+                      style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(height: 4.0),
                     Container(
@@ -794,15 +692,13 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           ? const Center(
                               child: Padding(
                                 padding: EdgeInsets.all(16.0),
-                                child: CircularProgressIndicator(
-                                    color: Colors.white),
+                                child: CircularProgressIndicator(color: Colors.white),
                               ),
                             )
                           : ListView.separated(
                               shrinkWrap: true,
                               itemCount: provider.customApiUrls.length,
-                              separatorBuilder: (context, index) =>
-                                  const Divider(height: 1, color: Colors.grey),
+                              separatorBuilder: (context, index) => const Divider(height: 1, color: Colors.grey),
                               itemBuilder: (context, index) {
                                 final url = provider.customApiUrls[index];
                                 return Dismissible(
@@ -831,41 +727,30 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                   },
                                   child: ListTile(
                                     dense: true,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                        horizontal: 12, vertical: 2),
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
                                     title: Text(
                                       url,
-                                      style: const TextStyle(
-                                          color: Colors.white, fontSize: 12),
+                                      style: const TextStyle(color: Colors.white, fontSize: 12),
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                     tileColor:
-                                        provider.currentCustomApiUrl == url
-                                            ? Colors.green.withOpacity(0.2)
-                                            : null,
+                                        provider.currentCustomApiUrl == url ? Colors.green.withOpacity(0.2) : null,
                                     trailing: Container(
                                       margin: const EdgeInsets.only(right: 12),
                                       child: IconButton(
                                         iconSize: 16,
-                                        constraints: const BoxConstraints(
-                                            maxWidth: 28, maxHeight: 28),
+                                        constraints: const BoxConstraints(maxWidth: 28, maxHeight: 28),
                                         padding: EdgeInsets.zero,
-                                        icon: const Icon(
-                                            Icons.check_circle_outline,
-                                            color: Colors.green),
+                                        icon: const Icon(Icons.check_circle_outline, color: Colors.green),
                                         onPressed: () async {
-                                          await provider
-                                              .selectCustomApiUrl(url);
+                                          await provider.selectCustomApiUrl(url);
                                           // Force rebuild to update UI
                                           setState(() {});
                                           // Show a quick success message
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(
+                                          ScaffoldMessenger.of(context).showSnackBar(
                                             SnackBar(
-                                              content: Text(
-                                                  'Server changed to $url'),
-                                              duration:
-                                                  const Duration(seconds: 2),
+                                              content: Text('Server changed to $url'),
+                                              duration: const Duration(seconds: 2),
                                               backgroundColor: Colors.green,
                                             ),
                                           );
@@ -878,11 +763,9 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                       // Force rebuild to update UI
                                       setState(() {});
                                       // Show a quick success message
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
+                                      ScaffoldMessenger.of(context).showSnackBar(
                                         SnackBar(
-                                          content:
-                                              Text('Server changed to $url'),
+                                          content: Text('Server changed to $url'),
                                           duration: const Duration(seconds: 2),
                                           backgroundColor: Colors.green,
                                         ),
@@ -904,10 +787,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
     );
   }
 
-  _getTextFieldDecoration(String label,
-      {IconButton? suffixIcon,
-      bool canBeDisabled = false,
-      String hintText = ''}) {
+  _getTextFieldDecoration(String label, {IconButton? suffixIcon, bool canBeDisabled = false, String hintText = ''}) {
     return InputDecoration(
       labelText: label,
       enabled: true && canBeDisabled,

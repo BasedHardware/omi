@@ -10,8 +10,7 @@ import 'package:omi/services/wals.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SharedPreferencesUtil {
-  static final SharedPreferencesUtil _instance =
-      SharedPreferencesUtil._internal();
+  static final SharedPreferencesUtil _instance = SharedPreferencesUtil._internal();
   static SharedPreferences? _preferences;
 
   factory SharedPreferencesUtil() {
@@ -64,8 +63,7 @@ class SharedPreferencesUtil {
 
   BtDevice get btDevice {
     final String device = getString('btDevice') ?? '';
-    if (device.isEmpty)
-      return BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0);
+    if (device.isEmpty) return BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0);
     return BtDevice.fromJson(jsonDecode(device));
   }
 
@@ -79,8 +77,7 @@ class SharedPreferencesUtil {
 
   //----------------------------- Permissions ---------------------------------//
 
-  set notificationsEnabled(bool value) =>
-      saveBool('notificationsEnabled', value);
+  set notificationsEnabled(bool value) => saveBool('notificationsEnabled', value);
 
   bool get notificationsEnabled => getBool('notificationsEnabled') ?? false;
 
@@ -94,56 +91,43 @@ class SharedPreferencesUtil {
 
   set sttServerType(String value) => saveString('sttServerType', value);
 
-  String get wyomingServerIp =>
-      getString('wyomingServerIp') ?? 'localhost:10300';
+  String get wyomingServerIp => getString('wyomingServerIp') ?? 'localhost:10300';
 
   set wyomingServerIp(String value) => saveString('wyomingServerIp', value);
 
   //---------------------- Developer Settings ---------------------------------//
 
-  String get webhookOnConversationCreated =>
-      getString('webhookOnConversationCreated') ?? '';
+  String get webhookOnConversationCreated => getString('webhookOnConversationCreated') ?? '';
 
-  set webhookOnConversationCreated(String value) =>
-      saveString('webhookOnConversationCreated', value);
+  set webhookOnConversationCreated(String value) => saveString('webhookOnConversationCreated', value);
 
-  String get webhookOnTranscriptReceived =>
-      getString('webhookOnTranscriptReceived') ?? '';
+  String get webhookOnTranscriptReceived => getString('webhookOnTranscriptReceived') ?? '';
 
-  set webhookOnTranscriptReceived(String value) =>
-      saveString('webhookOnTranscriptReceived', value);
+  set webhookOnTranscriptReceived(String value) => saveString('webhookOnTranscriptReceived', value);
 
   String get webhookAudioBytes => getString('webhookAudioBytes') ?? '';
 
   set webhookAudioBytes(String value) => saveString('webhookAudioBytes', value);
 
-  String get webhookAudioBytesDelay =>
-      getString('webhookAudioBytesDelay') ?? '';
+  String get webhookAudioBytesDelay => getString('webhookAudioBytesDelay') ?? '';
 
   set webhookDaySummary(String value) => saveString('webhookDaySummary', value);
 
   String get webhookDaySummary => getString('webhookDaySummary') ?? '';
 
-  set webhookAudioBytesDelay(String value) =>
-      saveString('webhookAudioBytesDelay', value);
+  set webhookAudioBytesDelay(String value) => saveString('webhookAudioBytesDelay', value);
 
-  set devModeJoanFollowUpEnabled(bool value) =>
-      saveBool('devModeJoanFollowUpEnabled', value);
+  set devModeJoanFollowUpEnabled(bool value) => saveBool('devModeJoanFollowUpEnabled', value);
 
-  bool get devModeJoanFollowUpEnabled =>
-      getBool('devModeJoanFollowUpEnabled') ?? false;
+  bool get devModeJoanFollowUpEnabled => getBool('devModeJoanFollowUpEnabled') ?? false;
 
-  set transcriptionDiagnosticEnabled(bool value) =>
-      saveBool('transcriptionDiagnosticEnabled', value);
+  set transcriptionDiagnosticEnabled(bool value) => saveBool('transcriptionDiagnosticEnabled', value);
 
-  bool get transcriptionDiagnosticEnabled =>
-      getBool('transcriptionDiagnosticEnabled') ?? false;
+  bool get transcriptionDiagnosticEnabled => getBool('transcriptionDiagnosticEnabled') ?? false;
 
-  set conversationEventsToggled(bool value) =>
-      saveBool('conversationEventsToggled', value);
+  set conversationEventsToggled(bool value) => saveBool('conversationEventsToggled', value);
 
-  bool get conversationEventsToggled =>
-      getBool('conversationEventsToggled') ?? false;
+  bool get conversationEventsToggled => getBool('conversationEventsToggled') ?? false;
 
   set transcriptsToggled(bool value) => saveBool('transcriptsToggled', value);
 
@@ -161,44 +145,33 @@ class SharedPreferencesUtil {
 
   bool get localSyncEnabled => getBool('localSyncEnabled') ?? true;
 
-  bool get showSummarizeConfirmation =>
-      getBool('showSummarizeConfirmation') ?? true;
+  bool get showSummarizeConfirmation => getBool('showSummarizeConfirmation') ?? true;
 
-  set showSummarizeConfirmation(bool value) =>
-      saveBool('showSummarizeConfirmation', value);
+  set showSummarizeConfirmation(bool value) => saveBool('showSummarizeConfirmation', value);
 
-  bool get showSubmitAppConfirmation =>
-      getBool('showSubmitAppConfirmation') ?? true;
+  bool get showSubmitAppConfirmation => getBool('showSubmitAppConfirmation') ?? true;
 
-  set showSubmitAppConfirmation(bool value) =>
-      saveBool('showSubmitAppConfirmation', value);
+  set showSubmitAppConfirmation(bool value) => saveBool('showSubmitAppConfirmation', value);
 
-  bool get showInstallAppConfirmation =>
-      getBool('showInstallAppConfirmation') ?? true;
+  bool get showInstallAppConfirmation => getBool('showInstallAppConfirmation') ?? true;
 
-  set showInstallAppConfirmation(bool value) =>
-      saveBool('showInstallAppConfirmation', value);
+  set showInstallAppConfirmation(bool value) => saveBool('showInstallAppConfirmation', value);
 
-  bool get showFirmwareUpdateDialog =>
-      getBool('v2/showFirmwareUpdateDialog') ?? true;
+  bool get showFirmwareUpdateDialog => getBool('v2/showFirmwareUpdateDialog') ?? true;
 
-  set showFirmwareUpdateDialog(bool value) =>
-      saveBool('v2/showFirmwareUpdateDialog', value);
+  set showFirmwareUpdateDialog(bool value) => saveBool('v2/showFirmwareUpdateDialog', value);
 
   String get transcriptionModel => getString('transcriptionModel3') ?? 'soniox';
 
-  set transcriptionModel(String value) =>
-      saveString('transcriptionModel3', value);
+  set transcriptionModel(String value) => saveString('transcriptionModel3', value);
 
   bool get onboardingCompleted => getBool('onboardingCompleted') ?? false;
 
   set onboardingCompleted(bool value) => saveBool('onboardingCompleted', value);
 
-  String gptCompletionCache(String key) =>
-      getString('gptCompletionCache:$key') ?? '';
+  String gptCompletionCache(String key) => getString('gptCompletionCache:$key') ?? '';
 
-  setGptCompletionCache(String key, String value) =>
-      saveString('gptCompletionCache:$key', value);
+  setGptCompletionCache(String key, String value) => saveString('gptCompletionCache:$key', value);
 
   bool get optInAnalytics => getBool('optInAnalytics') ?? true;
 
@@ -206,18 +179,15 @@ class SharedPreferencesUtil {
 
   bool get optInEmotionalFeedback => getBool('optInEmotionalFeedback') ?? false;
 
-  set optInEmotionalFeedback(bool value) =>
-      saveBool('optInEmotionalFeedback', value);
+  set optInEmotionalFeedback(bool value) => saveBool('optInEmotionalFeedback', value);
 
   bool get devModeEnabled => getBool('devModeEnabled') ?? false;
 
   set devModeEnabled(bool value) => saveBool('devModeEnabled', value);
 
-  bool get permissionStoreRecordingsEnabled =>
-      getBool('permissionStoreRecordingsEnabled') ?? false;
+  bool get permissionStoreRecordingsEnabled => getBool('permissionStoreRecordingsEnabled') ?? false;
 
-  set permissionStoreRecordingsEnabled(bool value) =>
-      saveBool('permissionStoreRecordingsEnabled', value);
+  set permissionStoreRecordingsEnabled(bool value) => saveBool('permissionStoreRecordingsEnabled', value);
 
   bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
 
@@ -225,19 +195,16 @@ class SharedPreferencesUtil {
 
   bool get showDiscardedMemories => getBool('showDiscardedMemories') ?? true;
 
-  set showDiscardedMemories(bool value) =>
-      saveBool('showDiscardedMemories', value);
+  set showDiscardedMemories(bool value) => saveBool('showDiscardedMemories', value);
 
   // User primary language preferences
   String get userPrimaryLanguage => getString('userPrimaryLanguage') ?? '';
 
-  set userPrimaryLanguage(String value) =>
-      saveString('userPrimaryLanguage', value);
+  set userPrimaryLanguage(String value) => saveString('userPrimaryLanguage', value);
 
   bool get hasSetPrimaryLanguage => getBool('hasSetPrimaryLanguage') ?? false;
 
-  set hasSetPrimaryLanguage(bool value) =>
-      saveBool('hasSetPrimaryLanguage', value);
+  set hasSetPrimaryLanguage(bool value) => saveBool('hasSetPrimaryLanguage', value);
 
   int get currentStorageBytes => getInt('currentStorageBytes') ?? 0;
 
@@ -247,24 +214,18 @@ class SharedPreferencesUtil {
 
   set previousStorageBytes(int value) => saveInt('previousStorageBytes', value);
 
-  int get enabledAppsCount =>
-      appsList.where((element) => element.enabled).length;
+  int get enabledAppsCount => appsList.where((element) => element.enabled).length;
 
-  int get enabledAppsIntegrationsCount => appsList
-      .where((element) => element.enabled && element.worksExternally())
-      .length;
+  int get enabledAppsIntegrationsCount =>
+      appsList.where((element) => element.enabled && element.worksExternally()).length;
 
-  bool get showConversationDeleteConfirmation =>
-      getBool('showConversationDeleteConfirmation') ?? true;
+  bool get showConversationDeleteConfirmation => getBool('showConversationDeleteConfirmation') ?? true;
 
-  set showConversationDeleteConfirmation(bool value) =>
-      saveBool("showConversationDeleteConfirmation", value);
+  set showConversationDeleteConfirmation(bool value) => saveBool("showConversationDeleteConfirmation", value);
 
-  bool get showActionItemDeleteConfirmation =>
-      getBool('showActionItemDeleteConfirmation') ?? true;
+  bool get showActionItemDeleteConfirmation => getBool('showActionItemDeleteConfirmation') ?? true;
 
-  set showActionItemDeleteConfirmation(bool value) =>
-      saveBool('showActionItemDeleteConfirmation', value);
+  set showActionItemDeleteConfirmation(bool value) => saveBool('showActionItemDeleteConfirmation', value);
 
   List<App> get appsList {
     final List<String> apps = getStringList('appsList') ?? [];
@@ -292,34 +253,25 @@ class SharedPreferencesUtil {
     appsList = apps;
   }
 
-  String get selectedChatAppId =>
-      getString('selectedChatAppId2') ?? 'no_selected';
+  String get selectedChatAppId => getString('selectedChatAppId2') ?? 'no_selected';
 
-  set selectedChatAppId(String value) =>
-      saveString('selectedChatAppId2', value);
+  set selectedChatAppId(String value) => saveString('selectedChatAppId2', value);
 
   List<ServerConversation> get cachedConversations {
     if (getBool('migratedMemories') ?? false) {
-      if (getStringList('cachedMemories') != null ||
-          getStringList('cachedMemories')!.isNotEmpty) {
+      if (getStringList('cachedMemories') != null || getStringList('cachedMemories')!.isNotEmpty) {
         final List<ServerConversation> cachedMemories =
-            getStringList('cachedMemories')!
-                .map((e) => ServerConversation.fromJson(jsonDecode(e)))
-                .toList();
+            getStringList('cachedMemories')!.map((e) => ServerConversation.fromJson(jsonDecode(e))).toList();
         cachedConversations = cachedMemories;
         saveBool('migratedMemories', true);
       }
     }
-    final List<String> conversations =
-        getStringList('cachedConversations') ?? [];
-    return conversations
-        .map((e) => ServerConversation.fromJson(jsonDecode(e)))
-        .toList();
+    final List<String> conversations = getStringList('cachedConversations') ?? [];
+    return conversations.map((e) => ServerConversation.fromJson(jsonDecode(e))).toList();
   }
 
   set cachedConversations(List<ServerConversation> value) {
-    final List<String> conversations =
-        value.map((e) => jsonEncode(e.toJson())).toList();
+    final List<String> conversations = value.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('cachedConversations', conversations);
   }
 
@@ -329,8 +281,7 @@ class SharedPreferencesUtil {
   }
 
   set cachedMessages(List<ServerMessage> value) {
-    final List<String> messages =
-        value.map((e) => jsonEncode(e.toJson())).toList();
+    final List<String> messages = value.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('cachedMessages', messages);
   }
 
@@ -344,8 +295,7 @@ class SharedPreferencesUtil {
   }
 
   set cachedPeople(List<Person> value) {
-    final List<String> people =
-        value.map((e) => jsonEncode(e.toJson())).toList();
+    final List<String> people = value.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('cachedPeople', people);
   }
 
@@ -381,15 +331,12 @@ class SharedPreferencesUtil {
   }
 
   set modifiedConversationDetails(ServerConversation? value) {
-    saveString('modifiedConversationDetails',
-        value == null ? '' : jsonEncode(value.toJson()));
+    saveString('modifiedConversationDetails', value == null ? '' : jsonEncode(value.toJson()));
   }
 
-  set calendarPermissionAlreadyRequested(bool value) =>
-      saveBool('calendarPermissionAlreadyRequested', value);
+  set calendarPermissionAlreadyRequested(bool value) => saveBool('calendarPermissionAlreadyRequested', value);
 
-  bool get calendarPermissionAlreadyRequested =>
-      getBool('calendarPermissionAlreadyRequested') ?? false;
+  bool get calendarPermissionAlreadyRequested => getBool('calendarPermissionAlreadyRequested') ?? false;
 
   set calendarEnabled(bool value) => saveBool('calendarEnabled', value);
 
@@ -399,8 +346,7 @@ class SharedPreferencesUtil {
 
   String get calendarId => getString('calendarId') ?? '';
 
-  set calendarType(String value) =>
-      saveString('calendarType2', value); // auto, manual (only for now)
+  set calendarType(String value) => saveString('calendarType2', value); // auto, manual (only for now)
 
   String get calendarType => getString('calendarType2') ?? 'manual';
 
@@ -428,11 +374,9 @@ class SharedPreferencesUtil {
 
   String get fullName => '$givenName $familyName'.trim();
 
-  set locationPermissionRequested(bool value) =>
-      saveBool('locationPermissionRequested', value);
+  set locationPermissionRequested(bool value) => saveBool('locationPermissionRequested', value);
 
-  bool get locationPermissionRequested =>
-      getBool('locationPermissionRequested') ?? false;
+  bool get locationPermissionRequested => getBool('locationPermissionRequested') ?? false;
 
   //--------------------------------- Wals ------------------------------------//
 
