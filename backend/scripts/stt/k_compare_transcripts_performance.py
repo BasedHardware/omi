@@ -7,6 +7,7 @@
 # - prompt for computing WER using groq whisper as baseline (if better, but most likely)
 # - Run for deepgram vs soniox, and generate comparison result
 import asyncio
+
 # - P3
 # - Include speechmatics to the game
 import json
@@ -53,7 +54,7 @@ def execute_groq(file_path: str):
         for i in range(0, len(aseg), split_duration):
             split_file_path = f'{file_path}_{i}.wav'
             split_files.append(split_file_path)
-            aseg[i:i + split_duration].export(split_file_path, format="wav")
+            aseg[i : i + split_duration].export(split_file_path, format="wav")
     else:
         split_files.append(file_path)
 
@@ -66,7 +67,7 @@ def execute_groq(file_path: str):
                 model="whisper-large-v3",
                 response_format="text",
                 language="en",
-                temperature=0.0
+                temperature=0.0,
             )
             result += ' ' + str(transcription)
     return result.strip().lower().replace('  ', ' ')
@@ -85,11 +86,7 @@ async def _execute_single(file_path: str):
         return
 
     print('Started processing', memory_id, 'duration', aseg.duration_seconds)
-    result = {
-        'deepgram': [],
-        'soniox': [],
-        'speechmatics': []
-    }
+    result = {'deepgram': [], 'soniox': [], 'speechmatics': []}
 
     def stream_transcript_deepgram(new_segments, _):
         print('stream_transcript_deepgram', new_segments)
@@ -193,7 +190,7 @@ def compute_wer():
         "Model Words",
         "Source Characters",
         "Model Characters",
-        "Transcript"
+        "Transcript",
     ]
 
     # Check if the directory exists
@@ -267,16 +264,18 @@ def compute_wer():
                 current_file_wer[model] = current_wer
 
             # Append the data to the detailed table
-            table_data.append([
-                file,
-                model,
-                f"{current_wer:.2%}",
-                source_words,
-                model_words,
-                source_characters,
-                model_characters,
-                model_text
-            ])
+            table_data.append(
+                [
+                    file,
+                    model,
+                    f"{current_wer:.2%}",
+                    source_words,
+                    model_words,
+                    source_characters,
+                    model_characters,
+                    model_text,
+                ]
+            )
 
         # Determine which model(s) had the lowest WER in the current file
         if current_file_wer:
@@ -305,10 +304,7 @@ def compute_wer():
     # Create a list for overall WER table
     overall_wer_table = []
     for model, avg_wer in overall_wer.items():
-        overall_wer_table.append([
-            model,
-            f"{avg_wer:.2%}"
-        ])
+        overall_wer_table.append([model, f"{avg_wer:.2%}"])
 
     # Sort the overall WER table by average WER ascending (lower is better)
     overall_wer_table_sorted = sorted(overall_wer_table, key=lambda x: x[1])
@@ -319,8 +315,9 @@ def compute_wer():
     # Generate the overall WER table
     if overall_wer_table_sorted:
         print("\nOverall WER per Model:")
-        overall_wer_formatted = tabulate(overall_wer_table_sorted, headers=overall_wer_headers, tablefmt="grid",
-                                         stralign="left")
+        overall_wer_formatted = tabulate(
+            overall_wer_table_sorted, headers=overall_wer_headers, tablefmt="grid", stralign="left"
+        )
         print(overall_wer_formatted)
         with open('results/wer.txt', 'w') as f:
             f.write(overall_wer_formatted)
@@ -330,10 +327,7 @@ def compute_wer():
     # Create a ranking table based on points
     ranking_table = []
     for model, points in points_counter.items():
-        ranking_table.append([
-            model,
-            points
-        ])
+        ranking_table.append([model, points])
 
     # Sort the ranking table by points descending (more points are better)
     ranking_table_sorted = sorted(ranking_table, key=lambda x: x[1], reverse=True)
@@ -347,11 +341,7 @@ def compute_wer():
             rank = current_rank
         else:
             rank = current_rank - 1  # Same rank as previous
-        ranking_table_with_rank.append([
-            rank,
-            model,
-            points
-        ])
+        ranking_table_with_rank.append([rank, model, points])
         previous_points = points
         current_rank += 1
 
@@ -361,8 +351,9 @@ def compute_wer():
     # Generate the ranking table
     if ranking_table_with_rank:
         print("\nModel Rankings Based on WER Performance:")
-        ranking_table_formatted = tabulate(ranking_table_with_rank, headers=ranking_headers, tablefmt="grid",
-                                           stralign="left")
+        ranking_table_formatted = tabulate(
+            ranking_table_with_rank, headers=ranking_headers, tablefmt="grid", stralign="left"
+        )
         print(ranking_table_formatted)
         with open('results/ranking.txt', 'w') as f:
             f.write(ranking_table_formatted)
@@ -552,7 +543,8 @@ def compute_der():
         out_f.write(der_table + "\n\n")
         out_f.write("Average DER per Model:\n")
         out_f.write(
-            tabulate(average_der_sorted, headers=["Model", "Average DER"], tablefmt="grid", stralign="left") + "\n\n")
+            tabulate(average_der_sorted, headers=["Model", "Average DER"], tablefmt="grid", stralign="left") + "\n\n"
+        )
         out_f.write("Model Rankings Based on Average DER:\n")
         out_f.write(ranking_table + "\n\n")
         out_f.write(f"Winner: {winner}\n")

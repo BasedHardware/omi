@@ -62,10 +62,10 @@ class OmiContextMenu {
     bool showDividerBeforeLast,
   ) {
     final List<PopupMenuEntry<String>> menuItems = [];
-    
+
     for (int i = 0; i < items.length; i++) {
       final item = items[i];
-      
+
       // Add divider before last item if requested
       if (showDividerBeforeLast && i == items.length - 1 && items.length > 1) {
         menuItems.add(
@@ -88,7 +88,7 @@ class OmiContextMenu {
           ),
         );
       }
-      
+
       menuItems.add(
         PopupMenuItem<String>(
           value: item.id,
@@ -119,9 +119,7 @@ class OmiContextMenu {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
-                        color: item.enabled 
-                            ? ResponsiveHelper.textPrimary 
-                            : ResponsiveHelper.textTertiary,
+                        color: item.enabled ? ResponsiveHelper.textPrimary : ResponsiveHelper.textTertiary,
                       ),
                     ),
                     Text(
@@ -139,7 +137,7 @@ class OmiContextMenu {
         ),
       );
     }
-    
+
     return menuItems;
   }
-} 
+}

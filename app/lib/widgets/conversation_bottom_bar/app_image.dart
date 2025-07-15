@@ -20,10 +20,8 @@ class AppImage extends StatelessWidget {
     if (isLoading) {
       return _buildLoadingImage();
     }
-    
-    return isLocalAsset
-        ? _buildLocalImage()
-        : _buildNetworkImage();
+
+    return isLocalAsset ? _buildLocalImage() : _buildNetworkImage();
   }
 
   Widget _buildLoadingImage() {
@@ -39,9 +37,7 @@ class AppImage extends StatelessWidget {
         children: [
           Opacity(
             opacity: 0.5,
-            child: isLocalAsset
-                ? _buildLocalImage()
-                : _buildNetworkImage(),
+            child: isLocalAsset ? _buildLocalImage() : _buildNetworkImage(),
           ),
           SizedBox(
             width: size,
@@ -106,11 +102,7 @@ class AppImage extends StatelessWidget {
           shape: BoxShape.circle,
           color: Colors.grey.shade800,
         ),
-        child: Icon(
-          Icons.error_outline, 
-          size: size * 2/3, 
-          color: Colors.white
-        ),
+        child: Icon(Icons.error_outline, size: size * 2 / 3, color: Colors.white),
       ),
     );
   }

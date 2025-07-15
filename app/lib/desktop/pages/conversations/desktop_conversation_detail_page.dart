@@ -104,7 +104,8 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
       var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
       await provider.initConversation();
       if (provider.conversation.appResults.isEmpty) {
-        await Provider.of<ConversationProvider>(context, listen: false).updateSearchedConvoDetails(provider.conversation.id, provider.selectedDate, provider.conversationIdx);
+        await Provider.of<ConversationProvider>(context, listen: false)
+            .updateSearchedConvoDetails(provider.conversation.id, provider.selectedDate, provider.conversationIdx);
         provider.updateConversation(provider.conversationIdx, provider.selectedDate);
       }
 
@@ -124,7 +125,9 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
   }
 
   String setTime(DateTime? startedAt, DateTime createdAt, DateTime? finishedAt) {
-    return startedAt == null ? dateTimeFormat('h:mm a', createdAt) : '${dateTimeFormat('h:mm a', startedAt)} to ${dateTimeFormat('h:mm a', finishedAt)}';
+    return startedAt == null
+        ? dateTimeFormat('h:mm a', createdAt)
+        : '${dateTimeFormat('h:mm a', startedAt)} to ${dateTimeFormat('h:mm a', finishedAt)}';
   }
 
   @override
@@ -256,7 +259,11 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  widget.conversation.discarded ? 'Discarded Conversation' : (widget.conversation.structured.title.isNotEmpty ? widget.conversation.structured.title.decodeString : 'Untitled Conversation'),
+                  widget.conversation.discarded
+                      ? 'Discarded Conversation'
+                      : (widget.conversation.structured.title.isNotEmpty
+                          ? widget.conversation.structured.title.decodeString
+                          : 'Untitled Conversation'),
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w600,
@@ -493,7 +500,7 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
   Future<void> _handleShareConversation() async {
     if (_isSharing) return;
     setState(() => _isSharing = true);
-    
+
     try {
       bool shared = await setConversationVisibility(widget.conversation.id);
       if (!shared) {
@@ -501,7 +508,7 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
         setState(() => _isSharing = false);
         return;
       }
-      
+
       String content = 'https://h.omi.me/conversations/${widget.conversation.id}';
       await Share.share(content);
     } catch (e) {

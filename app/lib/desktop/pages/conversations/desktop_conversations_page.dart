@@ -19,9 +19,7 @@ import 'widgets/desktop_search_widget.dart';
 import 'widgets/desktop_search_result_header.dart';
 import 'widgets/desktop_recording_widget.dart';
 
-
 class DesktopConversationsPage extends StatefulWidget {
-
   const DesktopConversationsPage({
     super.key,
   });
@@ -38,7 +36,6 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
 
-
   // State for inline conversation detail viewing
   bool _showingConversationDetail = false;
   ServerConversation? _selectedConversation;
@@ -50,7 +47,6 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
   @override
   void initState() {
     super.initState();
-
 
     // Initialize animations
     _fadeController = AnimationController(
@@ -186,141 +182,143 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                   child: CustomScrollView(
                     physics: const AlwaysScrollableScrollPhysics(),
                     slivers: [
-                    const SliverToBoxAdapter(child: SizedBox(height: 20)),
+                      const SliverToBoxAdapter(child: SizedBox(height: 20)),
 
-                    // Header section (only show if there are conversations in system)
-                    if (hasAnyConversationsInSystem)
-                      SliverToBoxAdapter(
-                        child: FadeTransition(
-                          opacity: _fadeAnimation,
-                          child: _buildHeader(),
+                      // Header section (only show if there are conversations in system)
+                      if (hasAnyConversationsInSystem)
+                        SliverToBoxAdapter(
+                          child: FadeTransition(
+                            opacity: _fadeAnimation,
+                            child: _buildHeader(),
+                          ),
                         ),
-                      ),
 
-                    // Recording widget section
-                    // Only show if there are conversations in system and not searching
-                    if (hasAnyConversationsInSystem && !isSearchActive && !_showExpandedRecording)
-                      SliverToBoxAdapter(
-                        child: FadeTransition(
-                          opacity: _fadeAnimation,
-                          child: Container(
-                            padding: const EdgeInsets.fromLTRB(32, 24, 32, 24),
-                            child: DesktopRecordingWidget(
-                              hasConversations: true,
-                              onStartRecording: _showExpandedRecordingView,
+                      // Recording widget section
+                      // Only show if there are conversations in system and not searching
+                      if (hasAnyConversationsInSystem && !isSearchActive && !_showExpandedRecording)
+                        SliverToBoxAdapter(
+                          child: FadeTransition(
+                            opacity: _fadeAnimation,
+                            child: Container(
+                              padding: const EdgeInsets.fromLTRB(32, 24, 32, 24),
+                              child: DesktopRecordingWidget(
+                                hasConversations: true,
+                                onStartRecording: _showExpandedRecordingView,
+                              ),
                             ),
                           ),
                         ),
-                      ),
 
-                    // Search result header (only show if there are conversations in system)
-                    if (hasAnyConversationsInSystem) const SliverToBoxAdapter(child: DesktopSearchResultHeader()),
+                      // Search result header (only show if there are conversations in system)
+                      if (hasAnyConversationsInSystem) const SliverToBoxAdapter(child: DesktopSearchResultHeader()),
 
-                    getProcessingConversationsWidget(convoProvider.processingConversations),
+                      getProcessingConversationsWidget(convoProvider.processingConversations),
 
-                    // Main conversations content
-                    if (convoProvider.groupedConversations.isEmpty && !convoProvider.isLoadingConversations)
-                      SliverToBoxAdapter(
-                        child: FadeTransition(
-                          opacity: _fadeAnimation,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 80),
-                            child: Center(
-                              child: isSearchActive
-                                  ? const Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.search_off_rounded,
-                                          size: 48,
-                                          color: ResponsiveHelper.textTertiary,
-                                        ),
-                                        SizedBox(height: 16),
-                                        Text(
-                                          'No results found',
-                                          style: TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.w600,
-                                            color: ResponsiveHelper.textSecondary,
-                                          ),
-                                        ),
-                                        SizedBox(height: 8),
-                                        Text(
-                                          'Try adjusting your search terms',
-                                          style: TextStyle(
-                                            fontSize: 14,
+                      // Main conversations content
+                      if (convoProvider.groupedConversations.isEmpty && !convoProvider.isLoadingConversations)
+                        SliverToBoxAdapter(
+                          child: FadeTransition(
+                            opacity: _fadeAnimation,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 80),
+                              child: Center(
+                                child: isSearchActive
+                                    ? const Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.search_off_rounded,
+                                            size: 48,
                                             color: ResponsiveHelper.textTertiary,
                                           ),
-                                        ),
-                                      ],
-                                    )
-                                  : const DesktopEmptyConversations(),
-                            ),
-                          ),
-                        ),
-                      )
-                    else if (convoProvider.groupedConversations.isEmpty && convoProvider.isLoadingConversations)
-                      SliverToBoxAdapter(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 80),
-                          child: const Center(
-                            child: CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary),
-                              strokeWidth: 2,
-                            ),
-                          ),
-                        ),
-                      )
-                    else
-                      SliverPadding(
-                        padding: const EdgeInsets.symmetric(horizontal: 32),
-                        sliver: SliverList(
-                          delegate: SliverChildBuilderDelegate(
-                            childCount: convoProvider.groupedConversations.length + 1,
-                            (context, index) {
-                              if (index == convoProvider.groupedConversations.length) {
-                                return VisibilityDetector(
-                                  key: const Key('desktop-conversations-load-more'),
-                                  onVisibilityChanged: (visibilityInfo) {
-                                    var provider = Provider.of<ConversationProvider>(context, listen: false);
-                                    if (provider.previousQuery.isNotEmpty) {
-                                      if (visibilityInfo.visibleFraction > 0 &&
-                                          !provider.isLoadingConversations &&
-                                          (provider.totalSearchPages > provider.currentSearchPage)) {
-                                        provider.searchMoreConversations();
-                                      }
-                                    } else {
-                                      if (visibilityInfo.visibleFraction > 0 && !provider.isLoadingConversations) {
-                                        provider.getMoreConversationsFromServer();
-                                      }
-                                    }
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 32),
-                                    child: convoProvider.isLoadingConversations
-                                        ? const Center(
-                                            child: CircularProgressIndicator(
-                                              valueColor: AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary),
-                                              strokeWidth: 2,
+                                          SizedBox(height: 16),
+                                          Text(
+                                            'No results found',
+                                            style: TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w600,
+                                              color: ResponsiveHelper.textSecondary,
                                             ),
-                                          )
-                                        : const SizedBox(height: 20),
-                                  ),
+                                          ),
+                                          SizedBox(height: 8),
+                                          Text(
+                                            'Try adjusting your search terms',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color: ResponsiveHelper.textTertiary,
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                    : const DesktopEmptyConversations(),
+                              ),
+                            ),
+                          ),
+                        )
+                      else if (convoProvider.groupedConversations.isEmpty && convoProvider.isLoadingConversations)
+                        SliverToBoxAdapter(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 80),
+                            child: const Center(
+                              child: CircularProgressIndicator(
+                                valueColor: AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary),
+                                strokeWidth: 2,
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        SliverPadding(
+                          padding: const EdgeInsets.symmetric(horizontal: 32),
+                          sliver: SliverList(
+                            delegate: SliverChildBuilderDelegate(
+                              childCount: convoProvider.groupedConversations.length + 1,
+                              (context, index) {
+                                if (index == convoProvider.groupedConversations.length) {
+                                  return VisibilityDetector(
+                                    key: const Key('desktop-conversations-load-more'),
+                                    onVisibilityChanged: (visibilityInfo) {
+                                      var provider = Provider.of<ConversationProvider>(context, listen: false);
+                                      if (provider.previousQuery.isNotEmpty) {
+                                        if (visibilityInfo.visibleFraction > 0 &&
+                                            !provider.isLoadingConversations &&
+                                            (provider.totalSearchPages > provider.currentSearchPage)) {
+                                          provider.searchMoreConversations();
+                                        }
+                                      } else {
+                                        if (visibilityInfo.visibleFraction > 0 && !provider.isLoadingConversations) {
+                                          provider.getMoreConversationsFromServer();
+                                        }
+                                      }
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(vertical: 32),
+                                      child: convoProvider.isLoadingConversations
+                                          ? const Center(
+                                              child: CircularProgressIndicator(
+                                                valueColor:
+                                                    AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary),
+                                                strokeWidth: 2,
+                                              ),
+                                            )
+                                          : const SizedBox(height: 20),
+                                    ),
+                                  );
+                                }
+
+                                // Conversation groups
+                                var date = convoProvider.groupedConversations.keys.elementAt(index);
+                                List<ServerConversation> conversationsForDate =
+                                    convoProvider.groupedConversations[date]!;
+
+                                return FadeTransition(
+                                  opacity: _fadeAnimation,
+                                  child: _buildConversationGroup(date, conversationsForDate, index == 0),
                                 );
-                              }
-
-                              // Conversation groups
-                              var date = convoProvider.groupedConversations.keys.elementAt(index);
-                              List<ServerConversation> conversationsForDate = convoProvider.groupedConversations[date]!;
-
-                              return FadeTransition(
-                                opacity: _fadeAnimation,
-                                child: _buildConversationGroup(date, conversationsForDate, index == 0),
-                              );
-                            },
+                              },
+                            ),
                           ),
                         ),
-                      ),
 
                       const SliverToBoxAdapter(child: SizedBox(height: 80)),
                     ],
@@ -435,7 +433,6 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
               ),
             ),
           ),
-
           ...conversations.asMap().entries.map((entry) {
             final index = entry.key;
             final conversation = entry.value;

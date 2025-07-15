@@ -24,7 +24,7 @@ def _get_data(uid: str, conversation_id: str, vector: List[float]):
             'uid': uid,
             'memory_id': conversation_id,
             'created_at': int(datetime.now(timezone.utc).timestamp()),
-        }
+        },
     }
 
 
@@ -46,13 +46,8 @@ def update_vector_metadata(uid: str, conversation_id: str, metadata: dict):
     return index.update(f'{uid}-{conversation_id}', set_metadata=metadata, namespace="ns1")
 
 
-def upsert_vectors(
-        uid: str, vectors: List[List[float]], conversations: List[Conversation]
-):
-    data = [
-        _get_data(uid, conversation.id, vector) for conversation, vector in
-        zip(conversations, vectors)
-    ]
+def upsert_vectors(uid: str, vectors: List[List[float]], conversations: List[Conversation]):
+    data = [_get_data(uid, conversation.id, vector) for conversation, vector in zip(conversations, vectors)]
     res = index.upsert(vectors=data, namespace="ns1")
     print('upsert_vectors', res)
 
@@ -70,20 +65,30 @@ def query_vectors(query: str, uid: str, starts_at: int = None, ends_at: int = No
 
 
 def query_vectors_by_metadata(
-        uid: str, vector: List[float], dates_filter: List[datetime], people: List[str], topics: List[str],
-    entities: List[str], dates: List[str], limit: int = 5,
+    uid: str,
+    vector: List[float],
+    dates_filter: List[datetime],
+    people: List[str],
+    topics: List[str],
+    entities: List[str],
+    dates: List[str],
+    limit: int = 5,
 ):
-    filter_data = {'$and': [
-        {'uid': {'$eq': uid}},
-    ]}
+    filter_data = {
+        '$and': [
+            {'uid': {'$eq': uid}},
+        ]
+    }
     if people or topics or entities or dates:
         filter_data['$and'].append(
-            {'$or': [
-                {'people': {'$in': people}},
-                {'topics': {'$in': topics}},
-                {'entities': {'$in': entities}},
-                # {'dates': {'$in': dates_mentioned}},
-            ]}
+            {
+                '$or': [
+                    {'people': {'$in': people}},
+                    {'topics': {'$in': topics}},
+                    {'entities': {'$in': entities}},
+                    # {'dates': {'$in': dates_mentioned}},
+                ]
+            }
         )
     if dates_filter and len(dates_filter) == 2 and dates_filter[0] and dates_filter[1]:
         print('dates_filter', dates_filter)
@@ -94,18 +99,19 @@ def query_vectors_by_metadata(
     print('query_vectors_by_metadata:', json.dumps(filter_data))
 
     xc = index.query(
-        vector=vector, filter=filter_data, namespace="ns1", include_values=False,
-        include_metadata=True,
-        top_k=10000
+        vector=vector, filter=filter_data, namespace="ns1", include_values=False, include_metadata=True, top_k=10000
     )
     if not xc['matches']:
         if len(filter_data['$and']) == 3:
             filter_data['$and'].pop(1)
             print('query_vectors_by_metadata retrying without structured filters:', json.dumps(filter_data))
             xc = index.query(
-                vector=vector, filter=filter_data, namespace="ns1", include_values=False,
+                vector=vector,
+                filter=filter_data,
+                namespace="ns1",
+                include_values=False,
                 include_metadata=True,
-                top_k=20
+                top_k=20,
             )
         else:
             return []

@@ -111,9 +111,7 @@ class _DesktopCompleteScreenState extends State<DesktopCompleteScreen> with Tick
                           ),
                         ),
                       ),
-
                       const SizedBox(height: 32),
-
                       const Text(
                         'You\'re all set!',
                         style: TextStyle(
@@ -124,9 +122,7 @@ class _DesktopCompleteScreenState extends State<DesktopCompleteScreen> with Tick
                         ),
                         textAlign: TextAlign.center,
                       ),
-
                       const SizedBox(height: 8),
-
                       Container(
                         constraints: const BoxConstraints(maxWidth: 480),
                         padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -141,9 +137,7 @@ class _DesktopCompleteScreenState extends State<DesktopCompleteScreen> with Tick
                           textAlign: TextAlign.center,
                         ),
                       ),
-
                       const SizedBox(height: 48),
-
                       Container(
                         constraints: const BoxConstraints(maxWidth: 400),
                         margin: const EdgeInsets.symmetric(horizontal: 40),
@@ -156,16 +150,13 @@ class _DesktopCompleteScreenState extends State<DesktopCompleteScreen> with Tick
                           },
                         ),
                       ),
-
                       const SizedBox(height: 16),
-
                       if (widget.onBack != null)
                         OmiButton(
                           label: 'Back',
                           type: OmiButtonType.text,
                           onPressed: widget.onBack,
                         ),
-
                       const SizedBox(height: 16),
                     ],
                   ),

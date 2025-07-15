@@ -14,10 +14,13 @@ from typing import List
 
 # noinspection PyUnresolvedReferences
 import numpy as np
+
 # noinspection PyUnresolvedReferences
 import plotly.graph_objects as go
+
 # noinspection PyUnresolvedReferences
 import umap
+
 # noinspection PyUnresolvedReferences
 from plotly.subplots import make_subplots
 
@@ -30,6 +33,7 @@ import matplotlib.pyplot as plt
 
 
 # Assuming get_users_uid() and conversations_db.get_conversations() are already defined
+
 
 def process_memories(uid):
     durations = []

@@ -6,8 +6,9 @@ from models.integrations import ExternalIntegrationCreateMemory
 from utils.llm.memories import extract_memories_from_text
 
 
-def process_external_integration_memory(uid: str, memory_data: ExternalIntegrationCreateMemory, app_id: str) -> List[
-        MemoryDB]:
+def process_external_integration_memory(
+    uid: str, memory_data: ExternalIntegrationCreateMemory, app_id: str
+) -> List[MemoryDB]:
     memory_data.app_id = app_id
     saved_memories = []
 
@@ -18,7 +19,7 @@ def process_external_integration_memory(uid: str, memory_data: ExternalIntegrati
             memory = Memory(
                 content=explicit_memory.content,
                 category=MemoryCategory.system,
-                tags=explicit_memory.tags if explicit_memory.tags else []
+                tags=explicit_memory.tags if explicit_memory.tags else [],
             )
 
             # Convert to MemoryDB
@@ -32,7 +33,7 @@ def process_external_integration_memory(uid: str, memory_data: ExternalIntegrati
         extracted_memories = extract_memories_from_text(
             uid,
             memory_data.text,
-            memory_data.text_source_spec if memory_data.text_source_spec else memory_data.text_source.value
+            memory_data.text_source_spec if memory_data.text_source_spec else memory_data.text_source.value,
         )
 
         if extracted_memories and len(extracted_memories) > 0:
@@ -52,11 +53,7 @@ def process_external_integration_memory(uid: str, memory_data: ExternalIntegrati
 
 def process_twitter_memories(uid: str, tweets_text: str, persona_id: str) -> List[MemoryDB]:
     # Extract memories from tweets using the LLM
-    extracted_memories = extract_memories_from_text(
-        uid,
-        tweets_text,
-        "twitter_tweets"
-    )
+    extracted_memories = extract_memories_from_text(uid, tweets_text, "twitter_tweets")
 
     if not extracted_memories or len(extracted_memories) == 0:
         print(f"No memories extracted from tweets for user {uid}")

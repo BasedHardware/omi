@@ -9,8 +9,7 @@ import database.conversations as conversations_db
 from database.users import get_user_store_recording_permission
 from models.conversation import *
 from utils.conversations.process_conversation import process_conversation, process_user_emotion
-from utils.other.storage import upload_postprocessing_audio, \
-    delete_postprocessing_audio, upload_conversation_recording
+from utils.other.storage import upload_postprocessing_audio, delete_postprocessing_audio, upload_conversation_recording
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
 from utils.stt.speech_profile import get_speech_profile_matching_predictions
 from utils.stt.vad import vad_is_empty
@@ -18,7 +17,9 @@ from utils.stt.vad import vad_is_empty
 
 # TODO: this pipeline vs groq+pyannote diarization 3.1, probably the latter is better.
 # TODO: should consider storing non beautified segments, and beautify on read?
-def postprocess_conversation(conversation_id: str, file_path: str, uid: str, emotional_feedback: bool, streaming_model: str):
+def postprocess_conversation(
+    conversation_id: str, file_path: str, uid: str, emotional_feedback: bool, streaming_model: str
+):
     conversation_data = _get_conversation_by_id(uid, conversation_id)
     if not conversation_data:
         return 404, "Conversation not found"
@@ -28,12 +29,19 @@ def postprocess_conversation(conversation_id: str, file_path: str, uid: str, emo
         print('postprocess_conversation: Conversation is discarded')
         return 400, "Conversation is discarded"
 
-    if conversation.postprocessing is not None and conversation.postprocessing.status != PostProcessingStatus.not_started:
-        print(f'postprocess_conversation: Conversation can\'t be post-processed again {conversation.postprocessing.status}')
+    if (
+        conversation.postprocessing is not None
+        and conversation.postprocessing.status != PostProcessingStatus.not_started
+    ):
+        print(
+            f'postprocess_conversation: Conversation can\'t be post-processed again {conversation.postprocessing.status}'
+        )
         return 400, "Conversation can't be post-processed again"
 
     aseg = AudioSegment.from_wav(file_path)
-    if aseg.duration_seconds < 10:  # TODO: validate duration more accurately, segment.last.end - segment.first.start - 10
+    if (
+        aseg.duration_seconds < 10
+    ):  # TODO: validate duration more accurately, segment.last.end - segment.first.start - 10
         # TODO: fix app, sometimes audio uploaded is wrong, is too short.
         print('postprocess_conversation: Audio duration is too short, seems wrong.')
         conversations_db.set_postprocessing_status(uid, conversation.id, PostProcessingStatus.canceled)
@@ -49,7 +57,7 @@ def postprocess_conversation(conversation_id: str, file_path: str, uid: str, emo
             end = vad_segments[-1]['end']
             print('vad_is_empty file result segments:', start, end)
             aseg = AudioSegment.from_wav(file_path)
-            aseg = aseg[max(0, (start - 1) * 1000):min((end + 1) * 1000, aseg.duration_seconds * 1000)]
+            aseg = aseg[max(0, (start - 1) * 1000) : min((end + 1) * 1000, aseg.duration_seconds * 1000)]
             aseg.export(file_path, format="wav")
     except Exception as e:
         print(e)
@@ -79,17 +87,25 @@ def postprocess_conversation(conversation_id: str, file_path: str, uid: str, emo
             _handle_segment_embedding_matching(uid, file_path, fal_segments, aseg)
 
         # Store both models results.
-        conversations_db.store_model_segments_result(uid, conversation.id, streaming_model, conversation.transcript_segments)
+        conversations_db.store_model_segments_result(
+            uid, conversation.id, streaming_model, conversation.transcript_segments
+        )
         conversations_db.store_model_segments_result(uid, conversation.id, 'fal_whisperx', fal_segments)
 
         if not fal_failed:
             conversation.transcript_segments = fal_segments
 
-        conversations_db.upsert_conversation(uid, conversation.dict())  # Store transcript segments at least if smth fails later
+        conversations_db.upsert_conversation(
+            uid, conversation.dict()
+        )  # Store transcript segments at least if smth fails later
         if fal_failed:
             # TODO: FAL fails too much and is fucking expensive. Remove it.
-            fail_reason = 'FAL empty segments' if not fal_segments else f'FAL transcript too short ({new_count} vs {count})'
-            conversations_db.set_postprocessing_status(uid, conversation.id, PostProcessingStatus.failed, fail_reason=fail_reason)
+            fail_reason = (
+                'FAL empty segments' if not fal_segments else f'FAL transcript too short ({new_count} vs {count})'
+            )
+            conversations_db.set_postprocessing_status(
+                uid, conversation.id, PostProcessingStatus.failed, fail_reason=fail_reason
+            )
             # conversation.postprocessing = MemoryPostProcessing(
             #     status=PostProcessingStatus.failed, model=PostProcessingModel.fal_whisperx)
             # TODO: consider doing process_conversation, if any segment still matched to user or people
@@ -103,7 +119,9 @@ def postprocess_conversation(conversation_id: str, file_path: str, uid: str, emo
             asyncio.run(_process_user_emotion(uid, conversation.language, conversation, [signed_url]))
     except Exception as e:
         print(e)
-        conversations_db.set_postprocessing_status(uid, conversation.id, PostProcessingStatus.failed, fail_reason=str(e))
+        conversations_db.set_postprocessing_status(
+            uid, conversation.id, PostProcessingStatus.failed, fail_reason=str(e)
+        )
         return 500, str(e)
 
     conversations_db.set_postprocessing_status(uid, conversation.id, PostProcessingStatus.completed)

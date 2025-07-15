@@ -18,10 +18,24 @@ import database.conversations as conversations_db
 import database.users as user_db
 from database import redis_db
 from database.redis_db import get_cached_user_geolocation
-from models.conversation import Conversation, TranscriptSegment, ConversationStatus, Structured, Geolocation, \
-    ConversationPhoto, ConversationSource
-from models.message_event import ConversationEvent, MessageEvent, MessageServiceStatusEvent, LastConversationEvent, \
-    TranslationEvent, PhotoProcessingEvent, PhotoDescribedEvent
+from models.conversation import (
+    Conversation,
+    TranscriptSegment,
+    ConversationStatus,
+    Structured,
+    Geolocation,
+    ConversationPhoto,
+    ConversationSource,
+)
+from models.message_event import (
+    ConversationEvent,
+    MessageEvent,
+    MessageServiceStatusEvent,
+    LastConversationEvent,
+    TranslationEvent,
+    PhotoProcessingEvent,
+    PhotoDescribedEvent,
+)
 from models.transcript_segment import Translation
 from utils.apps import is_audio_bytes_app_enabled
 from utils.conversations.location import get_google_maps_location
@@ -30,8 +44,12 @@ from utils.other.task import safe_create_task
 from utils.app_integrations import trigger_external_integrations
 from utils.stt.streaming import *
 from utils.stt.streaming import get_stt_service_for_language, STTService
-from utils.stt.streaming import process_audio_soniox, process_audio_dg, process_audio_speechmatics, \
-    send_initial_file_path
+from utils.stt.streaming import (
+    process_audio_soniox,
+    process_audio_dg,
+    process_audio_speechmatics,
+    send_initial_file_path,
+)
 from utils.webhooks import get_audio_bytes_webhook_seconds
 from utils.pusher import connect_to_trigger_pusher
 from utils.translation import TranslationService
@@ -44,9 +62,15 @@ router = APIRouter()
 
 
 async def _listen(
-        websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
-        channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = None,
-        including_combined_segments: bool = False,
+    websocket: WebSocket,
+    uid: str,
+    language: str = 'en',
+    sample_rate: int = 8000,
+    codec: str = 'pcm8',
+    channels: int = 1,
+    include_speech_profile: bool = True,
+    stt_service: STTService = None,
+    including_combined_segments: bool = False,
 ):
     print('_listen', uid, language, sample_rate, codec, include_speech_profile, stt_service)
 
@@ -150,7 +174,8 @@ async def _listen(
     heartbeat_task = asyncio.create_task(send_heartbeat())
 
     _send_message_event(
-        MessageServiceStatusEvent(event_type="service_status", status="initiating", status_text="Service Starting"))
+        MessageServiceStatusEvent(event_type="service_status", status="initiating", status_text="Service Starting")
+    )
 
     # Validate user
     if not user_db.is_exists_user(uid):
@@ -256,32 +281,45 @@ async def _listen(
             finished_at = datetime.fromisoformat(existing_conversation['finished_at'].isoformat())
             seconds_since_last_segment = (datetime.now(timezone.utc) - finished_at).total_seconds()
             if seconds_since_last_segment >= conversation_creation_timeout:
-                print('_websocket_util processing existing_conversation', existing_conversation['id'],
-                      seconds_since_last_segment, uid)
+                print(
+                    '_websocket_util processing existing_conversation',
+                    existing_conversation['id'],
+                    seconds_since_last_segment,
+                    uid,
+                )
                 asyncio.create_task(_create_current_conversation())
             else:
-                print('_websocket_util will process', existing_conversation['id'], 'in',
-                      conversation_creation_timeout - seconds_since_last_segment, 'seconds')
+                print(
+                    '_websocket_util will process',
+                    existing_conversation['id'],
+                    'in',
+                    conversation_creation_timeout - seconds_since_last_segment,
+                    'seconds',
+                )
                 conversation_creation_task = asyncio.create_task(
-                    _trigger_create_conversation_with_delay(conversation_creation_timeout - seconds_since_last_segment,
-                                                            finished_at)
+                    _trigger_create_conversation_with_delay(
+                        conversation_creation_timeout - seconds_since_last_segment, finished_at
+                    )
                 )
 
     _send_message_event(
-        MessageServiceStatusEvent(status="in_progress_memories_processing", status_text="Processing Memories"))
+        MessageServiceStatusEvent(status="in_progress_memories_processing", status_text="Processing Memories")
+    )
     _process_in_progess_memories()
 
-    def _upsert_in_progress_conversation(segments: List[TranscriptSegment], photos: List[ConversationPhoto],
-                                         finished_at: datetime):
+    def _upsert_in_progress_conversation(
+        segments: List[TranscriptSegment], photos: List[ConversationPhoto], finished_at: datetime
+    ):
         if existing := retrieve_in_progress_conversation(uid):
             conversation = Conversation(**existing)
             starts, ends = (0, 0)
             if segments:
                 conversation.transcript_segments, (starts, ends) = TranscriptSegment.combine_segments(
-                    conversation.transcript_segments, segments)
-                conversations_db.update_conversation_segments(uid, conversation.id,
-                                                              [segment.dict() for segment in
-                                                               conversation.transcript_segments])
+                    conversation.transcript_segments, segments
+                )
+                conversations_db.update_conversation_segments(
+                    uid, conversation.id, [segment.dict() for segment in conversation.transcript_segments]
+                )
             if photos:
                 conversations_db.store_conversation_photos(uid, conversation.id, photos)
 
@@ -309,7 +347,7 @@ async def _listen(
             transcript_segments=segments,
             photos=photos,
             status=ConversationStatus.in_progress,
-            source=ConversationSource.openglass if photos else ConversationSource.omi
+            source=ConversationSource.openglass if photos else ConversationSource.omi,
         )
         print('_get_in_progress_conversation new', conversation, uid)
         conversations_db.upsert_conversation(uid, conversation_data=conversation.dict())
@@ -326,7 +364,8 @@ async def _listen(
                 except asyncio.CancelledError:
                     print("conversation_creation_task is cancelled now", uid)
             conversation_creation_task = asyncio.create_task(
-                _trigger_create_conversation_with_delay(conversation_creation_timeout, finished_at))
+                _trigger_create_conversation_with_delay(conversation_creation_timeout, finished_at)
+            )
 
     # STT
     # Validate websocket_active before initiating STT
@@ -365,19 +404,28 @@ async def _listen(
         try:
             file_path, speech_profile_duration = None, 0
             # Thougts: how bee does for recognizing other languages speech profile?
-            if (language == 'en' or language == 'auto') and (
-                    codec == 'opus' or codec == 'pcm16') and include_speech_profile:
+            if (
+                (language == 'en' or language == 'auto')
+                and (codec == 'opus' or codec == 'pcm16')
+                and include_speech_profile
+            ):
                 file_path = get_profile_audio_if_exists(uid)
                 speech_profile_duration = AudioSegment.from_wav(file_path).duration_seconds + 5 if file_path else 0
 
             # DEEPGRAM
             if stt_service == STTService.deepgram:
                 deepgram_socket = await process_audio_dg(
-                    stream_transcript, stt_language, sample_rate, 1, preseconds=speech_profile_duration,
-                    model=stt_model, )
+                    stream_transcript,
+                    stt_language,
+                    sample_rate,
+                    1,
+                    preseconds=speech_profile_duration,
+                    model=stt_model,
+                )
                 if speech_profile_duration:
-                    deepgram_socket2 = await process_audio_dg(stream_transcript, stt_language, sample_rate, 1,
-                                                              model=stt_model)
+                    deepgram_socket2 = await process_audio_dg(
+                        stream_transcript, stt_language, sample_rate, 1, model=stt_model
+                    )
 
                     async def deepgram_socket_send(data):
                         return deepgram_socket.send(data)
@@ -393,10 +441,12 @@ async def _listen(
                     hints = [language]
 
                 soniox_socket = await process_audio_soniox(
-                    stream_transcript, sample_rate, stt_language,
+                    stream_transcript,
+                    sample_rate,
+                    stt_language,
                     uid if include_speech_profile else None,
                     preseconds=speech_profile_duration,
-                    language_hints=hints
+                    language_hints=hints,
                 )
 
                 # Create a second socket for initial speech profile if needed
@@ -404,9 +454,11 @@ async def _listen(
                 print("file_path", file_path)
                 if speech_profile_duration and file_path:
                     soniox_socket2 = await process_audio_soniox(
-                        stream_transcript, sample_rate, stt_language,
+                        stream_transcript,
+                        sample_rate,
+                        stt_language,
                         uid if include_speech_profile else None,
-                        language_hints=hints
+                        language_hints=hints,
                     )
 
                     safe_create_task(send_initial_file_path(file_path, soniox_socket.send))
@@ -459,8 +511,11 @@ async def _listen(
                         data = bytearray()
                         data.extend(struct.pack("I", 102))
                         data.extend(
-                            bytes(json.dumps({"segments": segment_buffers, "memory_id": in_progress_conversation_id}),
-                                  "utf-8"))
+                            bytes(
+                                json.dumps({"segments": segment_buffers, "memory_id": in_progress_conversation_id}),
+                                "utf-8",
+                            )
+                        )
                         segment_buffers = []  # reset
                         await pusher_ws.send(data)
                     except websockets.exceptions.ConnectionClosed as e:
@@ -533,10 +588,14 @@ async def _listen(
             if pusher_ws:
                 await pusher_ws.close(code)
 
-        return (connect, close,
-                transcript_send, transcript_consume,
-                audio_bytes_send if audio_bytes_enabled else None,
-                audio_bytes_consume if audio_bytes_enabled else None)
+        return (
+            connect,
+            close,
+            transcript_send,
+            transcript_consume,
+            audio_bytes_send if audio_bytes_enabled else None,
+            audio_bytes_consume if audio_bytes_enabled else None,
+        )
 
     transcript_send = None
     transcript_consume = None
@@ -575,7 +634,9 @@ async def _listen(
 
                 # Create/Update Translation object
                 translation = Translation(lang=language, text=translated_text)
-                existing_translation_index = next((i for i, t in enumerate(segment.translations) if t.lang == language), None)
+                existing_translation_index = next(
+                    (i for i, t in enumerate(segment.translations) if t.lang == language), None
+                )
 
                 if existing_translation_index is not None:
                     segment.translations[existing_translation_index] = translation
@@ -598,7 +659,9 @@ async def _listen(
                             should_update = True
                             break
                 if should_update:
-                    conversations_db.update_conversation_segments(uid, conversation_id, conversation['transcript_segments'])
+                    conversations_db.update_conversation_segments(
+                        uid, conversation_id, conversation['transcript_segments']
+                    )
 
             if websocket_active:
                 _send_message_event(TranslationEvent(segments=[s.dict() for s in translated_segments]))
@@ -684,8 +747,9 @@ async def _listen(
         photo_buffer.append(final_photo)
         await send_event_func(PhotoDescribedEvent(photo_id=photo_id, description=description, discarded=discarded))
 
-    async def handle_image_chunk(uid: str, chunk_data: dict, image_chunks_cache: dict, send_event_func,
-                                 photo_buffer: list):
+    async def handle_image_chunk(
+        uid: str, chunk_data: dict, image_chunks_cache: dict, send_event_func, photo_buffer: list
+    ):
         temp_id = chunk_data.get('id')
         index = chunk_data.get('index')
         total = chunk_data.get('total')
@@ -696,7 +760,8 @@ async def _listen(
             return
 
         if temp_id not in image_chunks_cache:
-            if total <= 0: return
+            if total <= 0:
+                return
             image_chunks_cache[temp_id] = [None] * total
 
         if index < total and image_chunks_cache[temp_id][index] is None:
@@ -757,8 +822,9 @@ async def _listen(
                     try:
                         json_data = json.loads(message.get("text"))
                         if json_data.get('type') == 'image_chunk':
-                            await handle_image_chunk(uid, json_data, image_chunks, _asend_message_event,
-                                                     realtime_photo_buffers)
+                            await handle_image_chunk(
+                                uid, json_data, image_chunks, _asend_message_event, realtime_photo_buffers
+                            )
                     except json.JSONDecodeError:
                         print(f"Received non-json text message: {message.get('text')}", uid)
 
@@ -778,9 +844,9 @@ async def _listen(
         await _process_stt()
 
         # Init pusher
-        pusher_connect, pusher_close, \
-            transcript_send, transcript_consume, \
-            audio_bytes_send, audio_bytes_consume = create_pusher_task_handler()
+        pusher_connect, pusher_close, transcript_send, transcript_consume, audio_bytes_send, audio_bytes_consume = (
+            create_pusher_task_handler()
+        )
 
         # Tasks
         data_process_task = asyncio.create_task(
@@ -840,17 +906,37 @@ async def _listen(
 # TODO: should be removed after Sep 2025 due to backward compatibility
 @router.websocket("/v3/listen")
 async def listen_handler_v3(
-        websocket: WebSocket, uid: str = Depends(auth.get_current_user_uid), language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
-        channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = None
+    websocket: WebSocket,
+    uid: str = Depends(auth.get_current_user_uid),
+    language: str = 'en',
+    sample_rate: int = 8000,
+    codec: str = 'pcm8',
+    channels: int = 1,
+    include_speech_profile: bool = True,
+    stt_service: STTService = None,
 ):
     await _listen(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, None)
 
 
 @router.websocket("/v4/listen")
 async def listen_handler(
-        websocket: WebSocket, uid: str = Depends(auth.get_current_user_uid), language: str = 'en',
-        sample_rate: int = 8000, codec: str = 'pcm8',
-        channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = None
+    websocket: WebSocket,
+    uid: str = Depends(auth.get_current_user_uid),
+    language: str = 'en',
+    sample_rate: int = 8000,
+    codec: str = 'pcm8',
+    channels: int = 1,
+    include_speech_profile: bool = True,
+    stt_service: STTService = None,
 ):
-    await _listen(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, None,
-                  including_combined_segments=True)
+    await _listen(
+        websocket,
+        uid,
+        language,
+        sample_rate,
+        codec,
+        channels,
+        include_speech_profile,
+        None,
+        including_combined_segments=True,
+    )

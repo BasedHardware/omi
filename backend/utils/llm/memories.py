@@ -41,7 +41,7 @@ LEGACY_TO_NEW_CATEGORY = {
 
 
 def new_memories_extractor(
-        uid: str, segments: List[TranscriptSegment], user_name: Optional[str] = None, memories_str: Optional[str] = None
+    uid: str, segments: List[TranscriptSegment], user_name: Optional[str] = None, memories_str: Optional[str] = None
 ) -> List[Memory]:
     # print('new_memories_extractor', uid, 'segments', len(segments), user_name, 'len(memories_str)', len(memories_str))
     if user_name is None or memories_str is None:
@@ -58,18 +58,20 @@ def new_memories_extractor(
         parser = PydanticOutputParser(pydantic_object=Memories)
         chain = extract_memories_prompt | llm_mini | parser
         # with_parser = llm_mini.with_structured_output(Facts)
-        response: Memories = chain.invoke({
-            'user_name': user_name,
-            'conversation': content,
-            'memories_str': memories_str,
-            'format_instructions': parser.get_format_instructions(),
-        })
-        
+        response: Memories = chain.invoke(
+            {
+                'user_name': user_name,
+                'conversation': content,
+                'memories_str': memories_str,
+                'format_instructions': parser.get_format_instructions(),
+            }
+        )
+
         # Ensure all new memories use the new category format
         for memory in response.facts:
             if isinstance(memory.category, str) and memory.category in LEGACY_TO_NEW_CATEGORY:
                 memory.category = LEGACY_TO_NEW_CATEGORY[memory.category]
-        
+
         return response.facts
     except Exception as e:
         print(f'Error extracting new facts: {e}')
@@ -77,7 +79,7 @@ def new_memories_extractor(
 
 
 def extract_memories_from_text(
-        uid: str, text: str, text_source: str, user_name: Optional[str] = None, memories_str: Optional[str] = None
+    uid: str, text: str, text_source: str, user_name: Optional[str] = None, memories_str: Optional[str] = None
 ) -> List[Memory]:
     """Extract memories from external integration text sources like email, posts, messages"""
     if user_name is None or memories_str is None:
@@ -89,19 +91,21 @@ def extract_memories_from_text(
     try:
         parser = PydanticOutputParser(pydantic_object=MemoriesByTexts)
         chain = extract_memories_text_content_prompt | llm_mini | parser
-        response: Memories = chain.invoke({
-            'user_name': user_name,
-            'text_content': text,
-            'text_source': text_source,
-            'memories_str': memories_str,
-            'format_instructions': parser.get_format_instructions(),
-        })
-        
+        response: Memories = chain.invoke(
+            {
+                'user_name': user_name,
+                'text_content': text,
+                'text_source': text_source,
+                'memories_str': memories_str,
+                'format_instructions': parser.get_format_instructions(),
+            }
+        )
+
         # Ensure all new memories use the new category format
         for memory in response.facts:
             if isinstance(memory.category, str) and memory.category in LEGACY_TO_NEW_CATEGORY:
                 memory.category = LEGACY_TO_NEW_CATEGORY[memory.category]
-        
+
         return response.facts
     except Exception as e:
         print(f'Error extracting facts from {text_source}: {e}')
@@ -118,8 +122,7 @@ class Learnings(BaseModel):
 
 
 def new_learnings_extractor(
-        uid: str, segments: List[TranscriptSegment], user_name: Optional[str] = None,
-        learnings_str: Optional[str] = None
+    uid: str, segments: List[TranscriptSegment], user_name: Optional[str] = None, learnings_str: Optional[str] = None
 ) -> List[Memory]:
     if user_name is None or learnings_str is None:
         user_name, memories_str = get_prompt_memories(uid)
@@ -131,12 +134,14 @@ def new_learnings_extractor(
     try:
         parser = PydanticOutputParser(pydantic_object=Learnings)
         chain = extract_learnings_prompt | llm_high | parser
-        response: Learnings = chain.invoke({
-            'user_name': user_name,
-            'conversation': content,
-            'learnings_str': learnings_str,
-            'format_instructions': parser.get_format_instructions(),
-        })
+        response: Learnings = chain.invoke(
+            {
+                'user_name': user_name,
+                'conversation': content,
+                'learnings_str': learnings_str,
+                'format_instructions': parser.get_format_instructions(),
+            }
+        )
         return list(map(lambda x: Memory(content=x, category=MemoryCategory.interesting), response.result))
     except Exception as e:
         print(f'Error extracting new facts: {e}')

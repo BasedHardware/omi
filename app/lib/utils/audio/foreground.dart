@@ -59,7 +59,7 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
   }
 
   @override
-  Future<void> onDestroy(DateTime timestamp,  bool isTimeout) async {
+  Future<void> onDestroy(DateTime timestamp, bool isTimeout) async {
     debugPrint("Destroying foreground task");
     FlutterForegroundTask.stopService();
   }
@@ -93,20 +93,19 @@ class ForegroundUtil {
 
   static Future<void> initializeForegroundService() async {
     if (PlatformService.isDesktop) return;
-    
+
     if (_isInitialized) {
       debugPrint('ForegroundService already initialized, skipping');
       return;
     }
-    
+
     if (await FlutterForegroundTask.isRunningService) {
       _isInitialized = true;
       return;
     }
-    
+
     debugPrint('initializeForegroundService');
 
-    
     try {
       FlutterForegroundTask.init(
         androidNotificationOptions: AndroidNotificationOptions(
@@ -144,15 +143,15 @@ class ForegroundUtil {
 
   static Future<ServiceRequestResult> startForegroundTask() async {
     if (PlatformService.isDesktop) return const ServiceRequestSuccess();
-    
+
     if (_isStarting) {
       debugPrint('ForegroundTask already starting, skipping');
       return const ServiceRequestSuccess();
     }
-    
+
     _isStarting = true;
     debugPrint('startForegroundTask');
-    
+
     try {
       ServiceRequestResult result;
       if (await FlutterForegroundTask.isRunningService) {
@@ -177,7 +176,7 @@ class ForegroundUtil {
   static Future<void> stopForegroundTask() async {
     if (PlatformService.isDesktop) return;
     debugPrint('stopForegroundTask');
-    
+
     try {
       if (await FlutterForegroundTask.isRunningService) {
         await FlutterForegroundTask.stopService();

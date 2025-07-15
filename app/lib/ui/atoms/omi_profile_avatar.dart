@@ -37,7 +37,7 @@ class OmiProfileAvatar extends AdaptiveWidget {
   Widget _avatar() {
     final double radius = size / 2;
     final double calculatedFontSize = fontSize ?? size * 0.4;
-    
+
     return Container(
       width: size,
       height: size,
@@ -48,13 +48,15 @@ class OmiProfileAvatar extends AdaptiveWidget {
           color: borderColor ?? ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
           width: borderWidth,
         ),
-        boxShadow: showShadow ? [
-          BoxShadow(
-            color: (borderColor ?? ResponsiveHelper.purplePrimary).withValues(alpha: 0.2),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ] : null,
+        boxShadow: showShadow
+            ? [
+                BoxShadow(
+                  color: (borderColor ?? ResponsiveHelper.purplePrimary).withValues(alpha: 0.2),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : null,
         image: imageUrl != null
             ? DecorationImage(
                 image: NetworkImage(imageUrl!),
@@ -76,4 +78,4 @@ class OmiProfileAvatar extends AdaptiveWidget {
           : null,
     );
   }
-} 
+}

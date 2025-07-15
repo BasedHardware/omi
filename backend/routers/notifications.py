@@ -23,6 +23,7 @@ router = APIRouter()
 RATE_LIMIT_PERIOD = 3600  # 1 hour in seconds
 MAX_NOTIFICATIONS_PER_HOUR = 10  # Maximum notifications per hour per app per user
 
+
 def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
     """
     Check if the app has exceeded its rate limit for a specific user
@@ -30,7 +31,7 @@ def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
     """
     now = datetime.utcnow()
     hour_key = f"notification_rate_limit:{app_id}:{user_id}:{now.strftime('%Y-%m-%d-%H')}"
-    
+
     # Check hourly limit
     hour_count = redis_client.get(hour_key)
     if hour_count is None:
@@ -49,9 +50,9 @@ def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
 
     # Increment counter
     redis_client.incr(hour_key)
-    
+
     remaining = MAX_NOTIFICATIONS_PER_HOUR - hour_count - 1
-    
+
     return True, remaining, reset_time, 0
 
 
@@ -60,9 +61,11 @@ def save_token(data: SaveFcmTokenRequest, uid: str = Depends(auth.get_current_us
     notification_db.save_token(uid, data.dict())
     return {'status': 'Ok'}
 
+
 # ******************************************************
 # ******************* TEAM ENDPOINTS *******************
 # ******************************************************
+
 
 @router.post('/v1/notification')
 def send_notification_to_user(data: dict, secret_key: str = Header(...)):
@@ -77,19 +80,15 @@ def send_notification_to_user(data: dict, secret_key: str = Header(...)):
 
 
 @router.post('/v1/integrations/notification')
-def send_app_notification_to_user(
-    request: Request,
-    data: dict,
-    authorization: Optional[str] = Header(None)
-):
+def send_app_notification_to_user(request: Request, data: dict, authorization: Optional[str] = Header(None)):
     # Check app-based auth
     if 'aid' not in data:
         raise HTTPException(status_code=400, detail='aid (app id) in request body is required')
-    
+
     if not data.get('uid'):
         raise HTTPException(status_code=400, detail='uid is required')
     uid = data['uid']
-    
+
     # Verify API key from Authorization header
     if not authorization or not authorization.startswith('Bearer '):
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'")
@@ -97,13 +96,13 @@ def send_app_notification_to_user(
     api_key = authorization.replace('Bearer ', '')
     if not verify_api_key(data['aid'], api_key):
         raise HTTPException(status_code=403, detail="Invalid API key")
-    
+
     # Get app details and convert to App model
     app_data = get_available_app_by_id(data['aid'], uid)
     if not app_data:
         raise HTTPException(status_code=404, detail='App not found')
     app = App(**app_data)
-    
+
     # Check if user has app installed
     user_enabled = set(get_enabled_apps(uid))
     if data['aid'] not in user_enabled:
@@ -111,32 +110,22 @@ def send_app_notification_to_user(
 
     # Check rate limit
     allowed, remaining, reset_time, retry_after = check_rate_limit(app.id, uid)
-    
+
     # Add rate limit headers to response
     headers = {
         'X-RateLimit-Limit': str(MAX_NOTIFICATIONS_PER_HOUR),
         'X-RateLimit-Remaining': str(remaining),
         'X-RateLimit-Reset': str(reset_time),
     }
-    
+
     if not allowed:
         headers['Retry-After'] = str(retry_after)
         return JSONResponse(
             status_code=429,
             headers=headers,
-            content={
-                'detail': f'Rate limit exceeded. Maximum {MAX_NOTIFICATIONS_PER_HOUR} notifications per hour.'
-            }
+            content={'detail': f'Rate limit exceeded. Maximum {MAX_NOTIFICATIONS_PER_HOUR} notifications per hour.'},
         )
 
     token = notification_db.get_token_only(uid)
     send_app_notification(token, app.name, app.id, data['message'])
-    return JSONResponse(
-        status_code=200,
-        headers=headers,
-        content={'status': 'Ok'}
-    )
-
-
-
-
+    return JSONResponse(status_code=200, headers=headers, content={'status': 'Ok'})

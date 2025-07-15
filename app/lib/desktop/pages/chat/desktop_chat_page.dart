@@ -186,9 +186,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                   child: Column(
                     children: [
                       _buildModernHeader(appProvider),
-
                       if (provider.isLoadingMessages) _buildLoadingBar(),
-
                       Expanded(
                         child: _animationsInitialized
                             ? FadeTransition(
@@ -200,7 +198,6 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                               )
                             : _buildChatContent(provider, connectivityProvider),
                       ),
-
                       _buildFloatingInputArea(provider, connectivityProvider),
                     ],
                   ),
@@ -249,7 +246,9 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   }
 
   Widget _buildModernHeader(AppProvider appProvider) {
-    final selectedApp = appProvider.selectedChatAppId.isEmpty || appProvider.selectedChatAppId == 'no_selected' ? null : appProvider.getSelectedApp();
+    final selectedApp = appProvider.selectedChatAppId.isEmpty || appProvider.selectedChatAppId == 'no_selected'
+        ? null
+        : appProvider.getSelectedApp();
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
@@ -768,7 +767,12 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   }
 
   Widget _buildCustomNormalMessageWidget(ServerMessage message, MessageProvider provider, int chatIndex) {
-    var previousThinkingText = message.thinkings.length > 1 ? message.thinkings.sublist(message.thinkings.length - 2 >= 0 ? message.thinkings.length - 2 : 0).first.decodeString : null;
+    var previousThinkingText = message.thinkings.length > 1
+        ? message.thinkings
+            .sublist(message.thinkings.length - 2 >= 0 ? message.thinkings.length - 2 : 0)
+            .first
+            .decodeString
+        : null;
     var thinkingText = message.thinkings.isNotEmpty ? message.thinkings.last.decodeString : null;
     bool showTypingIndicator = provider.showTypingIndicator && chatIndex == 0;
 
@@ -1088,7 +1092,9 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
             duration: const Duration(milliseconds: 200),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: isDisabled ? ResponsiveHelper.textQuaternary.withOpacity(0.1) : ResponsiveHelper.purplePrimary.withOpacity(0.15),
+              color: isDisabled
+                  ? ResponsiveHelper.textQuaternary.withOpacity(0.1)
+                  : ResponsiveHelper.purplePrimary.withOpacity(0.15),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
@@ -1177,7 +1183,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     MessageProvider provider,
     ConnectivityProvider connectivityProvider,
   ) {
-    bool canSend = textController.text.trim().isNotEmpty && !provider.isUploadingFiles && connectivityProvider.isConnected;
+    bool canSend =
+        textController.text.trim().isNotEmpty && !provider.isUploadingFiles && connectivityProvider.isConnected;
 
     return Container(
       margin: const EdgeInsets.only(left: 8),
@@ -1430,7 +1437,9 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   }
 
   void _showAppSelectionSheet(BuildContext context, AppProvider appProvider) {
-    final selectedApp = appProvider.selectedChatAppId.isEmpty || appProvider.selectedChatAppId == 'no_selected' ? null : appProvider.getSelectedApp();
+    final selectedApp = appProvider.selectedChatAppId.isEmpty || appProvider.selectedChatAppId == 'no_selected'
+        ? null
+        : appProvider.getSelectedApp();
     final availableApps = appProvider.apps.where((app) => app.worksWithChat() && app.enabled).toList();
 
     showModalBottomSheet(
@@ -1582,10 +1591,14 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: isSelected ? ResponsiveHelper.purplePrimary.withOpacity(0.15) : ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+              color: isSelected
+                  ? ResponsiveHelper.purplePrimary.withOpacity(0.15)
+                  : ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isSelected ? ResponsiveHelper.purplePrimary.withOpacity(0.3) : ResponsiveHelper.backgroundQuaternary.withOpacity(0.3),
+                color: isSelected
+                    ? ResponsiveHelper.purplePrimary.withOpacity(0.3)
+                    : ResponsiveHelper.backgroundQuaternary.withOpacity(0.3),
                 width: 1,
               ),
             ),

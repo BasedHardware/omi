@@ -26,7 +26,8 @@ class DesktopMemoriesPage extends StatefulWidget {
   State<DesktopMemoriesPage> createState() => DesktopMemoriesPageState();
 }
 
-class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with AutomaticKeepAliveClientMixin, TickerProviderStateMixin {
+class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
+    with AutomaticKeepAliveClientMixin, TickerProviderStateMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -313,21 +314,15 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
               },
             ),
           ),
-
           const SizedBox(width: 12),
-
           _buildFilterDropdown(provider),
-
           const SizedBox(width: 12),
-
           OmiIconButton(
             icon: Icons.add,
             onPressed: () => _showMemoryDialog(context, provider),
             style: OmiIconButtonStyle.filled,
           ),
-
           const SizedBox(width: 8),
-
           OmiIconButton(
             icon: Icons.more_vert,
             onPressed: () => _showManagementSheet(context, provider),
@@ -528,11 +523,13 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage> with Automatic
       children: [
         OmiEmptyState(
           icon: FontAwesomeIcons.brain,
-          title: provider.searchQuery.isEmpty && _selectedCategory == null ? '🧠 No memories yet' : '🔍 No memories found',
-          message: provider.searchQuery.isEmpty && _selectedCategory == null ? 'Create your first memory to get started' : 'Try adjusting your search or filter',
+          title:
+              provider.searchQuery.isEmpty && _selectedCategory == null ? '🧠 No memories yet' : '🔍 No memories found',
+          message: provider.searchQuery.isEmpty && _selectedCategory == null
+              ? 'Create your first memory to get started'
+              : 'Try adjusting your search or filter',
           color: ResponsiveHelper.purplePrimary,
         ),
-
         if (provider.searchQuery.isEmpty && _selectedCategory == null) ...[
           const SizedBox(height: 24),
           Material(
