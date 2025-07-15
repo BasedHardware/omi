@@ -44,5 +44,6 @@ def num_tokens_from_string(string: str) -> int:
     num_tokens = len(encoding.encode(string))
     return num_tokens
 
+
 def generate_embedding(content: str) -> List[float]:
     return embeddings.embed_documents([content])[0]

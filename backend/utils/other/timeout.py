@@ -4,6 +4,7 @@ from fastapi import Request
 import asyncio
 import os
 
+
 class TimeoutMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, methods_timeout: dict = None):
         super().__init__(app)
@@ -37,4 +38,4 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
         try:
             return await asyncio.wait_for(call_next(request), timeout=timeout)
         except asyncio.TimeoutError:
-                return Response(status_code=504)
+            return Response(status_code=504)

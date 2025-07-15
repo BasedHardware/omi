@@ -18,4 +18,4 @@ abstract class AdaptiveWidget extends StatelessWidget {
     }
     return buildMobile(context);
   }
-} 
+}

@@ -70,14 +70,14 @@ def get_github_docs_content(repo="BasedHardware/omi", path="docs/docs"):
 # ************* EXTERNAL INTEGRATIONS **************
 # **************************************************
 
+
 def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
     """ON CONVERSATION CREATED"""
     if not conversation or conversation.discarded:
         return []
 
     apps: List[App] = get_available_apps(uid)
-    filtered_apps = [app for app in apps if
-                     app.triggers_on_conversation_creation() and app.enabled]
+    filtered_apps = [app for app in apps if app.triggers_on_conversation_creation() and app.enabled]
     if not filtered_apps:
         return []
 
@@ -101,18 +101,27 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
             url += '?uid=' + uid
 
         try:
-            response = requests.post(url, json=conversation_dict, timeout=30, )  # TODO: failing?
+            response = requests.post(
+                url,
+                json=conversation_dict,
+                timeout=30,
+            )  # TODO: failing?
             if response.status_code != 200:
                 print('App integration failed', app.id, 'status:', response.status_code, 'result:', response.text[:100])
                 return
 
             if app.uid is not None:
                 if app.uid != uid:
-                    record_app_usage(uid, app.id, UsageHistoryType.memory_created_external_integration,
-                                     conversation_id=conversation.id)
+                    record_app_usage(
+                        uid,
+                        app.id,
+                        UsageHistoryType.memory_created_external_integration,
+                        conversation_id=conversation.id,
+                    )
             else:
-                record_app_usage(uid, app.id, UsageHistoryType.memory_created_external_integration,
-                                 conversation_id=conversation.id)
+                record_app_usage(
+                    uid, app.id, UsageHistoryType.memory_created_external_integration, conversation_id=conversation.id
+                )
 
             # print('response', response.json())
             if message := response.json().get('message', ''):
@@ -151,11 +160,7 @@ async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearr
 
 # proactive notification
 def _retrieve_contextual_memories(uid: str, user_context):
-    vector = (
-        generate_embedding(user_context.get('question', ''))
-        if user_context.get('question')
-        else [0] * 3072
-    )
+    vector = generate_embedding(user_context.get('question', '')) if user_context.get('question') else [0] * 3072
     print("query_vectors vector:", vector[:5])
 
     date_filters = {}  # not support yet
@@ -209,8 +214,12 @@ def _process_proactive_notification(uid: str, token: str, app: App, data):
 
     prompt = data.get('prompt', '')
     if len(prompt) > max_prompt_char_limit:
-        send_app_notification(token, app.name, app.id,
-                                 f"Prompt too long: {len(prompt)}/{max_prompt_char_limit} characters. Please shorten.")
+        send_app_notification(
+            token,
+            app.name,
+            app.id,
+            f"Prompt too long: {len(prompt)}/{max_prompt_char_limit} characters. Please shorten.",
+        )
         print(f"App {app.id}, prompt too long, length: {len(prompt)}/{max_prompt_char_limit}", uid)
         return None
 
@@ -246,10 +255,7 @@ def _process_proactive_notification(uid: str, token: str, app: App, data):
 
 def _trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
     apps: List[App] = get_available_apps(uid)
-    filtered_apps = [
-        app for app in apps if
-        app.triggers_realtime_audio_bytes() and app.enabled
-    ]
+    filtered_apps = [app for app in apps if app.triggers_realtime_audio_bytes() and app.enabled]
     if not filtered_apps:
         return {}
 
@@ -280,10 +286,7 @@ def _trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
 
 def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], conversation_id: str | None) -> dict:
     apps: List[App] = get_available_apps(uid)
-    filtered_apps = [
-        app for app in apps if
-        app.triggers_realtime() and app.enabled
-    ]
+    filtered_apps = [app for app in apps if app.triggers_realtime() and app.enabled]
     if not filtered_apps:
         return {}
 
@@ -303,12 +306,23 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], c
         try:
             response = requests.post(url, json={"session_id": uid, "segments": segments}, timeout=30)
             if response.status_code != 200:
-                print('trigger_realtime_integrations', app.id, 'status: ', response.status_code, 'results:',
-                      response.text[:100])
+                print(
+                    'trigger_realtime_integrations',
+                    app.id,
+                    'status: ',
+                    response.status_code,
+                    'results:',
+                    response.text[:100],
+                )
                 return
 
             if (app.uid is None or app.uid != uid) and conversation_id is not None:
-                record_app_usage(uid, app.id, UsageHistoryType.transcript_processed_external_integration, conversation_id=conversation_id)
+                record_app_usage(
+                    uid,
+                    app.id,
+                    UsageHistoryType.transcript_processed_external_integration,
+                    conversation_id=conversation_id,
+                )
 
             response_data = response.json()
             if not response_data:

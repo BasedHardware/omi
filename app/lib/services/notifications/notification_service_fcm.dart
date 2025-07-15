@@ -223,4 +223,4 @@ class _FCMNotificationService implements NotificationInterface {
 }
 
 /// Factory function to create the FCM notification service
-NotificationInterface createNotificationService() => _FCMNotificationService._(); 
+NotificationInterface createNotificationService() => _FCMNotificationService._();

@@ -59,4 +59,4 @@ class OmiSectionHeader extends StatelessWidget {
       ],
     );
   }
-} 
+}

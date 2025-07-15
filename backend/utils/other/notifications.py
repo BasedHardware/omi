@@ -76,10 +76,7 @@ def _send_summary_notification(user_data: tuple):
 async def _send_bulk_summary_notification(users: list):
     loop = asyncio.get_running_loop()
     with concurrent.futures.ThreadPoolExecutor() as pool:
-        tasks = [
-            loop.run_in_executor(pool, _send_summary_notification, uid)
-            for uid in users
-        ]
+        tasks = [loop.run_in_executor(pool, _send_summary_notification, uid) for uid in users]
         await asyncio.gather(*tasks)
 
 

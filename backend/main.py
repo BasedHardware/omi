@@ -5,9 +5,27 @@ import firebase_admin
 from fastapi import FastAPI
 
 from modal import Image, App, asgi_app, Secret
-from routers import workflow, chat, firmware, plugins, transcribe, notifications, \
-    speech_profile, agents, users, trends, sync, apps, custom_auth, \
-    payment, integration, conversations, memories, mcp, oauth # Added oauth
+from routers import (
+    workflow,
+    chat,
+    firmware,
+    plugins,
+    transcribe,
+    notifications,
+    speech_profile,
+    agents,
+    users,
+    trends,
+    sync,
+    apps,
+    custom_auth,
+    payment,
+    integration,
+    conversations,
+    memories,
+    mcp,
+    oauth,
+)  # Added oauth
 
 from utils.other.timeout import TimeoutMiddleware
 
@@ -39,7 +57,7 @@ app.include_router(sync.router)
 
 app.include_router(apps.router)
 app.include_router(custom_auth.router)
-app.include_router(oauth.router) # Added oauth router
+app.include_router(oauth.router)  # Added oauth router
 
 app.include_router(payment.router)
 app.include_router(mcp.router)
@@ -52,17 +70,13 @@ methods_timeout = {
     "DELETE": os.environ.get('HTTP_DELETE_TIMEOUT'),
 }
 
-app.add_middleware(TimeoutMiddleware,methods_timeout=methods_timeout)
+app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout)
 
 modal_app = App(
     name='backend',
     secrets=[Secret.from_name("gcp-credentials"), Secret.from_name('envs')],
 )
-image = (
-    Image.debian_slim()
-    .apt_install('ffmpeg', 'git', 'unzip')
-    .pip_install_from_requirements('requirements.txt')
-)
+image = Image.debian_slim().apt_install('ffmpeg', 'git', 'unzip').pip_install_from_requirements('requirements.txt')
 
 
 @modal_app.function(

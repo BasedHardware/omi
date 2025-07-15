@@ -9,6 +9,7 @@ class Translation(BaseModel):
     lang: str
     text: str
 
+
 class TranscriptSegment(BaseModel):
     id: Optional[str] = None
     text: str
@@ -65,8 +66,8 @@ class TranscriptSegment(BaseModel):
             if i == -1:
                 return [text]
 
-            parts = [text[:i+1]]
-            remaining = text[i+1:].strip()
+            parts = [text[: i + 1]]
+            remaining = text[i + 1 :].strip()
             if remaining:
                 parts.append(remaining)
             return parts
@@ -76,7 +77,7 @@ class TranscriptSegment(BaseModel):
         for segment in new_segments:
             if segment.text and segment.text[0].islower() and re.search('[.?!]', segment.text):
                 start = segment.start
-                c_rate = (segment.end - segment.start)/len(segment.text)
+                c_rate = (segment.end - segment.start) / len(segment.text)
                 for text in _split(segment.text):
                     if not text:
                         continue
@@ -97,7 +98,7 @@ class TranscriptSegment(BaseModel):
         def _merge(a, b: TranscriptSegment):
             if not a or not b:
                 return a, b
-            if ((a.speaker == b.speaker or (a.is_user and b.is_user)) and (b.start - b.end < 30)):
+            if (a.speaker == b.speaker or (a.is_user and b.is_user)) and (b.start - b.end < 30):
                 a.text += f' {b.text}'
                 a.end = b.end
                 return a, None
@@ -138,11 +139,7 @@ class TranscriptSegment(BaseModel):
         # Speechmatics specific issue with punctuation
         for i, segment in enumerate(segments):
             segments[i].text = (
-                segments[i].text.strip()
-                .replace('  ', ' ')
-                .replace(' ,', ',')
-                .replace(' .', '.')
-                .replace(' ?', '?')
+                segments[i].text.strip().replace('  ', ' ').replace(' ,', ',').replace(' .', '.').replace(' ?', '?')
             )
 
         return segments, (starts, ends)

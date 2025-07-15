@@ -51,4 +51,4 @@ class OmiMessageInput extends AdaptiveWidget {
       ),
     );
   }
-} 
+}

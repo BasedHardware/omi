@@ -24,6 +24,7 @@ omi_apps_bucket = os.getenv('BUCKET_PLUGINS_LOGOS')
 app_thumbnails_bucket = os.getenv('BUCKET_APP_THUMBNAILS')
 chat_files_bucket = os.getenv('BUCKET_CHAT_FILES')
 
+
 # *******************************************
 # ************* SPEECH PROFILE **************
 # *******************************************
@@ -87,6 +88,7 @@ def get_additional_profile_recordings(uid: str, download: bool = False) -> List[
 # ********************************************
 # ************* PEOPLE PROFILES **************
 # ********************************************
+
 
 def upload_user_person_speech_sample(file_path: str, uid: str, person_id: str) -> None:
     bucket = storage_client.bucket(speech_profiles_bucket)
@@ -158,6 +160,7 @@ def delete_postprocessing_audio(file_path: str):
 # ************* SDCARD **************
 # ***********************************
 
+
 def upload_sdcard_audio(file_path: str):
     bucket = storage_client.bucket(postprocessing_audio_bucket)
     blob = bucket.blob(file_path)
@@ -174,6 +177,7 @@ def download_postprocessing_audio(file_path: str, destination_file_path: str):
 # ************************************************
 # *********** CONVERSATIONS RECORDINGS ***********
 # ************************************************
+
 
 def upload_conversation_recording(file_path: str, uid: str, conversation_id: str):
     bucket = storage_client.bucket(memories_recordings_bucket)
@@ -213,6 +217,7 @@ def get_syncing_file_temporal_url(file_path: str):
     blob.upload_from_filename(file_path)
     return f'https://storage.googleapis.com/{syncing_local_bucket}/{file_path}'
 
+
 def get_syncing_file_temporal_signed_url(file_path: str):
     bucket = storage_client.bucket(syncing_local_bucket)
     blob = bucket.blob(file_path)
@@ -229,6 +234,7 @@ def delete_syncing_temporal_file(file_path: str):
 # **********************************
 # ************* UTILS **************
 # **********************************
+
 
 def _get_signed_url(blob, minutes):
     if cached := get_cached_signed_url(blob.name):
@@ -255,6 +261,7 @@ def delete_app_logo(img_url: str):
     blob = bucket.blob(path)
     blob.delete()
 
+
 def upload_app_thumbnail(file_path: str, thumbnail_id: str) -> str:
     bucket = storage_client.bucket(app_thumbnails_bucket)
     path = f'{thumbnail_id}.jpg'
@@ -264,9 +271,11 @@ def upload_app_thumbnail(file_path: str, thumbnail_id: str) -> str:
     public_url = f'https://storage.googleapis.com/{app_thumbnails_bucket}/{path}'
     return public_url
 
+
 def get_app_thumbnail_url(thumbnail_id: str) -> str:
     path = f'{thumbnail_id}.jpg'
     return f'https://storage.googleapis.com/{app_thumbnails_bucket}/{path}'
+
 
 # **********************************
 # ************* CHAT FILES **************
@@ -283,7 +292,9 @@ def upload_multi_chat_files(files_name: List[str], uid: str) -> dict:
         dict: A dictionary mapping original filenames to their Google Cloud Storage URLs
     """
     bucket = storage_client.bucket(chat_files_bucket)
-    result = transfer_manager.upload_many_from_filenames(bucket, files_name, source_directory="./", blob_name_prefix=f'{uid}/')
+    result = transfer_manager.upload_many_from_filenames(
+        bucket, files_name, source_directory="./", blob_name_prefix=f'{uid}/'
+    )
     dictFiles = {}
     for name, result in zip(files_name, result):
         if isinstance(result, Exception):

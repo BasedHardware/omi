@@ -9,8 +9,7 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 ENCRYPTION_SECRET = os.getenv('ENCRYPTION_SECRET', '').encode('utf-8')
 if not ENCRYPTION_SECRET or len(ENCRYPTION_SECRET) < 32:
     raise ValueError(
-        "ENCRYPTION_SECRET environment variable not set or is too short. "
-        "It must be a securely managed 32-byte key."
+        "ENCRYPTION_SECRET environment variable not set or is too short. " "It must be a securely managed 32-byte key."
     )
 
 

@@ -86,7 +86,9 @@ class _AdaptiveSearchInnerState extends State<_AdaptiveSearchInner> {
         color: ResponsiveHelper.backgroundSecondary.withOpacity(0.8),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isFocused ? ResponsiveHelper.purplePrimary.withOpacity(0.6) : ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+          color: isFocused
+              ? ResponsiveHelper.purplePrimary.withOpacity(0.6)
+              : ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
           width: 1,
         ),
       ),
@@ -121,4 +123,4 @@ class _AdaptiveSearchInnerState extends State<_AdaptiveSearchInner> {
       ),
     );
   }
-} 
+}

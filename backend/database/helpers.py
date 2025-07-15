@@ -18,6 +18,7 @@ def set_data_protection_level(data_arg_name: str):
 
     Assumes 'uid' is an argument to the decorated function.
     """
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -35,7 +36,9 @@ def set_data_protection_level(data_arg_name: str):
             data: Dict[str, Any] | List[Dict[str, Any]] | None = bound_args.arguments.get(data_arg_name)
 
             if not uid:
-                raise TypeError(f"Function {func.__name__} decorated with set_data_protection_level must have a 'uid' argument.")
+                raise TypeError(
+                    f"Function {func.__name__} decorated with set_data_protection_level must have a 'uid' argument."
+                )
 
             # If data is None or not a dict/list, do nothing and let the original function handle it.
             if not isinstance(data, (dict, list)):
@@ -79,7 +82,9 @@ def set_data_protection_level(data_arg_name: str):
                             item['data_protection_level'] = level
 
             return func(*args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
@@ -94,6 +99,7 @@ def prepare_for_write(data_arg_name: str, prepare_func: Callable[[Dict[str, Any]
     to the decorated function. Also assumes 'data_protection_level' is already set on the data.
     This decorator should be placed AFTER @set_data_protection_level.
     """
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -105,7 +111,9 @@ def prepare_for_write(data_arg_name: str, prepare_func: Callable[[Dict[str, Any]
             original_data = bound_args.arguments.get(data_arg_name)
 
             if not uid:
-                raise TypeError(f"Function {func.__name__} decorated with prepare_for_write must have a 'uid' argument.")
+                raise TypeError(
+                    f"Function {func.__name__} decorated with prepare_for_write must have a 'uid' argument."
+                )
 
             if not isinstance(original_data, (dict, list)):
                 func(*args, **kwargs)
@@ -117,7 +125,9 @@ def prepare_for_write(data_arg_name: str, prepare_func: Callable[[Dict[str, Any]
                 prepared_data = prepare_func(original_data, uid, original_data.get('data_protection_level', 'standard'))
             elif isinstance(original_data, list):
                 if original_data and isinstance(original_data[0], dict):
-                    prepared_data = [prepare_func(item, uid, item.get('data_protection_level', 'standard')) for item in original_data]
+                    prepared_data = [
+                        prepare_func(item, uid, item.get('data_protection_level', 'standard')) for item in original_data
+                    ]
 
             # Modify the bound arguments with the prepared data and reconstruct the call
             bound_args.arguments[data_arg_name] = prepared_data
@@ -125,7 +135,9 @@ def prepare_for_write(data_arg_name: str, prepare_func: Callable[[Dict[str, Any]
 
             # Return the original, unmodified data from the initial call
             return original_data
+
         return wrapper
+
     return decorator
 
 
@@ -137,6 +149,7 @@ def prepare_for_read(decrypt_func: Callable[[Dict[str, Any], str], Dict[str, Any
 
     Assumes 'uid' is an argument to the decorated function to be used for decryption.
     """
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -174,7 +187,9 @@ def prepare_for_read(decrypt_func: Callable[[Dict[str, Any], str], Dict[str, Any
                         processed_elements.append(element)
                 return tuple(processed_elements)
             return result
+
         return wrapper
+
     return decorator
 
 
@@ -184,6 +199,7 @@ def with_photos(photos_getter: Callable):
     It fetches documents from the 'photos' sub-collection and attaches them using the provided getter.
     This should be applied to functions that return conversation dicts and have a 'uid' parameter.
     """
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -231,5 +247,7 @@ def with_photos(photos_getter: Callable):
                 return tuple(processed_elements)
 
             return result
+
         return wrapper
+
     return decorator

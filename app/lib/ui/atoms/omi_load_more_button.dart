@@ -45,4 +45,4 @@ class OmiLoadMoreButton extends AdaptiveWidget {
       ),
     );
   }
-} 
+}

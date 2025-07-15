@@ -67,16 +67,16 @@ class ActionFieldsWidget extends StatelessWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      actionType.description ?? 
-                                        (actionType.id == 'create_conversation'
-                                          ? 'Extend user conversations by making a POST request to the OMI System.'
-                                          : actionType.id == 'create_facts'
-                                              ? 'Create new memories for the user through the OMI System.'
-                                              : actionType.id == 'read_conversations'
-                                                  ? 'Access and read all user conversations through the OMI System. This gives the app access to all conversation history.'
-                                                  : actionType.id == 'read_memories'
-                                                      ? 'Access and read all user memories through the OMI System. This gives the app access to all stored memories.'
-                                                      : 'Enable this action for your app.'),
+                                      actionType.description ??
+                                          (actionType.id == 'create_conversation'
+                                              ? 'Extend user conversations by making a POST request to the OMI System.'
+                                              : actionType.id == 'create_facts'
+                                                  ? 'Create new memories for the user through the OMI System.'
+                                                  : actionType.id == 'read_conversations'
+                                                      ? 'Access and read all user conversations through the OMI System. This gives the app access to all conversation history.'
+                                                      : actionType.id == 'read_memories'
+                                                          ? 'Access and read all user memories through the OMI System. This gives the app access to all stored memories.'
+                                                          : 'Enable this action for your app.'),
                                       style: TextStyle(
                                         color: Colors.grey.shade400,
                                         fontSize: 14,

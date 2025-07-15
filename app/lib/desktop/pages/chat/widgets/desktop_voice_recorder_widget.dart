@@ -214,14 +214,14 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
               Padding(
                 padding: const EdgeInsets.all(8),
                 child: OmiIconButton(
-                icon: Icons.close,
-                style: OmiIconButtonStyle.outline,
-                borderOpacity: 0.12,
-                size: 32,
-                iconSize: 14,
-                borderRadius: 8,
-                onPressed: widget.onClose,
-              ),
+                  icon: Icons.close,
+                  style: OmiIconButtonStyle.outline,
+                  borderOpacity: 0.12,
+                  size: 32,
+                  iconSize: 14,
+                  borderRadius: 8,
+                  onPressed: widget.onClose,
+                ),
               ),
               Expanded(
                 child: SizedBox(
@@ -234,18 +234,19 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
                   ),
                 ),
               ),
-             Padding( 
-              padding: const EdgeInsets.all(8),
-              child:OmiIconButton(
-                icon: Icons.check,
-                style: OmiIconButtonStyle.filled,
-                color: ResponsiveHelper.purplePrimary,
-                solid: true,
-                size: 32,
-                iconSize: 14,
-                borderRadius: 8,
-                onPressed: _processRecording,
-              ),)
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: OmiIconButton(
+                  icon: Icons.check,
+                  style: OmiIconButtonStyle.filled,
+                  color: ResponsiveHelper.purplePrimary,
+                  solid: true,
+                  size: 32,
+                  iconSize: 14,
+                  borderRadius: 8,
+                  onPressed: _processRecording,
+                ),
+              )
             ],
           ),
         );

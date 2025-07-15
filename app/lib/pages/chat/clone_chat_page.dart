@@ -32,7 +32,7 @@ class CloneChatPageState extends State<CloneChatPage> {
       if (provider.userPersona != null) {
         App selectedApp = provider.userPersona!;
 
-        if (!mounted){
+        if (!mounted) {
           return;
         }
 

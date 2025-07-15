@@ -23,7 +23,7 @@ class AppReview(BaseModel):
             review=json_data['review'],
             username=json_data.get('username'),
             response=json_data.get('response'),
-            responded_at=datetime.fromisoformat(json_data['responded_at']) if json_data.get('responded_at') else None
+            responded_at=datetime.fromisoformat(json_data['responded_at']) if json_data.get('responded_at') else None,
         )
 
 
@@ -144,6 +144,7 @@ class App(BaseModel):
     def get_image_url(self) -> str:
         return f'https://raw.githubusercontent.com/BasedHardware/Omi/main{self.image}'
 
+
 class AppCreate(BaseModel):
     id: str
     name: str
@@ -171,6 +172,7 @@ class AppCreate(BaseModel):
     payment_plan: Optional[str] = None
     thumbnails: Optional[List[str]] = []  # List of thumbnail IDs
 
+
 class AppUpdate(BaseModel):
     id: str
     name: Optional[str] = None
@@ -196,6 +198,7 @@ class AppUpdate(BaseModel):
     payment_plan: Optional[str] = None
     thumbnails: Optional[List[str]] = None  # List of thumbnail IDs
     updated_at: Optional[datetime] = None
+
 
 class UsageHistoryType(str, Enum):
     memory_created_external_integration = 'memory_created_external_integration'

@@ -183,7 +183,8 @@ class DesktopMemoryItem extends StatelessWidget {
         onTap(context, memory, provider);
         break;
       case 'visibility':
-        final newVisibility = memory.visibility == MemoryVisibility.private ? MemoryVisibility.public : MemoryVisibility.private;
+        final newVisibility =
+            memory.visibility == MemoryVisibility.private ? MemoryVisibility.public : MemoryVisibility.private;
         provider.updateMemoryVisibility(memory, newVisibility);
         MixpanelManager().memoryVisibilityChanged(memory, newVisibility);
         break;
@@ -219,7 +220,6 @@ class DesktopMemoryItem extends StatelessWidget {
         return Icons.settings_outlined;
     }
   }
-
 }
 
 extension StringCapitalize on String {

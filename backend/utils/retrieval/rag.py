@@ -6,7 +6,7 @@ from database.conversations import get_conversations_by_id
 from database.vector_db import query_vectors
 from models.conversation import Conversation
 from models.transcript_segment import TranscriptSegment
-from utils.llm.chat import  chunk_extraction, retrieve_memory_context_params
+from utils.llm.chat import chunk_extraction, retrieve_memory_context_params
 from utils.llm.clients import num_tokens_from_string
 
 
@@ -26,8 +26,9 @@ def retrieve_memories_for_topics(uid: str, topics: List[str], dates_range: List)
     threads = []
     top_k = 10 if len(topics) == 1 else 5
     for topic in topics:
-        t = threading.Thread(target=retrieve_for_topic,
-                             args=(uid, topic, start_timestamp, end_timestamp, top_k, memories_id))
+        t = threading.Thread(
+            target=retrieve_for_topic, args=(uid, topic, start_timestamp, end_timestamp, top_k, memories_id)
+        )
         threads.append(t)
     [t.start() for t in threads]
     [t.join() for t in threads]

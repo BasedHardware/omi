@@ -12,6 +12,7 @@ from openai import AssistantEventHandler
 
 from utils.other.pattern import singleton
 
+
 class File:
     def __init__(self, file_path) -> None:
         self.file_path = Path(file_path)
@@ -36,7 +37,7 @@ class File:
             self.thumbnail_path = str(thumb_path)
 
     def get_mime_type(self):
-        mime_type , _ = mimetypes.guess_type(self.file_path)
+        mime_type, _ = mimetypes.guess_type(self.file_path)
         self.mime_type = str(mime_type)
 
     def is_image(self):
@@ -115,7 +116,7 @@ class FileChatTool:
             instructions="You are a helpful assistant that answers questions about the provided file. Use the file_search tool to search the file contents when needed.",
             model="gpt-4o",
             tools=[{"type": "file_search"}],
-            )
+        )
 
     def _fill_question(self, uid, question, file_ids: List[str]):
         if not self.thread:
@@ -128,34 +129,20 @@ class FileChatTool:
         contents = []
         attachments = []
 
-        contents.append({
-            "type": "text",
-            "text": question
-        })
+        contents.append({"type": "text", "text": question})
 
         for file in files:
             if file.is_image():
-                contents.append({
-                    "type": "image_file",
-                    "image_file": {
-                        "file_id": file.openai_file_id,
-                        "detail": "auto"
-                    }
-                })
+                contents.append(
+                    {"type": "image_file", "image_file": {"file_id": file.openai_file_id, "detail": "auto"}}
+                )
             else:
-                attachments.append({
-                    "file_id": file.openai_file_id,
-                    "tools": [{"type": "file_search"}]
-                })
+                attachments.append({"file_id": file.openai_file_id, "tools": [{"type": "file_search"}]})
 
         # ask question
         openai.beta.threads.messages.create(
-                    thread_id=self.thread.id,
-                    role="user",
-                    content=contents,
-                    attachments=attachments
-            )
-
+            thread_id=self.thread.id, role="user", content=contents, attachments=attachments
+        )
 
     def ask(self, uid, question, file_ids: List[str]):
         if not self.thread or not self.assistant:
@@ -171,17 +158,12 @@ class FileChatTool:
 
         # Wait for the response
         while True:
-            run_status = openai.beta.threads.runs.retrieve(
-                thread_id=self.thread.id,
-                run_id=run.id
-            )
+            run_status = openai.beta.threads.runs.retrieve(thread_id=self.thread.id, run_id=run.id)
             if run_status.status == 'completed':
                 break
 
         # Get the messages
-        messages = openai.beta.threads.messages.list(
-            thread_id=self.thread.id
-        )
+        messages = openai.beta.threads.messages.list(thread_id=self.thread.id)
 
         # Return the latest assistant response
         return messages.data[0].content[0].text.value
@@ -195,8 +177,8 @@ class FileChatTool:
         with openai.beta.threads.runs.stream(
             thread_id=self.thread.id,
             assistant_id=self.assistant.id,
-            event_handler=AssistantEventHandler() ,
-            ) as stream:
+            event_handler=AssistantEventHandler(),
+        ) as stream:
             for text in stream.text_deltas:
                 callback.put_data_nowait(text)
                 output_list.append(text)
@@ -224,4 +206,3 @@ class FileChatTool:
             openai.beta.assistants.delete(self.assistant.id)
             self.assistant = None
         self.file_ids = []
-
