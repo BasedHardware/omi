@@ -55,9 +55,8 @@ async def auth_authorize(
         return await _apple_auth_redirect(session_id)
 
 @router.get("/callback/google")
-async def auth_callback(
+async def auth_callback_google(
     request: Request,
-    provider: str,
     code: Optional[str] = None,
     state: Optional[str] = None,
     error: Optional[str] = None,
@@ -73,14 +72,14 @@ async def auth_callback(
     if not session_data:
         raise HTTPException(status_code=400, detail="Invalid auth session")
     
-    # Exchange code for Firebase token
-    firebase_token = await _exchange_provider_code_for_firebase_token(
-        provider, code, session_data
+    # Exchange code for OAuth credentials
+    oauth_credentials = await _exchange_provider_code_for_oauth_credentials(
+        'google', code, session_data
     )
     
     # Create temporary auth code
     auth_code = str(uuid.uuid4())
-    set_auth_code(auth_code, firebase_token, 300)
+    set_auth_code(auth_code, oauth_credentials, 300)
     
     # Redirect back to app
     redirect_url = f"{session_data['redirect_uri']}?code={auth_code}&state={session_data['state'] or ''}"
@@ -105,14 +104,14 @@ async def auth_callback_apple_post(
     if not session_data:
         raise HTTPException(status_code=400, detail="Invalid auth session")
     
-    # Exchange code for Firebase token
-    firebase_token = await _exchange_provider_code_for_firebase_token(
+    # Exchange code for OAuth credentials
+    oauth_credentials = await _exchange_provider_code_for_oauth_credentials(
         'apple', code, session_data
     )
     
     # Create temporary auth code
     auth_code = str(uuid.uuid4())
-    set_auth_code(auth_code, firebase_token, 300)
+    set_auth_code(auth_code, oauth_credentials, 300)
     
     # Redirect back to app
     redirect_url = f"{session_data['redirect_uri']}?code={auth_code}&state={session_data['state'] or ''}"
@@ -126,31 +125,35 @@ async def auth_token(
     redirect_uri: str = Form(...),
 ):
     """
-    Exchange auth code for Firebase token
+    Exchange auth code for OAuth credentials
     """
     if grant_type != 'authorization_code':
         raise HTTPException(status_code=400, detail="Unsupported grant type")
     
-    # Get Firebase token from Redis
-    firebase_token = get_auth_code(code)
-    if not firebase_token:
+    # Get OAuth credentials from Redis
+    oauth_credentials_json = get_auth_code(code)
+    if not oauth_credentials_json:
         raise HTTPException(status_code=400, detail="Invalid or expired code")
     
     # Clean up used code
     delete_auth_code(code)
     
     try:
-        decoded_token = jwt.decode(firebase_token, options={"verify_signature": False})
-        uid = decoded_token.get('uid')
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid token")
-    
-    return {
-        "access_token": firebase_token,
-        "token_type": "Bearer",
-        "expires_in": 3600,
-        "uid": uid
-    }
+        oauth_credentials = json.loads(oauth_credentials_json)
+        provider = oauth_credentials.get('provider')
+        
+        return {
+            "provider": provider,
+            "id_token": oauth_credentials.get('id_token'),
+            "access_token": oauth_credentials.get('access_token'),
+            "provider_id": oauth_credentials.get('provider_id'),
+            "token_type": "Bearer",
+            "expires_in": 3600
+        }
+        
+    except Exception as e:
+        print(f"Error parsing OAuth credentials: {e}")
+        raise HTTPException(status_code=400, detail="Invalid OAuth credentials")
 
 
 async def _google_auth_redirect(session_id: str):
@@ -204,20 +207,20 @@ async def _apple_auth_redirect(session_id: str):
     
     return RedirectResponse(url=apple_auth_url)
 
-async def _exchange_provider_code_for_firebase_token(provider: str, code: str, session_data: dict) -> str:
+async def _exchange_provider_code_for_oauth_credentials(provider: str, code: str, session_data: dict) -> str:
     """
-    Exchange provider-specific code for Firebase ID token
+    Exchange provider-specific code for OAuth credentials
     """
     if provider == 'google':
-        return await _exchange_google_code_for_firebase_token(code, session_data)
+        return await _exchange_google_code_for_oauth_credentials(code, session_data)
     elif provider == 'apple':
-        return await _exchange_apple_code_for_firebase_token(code, session_data)
+        return await _exchange_apple_code_for_oauth_credentials(code, session_data)
     else:
         raise HTTPException(status_code=400, detail="Unsupported provider")
 
-async def _exchange_google_code_for_firebase_token(code: str, session_data: dict) -> str:
+async def _exchange_google_code_for_oauth_credentials(code: str, session_data: dict) -> str:
     """
-    Exchange Google authorization code for Firebase ID token
+    Exchange Google authorization code for Google OAuth tokens
     """
     client_id = os.getenv('GOOGLE_CLIENT_ID')
     client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
@@ -249,51 +252,19 @@ async def _exchange_google_code_for_firebase_token(code: str, session_data: dict
     if not id_token or not access_token:
         raise HTTPException(status_code=400, detail="Invalid Google token response")
     
-    # Create Firebase credential and sign in
-    try:
-        # verify the Google ID token to get user info
-        decoded_google_token = jwt.decode(id_token, options={"verify_signature": False})
-        uid = decoded_google_token.get('sub')
-        email = decoded_google_token.get('email')
-        name = decoded_google_token.get('name')
-        
-        # Create or update user in Firebase
-        try:
-            # First try to get user by uid
-            user = firebase_admin.auth.get_user(uid)
-        except firebase_admin.auth.UserNotFoundError:
-            try:
-                # If user doesn't exist by uid, try to get by email
-                user = firebase_admin.auth.get_user_by_email(email)
-                # If user exists by email but different uid, we need to handle this
-                if user.uid != uid:
-                    # User exists with different uid, use existing user
-                    uid = user.uid
-                else:
-                    # User exists with same uid, use existing user
-                    pass
-            except firebase_admin.auth.UserNotFoundError:
-                # User doesn't exist at all, create new user
-                user = firebase_admin.auth.create_user(
-                    uid=uid,
-                    email=email,
-                    display_name=name,
-                    email_verified=True
-                )
-        
-        # Create Firebase custom token
-        custom_token = firebase_admin.auth.create_custom_token(user.uid)
-        
-        # Return the custom token
-        return custom_token.decode('utf-8')
-        
-    except Exception as e:
-        print(f"Error creating Firebase token: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create Firebase token")
+    # Return OAuth credentials for client-side Firebase authentication
+    oauth_credentials = {
+        'provider': 'google',
+        'id_token': id_token,
+        'access_token': access_token,
+        'provider_id': 'google.com'
+    }
+    
+    return json.dumps(oauth_credentials)
 
-async def _exchange_apple_code_for_firebase_token(code: str, session_data: dict) -> str:
+async def _exchange_apple_code_for_oauth_credentials(code: str, session_data: dict) -> str:
     """
-    Exchange Apple authorization code for Firebase custom token
+    Exchange Apple authorization code for Apple OAuth tokens
     """
     try:
         # Get Apple configuration
@@ -339,53 +310,26 @@ async def _exchange_apple_code_for_firebase_token(code: str, session_data: dict)
         
         token_json = token_response.json()
         id_token = token_json.get('id_token')
+        access_token = token_json.get('access_token')  # Apple typically returns access_token
         
         if not id_token:
             raise HTTPException(status_code=400, detail="No ID token received from Apple")
         
-        # Verify and decode the Apple ID token
-        apple_user_info = _verify_apple_id_token(id_token, client_id)
+        # Return OAuth credentials for client-side Firebase authentication
+        oauth_credentials = {
+            'provider': 'apple',
+            'id_token': id_token,
+            'access_token': access_token,
+            'provider_id': 'apple.com'
+        }
         
-        # Extract user information
-        uid = apple_user_info.get('sub')
-        email = apple_user_info.get('email')
-        email_verified = apple_user_info.get('email_verified', False)
-        
-        if not uid:
-            raise HTTPException(status_code=400, detail="Invalid Apple ID token")
-        
-        # Create or update user in Firebase
-        try:
-            # First try to get user by Apple UID
-            firebase_uid = f"apple_{uid}"
-            user = firebase_admin.auth.get_user(firebase_uid)
-        except firebase_admin.auth.UserNotFoundError:
-            try:
-                # If user doesn't exist by UID, try to get by email
-                if email:
-                    user = firebase_admin.auth.get_user_by_email(email)
-                    firebase_uid = user.uid
-                else:
-                    raise firebase_admin.auth.UserNotFoundError("No email provided")
-            except firebase_admin.auth.UserNotFoundError:
-                # Create new user
-                user = firebase_admin.auth.create_user(
-                    uid=firebase_uid,
-                    email=email,
-                    email_verified=email_verified if isinstance(email_verified, bool) else str(email_verified).lower() == 'true',
-                    display_name="Apple User"
-                )
-        
-        # Create Firebase custom token
-        custom_token = firebase_admin.auth.create_custom_token(user.uid)
-        
-        return custom_token.decode('utf-8')
+        return json.dumps(oauth_credentials)
         
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error creating Firebase token for Apple: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create Firebase token")
+        print(f"Error exchanging Apple code for tokens: {e}")
+        raise HTTPException(status_code=500, detail="Failed to exchange Apple code for tokens")
 
 
 def _generate_apple_client_secret(client_id: str, team_id: str, key_id: str, private_key_content: str) -> str:
