@@ -23,8 +23,14 @@ def remove_speaker():
 def remove_training_sample():
     result = subprocess.run(
         [
-            'python', '-m', 'soniox.manage_speakers', '--remove_audio', '--speaker_name', 'test_1', '--audio_name',
-            'joined_output'
+            'python',
+            '-m',
+            'soniox.manage_speakers',
+            '--remove_audio',
+            '--speaker_name',
+            'test_1',
+            '--audio_name',
+            'joined_output',
         ]
     )
     completed = result.returncode == 0
@@ -51,8 +57,16 @@ def train_speaker_profile():
 
     result = subprocess.run(
         [
-            'python', '-m', 'soniox.manage_speakers', '--add_audio', '--speaker_name', 'test_1', '--audio_name',
-            'joined_output', '--audio_fn', output_path
+            'python',
+            '-m',
+            'soniox.manage_speakers',
+            '--add_audio',
+            '--speaker_name',
+            'test_1',
+            '--audio_name',
+            'joined_output',
+            '--audio_fn',
+            output_path,
         ]
     )
     completed = result.returncode == 0

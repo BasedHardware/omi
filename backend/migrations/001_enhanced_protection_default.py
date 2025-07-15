@@ -56,7 +56,9 @@ def migrate_user_to_enhanced(uid: str):
         users_db.set_data_protection_level(uid, 'enhanced')
         return
 
-    print(f"Found {len(conversations_to_migrate)} conversations, {len(memories_to_migrate)} memories, and {len(chats_to_migrate)} chats to migrate for user {uid}.")
+    print(
+        f"Found {len(conversations_to_migrate)} conversations, {len(memories_to_migrate)} memories, and {len(chats_to_migrate)} chats to migrate for user {uid}."
+    )
 
     # 2. Migrate data in batches
     try:
@@ -64,7 +66,7 @@ def migrate_user_to_enhanced(uid: str):
         if conversations_to_migrate:
             print(f"Migrating {len(conversations_to_migrate)} conversations for {uid}...")
             for i in range(0, len(conversations_to_migrate), batch_size):
-                batch_ids = conversations_to_migrate[i:i + batch_size]
+                batch_ids = conversations_to_migrate[i : i + batch_size]
                 print(f"  Migrating conversation batch {i//batch_size + 1} for {uid} ({len(batch_ids)} items)")
                 conversations_db.migrate_conversations_level_batch(uid, batch_ids, 'enhanced')
             print(f"Conversations migrated for {uid}.")
@@ -72,7 +74,7 @@ def migrate_user_to_enhanced(uid: str):
         if memories_to_migrate:
             print(f"Migrating {len(memories_to_migrate)} memories for {uid}...")
             for i in range(0, len(memories_to_migrate), batch_size):
-                batch_ids = memories_to_migrate[i:i + batch_size]
+                batch_ids = memories_to_migrate[i : i + batch_size]
                 print(f"  Migrating memory batch {i//batch_size + 1} for {uid} ({len(batch_ids)} items)")
                 memories_db.migrate_memories_level_batch(uid, batch_ids, 'enhanced')
             print(f"Memories migrated for {uid}.")
@@ -80,7 +82,7 @@ def migrate_user_to_enhanced(uid: str):
         if chats_to_migrate:
             print(f"Migrating {len(chats_to_migrate)} chats for {uid}...")
             for i in range(0, len(chats_to_migrate), batch_size):
-                batch_ids = chats_to_migrate[i:i + batch_size]
+                batch_ids = chats_to_migrate[i : i + batch_size]
                 print(f"  Migrating chat batch {i//batch_size + 1} for {uid} ({len(batch_ids)} items)")
                 chat_db.migrate_chats_level_batch(uid, batch_ids, 'enhanced')
             print(f"Chats migrated for {uid}.")

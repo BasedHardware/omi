@@ -7,10 +7,9 @@ from pyannote.audio import Pipeline
 
 # Instantiate pretrained voice activity detection pipeline
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-vad = Pipeline.from_pretrained(
-    "pyannote/voice-activity-detection",
-    use_auth_token=os.getenv('HUGGINGFACE_TOKEN')
-).to(device)
+vad = Pipeline.from_pretrained("pyannote/voice-activity-detection", use_auth_token=os.getenv('HUGGINGFACE_TOKEN')).to(
+    device
+)
 
 # app = App(name='vad')
 # image = (
@@ -33,9 +32,11 @@ def vad_endpoint(file: UploadFile):
     os.remove(file_path)
     data = []
     for segment in segments:
-        data.append({
-            'start': segment.start,
-            'end': segment.end,
-            'duration': segment.duration,
-        })
+        data.append(
+            {
+                'start': segment.start,
+                'end': segment.end,
+                'duration': segment.duration,
+            }
+        )
     return data

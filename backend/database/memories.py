@@ -18,6 +18,7 @@ users_collection = 'users'
 # ******* ENCRYPTION HELPERS ******
 # *********************************
 
+
 def _encrypt_memory_data(memory_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
     data = copy.deepcopy(memory_data)
 
@@ -58,6 +59,7 @@ def _prepare_memory_for_read(memory_data: Optional[Dict[str, Any]], uid: str) ->
 # ********** CRUD *************
 # *****************************
 
+
 @prepare_for_read(decrypt_func=_prepare_memory_for_read)
 def get_memories(uid: str, limit: int = 100, offset: int = 0, categories: List[str] = []):
     print('get_memories db', uid, limit, offset, categories)
@@ -66,8 +68,7 @@ def get_memories(uid: str, limit: int = 100, offset: int = 0, categories: List[s
         memories_ref = memories_ref.where(filter=FieldFilter('category', 'in', categories))
 
     memories_ref = (
-        memories_ref
-        .order_by('scoring', direction=firestore.Query.DESCENDING)
+        memories_ref.order_by('scoring', direction=firestore.Query.DESCENDING)
         .order_by('created_at', direction=firestore.Query.DESCENDING)
         .limit(limit)
         .offset(offset)
@@ -85,9 +86,8 @@ def get_user_public_memories(uid: str, limit: int = 100, offset: int = 0):
     print('get_public_memories', limit, offset)
 
     memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
-    memories_ref = (
-        memories_ref.order_by('scoring', direction=firestore.Query.DESCENDING)
-        .order_by('created_at', direction=firestore.Query.DESCENDING)
+    memories_ref = memories_ref.order_by('scoring', direction=firestore.Query.DESCENDING).order_by(
+        'created_at', direction=firestore.Query.DESCENDING
     )
 
     memories_ref = memories_ref.limit(limit).offset(offset)
@@ -104,9 +104,7 @@ def get_user_public_memories(uid: str, limit: int = 100, offset: int = 0):
 def get_non_filtered_memories(uid: str, limit: int = 100, offset: int = 0):
     print('get_non_filtered_memories', uid, limit, offset)
     memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
-    memories_ref = (
-        memories_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
-    )
+    memories_ref = memories_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
     memories_ref = memories_ref.limit(limit).offset(offset)
     memories = [doc.to_dict() for doc in memories_ref.stream()]
     return memories
@@ -205,9 +203,7 @@ def delete_memories_for_conversation(uid: str, memory_id: str):
     batch = db.batch()
     user_ref = db.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
-    query = (
-        memories_ref.where(filter=FieldFilter('memory_id', '==', memory_id))
-    )
+    query = memories_ref.where(filter=FieldFilter('memory_id', '==', memory_id))
 
     removed_ids = []
     for doc in query.stream():
@@ -220,6 +216,7 @@ def delete_memories_for_conversation(uid: str, memory_id: str):
 # **************************************
 # ********* MIGRATION HELPERS **********
 # **************************************
+
 
 def get_memories_to_migrate(uid: str, target_level: str) -> List[dict]:
     """
@@ -270,10 +267,7 @@ def migrate_memories_level_batch(uid: str, memory_ids: List[str], target_level: 
                 migrated_content = encryption.encrypt(plain_content, uid)
 
         # Update the document with the migrated data and the new protection level.
-        update_data = {
-            'data_protection_level': target_level,
-            'content': migrated_content
-        }
+        update_data = {'data_protection_level': target_level, 'content': migrated_content}
         batch.update(doc_snapshot.reference, update_data)
 
     batch.commit()

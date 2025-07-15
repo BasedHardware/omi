@@ -5,8 +5,12 @@ from typing import List
 import requests
 from pydub import AudioSegment
 
-from utils.other.storage import get_profile_audio_if_exists, get_additional_profile_recordings, get_user_people_ids, \
-    get_user_person_speech_samples
+from utils.other.storage import (
+    get_profile_audio_if_exists,
+    get_additional_profile_recordings,
+    get_user_people_ids,
+    get_user_person_speech_samples,
+)
 
 
 def get_speech_profile_matching_predictions(uid: str, audio_file_path: str, segments: List) -> List[dict]:
@@ -15,9 +19,7 @@ def get_speech_profile_matching_predictions(uid: str, audio_file_path: str, segm
         ('audio_file', (os.path.basename(audio_file_path), open(audio_file_path, 'rb'), 'audio/wav')),
     ]
     response = requests.post(
-        os.getenv('HOSTED_SPEECH_PROFILE_API_URL') + f'?uid={uid}',
-        data={'segments': json.dumps(segments)},
-        files=files
+        os.getenv('HOSTED_SPEECH_PROFILE_API_URL') + f'?uid={uid}', data={'segments': json.dumps(segments)}, files=files
     )
     default = [{'is_user': False, 'person_id': None}] * len(segments)
 

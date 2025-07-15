@@ -8,6 +8,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.field_path import FieldPath
 from google.cloud.firestore_v1 import FieldFilter
 
+
 class MemoryTime(BaseModel):
     id: str
     created_at: datetime
@@ -20,10 +21,7 @@ def migration_incorrect_start_finish_time():
     user_limit = 400
     while True:
         print(f"running...user...{user_offset}")
-        users_ref = (
-            db.collection('users')
-            .order_by(FieldPath.document_id(), direction=firestore.Query.ASCENDING)
-        )
+        users_ref = db.collection('users').order_by(FieldPath.document_id(), direction=firestore.Query.ASCENDING)
         users_ref = users_ref.limit(user_limit).offset(user_offset)
         users = list(users_ref.stream())
         if not users or len(users) == 0:
@@ -35,7 +33,9 @@ def migration_incorrect_start_finish_time():
             while True:
                 print(f"running...user...{user.id}...memories...{offset}")
                 memories_ref = (
-                    db.collection('users').document(user.id).collection("memories")
+                    db.collection('users')
+                    .document(user.id)
+                    .collection("memories")
                     .order_by(FieldPath.document_id(), direction=firestore.Query.ASCENDING)
                 )
                 memories_ref = memories_ref.limit(limit).offset(offset)
@@ -52,7 +52,7 @@ def migration_incorrect_start_finish_time():
                         continue
 
                     delta = memory.created_at.timestamp() - memory.started_at.timestamp()
-                    if math.fabs(delta) < 15*60:  # gaps in 15' is ok
+                    if math.fabs(delta) < 15 * 60:  # gaps in 15' is ok
                         continue
                     td = None
                     if delta > 0:
@@ -69,6 +69,6 @@ def migration_incorrect_start_finish_time():
 
                 batch.commit()
                 offset += len(docs)
-                time.sleep(.01)  # sleep 100ms
+                time.sleep(0.01)  # sleep 100ms
 
         user_offset = user_offset + len(users)

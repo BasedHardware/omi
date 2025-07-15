@@ -23,6 +23,7 @@ conversations_collection = 'conversations'
 # ******* ENCRYPTION HELPERS ******
 # *********************************
 
+
 def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
     data = copy.deepcopy(conversation_data)
 
@@ -130,6 +131,7 @@ def get_conversation_photos(uid: str, conversation_id: str):
 # ********** CRUD *************
 # *****************************
 
+
 @set_data_protection_level(data_arg_name='conversation_data')
 @prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
 def upsert_conversation(uid: str, conversation_data: dict):
@@ -142,6 +144,7 @@ def upsert_conversation(uid: str, conversation_data: dict):
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
     conversation_ref.set(conversation_data)
 
+
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_conversation(uid, conversation_id):
@@ -153,12 +156,17 @@ def get_conversation(uid, conversation_id):
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
-def get_conversations(uid: str, limit: int = 100, offset: int = 0, include_discarded: bool = False,
-                      statuses: List[str] = [], start_date: Optional[datetime] = None,
-                      end_date: Optional[datetime] = None, categories: Optional[List[str]] = None):
-    conversations_ref = (
-        db.collection('users').document(uid).collection(conversations_collection)
-    )
+def get_conversations(
+    uid: str,
+    limit: int = 100,
+    offset: int = 0,
+    include_discarded: bool = False,
+    statuses: List[str] = [],
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    categories: Optional[List[str]] = None,
+):
+    conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
     if len(statuses) > 0:
@@ -250,6 +258,7 @@ def get_conversations_by_id(uid, conversation_ids):
 # ********* MIGRATION HELPERS **********
 # **************************************
 
+
 def get_conversations_to_migrate(uid: str, target_level: str) -> List[dict]:
     """
     Finds all conversations that are not at the target protection level by fetching all documents
@@ -280,9 +289,9 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
     batch_count = 0
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     doc_refs = [conversations_ref.document(conv_id) for conv_id in conversation_ids]
-    doc_snapshots = db.get_all(doc_refs, field_paths=[
-        'data_protection_level', 'transcript_segments', 'transcript_segments_compressed'
-    ])
+    doc_snapshots = db.get_all(
+        doc_refs, field_paths=['data_protection_level', 'transcript_segments', 'transcript_segments_compressed']
+    )
 
     for doc_snapshot in doc_snapshots:
         if not doc_snapshot.exists:
@@ -308,7 +317,9 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
         }
         if 'transcript_segments' in prepared_payload:
             update_data['transcript_segments'] = prepared_payload['transcript_segments']
-            update_data['transcript_segments_compressed'] = prepared_payload.get('transcript_segments_compressed', False)
+            update_data['transcript_segments_compressed'] = prepared_payload.get(
+                'transcript_segments_compressed', False
+            )
 
         if not update_data.get('transcript_segments_compressed'):
             update_data['transcript_segments_compressed'] = firestore.DELETE_FIELD
@@ -333,9 +344,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             plain_photo_data = _prepare_photo_for_read(photo_data, uid)
 
             # Prepare the specific fields for update
-            photo_update_payload = {
-                'data_protection_level': target_level
-            }
+            photo_update_payload = {'data_protection_level': target_level}
             if target_level == 'enhanced':
                 photo_update_payload['base64'] = encryption.encrypt(plain_photo_data['base64'], uid)
             else:  # Moving from enhanced to standard
@@ -357,13 +366,13 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 # ********** STATUS *************
 # **************************************
 
+
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_in_progress_conversation(uid: str):
     user_ref = db.collection('users').document(uid)
-    conversations_ref = (
-        user_ref.collection(conversations_collection)
-        .where(filter=FieldFilter('status', '==', 'in_progress'))
+    conversations_ref = user_ref.collection(conversations_collection).where(
+        filter=FieldFilter('status', '==', 'in_progress')
     )
     docs = [doc.to_dict() for doc in conversations_ref.stream()]
     conversation = docs[0] if docs else None
@@ -374,9 +383,8 @@ def get_in_progress_conversation(uid: str):
 @with_photos(get_conversation_photos)
 def get_processing_conversations(uid: str):
     user_ref = db.collection('users').document(uid)
-    conversations_ref = (
-        user_ref.collection(conversations_collection)
-        .where(filter=FieldFilter('status', '==', 'processing'))
+    conversations_ref = user_ref.collection(conversations_collection).where(
+        filter=FieldFilter('status', '==', 'processing')
     )
     conversations = [doc.to_dict() for doc in conversations_ref.stream()]
     return conversations
@@ -398,6 +406,7 @@ def set_conversation_as_discarded(uid: str, conversation_id: str):
 # ********** CALENDAR *************
 # *********************************
 
+
 def update_conversation_events(uid: str, conversation_id: str, events: List[dict]):
     update_conversation(uid, conversation_id, {'structured.events': events})
 
@@ -406,6 +415,7 @@ def update_conversation_events(uid: str, conversation_id: str, events: List[dict
 # ******** ACTION ITEMS ***********
 # *********************************
 
+
 def update_conversation_action_items(uid: str, conversation_id: str, action_items: List[dict]):
     update_conversation(uid, conversation_id, {'structured.action_items': action_items})
 
@@ -413,6 +423,7 @@ def update_conversation_action_items(uid: str, conversation_id: str, action_item
 # ******************************
 # ********** OTHER *************
 # ******************************
+
 
 def update_conversation_finished_at(uid: str, conversation_id: str, finished_at: datetime):
     user_ref = db.collection('users').document(uid)
@@ -435,6 +446,7 @@ def update_conversation_segments(uid: str, conversation_id: str, segments: List[
 # ***********************************
 # ********** VISIBILITY *************
 # ***********************************
+
 
 def set_conversation_visibility(uid: str, conversation_id: str, visibility: str):
     user_ref = db.collection('users').document(uid)
@@ -459,17 +471,19 @@ def get_public_conversations(data: List[Tuple[str, str]]):
 # ********** POSTPROCESSING **************
 # ****************************************
 
+
 def set_postprocessing_status(
-        uid: str, conversation_id: str, status: PostProcessingStatus, fail_reason: str = None,
-        model: PostProcessingModel = PostProcessingModel.fal_whisperx
+    uid: str,
+    conversation_id: str,
+    status: PostProcessingStatus,
+    fail_reason: str = None,
+    model: PostProcessingModel = PostProcessingModel.fal_whisperx,
 ):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_ref.update({
-        'postprocessing.status': status,
-        'postprocessing.model': model,
-        'postprocessing.fail_reason': fail_reason
-    })
+    conversation_ref.update(
+        {'postprocessing.status': status, 'postprocessing.model': model, 'postprocessing.fail_reason': fail_reason}
+    )
 
 
 def store_model_segments_result(uid: str, conversation_id: str, model_name: str, segments: List[TranscriptSegment]):
@@ -488,8 +502,7 @@ def store_model_segments_result(uid: str, conversation_id: str, model_name: str,
 
 
 def store_model_emotion_predictions_result(
-        uid: str, conversation_id: str, model_name: str,
-        predictions: List[hume.HumeJobModelPredictionResponseModel]
+    uid: str, conversation_id: str, model_name: str, predictions: List[hume.HumeJobModelPredictionResponseModel]
 ):
     now = datetime.now()
     user_ref = db.collection('users').document(uid)
@@ -500,12 +513,15 @@ def store_model_emotion_predictions_result(
     for prediction in predictions:
         prediction_id = str(uuid.uuid4())
         prediction_ref = predictions_ref.document(prediction_id)
-        batch.set(prediction_ref, {
-            "created_at": now,
-            "start": prediction.time[0],
-            "end": prediction.time[1],
-            "emotions": json.dumps(hume.HumePredictionEmotionResponseModel.to_multi_dict(prediction.emotions)),
-        })
+        batch.set(
+            prediction_ref,
+            {
+                "created_at": now,
+                "start": prediction.time[0],
+                "end": prediction.time[1],
+                "emotions": json.dumps(hume.HumePredictionEmotionResponseModel.to_multi_dict(prediction.emotions)),
+            },
+        )
         count = count + 1
         if count >= 100:
             batch.commit()
@@ -534,6 +550,7 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
 # ********** OPENGLASS **************
 # ***********************************
 
+
 def store_conversation_photos(uid: str, conversation_id: str, photos: List[ConversationPhoto]):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
@@ -559,18 +576,19 @@ def store_conversation_photos(uid: str, conversation_id: str, photos: List[Conve
 # ********** SYNCING *************
 # ********************************
 
+
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
-def get_closest_conversation_to_timestamps(
-        uid: str, start_timestamp: int, end_timestamp: int
-) -> Optional[dict]:
+def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_timestamp: int) -> Optional[dict]:
     print('get_closest_conversation_to_timestamps', start_timestamp, end_timestamp)
     start_threshold = datetime.utcfromtimestamp(start_timestamp) - timedelta(minutes=2)
     end_threshold = datetime.utcfromtimestamp(end_timestamp) + timedelta(minutes=2)
     print('get_closest_conversation_to_timestamps', start_threshold, end_threshold)
 
     query = (
-        db.collection('users').document(uid).collection(conversations_collection)
+        db.collection('users')
+        .document(uid)
+        .collection(conversations_collection)
         .where(filter=FieldFilter('finished_at', '>=', start_threshold))
         .where(filter=FieldFilter('started_at', '<=', end_threshold))
         .order_by('created_at', direction=firestore.Query.DESCENDING)
@@ -605,7 +623,9 @@ def get_closest_conversation_to_timestamps(
 @with_photos(get_conversation_photos)
 def get_last_completed_conversation(uid: str) -> Optional[dict]:
     query = (
-        db.collection('users').document(uid).collection(conversations_collection)
+        db.collection('users')
+        .document(uid)
+        .collection(conversations_collection)
         .where(filter=FieldFilter('status', '==', ConversationStatus.completed))
         .order_by('created_at', direction=firestore.Query.DESCENDING)
         .limit(1)
