@@ -1,0 +1,25 @@
+#!/bin/sh
+
+# Dart formatting for app/
+STAGED_DART_FILES=$(git diff --cached --name-only --diff-filter=ACM "app/**.dart" | grep -v -e '\.gen\.dart$' -e '\.g\.dart$')
+
+if [ -n "$STAGED_DART_FILES" ]; then
+  echo "Formatting staged Dart files in app/..."
+  echo "$STAGED_DART_FILES" | xargs dart format --line-length 120
+  echo "$STAGED_DART_FILES" | xargs git add
+fi
+
+# Python formatting for backend/
+STAGED_PYTHON_FILES=$(git diff --cached --name-only --diff-filter=ACM "backend/**.py")
+
+if [ -n "$STAGED_PYTHON_FILES" ]; then
+  echo "Formatting staged Python files in backend/..."
+  if ! command -v black >/dev/null 2>&1; then
+    echo "black is not installed. Please run 'pip install black'" >&2
+    exit 1
+  fi
+  echo "$STAGED_PYTHON_FILES" | xargs black --line-length 120 --skip-string-normalization
+  echo "$STAGED_PYTHON_FILES" | xargs git add
+fi
+
+exit 0
