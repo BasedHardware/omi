@@ -46,4 +46,4 @@ class OmiChatBubble extends AdaptiveWidget {
       child: child,
     );
   }
-} 
+}

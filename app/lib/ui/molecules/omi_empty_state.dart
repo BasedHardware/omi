@@ -81,4 +81,4 @@ class OmiEmptyState extends StatelessWidget {
       ),
     );
   }
-} 
+}

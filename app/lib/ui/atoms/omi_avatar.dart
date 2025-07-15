@@ -25,12 +25,12 @@ class OmiAvatar extends AdaptiveWidget {
       height: size,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(size / 2),
-        image: imageUrl != null
-            ? DecorationImage(image: NetworkImage(imageUrl!), fit: BoxFit.cover)
-            : null,
+        image: imageUrl != null ? DecorationImage(image: NetworkImage(imageUrl!), fit: BoxFit.cover) : null,
         color: imageUrl == null ? ResponsiveHelper.backgroundTertiary : null,
       ),
-      child: imageUrl == null ? fallback ?? const Icon(Icons.person, size: 16, color: ResponsiveHelper.textSecondary) : null,
+      child: imageUrl == null
+          ? fallback ?? const Icon(Icons.person, size: 16, color: ResponsiveHelper.textSecondary)
+          : null,
     );
   }
-} 
+}

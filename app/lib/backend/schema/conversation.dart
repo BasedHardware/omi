@@ -87,11 +87,7 @@ class ConversationPhoto {
   bool discarded;
 
   ConversationPhoto(
-      {required this.id,
-      required this.base64,
-      this.description,
-      required this.createdAt,
-      this.discarded = false});
+      {required this.id, required this.base64, this.description, required this.createdAt, this.discarded = false});
 
   factory ConversationPhoto.fromJson(Map<String, dynamic> json) {
     return ConversationPhoto(

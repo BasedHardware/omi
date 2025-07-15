@@ -49,7 +49,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
           body: PopScope(
             onPopInvokedWithResult: (didPop, result) {
               context.read<AddAppProvider>().clear();
-              },
+            },
             child: Builder(builder: (context) {
               if (provider.isUpdating) {
                 return const Center(

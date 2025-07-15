@@ -51,9 +51,8 @@ class OmiIconButton extends AdaptiveWidget {
             ? (solid ? Colors.white : baseColor)
             : baseColor;
 
-    final border = style == OmiIconButtonStyle.outline
-        ? Border.all(color: baseColor.withOpacity(borderOpacity), width: 1)
-        : null;
+    final border =
+        style == OmiIconButtonStyle.outline ? Border.all(color: baseColor.withOpacity(borderOpacity), width: 1) : null;
 
     return Material(
       color: Colors.transparent,
@@ -78,4 +77,4 @@ class OmiIconButton extends AdaptiveWidget {
       ),
     );
   }
-} 
+}

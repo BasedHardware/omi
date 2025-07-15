@@ -167,7 +167,8 @@ class AddAppProvider extends ChangeNotifier {
       conversationPromptController.text = app.conversationPrompt!.decodeString;
     }
     if (app.proactiveNotification != null) {
-      selectedScopes = app.getNotificationScopesFromIds(capabilities.firstWhere((element) => element.id == 'proactive_notification').notificationScopes);
+      selectedScopes = app.getNotificationScopesFromIds(
+          capabilities.firstWhere((element) => element.id == 'proactive_notification').notificationScopes);
     }
 
     // Set existing thumbnails
@@ -835,11 +836,19 @@ class AddAppProvider extends ChangeNotifier {
   }
 
   List<TriggerEvent> getTriggerEvents() {
-    return selectedCapabilities.where((element) => element.id == 'external_integration').map((e) => e.triggerEvents).expand((element) => element).toList();
+    return selectedCapabilities
+        .where((element) => element.id == 'external_integration')
+        .map((e) => e.triggerEvents)
+        .expand((element) => element)
+        .toList();
   }
 
   List<NotificationScope> getNotificationScopes() {
-    return selectedCapabilities.where((item) => item.id == 'proactive_notification').map((e) => e.notificationScopes).expand((element) => element).toList();
+    return selectedCapabilities
+        .where((item) => item.id == 'proactive_notification')
+        .map((e) => e.notificationScopes)
+        .expand((element) => element)
+        .toList();
   }
 
   bool capabilitySelected() {

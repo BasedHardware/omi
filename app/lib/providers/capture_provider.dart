@@ -599,53 +599,53 @@ class CaptureProvider extends ChangeNotifier
     await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
 
     await ServiceManager.instance().systemAudio.start(
-      onFormatReceived: (Map<String, dynamic> format) async {
-        // This callback is for information only, no action needed.
-      },
-      onByteReceived: _processSystemAudioByteReceived,
-      onRecording: () {
-        updateRecordingState(RecordingState.systemAudioRecord);
-        debugPrint('System audio recording started successfully.');
-      },
-      onStop: () {
-        if (_isPaused) {
-          updateRecordingState(RecordingState.pause);
-        } else {
-          updateRecordingState(RecordingState.stop);
-        }
-        _socket?.stop(reason: 'system audio stream ended from native');
-      },
-      onError: (error) {
-        debugPrint('System audio capture error: $error');
-        AppSnackbar.showSnackbarError('An error occurred during recording: $error');
-        updateRecordingState(RecordingState.stop);
-      },
-      onSystemWillSleep: (wasRecording) {
-        debugPrint('System will sleep - was recording: $wasRecording');
-      },
-      onSystemDidWake: (nativeIsRecording) async {
-        debugPrint('System woke up - Native recording: $nativeIsRecording, Flutter state: $recordingState');
-        if (!nativeIsRecording && recordingState == RecordingState.systemAudioRecord) {
-          updateRecordingState(RecordingState.stop);
-        }
-      },
-      onScreenDidLock: (wasRecording) {
-        debugPrint('Screen locked - was recording: $wasRecording');
-      },
-      onScreenDidUnlock: () {
-        debugPrint('Screen unlocked');
-      },
-      onDisplaySetupInvalid: (reason) {
-        debugPrint('Display setup invalid: $reason');
-        if (recordingState == RecordingState.systemAudioRecord) {
-          updateRecordingState(RecordingState.stop);
-          AppSnackbar.showSnackbarError(
-              'Recording stopped: $reason. You may need to reconnect external displays or restart recording.');
-        }
-      },
-      onMicrophoneDeviceChanged: _onMicrophoneDeviceChanged,
-      onMicrophoneStatus: _onMicrophoneStatus,
-    );
+          onFormatReceived: (Map<String, dynamic> format) async {
+            // This callback is for information only, no action needed.
+          },
+          onByteReceived: _processSystemAudioByteReceived,
+          onRecording: () {
+            updateRecordingState(RecordingState.systemAudioRecord);
+            debugPrint('System audio recording started successfully.');
+          },
+          onStop: () {
+            if (_isPaused) {
+              updateRecordingState(RecordingState.pause);
+            } else {
+              updateRecordingState(RecordingState.stop);
+            }
+            _socket?.stop(reason: 'system audio stream ended from native');
+          },
+          onError: (error) {
+            debugPrint('System audio capture error: $error');
+            AppSnackbar.showSnackbarError('An error occurred during recording: $error');
+            updateRecordingState(RecordingState.stop);
+          },
+          onSystemWillSleep: (wasRecording) {
+            debugPrint('System will sleep - was recording: $wasRecording');
+          },
+          onSystemDidWake: (nativeIsRecording) async {
+            debugPrint('System woke up - Native recording: $nativeIsRecording, Flutter state: $recordingState');
+            if (!nativeIsRecording && recordingState == RecordingState.systemAudioRecord) {
+              updateRecordingState(RecordingState.stop);
+            }
+          },
+          onScreenDidLock: (wasRecording) {
+            debugPrint('Screen locked - was recording: $wasRecording');
+          },
+          onScreenDidUnlock: () {
+            debugPrint('Screen unlocked');
+          },
+          onDisplaySetupInvalid: (reason) {
+            debugPrint('Display setup invalid: $reason');
+            if (recordingState == RecordingState.systemAudioRecord) {
+              updateRecordingState(RecordingState.stop);
+              AppSnackbar.showSnackbarError(
+                  'Recording stopped: $reason. You may need to reconnect external displays or restart recording.');
+            }
+          },
+          onMicrophoneDeviceChanged: _onMicrophoneDeviceChanged,
+          onMicrophoneStatus: _onMicrophoneStatus,
+        );
   }
 
   Future<bool> _checkAndRequestSystemAudioPermissions() async {
@@ -712,8 +712,9 @@ class CaptureProvider extends ChangeNotifier
   }
 
   void _onMicrophoneStatus(String deviceName, double micLevel, double systemAudioLevel) {
-    final bool needsUpdate =
-        microphoneName != deviceName || (microphoneLevel - micLevel).abs() > 0.001 || (this.systemAudioLevel - systemAudioLevel).abs() > 0.001;
+    final bool needsUpdate = microphoneName != deviceName ||
+        (microphoneLevel - micLevel).abs() > 0.001 ||
+        (this.systemAudioLevel - systemAudioLevel).abs() > 0.001;
 
     if (needsUpdate) {
       microphoneName = deviceName;

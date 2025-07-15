@@ -20,7 +20,8 @@ class DesktopPermissionsScreen extends StatefulWidget {
   State<DesktopPermissionsScreen> createState() => _DesktopPermissionsScreenState();
 }
 
-class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> with WidgetsBindingObserver, TickerProviderStateMixin {
+class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen>
+    with WidgetsBindingObserver, TickerProviderStateMixin {
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
 
@@ -155,9 +156,7 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
                                 size: 28,
                               ),
                             ),
-
                             const SizedBox(height: 24),
-
                             const Text(
                               'Grant permissions',
                               style: TextStyle(
@@ -168,9 +167,7 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
                               ),
                               textAlign: TextAlign.center,
                             ),
-
                             const SizedBox(height: 8),
-
                             Container(
                               constraints: const BoxConstraints(maxWidth: 480),
                               padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -189,7 +186,6 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
                         ),
                       ),
                     ),
-
                     Flexible(
                       child: FadeTransition(
                         opacity: _fadeAnimation,
@@ -201,7 +197,11 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
                             children: [
                               // Bluetooth Permission
                               OmiSelectableTile(
-                                leading: Icon(Icons.bluetooth_rounded, color: provider.hasBluetoothPermission ? ResponsiveHelper.purplePrimary : const Color(0xFF9CA3AF), size: 20),
+                                leading: Icon(Icons.bluetooth_rounded,
+                                    color: provider.hasBluetoothPermission
+                                        ? ResponsiveHelper.purplePrimary
+                                        : const Color(0xFF9CA3AF),
+                                    size: 20),
                                 title: 'Bluetooth Access',
                                 subtitle: 'Connect to your Omi device',
                                 selected: provider.hasBluetoothPermission,
@@ -209,7 +209,8 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
                                   if (!provider.hasBluetoothPermission) {
                                     _showPermissionDialog(
                                       title: 'Bluetooth Access',
-                                      description: 'This app uses Bluetooth to connect and communicate with your device. Your device data stays private and secure.',
+                                      description:
+                                          'This app uses Bluetooth to connect and communicate with your device. Your device data stays private and secure.',
                                       onContinue: () async {
                                         await provider.askForBluetoothPermissions();
                                       },
@@ -224,7 +225,11 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
 
                               // Location Permission
                               OmiSelectableTile(
-                                leading: Icon(Icons.location_on_rounded, color: provider.hasLocationPermission ? ResponsiveHelper.purplePrimary : const Color(0xFF9CA3AF), size: 20),
+                                leading: Icon(Icons.location_on_rounded,
+                                    color: provider.hasLocationPermission
+                                        ? ResponsiveHelper.purplePrimary
+                                        : const Color(0xFF9CA3AF),
+                                    size: 20),
                                 title: 'Location Services',
                                 subtitle: 'Tag conversations with location',
                                 selected: provider.hasLocationPermission,
@@ -232,7 +237,8 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
                                   if (!provider.hasLocationPermission) {
                                     _showPermissionDialog(
                                       title: 'Location Services',
-                                      description: 'This app may use your location to tag your conversations and improve your experience.',
+                                      description:
+                                          'This app may use your location to tag your conversations and improve your experience.',
                                       onContinue: () async {
                                         await provider.askForLocationPermissions();
                                       },
@@ -247,7 +253,11 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
 
                               // Notification Permission
                               OmiSelectableTile(
-                                leading: Icon(Icons.notifications_rounded, color: provider.hasNotificationPermission ? ResponsiveHelper.purplePrimary : const Color(0xFF9CA3AF), size: 20),
+                                leading: Icon(Icons.notifications_rounded,
+                                    color: provider.hasNotificationPermission
+                                        ? ResponsiveHelper.purplePrimary
+                                        : const Color(0xFF9CA3AF),
+                                    size: 20),
                                 title: 'Notifications',
                                 subtitle: 'Receive important updates',
                                 selected: provider.hasNotificationPermission,
@@ -255,7 +265,8 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
                                   if (!provider.hasNotificationPermission) {
                                     _showPermissionDialog(
                                       title: 'Notifications',
-                                      description: 'This app would like to send you notifications to keep you informed about important updates and activities.',
+                                      description:
+                                          'This app would like to send you notifications to keep you informed about important updates and activities.',
                                       onContinue: () async {
                                         await provider.askForNotificationPermissions();
                                       },
@@ -270,7 +281,6 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
                         ),
                       ),
                     ),
-
                     Container(
                       padding: const EdgeInsets.fromLTRB(40, 24, 40, 40),
                       child: Column(
@@ -281,7 +291,9 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
                               OmiButton(
                                 label: provider.isLoading
                                     ? 'Please wait...'
-                                    : (provider.hasBluetoothPermission || provider.hasLocationPermission || provider.hasNotificationPermission)
+                                    : (provider.hasBluetoothPermission ||
+                                            provider.hasLocationPermission ||
+                                            provider.hasNotificationPermission)
                                         ? 'Continue'
                                         : 'Skip',
                                 onPressed: provider.isLoading
@@ -295,9 +307,7 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen> wit
                               ),
                             ],
                           ),
-
                           const SizedBox(height: 8),
-
                           OmiButton(
                             label: 'Back',
                             type: OmiButtonType.text,

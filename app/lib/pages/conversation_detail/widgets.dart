@@ -884,7 +884,8 @@ class _GetShareOptionsState extends State<GetShareOptions> {
                 );
                 return;
               }
-              String content = '''https://h.omi.me/conversations/${widget.conversation.id}'''.replaceAll('  ', '').trim();
+              String content =
+                  '''https://h.omi.me/conversations/${widget.conversation.id}'''.replaceAll('  ', '').trim();
               print(content);
               await Share.share(content);
               changeLoadingShareConversationViaURL(false);
