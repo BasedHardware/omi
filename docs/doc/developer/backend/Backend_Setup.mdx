@@ -61,7 +61,65 @@ Before you start, make sure you have the following:
        ```
 
 
-## II. Backend Setup 🛠️
+## II. Setting Up OAuth Authentication 🔐
+
+### Google OAuth Setup
+
+1. **Create OAuth 2.0 Client Credentials:**
+    - Go to the [Google Cloud Console](https://console.cloud.google.com/)
+    - Navigate to APIs & Services -> Credentials
+    - Click **Create Credentials** -> **OAuth 2.0 Client ID**
+    - Configure the OAuth consent screen if prompted
+    - Select **Web application** as the application type
+    - Set the **Name** (e.g., "Omi Backend Auth")
+    - Under **Authorized JavaScript origins**, add:
+        - `https://your-domain.com` (replace with your actual domain)
+        - `https://your-ngrok-domain.ngrok-free.app/v1/auth/callback/google` (for local development)
+    - Under **Authorized redirect URIs**, add:
+        - `https://your-domain.com/v1/auth/callback/google` (replace with your actual domain)
+        - `https://your-ngrok-domain.ngrok-free.app/v1/auth/callback/google` (for local development)
+    - Click **Create**
+    - Save the **Client ID** and **Client Secret** - you'll need these for your environment variables
+
+2. **Configure OAuth Consent Screen:**
+    - Go to APIs & Services -> OAuth consent screen
+    - Fill in the required information about your app
+    - Add your domain to **Authorized domains**
+    - Add the necessary scopes: `openid`, `email`, `profile`
+
+### Apple OAuth Setup
+
+1. **Prerequisites:**
+    - You need a paid Apple Developer account
+    - Your app must be registered in the Apple Developer Console
+
+2. **Create App ID:**
+    - Go to [Apple Developer Console](https://developer.apple.com/account/resources/identifiers/list)
+    - Create a new App ID with **Sign In with Apple** capability enabled
+    - Note your App ID (Bundle ID)
+
+3. **Create Services ID:**
+    - In Apple Developer Console, create a new **Services ID**
+    - This will be your `APPLE_CLIENT_ID`
+    - Configure **Sign In with Apple** for this Services ID
+    - Add your authorized domains and return URLs:
+        - `https://your-domain.com/v1/auth/callback/apple`
+        - `https://your-ngrok-domain.ngrok-free.app/v1/auth/callback/apple`
+
+4. **Create Private Key:**
+    - Go to **Keys** in Apple Developer Console
+    - Create a new key with **Sign In with Apple** enabled
+    - Download the `.p8` file and note the **Key ID**
+    - You'll need the **Team ID** from your Apple Developer account
+
+5. **Prepare Environment Variables:**
+    - `APPLE_CLIENT_ID`: Your Services ID
+    - `APPLE_TEAM_ID`: Your Apple Developer Team ID
+    - `APPLE_KEY_ID`: The Key ID from step 4
+    - `APPLE_PRIVATE_KEY`: The contents of your .p8 file as a string (keep the `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----` lines)
+
+
+## III. Backend Setup 🛠️
 
 1. **Install Python & Dependencies: 🐍**
     - **Mac (using brew):** `brew install python`
@@ -79,7 +137,7 @@ Before you start, make sure you have the following:
     - **Install PyOgg:**
         - **All Platforms:** `pip install PyOgg`
     - **Install All Required Dependencies:**
-        - **All Platforms:** `brew install -r requirements.txt`
+        - **All Platforms:** `pip install -r requirements.txt`
 
 2. **Clone the Backend Repository: 📂**
     - Open your terminal and navigate to your desired directory
@@ -131,6 +189,13 @@ Before you start, make sure you have the following:
         - **Modal API Key:**  Obtained from your [Modal Dashboard](https://modal.com/settings#tokens)
         - **ADMIN_KEY:** Set to a temporary value (e.g., `123`) for local development
         - **ENCRYPTION_SECRET:** The `.env.template` provides a default key suitable for local development (e.g., `omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv`). For production, you must generate a new secure key.
+        - **OAuth Authentication Credentials:** From Section II above
+            - **GOOGLE_CLIENT_ID:** Your Google OAuth 2.0 Client ID
+            - **GOOGLE_CLIENT_SECRET:** Your Google OAuth 2.0 Client Secret
+            - **APPLE_CLIENT_ID:** Your Apple Services ID
+            - **APPLE_TEAM_ID:** Your Apple Developer Team ID
+            - **APPLE_KEY_ID:** Your Apple private key ID
+            - **APPLE_PRIVATE_KEY:** Your Apple private key content (as a string with newlines)
         - **HOSTED_PUSHER_API_URL:** Endpoint of your hosted pusher service (if you are using it, see step 3)
         - **Typesense Credentials:** Host, port, and API key from your [Typesense Cloud Dashboard](https://cloud.typesense.org/clusters)
         - **NO_SOCKET_TIMEOUT: (Optional)** Set to `True` to disable the socket timeout for the backend server (socket will stay connected for as long as the app is open)
@@ -214,6 +279,7 @@ Before you start, make sure you have the following:
 
 4. **Connect the App to the Backend: 🔗**
     - In your Omi app's environment variables, set the `API_BASE_URL` to the public URL provided by Ngrok (e.g., `https://example.ngrok-free.app/`) (don't forget the trailing / )
+    - Make sure your OAuth redirect URIs in Google Cloud Console and Apple Developer Console are updated to use your Ngrok URL for local development
 
 Now, your Omi app should be successfully connected to the locally running backend.
 
@@ -251,6 +317,13 @@ Here's a detailed explanation of each environment variable you need to define in
 - **`HOSTED_PUSHER_API_URL`:** URL of your omi-pusher service if you're using one. Example: http://omi-push:8081
 - **`TYPESENSE_HOST`:** URL of your typesense server. 
 - **`TYPESENSE_API_KEY`:** Typesense API key
+- **`GOOGLE_CLIENT_ID`:** Your Google OAuth 2.0 Client ID from [Google Cloud Console](https://console.cloud.google.com/apis/credentials), used for Google authentication
+- **`GOOGLE_CLIENT_SECRET`:** Your Google OAuth 2.0 Client Secret from [Google Cloud Console](https://console.cloud.google.com/apis/credentials), used for Google authentication
+- **`APPLE_CLIENT_ID`:** Your Apple Services ID from [Apple Developer Console](https://developer.apple.com/account/resources/identifiers/list), used for Apple Sign In authentication
+- **`APPLE_TEAM_ID`:** Your Apple Developer Team ID, found in your Apple Developer account
+- **`APPLE_KEY_ID`:** The Key ID of your Apple private key for Sign In with Apple
+- **`APPLE_PRIVATE_KEY`:** The contents of your Apple private key (.p8 file) as a string, including the `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----` lines
+- **`API_BASE_URL`:** The base URL of your backend API (e.g., `https://your-domain.com/` or `https://your-ngrok-domain.ngrok-free.app/` for local development)
 
 Make sure to replace the placeholders (`<api-key>`, `<bucket-name>`, etc.) with your actual values.
 
