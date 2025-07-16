@@ -118,6 +118,18 @@ Before you start, make sure you have the following:
     - `APPLE_KEY_ID`: The Key ID from step 4
     - `APPLE_PRIVATE_KEY`: The contents of your .p8 file as a string (keep the `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----` lines)
 
+6. **Configure Firebase for Apple Sign-In:**
+    - Go to the [Firebase Console](https://console.firebase.google.com/)
+    - Select your project
+    - Navigate to Authentication -> Sign-in method
+    - Click on **Apple** and enable it
+    - Add the same configuration values from your Apple Developer setup:
+        - **Client ID:** Your Services ID (same as `APPLE_CLIENT_ID`)
+        - **Team ID:** Your Apple Developer Team ID (same as `APPLE_TEAM_ID`)
+        - **Key ID:** The Key ID from your private key (same as `APPLE_KEY_ID`)
+        - **Private Key:** The contents of your .p8 file (same as `APPLE_PRIVATE_KEY`)
+    - Click **Save**
+
 
 ## III. Backend Setup 🛠️
 
