@@ -357,6 +357,59 @@ def add_files_to_chat_session(uid: str, chat_session_id: str, file_ids: List[str
     session_ref.update({"file_ids": firestore.ArrayUnion(file_ids)})
 
 
+def get_chat_sessions(uid: str, app_id: Optional[str] = None) -> List[dict]:
+    """Get all chat sessions for a user and app"""
+    session_ref = (
+        db.collection('users')
+        .document(uid)
+        .collection('chat_sessions')
+        .where(filter=FieldFilter('plugin_id', '==', app_id))
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+    )
+    return [doc.to_dict() for doc in session_ref.stream()]
+
+
+def get_chat_session_by_id(uid: str, chat_session_id: str) -> Optional[dict]:
+    """Get a specific chat session by ID"""
+    user_ref = db.collection('users').document(uid)
+    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
+    session_doc = session_ref.get()
+    
+    if session_doc.exists:
+        return session_doc.to_dict()
+    return None
+
+
+def create_new_chat_session(uid: str, plugin_id: Optional[str] = None, title: Optional[str] = None) -> dict:
+    """Create a new chat session"""
+    from datetime import datetime, timezone
+    import uuid
+    
+    # Generate a temporary title if not provided
+    if not title:
+        session_count = len(get_chat_sessions(uid, plugin_id)) + 1
+        title = f"New Chat {session_count}"
+    
+    session_data = {
+        'id': str(uuid.uuid4()),
+        'created_at': datetime.now(timezone.utc),
+        'plugin_id': plugin_id,
+        'app_id': plugin_id,  # For backward compatibility
+        'message_ids': [],
+        'file_ids': [],
+        'title': title
+    }
+    
+    return add_chat_session(uid, session_data)
+
+
+def update_chat_session_title(uid: str, chat_session_id: str, title: str):
+    """Update the title of a chat session"""
+    user_ref = db.collection('users').document(uid)
+    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
+    session_ref.update({"title": title})
+
+
 # **************************************
 # ********* MIGRATION HELPERS **********
 # **************************************
