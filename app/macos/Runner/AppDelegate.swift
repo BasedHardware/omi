@@ -7,8 +7,19 @@ class AppDelegate: FlutterAppDelegate {
     override func applicationDidFinishLaunching(_ notification: Notification) {
         super.applicationDidFinishLaunching(notification)
         
+        print("🚀 AppDelegate: applicationDidFinishLaunching called")
+        
         // Initialize the HotKey manager for global shortcuts
         HotKeyManager.shared.initialize()
+        
+        print("🚀 AppDelegate: HotKeyManager initialization completed")
+    }
+    
+    override func applicationDidBecomeActive(_ notification: Notification) {
+        super.applicationDidBecomeActive(notification)
+        
+        // Recheck accessibility permissions when app becomes active
+        HotKeyManager.shared.recheckPermissions()
     }
     
     override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

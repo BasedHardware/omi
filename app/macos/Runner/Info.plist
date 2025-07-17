@@ -79,6 +79,8 @@
 	<string>Omi records screen and system audio as part of conversation recording feature and transcribes in real-time.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>We need access to your photo library to allow you to upload and share photos through Instabug.</string>
+	<key>NSAccessibilityUsageDescription</key>
+	<string>Omi needs accessibility access to register global hotkeys (Option+Space) for quick chat access from anywhere on your Mac.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>NSSupportsAutomaticTermination</key>
@@ -88,7 +90,7 @@
 	<key>PermissionGroupNotification</key>
 	<string>You need to enable notifications to receive your pro-active feedback.</string>
 	<key>com.apple.security.app-sandbox</key>
-	<true/>
+	<false/>
 	<key>com.apple.security.device.audio-input</key>
 	<true/>
 	<key>com.apple.security.files.user-selected.read-only</key>

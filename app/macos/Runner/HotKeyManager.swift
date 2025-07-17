@@ -1,6 +1,7 @@
 import Cocoa
 import SwiftUI
 import HotKey
+import ApplicationServices
 
 class HotKeyManager: NSObject {
     static let shared = HotKeyManager()
@@ -11,18 +12,62 @@ class HotKeyManager: NSObject {
     
     private override init() {
         super.init()
+        checkAccessibilityPermissions()
         setupHotKey()
     }
     
+    private func checkAccessibilityPermissions() {
+        let trusted = AXIsProcessTrusted()
+        if !trusted {
+            print("⚠️ Accessibility permissions not granted. Requesting permissions...")
+            
+            // Request accessibility permissions
+            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
+            let isTrusted = AXIsProcessTrustedWithOptions(options)
+            
+            if !isTrusted {
+                print("❌ User needs to grant accessibility permissions in System Preferences")
+                showAccessibilityAlert()
+            } else {
+                print("✅ Accessibility permissions granted")
+            }
+        } else {
+            print("✅ Accessibility permissions already granted")
+        }
+    }
+    
+    private func showAccessibilityAlert() {
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = "Accessibility Permission Required"
+            alert.informativeText = "Omi needs accessibility permission to register global hotkeys (Option+Space). Please:\n\n1. Go to System Preferences → Security & Privacy → Privacy\n2. Select Accessibility from the left panel\n3. Add Omi to the list and enable it\n4. Restart the app"
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Open System Preferences")
+            alert.addButton(withTitle: "Later")
+            
+            let response = alert.runModal()
+            if response == .alertFirstButtonReturn {
+                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+            }
+        }
+    }
+    
     private func setupHotKey() {
+        // Check if we have accessibility permissions before setting up hotkey
+        guard AXIsProcessTrusted() else {
+            print("❌ Cannot setup hotkey: Accessibility permissions not granted")
+            return
+        }
+        
         // Option + Space hotkey
         hotKey = HotKey(key: .space, modifiers: [.option])
         hotKey?.keyDownHandler = { [weak self] in
+            print("🔥 HotKey triggered: Option+Space")
             DispatchQueue.main.async {
                 self?.toggleChatWindow()
             }
         }
-        print("HotKey manager initialized with Option+Space")
+        print("✅ HotKey manager initialized with Option+Space")
     }
     
     func toggleChatWindow() {
@@ -98,5 +143,13 @@ extension HotKeyManager {
     func initialize() {
         // This method can be called from AppDelegate to ensure initialization
         print("HotKeyManager explicitly initialized")
+    }
+    
+    func recheckPermissions() {
+        // Call this method when app becomes active to recheck permissions
+        checkAccessibilityPermissions()
+        if AXIsProcessTrusted() && hotKey == nil {
+            setupHotKey()
+        }
     }
 }
