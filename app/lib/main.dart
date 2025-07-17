@@ -28,6 +28,7 @@ import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
@@ -242,6 +243,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => PersonaProvider()),
           ChangeNotifierProvider(create: (context) => MemoriesProvider()),
           ChangeNotifierProvider(create: (context) => UserProvider()),
+          ChangeNotifierProvider(create: (context) => ChatSessionProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(

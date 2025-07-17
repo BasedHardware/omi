@@ -609,7 +609,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     provider.addMessageLocally(text);
     scrollToBottom();
     textController.clear();
-    provider.sendMessageStreamToServer(text);
+    provider.sendMessageStreamToServer(text, context: context);
     provider.clearSelectedFiles();
     provider.setSendingMessage(false);
   }
