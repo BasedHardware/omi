@@ -12,8 +12,10 @@ class HotKeyManager: NSObject {
     
     private override init() {
         super.init()
+        print("🔥 HotKeyManager: init() called")
         checkAccessibilityPermissions()
         setupHotKey()
+        print("🔥 HotKeyManager: initialization complete")
     }
     
     private func checkAccessibilityPermissions() {
@@ -142,11 +144,17 @@ class HotKeyManager: NSObject {
 extension HotKeyManager {
     func initialize() {
         // This method can be called from AppDelegate to ensure initialization
-        print("HotKeyManager explicitly initialized")
+        print("🔥 HotKeyManager: initialize() called explicitly")
+        // Force recheck permissions and setup
+        checkAccessibilityPermissions()
+        if hotKey == nil {
+            setupHotKey()
+        }
     }
     
     func recheckPermissions() {
         // Call this method when app becomes active to recheck permissions
+        print("🔥 HotKeyManager: recheckPermissions() called")
         checkAccessibilityPermissions()
         if AXIsProcessTrusted() && hotKey == nil {
             setupHotKey()

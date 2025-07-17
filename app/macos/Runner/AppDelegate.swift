@@ -9,10 +9,15 @@ class AppDelegate: FlutterAppDelegate {
         
         print("🚀 AppDelegate: applicationDidFinishLaunching called")
         
-        // Initialize the HotKey manager for global shortcuts
-        HotKeyManager.shared.initialize()
-        
-        print("🚀 AppDelegate: HotKeyManager initialization completed")
+        // Force a slight delay to ensure everything is loaded
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            print("🚀 AppDelegate: About to initialize HotKeyManager")
+            
+            // Initialize the HotKey manager for global shortcuts
+            HotKeyManager.shared.initialize()
+            
+            print("🚀 AppDelegate: HotKeyManager initialization completed")
+        }
     }
     
     override func applicationDidBecomeActive(_ notification: Notification) {
