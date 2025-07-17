@@ -34,6 +34,9 @@
 		A1B2C3D42E567F890012345A /* HotKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D32E567F890012345B /* HotKeyManager.swift */; };
 		A1B2C3D62E567F890012345C /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D52E567F890012345D /* ChatView.swift */; };
 		A1B2C3D82E567F890012345E /* OmiConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D72E567F890012345F /* OmiConfig.swift */; };
+		A1B2C3DA2E567F8900123460 /* OmiAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D92E567F8900123461 /* OmiAPIClient.swift */; };
+		A1B2C3DC2E567F8900123462 /* MessageSyncManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3DB2E567F8900123463 /* MessageSyncManager.swift */; };
+		A1B2C3DE2E567F8900123464 /* AuthBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3DD2E567F8900123465 /* AuthBridge.swift */; };
 		6CEA62AC1B6F48029F663C75 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 990C21DF2FB7195E1A0C66BB /* Pods_Runner.framework */; };
 /* End PBXBuildFile section */
 
@@ -85,6 +88,9 @@
 		A1B2C3D32E567F890012345B /* HotKeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotKeyManager.swift; sourceTree = "<group>"; };
 		A1B2C3D52E567F890012345D /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		A1B2C3D72E567F890012345F /* OmiConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiConfig.swift; sourceTree = "<group>"; };
+		A1B2C3D92E567F8900123461 /* OmiAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiAPIClient.swift; sourceTree = "<group>"; };
+		A1B2C3DB2E567F8900123463 /* MessageSyncManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageSyncManager.swift; sourceTree = "<group>"; };
+		A1B2C3DD2E567F8900123465 /* AuthBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthBridge.swift; sourceTree = "<group>"; };
 		33CEB47222A05771004F2AC0 /* Flutter-Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Flutter-Debug.xcconfig"; sourceTree = "<group>"; };
 		33CEB47422A05771004F2AC0 /* Flutter-Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Flutter-Release.xcconfig"; sourceTree = "<group>"; };
 		33CEB47722A0578A004F2AC0 /* Flutter-Generated.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = "Flutter-Generated.xcconfig"; path = "ephemeral/Flutter-Generated.xcconfig"; sourceTree = "<group>"; };
@@ -188,6 +194,9 @@
 				A1B2C3D32E567F890012345B /* HotKeyManager.swift */,
 				A1B2C3D52E567F890012345D /* ChatView.swift */,
 				A1B2C3D72E567F890012345F /* OmiConfig.swift */,
+				A1B2C3D92E567F8900123461 /* OmiAPIClient.swift */,
+				A1B2C3DB2E567F8900123463 /* MessageSyncManager.swift */,
+				A1B2C3DD2E567F8900123465 /* AuthBridge.swift */,
 				33E51913231747F40026EE4D /* DebugProfile.entitlements */,
 				33E51914231749380026EE4D /* Release.entitlements */,
 				33CC11242044D66E0003C045 /* Resources */,
@@ -434,6 +443,9 @@
 				A1B2C3D42E567F890012345A /* HotKeyManager.swift in Sources */,
 				A1B2C3D62E567F890012345C /* ChatView.swift in Sources */,
 				A1B2C3D82E567F890012345E /* OmiConfig.swift in Sources */,
+				A1B2C3DA2E567F8900123460 /* OmiAPIClient.swift in Sources */,
+				A1B2C3DC2E567F8900123462 /* MessageSyncManager.swift in Sources */,
+				A1B2C3DE2E567F8900123464 /* AuthBridge.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

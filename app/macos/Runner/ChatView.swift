@@ -6,6 +6,10 @@ struct ChatView: View {
     @State private var messages: [ChatMessage] = []
     @State private var isLoading = false
     @State private var showWelcomeMessage = true
+    @State private var errorMessage: String?
+    
+    @StateObject private var apiClient = OmiAPIClient.shared
+    @StateObject private var messageSyncManager = MessageSyncManager.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -150,19 +154,91 @@ struct ChatView: View {
         .clipShape(RoundedRectangle(cornerRadius: 24))
         .onAppear {
             checkOmiConnection()
+            loadInitialMessages()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            // Sync auth when app becomes active
+            AuthBridge.shared.forceSync()
+            checkOmiConnection()
         }
     }
 
     private func checkOmiConnection() {
+        // Force sync authentication data from Flutter app
+        AuthBridge.shared.forceSync()
+        
         if !OmiConfig.isConfigured() {
-            print("Omi not configured. Please authenticate.")
+            let status = AuthBridge.shared.getAuthStatus()
+            print("Omi not configured. Missing: \(status.missingData.joined(separator: ", "))")
+            errorMessage = "Please sign in to Omi to use chat functionality"
+            
+            // Debug: Print available keys to help with integration
+            AuthBridge.shared.printAvailableKeys()
         } else {
+            print("✅ Omi configuration successful")
             OmiConfig.printConfiguration()
+            errorMessage = nil
+        }
+    }
+    
+    private func loadInitialMessages() {
+        guard OmiConfig.isConfigured() else { return }
+        
+        Task {
+            do {
+                let serverMessages = try await apiClient.getMessages(appId: OmiConfig.selectedAppId)
+                await MainActor.run {
+                    // Convert server messages to local chat messages
+                    messages = serverMessages.reversed().map { serverMessage in
+                        ChatMessage(
+                            content: serverMessage.text,
+                            isUser: serverMessage.sender == "human"
+                        )
+                    }
+                    
+                    // If no messages, get initial message
+                    if messages.isEmpty {
+                        loadInitialMessage()
+                    } else {
+                        showWelcomeMessage = false
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    print("Failed to load messages: \(error)")
+                    // Show welcome message as fallback
+                    showWelcomeMessage = true
+                }
+            }
+        }
+    }
+    
+    private func loadInitialMessage() {
+        guard OmiConfig.isConfigured() else { return }
+        
+        Task {
+            do {
+                let initialMessage = try await apiClient.getInitialMessage(appId: OmiConfig.selectedAppId)
+                await MainActor.run {
+                    let chatMessage = ChatMessage(content: initialMessage.text, isUser: false)
+                    messages.append(chatMessage)
+                    showWelcomeMessage = false
+                }
+            } catch {
+                await MainActor.run {
+                    print("Failed to get initial message: \(error)")
+                    // Keep welcome message
+                }
+            }
         }
     }
 
     private func handleSendMessage() {
         guard !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard OmiConfig.isConfigured() else {
+            errorMessage = "Please sign in to Omi to send messages"
+            return
+        }
 
         // Hide welcome message when first message is sent
         if showWelcomeMessage {
@@ -171,12 +247,88 @@ struct ChatView: View {
 
         let userMessage = ChatMessage(content: inputText, isUser: true)
         messages.append(userMessage)
+        
+        // Sync user message to Flutter app
+        messageSyncManager.syncMessageToFlutter(userMessage)
 
         let messageToSend = inputText
         inputText = ""
         isLoading = true
+        errorMessage = nil
 
         sendToOmiChat(message: messageToSend)
+    }
+    
+    private func sendToOmiChat(message: String) {
+        print("Sending to Omi: \(message)")
+        
+        Task {
+            do {
+                var responseText = ""
+                // var finalMessage: ServerMessage? // Unused for now
+                
+                // Create a placeholder AI message
+                let aiMessage = ChatMessage(content: "", isUser: false)
+                await MainActor.run {
+                    messages.append(aiMessage)
+                }
+                
+                // Stream the response
+                for try await chunk in apiClient.sendMessage(
+                    text: message, 
+                    appId: OmiConfig.selectedAppId
+                ) {
+                    await MainActor.run {
+                        switch chunk.type {
+                        case "think":
+                            // Handle thinking chunks (optional: show typing indicator)
+                            break
+                        case "data":
+                            // Update the AI message with streaming text
+                            responseText += chunk.text
+                            if let lastIndex = messages.indices.last {
+                                messages[lastIndex] = ChatMessage(content: responseText, isUser: false)
+                            }
+                        case "done":
+                            // Final message received
+                            if let serverMessage = chunk.message {
+                                // finalMessage = serverMessage // Unused for now
+                                if let lastIndex = messages.indices.last {
+                                    let aiMessage = ChatMessage(content: serverMessage.text, isUser: false)
+                                    messages[lastIndex] = aiMessage
+                                    // Sync AI response to Flutter app
+                                    messageSyncManager.syncMessageToFlutter(aiMessage)
+                                }
+                            }
+                        case "error":
+                            // Handle error
+                            if let lastIndex = messages.indices.last {
+                                messages[lastIndex] = ChatMessage(content: "Error: \(chunk.text)", isUser: false)
+                            }
+                        default:
+                            break
+                        }
+                    }
+                }
+                
+                await MainActor.run {
+                    isLoading = false
+                }
+                
+            } catch {
+                await MainActor.run {
+                    // Update the last message with error
+                    if let lastIndex = messages.indices.last {
+                        messages[lastIndex] = ChatMessage(
+                            content: "Failed to send message: \(error.localizedDescription)", 
+                            isUser: false
+                        )
+                    }
+                    isLoading = false
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
     }
 
     private func toggleVoiceRecording() {
@@ -188,27 +340,16 @@ struct ChatView: View {
         }
     }
 
-    private func sendToOmiChat(message: String) {
-        print("Sending to Omi: \(message)")
-
-        // Simulated response
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            let response = ChatMessage(
-                content: "Simulated Omi response. Replace this with real API call.",
-                isUser: false
-            )
-            self.messages.append(response)
-            self.isLoading = false
-        }
-    }
-
     private func startVoiceRecording() {
-        print("Voice recording started (simulate integration here)")
+        print("Voice recording started (implementation needed)")
+        // TODO: Implement voice recording using AVAudioRecorder
+        // TODO: Send audio to Omi voice message endpoint
     }
 
     private func stopVoiceRecording() {
         print("Voice recording stopped")
         isRecording = false
+        // TODO: Stop recording and process audio
     }
 }
 

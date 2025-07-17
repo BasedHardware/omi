@@ -32,7 +32,9 @@ class AppDelegate: FlutterAppDelegate {
     }
     
     override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        return true
+        // Keep the app running even when all windows are closed
+        // This is important for the global hotkey functionality to continue working
+        return false
     }
     
     override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
