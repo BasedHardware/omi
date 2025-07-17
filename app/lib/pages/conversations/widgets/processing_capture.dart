@@ -15,6 +15,7 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
+import 'package:omi/widgets/recording_waveform.dart';
 import 'package:provider/provider.dart';
 
 class ConversationCaptureWidget extends StatefulWidget {
@@ -55,11 +56,20 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
               children: [
                 header,
                 (provider.segments.isNotEmpty || provider.photos.isNotEmpty)
-                    ? const Column(
+                    ? Column(
                         children: [
-                          SizedBox(height: 8),
-                          LiteCaptureWidget(),
-                          SizedBox(height: 8),
+                          const SizedBox(height: 8),
+                          const LiteCaptureWidget(),
+                          // Add waveform below transcript when recording
+                          if (provider.recordingState == RecordingState.record || provider.recordingState == RecordingState.systemAudioRecord || provider.recordingState == RecordingState.deviceRecord || provider.havingRecordingDevice) ...[
+                            const SizedBox(height: 8),
+                            RecordingWaveform(
+                              segments: provider.segments,
+                              isRecording: provider.recordingState == RecordingState.record || provider.recordingState == RecordingState.systemAudioRecord || provider.recordingState == RecordingState.deviceRecord || provider.havingRecordingDevice,
+                              height: 60,
+                            ),
+                          ],
+                          const SizedBox(height: 8),
                         ],
                       )
                     : const SizedBox.shrink(),
