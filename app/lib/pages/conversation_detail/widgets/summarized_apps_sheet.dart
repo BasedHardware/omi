@@ -167,24 +167,22 @@ class _AppsList extends StatelessWidget {
   }
 
   void _handleAppTap(BuildContext context, App app) async {
-    // If this is a different app than currently selected, reprocess with this app
+    // Reprocess with the selected app
     final provider = context.read<ConversationDetailProvider>();
     final previousAppId = provider.getSummarizedApp()?.appId;
     final conversationId = provider.conversation.id;
 
-    if (app.id != currentAppId) {
-      MixpanelManager().summarizedAppSelected(
-        conversationId: conversationId,
-        selectedAppId: app.id,
-        previousAppId: previousAppId,
-      );
+    MixpanelManager().summarizedAppSelected(
+      conversationId: conversationId,
+      selectedAppId: app.id,
+      previousAppId: previousAppId,
+    );
 
-      Navigator.pop(context);
-      provider.setSelectedAppForReprocessing(app);
-      provider.setPreferredSummarizationApp(app.id);
-      await provider.reprocessConversation(appId: app.id);
-      return;
-    }
+    Navigator.pop(context);
+    provider.setSelectedAppForReprocessing(app);
+    provider.setPreferredSummarizationApp(app.id);
+    await provider.reprocessConversation(appId: app.id);
+    return;
   }
 }
 
