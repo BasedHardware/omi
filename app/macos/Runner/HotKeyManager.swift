@@ -3,6 +3,21 @@ import SwiftUI
 import HotKey
 import ApplicationServices
 
+// Custom NSWindow that can become key window to accept input
+class KeyableWindow: NSWindow {
+    override var canBecomeKey: Bool {
+        return true
+    }
+    
+    override var canBecomeMain: Bool {
+        return false  // Don't become main to avoid stealing focus from other apps
+    }
+    
+    func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        return true
+    }
+}
+
 class HotKeyManager: NSObject {
     static let shared = HotKeyManager()
     
@@ -98,7 +113,10 @@ class HotKeyManager: NSObject {
     // If window already exists and is visible, just bring it to front
     if let window = chatWindow, window.isVisible {
         window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        // Focus on the text field
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            window.makeFirstResponder(nil)
+        }
         return
     }
     
@@ -117,7 +135,7 @@ class HotKeyManager: NSObject {
     )
 
     // Create the floating window with proper style mask
-    chatWindow = NSWindow(
+    chatWindow = KeyableWindow(
         contentRect: windowRect,
         styleMask: [.borderless],
         backing: .buffered,
@@ -138,6 +156,9 @@ class HotKeyManager: NSObject {
     chatWindow.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
     chatWindow.hasShadow = true
     chatWindow.isReleasedWhenClosed = false // Important: prevent window from being deallocated
+    
+    // Make window accept mouse events
+    chatWindow.acceptsMouseMovedEvents = true
 
     // Create a NSVisualEffectView (glass background)
     let visualEffectView = NSVisualEffectView()
@@ -175,8 +196,13 @@ class HotKeyManager: NSObject {
     // Set container as the window's content view
     chatWindow.contentView = containerView
 
-    // Show the window without making the app active
-    chatWindow.orderFront(nil)
+    // Show the window and make it key to accept input
+    chatWindow.makeKeyAndOrderFront(nil)
+    
+    // Focus on the text field (if possible)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+        chatWindow.makeFirstResponder(nil)
+    }
     
     print("✅ Chat window shown with glass style")
 }

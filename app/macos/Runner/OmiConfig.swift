@@ -17,40 +17,59 @@ struct OmiConfig {
     static let maxMessageLength = 1000
     static let timeout: TimeInterval = 30.0
     
+    // Thread-safe UserDefaults access
+    private static let userDefaultsQueue = DispatchQueue(label: "com.omi.userdefaults", qos: .userInitiated)
+    
     // User Configuration (will be populated from Flutter app or stored preferences)
     static var userToken: String? {
         get {
-            return UserDefaults.standard.string(forKey: "omi_user_token")
+            return userDefaultsQueue.sync {
+                UserDefaults.standard.string(forKey: "omi_user_token")
+            }
         }
         set {
-            UserDefaults.standard.set(newValue, forKey: "omi_user_token")
+            userDefaultsQueue.async {
+                UserDefaults.standard.set(newValue, forKey: "omi_user_token")
+            }
         }
     }
     
     static var userId: String? {
         get {
-            return UserDefaults.standard.string(forKey: "omi_user_id")
+            return userDefaultsQueue.sync {
+                UserDefaults.standard.string(forKey: "omi_user_id")
+            }
         }
         set {
-            UserDefaults.standard.set(newValue, forKey: "omi_user_id")
+            userDefaultsQueue.async {
+                UserDefaults.standard.set(newValue, forKey: "omi_user_id")
+            }
         }
     }
     
     static var deviceId: String? {
         get {
-            return UserDefaults.standard.string(forKey: "omi_device_id")
+            return userDefaultsQueue.sync {
+                UserDefaults.standard.string(forKey: "omi_device_id")
+            }
         }
         set {
-            UserDefaults.standard.set(newValue, forKey: "omi_device_id")
+            userDefaultsQueue.async {
+                UserDefaults.standard.set(newValue, forKey: "omi_device_id")
+            }
         }
     }
     
     static var selectedAppId: String? {
         get {
-            return UserDefaults.standard.string(forKey: "selected_app_id")
+            return userDefaultsQueue.sync {
+                UserDefaults.standard.string(forKey: "selected_app_id")
+            }
         }
         set {
-            UserDefaults.standard.set(newValue, forKey: "selected_app_id")
+            userDefaultsQueue.async {
+                UserDefaults.standard.set(newValue, forKey: "selected_app_id")
+            }
         }
     }
     

@@ -7,9 +7,16 @@ struct ChatView: View {
     @State private var isLoading = false
     @State private var showWelcomeMessage = true
     @State private var errorMessage: String?
+    @State private var isInitialized = false
     
-    @StateObject private var apiClient = OmiAPIClient.shared
-    @StateObject private var messageSyncManager = MessageSyncManager.shared
+    // Use lazy initialization to avoid crashes during view creation
+    private var apiClient: OmiAPIClient {
+        OmiAPIClient.shared
+    }
+    
+    private var messageSyncManager: MessageSyncManager {
+        MessageSyncManager.shared
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -153,13 +160,20 @@ struct ChatView: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 24))
         .onAppear {
-            checkOmiConnection()
-            loadInitialMessages()
+            // Safely sync auth data first, then initialize
+            DispatchQueue.main.async {
+                AuthBridge.shared.syncFromFlutterApp()
+                isInitialized = true
+                checkOmiConnection()
+                loadInitialMessages()
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             // Sync auth when app becomes active
-            AuthBridge.shared.forceSync()
-            checkOmiConnection()
+            DispatchQueue.main.async {
+                AuthBridge.shared.forceSync()
+                checkOmiConnection()
+            }
         }
     }
 

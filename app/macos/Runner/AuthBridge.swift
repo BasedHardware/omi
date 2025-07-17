@@ -14,7 +14,15 @@ class AuthBridge: NSObject {
     
     /// Sync authentication data from Flutter app UserDefaults
     func syncFromFlutterApp() {
-        // Try to get auth data from Flutter's UserDefaults keys
+        // Ensure we're on the main thread for UserDefaults access
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async {
+                self.syncFromFlutterApp()
+            }
+            return
+        }
+        
+        // Try to get auth data from Flutter's UserDefaults keys with safety checks
         if let flutterToken = UserDefaults.standard.string(forKey: "flutter.authToken") {
             OmiConfig.userToken = flutterToken
             print("Synced auth token from Flutter app")
